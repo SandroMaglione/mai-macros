@@ -1,0 +1,99 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["@mai/oxc/oxlint"],
+  "ignorePatterns": [
+    "**/scripts/**",
+    ".repos/**",
+    "references/**",
+    "local/**",
+    "*.js",
+    "*.jsx",
+    "*.mjs",
+    "*.cjs",
+    "*.mts",
+    "*.cts",
+    "*.astro",
+    "*.svelte",
+    "*.vue"
+  ],
+  "rules": {
+    "mai/no-banned-type-assertions": "error",
+    "mai/no-comments": "error",
+    "mai/no-direct-fetch": "error",
+    "mai/no-disable-validation": "error",
+    "mai/no-effect-asvoid": "warn",
+    "mai/no-effect-catch-cause": "error",
+    "mai/no-effect-ignore": "error",
+    "mai/no-global-json": "error",
+    "mai/no-in-operator": "error",
+    "mai/no-multiple-function-params": "error",
+    "mai/no-multiple-xstate-hooks": "error",
+    "mai/no-nested-effect-array-methods": "error",
+    "mai/no-nested-layer-provide": "warn",
+    "mai/no-optional-function-parameters": "error",
+    "mai/no-react-state-hooks": "error",
+    "mai/no-service-option": "error",
+    "mai/no-shadowed-standard-array-static": "error",
+    "mai/no-silent-error-swallow": "error",
+    "mai/no-single-use-private-functions": "error",
+    "mai/no-single-use-xstate-actions": "error",
+    "mai/no-single-use-xstate-guards": "error",
+    "mai/no-sql-type-parameter": "error",
+    "mai/no-standard-map-set": "error",
+    "mai/no-switch": "error",
+    "mai/no-sync-schema-apis": "error",
+    "mai/no-typeof-object": "error",
+    "mai/no-type-assertion": "warn",
+    "mai/pipe-max-arguments": "warn",
+    "mai/prefer-option-from-nullable": "warn",
+    "mai/private-function-prefix": "error",
+    "mai/require-xstate-event-satisfies": "error",
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    "no-console": "error",
+    "no-empty": "error",
+    "no-eq-null": "error",
+    "no-unused-private-class-members": "error",
+    "no-unused-vars": [
+      "error",
+      { "vars": "all", "args": "all", "caughtErrors": "all" }
+    ],
+    "eqeqeq": "error",
+    "no-explicit-any": "error",
+    "strict-boolean-expressions": "error",
+    "prefer-nullish-coalescing": "error",
+    "no-floating-promises": "error",
+    "no-non-null-assertion": "warn",
+    "no-empty-function": "warn",
+    "no-param-reassign": "warn",
+    "prefer-for-of": "warn",
+    "array-type": "warn",
+    "prefer-as-const": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["packages/oxc/**/*.ts", "packages/typed-lint/**/*.ts"],
+      "rules": {
+        "array-type": "off",
+        "mai/no-in-operator": "off",
+        "mai/no-standard-map-set": "off",
+        "mai/no-single-use-private-functions": "off",
+        "mai/no-typeof-object": "off",
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["packages/typed-lint/**/*.ts"],
+      "rules": {
+        "mai/no-switch": "off"
+      }
+    },
+    {
+      "files": ["**/*.gen.ts"],
+      "rules": {
+        "mai/no-comments": "off",
+        "mai/no-type-assertion": "off",
+        "unicorn/filename-case": "off"
+      }
+    }
+  ]
+}

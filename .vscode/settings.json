@@ -1,0 +1,19 @@
+{
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "editor.codeActionsOnSave": {
+    "source.format.oxc": "always"
+  },
+  "files.readonlyInclude": {
+    "**/*.gen.ts": true
+  },
+  "files.watcherExclude": {
+    "**/*.gen.ts": true
+  },
+  "search.exclude": {
+    "**/*.gen.ts": true
+  }
+}

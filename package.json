@@ -1,0 +1,24 @@
+{
+  "name": "mai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "oxfmt",
+    "typecheck": "pnpm -r typecheck",
+    "lint:all": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config",
+    "lint": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config --quiet",
+    "lint:types": "NODE_OPTIONS='--experimental-strip-types' node packages/typed-lint/src/main.ts",
+    "verify": "pnpm run format && pnpm run typecheck && pnpm run lint:all && pnpm run lint:types"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.86.2",
+    "@mai/oxc": "workspace:^",
+    "@mai/typed-lint": "workspace:^",
+    "@types/node": "latest",
+    "@typescript/native-preview": "beta",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "pnpm@10.33.1"
+}

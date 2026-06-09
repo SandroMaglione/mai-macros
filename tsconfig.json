@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@effect/language-service/schema.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "@effect/language-service" }],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}
