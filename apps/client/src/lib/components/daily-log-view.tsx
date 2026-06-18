@@ -9,7 +9,13 @@ import {
   type MealEntry,
 } from "@mai/nutrition";
 import { Array, Effect } from "effect";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { assign, assertEvent, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
@@ -77,6 +83,7 @@ const dailyNutrientNoTargetClassNames = {
 const actionColorClassName = "text-[#ff5a51]";
 const headerActionClassName =
   "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
+const planActionClassName = `${actionColorClassName} inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-[#3d2827] bg-[#241918] no-underline transition-colors hover:bg-[#2c1d1c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`;
 const darkFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const darkFieldLabelClassName =
@@ -864,7 +871,7 @@ function DailyProgress({
         sugarTargetGrams={plan.sugarTargetGrams}
       />
 
-      <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 px-2">
+      <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-2">
         <label className="relative flex min-h-11 min-w-0 items-center rounded-md border border-[#343438] bg-[#202024] px-3 text-[#ffbd35] transition-colors focus-within:border-[#ff5a51]/70 focus-within:ring-2 focus-within:ring-[#ff5a51]/25">
           <span className="sr-only">Meal plan</span>
           <select
@@ -893,12 +900,23 @@ function DailyProgress({
           />
         </label>
         <Link
-          className={`${actionColorClassName} inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-[#3d2827] bg-[#241918] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2c1d1c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
+          aria-label="Edit selected plan"
+          className={planActionClassName}
+          params={{ planId: plan.id }}
+          search={{ dateKey: day.dailyLog.dateKey }}
+          title="Edit selected plan"
+          to="/plans/$planId/edit"
+        >
+          <Pencil aria-hidden="true" size={18} strokeWidth={3} />
+        </Link>
+        <Link
+          aria-label="Create a new plan"
+          className={planActionClassName}
           search={{ dateKey: day.dailyLog.dateKey }}
           title="Create a new plan"
           to="/plans/new"
         >
-          New plan
+          <Plus aria-hidden="true" size={18} strokeWidth={3} />
         </Link>
       </div>
 

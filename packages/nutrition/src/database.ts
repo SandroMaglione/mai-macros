@@ -4,7 +4,7 @@ import {
   IndexedDbTable,
   IndexedDbVersion,
 } from "@effect/platform-browser";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import {
   ActiveMealPlanSelection,
@@ -68,6 +68,14 @@ export class MaiVersion1 extends IndexedDbVersion.make(
   MealEntriesTable
 ) {}
 
+export class MaiVersion2 extends IndexedDbVersion.make(
+  FoodsTable,
+  PlansTable,
+  DailyLogsTable,
+  ActiveMealPlanSelectionsTable,
+  MealEntriesTable
+) {}
+
 export class MaiDatabase extends IndexedDbDatabase.make(
   MaiVersion1,
   Effect.fn(function* (api) {
@@ -82,6 +90,37 @@ export class MaiDatabase extends IndexedDbDatabase.make(
     yield* api.createIndex("mealEntries", "byDate");
     yield* api.createIndex("mealEntries", "byDateMeal");
     yield* api.createIndex("mealEntries", "byFood");
+  })
+).add(
+  MaiVersion2,
+  Effect.fn(function* (from, to) {
+    const plans = yield* from.from("plans").select();
+    const usedNames: string[] = [];
+    const renamedPlans = yield* Effect.forEach(plans, (plan) =>
+      Effect.gen(function* () {
+        const baseName = plan.name.trim() === "" ? "Plan" : plan.name.trim();
+        let index = 0;
+        let name = baseName;
+
+        while (usedNames.includes(name)) {
+          index += 1;
+          name = `${baseName} (${index})`;
+        }
+
+        usedNames.push(name);
+
+        const encodedPlan = yield* Schema.encodeEffect(Plan)(plan);
+
+        return yield* Schema.decodeEffect(Plan)({
+          ...encodedPlan,
+          name,
+        });
+      })
+    );
+
+    yield* from.deleteIndex("plans", "byName");
+    yield* to.from("plans").upsertAll(renamedPlans);
+    yield* to.createIndex("plans", "byName", { unique: true });
   })
 ) {}
 

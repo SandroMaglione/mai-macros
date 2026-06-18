@@ -1,4 +1,4 @@
-import type { DateKey } from "@mai/nutrition";
+import { calculateMacronutrientEnergyKcal, type DateKey } from "@mai/nutrition";
 
 import type { CreateMealEntryInput } from "./services/meal-entries.ts";
 import type { CreateFoodInput } from "./services/foods.ts";
@@ -82,7 +82,7 @@ export const createMealPlanInputFromFormData = ({
   });
 
   return {
-    name: _formString({ formData, name: "name" }),
+    name: _formTrimmedString({ formData, name: "name" }),
     proteinTargetGrams: _formString({
       formData,
       name: "proteinTargetGrams",
@@ -103,6 +103,26 @@ export const createMealPlanInputFromFormData = ({
       : { saturatedFatTargetGrams }),
   };
 };
+
+export const calculateMealPlanEnergyKcalFromFormData = ({
+  formData,
+}: {
+  readonly formData: FormData;
+}) =>
+  calculateMacronutrientEnergyKcal({
+    proteinGrams: _formNonNegativeNumber({
+      formData,
+      name: "proteinTargetGrams",
+    }),
+    carbsGrams: _formNonNegativeNumber({
+      formData,
+      name: "carbsTargetGrams",
+    }),
+    fatGrams: _formNonNegativeNumber({
+      formData,
+      name: "fatTargetGrams",
+    }),
+  });
 
 export const createFoodInputFromFormData = ({
   formData,
@@ -165,4 +185,22 @@ export const createMealEntryInputFromFormData = ({
     foodId: _formString({ formData, name: "foodId" }),
     quantityGrams: _formString({ formData, name: "quantityGrams" }),
   };
+};
+
+const _formNonNegativeNumber = ({
+  formData,
+  name,
+}: {
+  readonly formData: FormData;
+  readonly name: string;
+}) => {
+  const value = formData.get(name);
+
+  if (typeof value !== "string" || value.trim() === "") {
+    return 0;
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
 };

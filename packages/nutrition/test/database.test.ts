@@ -76,7 +76,7 @@ const mealEntryInput: typeof MealEntry.Encoded = {
 };
 
 describe("MaiDatabase", () => {
-  it("opens version one with stores and indexes", async () => {
+  it("opens the latest version with stores and indexes", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase;
       const name = yield* api.use((database) => database.name);
@@ -95,14 +95,27 @@ describe("MaiDatabase", () => {
             .indexNames
         )
       );
+      const planNameIndexIsUnique = yield* api.use(
+        (database) =>
+          database.transaction("plans").objectStore("plans").index("byName")
+            .unique
+      );
 
-      return { entryIndexes, foodIndexes, name, storeNames, version };
+      return {
+        entryIndexes,
+        foodIndexes,
+        name,
+        planNameIndexIsUnique,
+        storeNames,
+        version,
+      };
     }).pipe(Effect.provide(databaseLayer));
 
     const result = await Effect.runPromise(program);
 
     assert.equal(result.name, DatabaseName);
-    assert.equal(result.version, 1);
+    assert.equal(result.version, 2);
+    assert.equal(result.planNameIndexIsUnique, true);
     assert.deepStrictEqual(result.storeNames, [
       "activeMealPlanSelections",
       "dailyLogs",
@@ -190,5 +203,106 @@ describe("MaiDatabase", () => {
     assert.equal(result.storedFood.name, "Greek yogurt");
     assert.equal(result.validatedNutrients.energyKcal, 88.5);
     assert.equal(result.validatedNutrients.proteinGrams, 15);
+  });
+
+  it("renames duplicate legacy plan names before making the index unique", async () => {
+    const legacyPlans: readonly (typeof Plan.Encoded)[] = [
+      planInput,
+      {
+        ...planInput,
+        id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
+      },
+      {
+        ...planInput,
+        id: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+        name: " Training day ",
+      },
+      {
+        ...planInput,
+        id: "9535a059-a61f-42e1-a2e0-35ec87203c29",
+        name: "training day",
+      },
+    ];
+
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DatabaseName, 1);
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        const foodStore = database.createObjectStore("foods", {
+          keyPath: "id",
+        });
+        foodStore.createIndex("byName", "name");
+
+        const planStore = database.createObjectStore("plans", {
+          keyPath: "id",
+        });
+        planStore.createIndex("byName", "name");
+
+        const dailyLogStore = database.createObjectStore("dailyLogs", {
+          keyPath: "dateKey",
+        });
+        dailyLogStore.createIndex("byPlan", "planId");
+
+        database.createObjectStore("activeMealPlanSelections", {
+          keyPath: "id",
+        });
+
+        const mealEntryStore = database.createObjectStore("mealEntries", {
+          keyPath: "id",
+        });
+        mealEntryStore.createIndex("byDate", "dateKey");
+        mealEntryStore.createIndex("byDateMeal", ["dateKey", "meal"]);
+        mealEntryStore.createIndex("byFood", "foodId");
+      };
+
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction("plans", "readwrite");
+        const planStore = transaction.objectStore("plans");
+
+        for (const plan of legacyPlans) {
+          planStore.put(plan);
+        }
+
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+      };
+    });
+
+    const program = Effect.gen(function* () {
+      const api = yield* MaiDatabase.getQueryBuilder;
+      const plans = yield* api.from("plans").select();
+      const planNameIndexIsUnique = yield* api.use(
+        (database) =>
+          database.transaction("plans").objectStore("plans").index("byName")
+            .unique
+      );
+
+      return {
+        names: plans.map((plan) => plan.name),
+        planNameIndexIsUnique,
+      };
+    }).pipe(Effect.provide(databaseLayer));
+
+    const result = await Effect.runPromise(program);
+
+    assert.equal(result.planNameIndexIsUnique, true);
+    assert.deepStrictEqual(result.names, [
+      "Training day",
+      "Training day (1)",
+      "Training day (2)",
+      "training day",
+    ]);
   });
 });
