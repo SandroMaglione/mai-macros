@@ -27,6 +27,7 @@ export type DailyLogViewData = {
 
 type NutrientTotals = ReturnType<typeof calculateEntryNutrients>;
 type MacroTone = "protein" | "carbs" | "fat";
+type DailyNutrientTone = "carbs" | "fat" | "salt";
 
 const macroToneClassNames: Record<
   MacroTone,
@@ -51,6 +52,27 @@ const macroToneClassNames: Record<
     text: "text-[#4c7dff]",
     track: "bg-[#233059]",
   },
+};
+const dailyNutrientToneClassNames: Record<
+  DailyNutrientTone,
+  {
+    readonly bar: string;
+    readonly text: string;
+    readonly track: string;
+  }
+> = {
+  carbs: macroToneClassNames.carbs,
+  fat: macroToneClassNames.fat,
+  salt: {
+    bar: "bg-[#aaaab1]",
+    text: "text-[#aaaab1]",
+    track: "bg-[#303034]",
+  },
+};
+const dailyNutrientNoTargetClassNames = {
+  bar: "bg-[#4a4a50]",
+  text: "text-[#8d8d95]",
+  track: "bg-[#2b2b30]",
 };
 const actionColorClassName = "text-[#ff5a51]";
 const headerActionClassName =
@@ -835,12 +857,11 @@ function DailyProgress({
       />
 
       <DailyNutrientDetails
-        fiberTargetGrams={plan.fiberTargetGrams ?? plan.carbsTargetGrams}
+        fiberTargetGrams={plan.fiberTargetGrams}
         nutrients={nutrients}
-        saturatedFatTargetGrams={
-          plan.saturatedFatTargetGrams ?? plan.fatTargetGrams
-        }
-        sugarTargetGrams={plan.carbsTargetGrams}
+        saltTargetGrams={plan.saltTargetGrams}
+        saturatedFatTargetGrams={plan.saturatedFatTargetGrams}
+        sugarTargetGrams={plan.sugarTargetGrams}
       />
 
       <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 px-2">
@@ -877,7 +898,7 @@ function DailyProgress({
           title="Create a new plan"
           to="/plans/new"
         >
-          Details
+          New plan
         </Link>
       </div>
 
@@ -900,16 +921,18 @@ function DailyProgress({
 function DailyNutrientDetails({
   fiberTargetGrams,
   nutrients,
+  saltTargetGrams,
   saturatedFatTargetGrams,
   sugarTargetGrams,
 }: {
-  readonly fiberTargetGrams: number;
+  readonly fiberTargetGrams: number | undefined;
   readonly nutrients: NutrientTotals;
-  readonly saturatedFatTargetGrams: number;
-  readonly sugarTargetGrams: number;
+  readonly saltTargetGrams: number | undefined;
+  readonly saturatedFatTargetGrams: number | undefined;
+  readonly sugarTargetGrams: number | undefined;
 }) {
   return (
-    <dl className="mt-3 grid grid-cols-3 gap-3">
+    <dl className="mt-3 grid grid-cols-4 gap-2">
       <DailyNutrientProgressLine
         label="Fiber"
         target={fiberTargetGrams}
@@ -928,6 +951,12 @@ function DailyNutrientDetails({
         tone="fat"
         value={nutrients.saturatedFatGrams}
       />
+      <DailyNutrientProgressLine
+        label="Salt"
+        target={saltTargetGrams}
+        tone="salt"
+        value={nutrients.saltGrams}
+      />
     </dl>
   );
 }
@@ -939,19 +968,31 @@ function DailyNutrientProgressLine({
   value,
 }: {
   readonly label: string;
-  readonly target: number;
-  readonly tone: "carbs" | "fat";
+  readonly target: number | undefined;
+  readonly tone: DailyNutrientTone;
   readonly value: number;
 }) {
-  const progressPercent =
-    target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
+  const hasTarget = target !== undefined;
+  const progressPercent = hasTarget
+    ? target <= 0
+      ? value > 0
+        ? 100
+        : 0
+      : (value / target) * 100
+    : 0;
   const cappedProgressPercent = Math.min(progressPercent, 100);
-  const toneClassNames = macroToneClassNames[tone];
+  const toneClassNames = hasTarget
+    ? dailyNutrientToneClassNames[tone]
+    : dailyNutrientNoTargetClassNames;
+  const valueText = _formatValueWithUnit({ unit: "g", value });
+  const targetText = hasTarget
+    ? _formatValueWithUnit({ unit: "g", value: target })
+    : undefined;
 
   return (
-    <div className="grid min-w-0 gap-1.5 text-center">
+    <div className="grid min-w-0 gap-1 text-center">
       <dt
-        className={`truncate text-xs font-medium leading-tight ${toneClassNames.text}`}
+        className={`truncate text-[0.68rem] font-medium leading-tight ${toneClassNames.text}`}
       >
         {label}
       </dt>
@@ -960,11 +1001,10 @@ function DailyNutrientProgressLine({
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={Math.round(cappedProgressPercent)}
-        aria-valuetext={`${_formatValueWithUnit({
-          unit: "g",
-          value,
-        })} of ${_formatValueWithUnit({ unit: "g", value: target })}`}
-        className={`h-2 overflow-hidden rounded-full ${toneClassNames.track}`}
+        aria-valuetext={
+          targetText === undefined ? valueText : `${valueText} of ${targetText}`
+        }
+        className={`h-1.5 overflow-hidden rounded-full ${toneClassNames.track}`}
         role="progressbar"
       >
         <span
@@ -973,9 +1013,12 @@ function DailyNutrientProgressLine({
         />
       </div>
       <dd
-        className={`truncate text-sm font-black leading-tight ${toneClassNames.text}`}
+        className={`truncate text-[0.72rem] font-black leading-tight ${toneClassNames.text}`}
       >
-        {_formatNumber({ value })} / {_formatNumber({ value: target })} g
+        {_formatNumber({ value })}g
+        {target === undefined
+          ? null
+          : ` / ${_formatNumber({ value: target })}g`}
       </dd>
     </div>
   );

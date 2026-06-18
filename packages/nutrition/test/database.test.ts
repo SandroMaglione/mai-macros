@@ -52,6 +52,7 @@ const planInput: typeof Plan.Encoded = {
   carbsTargetGrams: 220,
   fatTargetGrams: 70,
   fiberTargetGrams: 30,
+  sugarTargetGrams: 50,
   saltTargetGrams: 6,
   saturatedFatTargetGrams: 20,
   createdAt: 0,

@@ -1,4 +1,5 @@
 import {
+  Link,
   createFileRoute,
   useNavigate,
   type UseNavigateResult,
@@ -6,7 +7,7 @@ import {
 import { useMachine } from "@xstate/react";
 import { calculateMacronutrientEnergyKcal } from "@mai/nutrition";
 import { DateTime, Effect } from "effect";
-import { ClipboardList, Flame, Plus } from "lucide-react";
+import { ClipboardList, Flame, Plus, X } from "lucide-react";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../lib/runtime-client.ts";
@@ -22,6 +23,93 @@ export const Route = createFileRoute("/plans/new")({
   }),
   component: Component,
 });
+
+type PlanTargetFieldName =
+  | "proteinTargetGrams"
+  | "carbsTargetGrams"
+  | "fatTargetGrams"
+  | "fiberTargetGrams"
+  | "sugarTargetGrams"
+  | "saturatedFatTargetGrams"
+  | "saltTargetGrams";
+
+type PlanTargetField = {
+  readonly accentClassName: string;
+  readonly label: string;
+  readonly name: PlanTargetFieldName;
+  readonly placeholder: string;
+  readonly step: "0.1" | "0.01";
+  readonly unit: "g";
+};
+
+const planFieldClassName =
+  "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
+const planFieldLabelClassName =
+  "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
+const secondaryActionClassName =
+  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black text-[#ff5a51] no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45 sm:w-fit";
+
+const macroTargetFields: readonly PlanTargetField[] = [
+  {
+    accentClassName: "text-[#4c7dff]",
+    label: "Protein",
+    name: "proteinTargetGrams",
+    placeholder: "160",
+    step: "0.1",
+    unit: "g",
+  },
+  {
+    accentClassName: "text-[#ff4f8b]",
+    label: "Carbs",
+    name: "carbsTargetGrams",
+    placeholder: "220",
+    step: "0.1",
+    unit: "g",
+  },
+  {
+    accentClassName: "text-[#ffbd35]",
+    label: "Fat",
+    name: "fatTargetGrams",
+    placeholder: "70",
+    step: "0.1",
+    unit: "g",
+  },
+];
+
+const nutrientTargetFields: readonly PlanTargetField[] = [
+  {
+    accentClassName: "text-[#ff4f8b]",
+    label: "Fiber",
+    name: "fiberTargetGrams",
+    placeholder: "30",
+    step: "0.1",
+    unit: "g",
+  },
+  {
+    accentClassName: "text-[#ff4f8b]",
+    label: "Sugar",
+    name: "sugarTargetGrams",
+    placeholder: "50",
+    step: "0.1",
+    unit: "g",
+  },
+  {
+    accentClassName: "text-[#ffbd35]",
+    label: "Saturated fat",
+    name: "saturatedFatTargetGrams",
+    placeholder: "20",
+    step: "0.1",
+    unit: "g",
+  },
+  {
+    accentClassName: "text-[#aaaab1]",
+    label: "Salt",
+    name: "saltTargetGrams",
+    placeholder: "6",
+    step: "0.01",
+    unit: "g",
+  },
+];
 
 const submitMealPlanMachine = setup({
   types: {
@@ -161,24 +249,26 @@ function Component() {
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
   return (
-    <main className="min-h-screen px-2 py-3 sm:px-4">
-      <section className="mx-auto flex w-full max-w-[430px] flex-col">
-        <header className="mb-3 flex items-center gap-2">
-          <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-stone-950 text-white">
-            <ClipboardList aria-hidden="true" size={22} strokeWidth={2.4} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[0.68rem] font-black uppercase leading-tight tracking-normal text-stone-500">
-              Meal plans
-            </p>
-            <h1 className="truncate text-xl font-black leading-tight text-stone-950">
-              Create plan
-            </h1>
+    <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
+      <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-6">
+        <header className="sticky top-0 z-30 bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
+          <div className="flex h-16 items-center gap-3 px-4">
+            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+              <ClipboardList aria-hidden="true" size={24} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
+                Meal plans
+              </p>
+              <h1 className="truncate text-2xl font-black leading-tight text-white">
+                Create plan
+              </h1>
+            </div>
           </div>
         </header>
 
         <form
-          className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3"
+          className="grid gap-4 px-4 py-5"
           onInput={(event) => {
             send({
               type: "changeTargets",
@@ -195,97 +285,133 @@ function Component() {
             });
           }}
         >
-          <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
+          <label className={planFieldLabelClassName}>
             Name
             <input
               autoComplete="off"
-              className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+              className={planFieldClassName}
+              disabled={isSubmitting}
               name="name"
               placeholder="Training day"
               required
             />
           </label>
 
-          <div className="grid grid-cols-3 gap-2">
-            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
-              Protein
-              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                <input
-                  className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
-                  inputMode="decimal"
-                  min="0"
-                  name="proteinTargetGrams"
-                  required
-                  step="0.1"
-                  type="number"
+          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
+            <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
+              Macros
+            </legend>
+            <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-3">
+              {macroTargetFields.map((field) => (
+                <PlanTargetInput
+                  disabled={isSubmitting}
+                  field={field}
+                  key={field.name}
                 />
-                <span className="font-bold text-stone-500">g</span>
-              </span>
-            </label>
+              ))}
+            </div>
 
-            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
-              Carbs
-              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                <input
-                  className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
-                  inputMode="decimal"
-                  min="0"
-                  name="carbsTargetGrams"
-                  required
-                  step="0.1"
-                  type="number"
-                />
-                <span className="font-bold text-stone-500">g</span>
+            <output
+              aria-live="polite"
+              className="mt-1 flex items-center justify-between gap-3 rounded-lg border border-[#29292d] bg-[#111113] p-3 text-[#4c7dff]"
+              name="energyKcal"
+            >
+              <span className="inline-flex items-center gap-1.5 text-sm font-black uppercase tracking-normal">
+                <Flame aria-hidden="true" size={18} strokeWidth={2.6} />
+                Calories
               </span>
-            </label>
+              <span className="grid justify-items-end gap-0.5">
+                <strong className="text-3xl font-black leading-none">
+                  {formattedEnergyKcal}
+                </strong>
+                <span className="text-[0.68rem] font-black uppercase tracking-normal">
+                  kcal
+                </span>
+              </span>
+            </output>
+          </fieldset>
 
-            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
-              Fat
-              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                <input
-                  className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
-                  inputMode="decimal"
-                  min="0"
-                  name="fatTargetGrams"
-                  required
-                  step="0.1"
-                  type="number"
+          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
+            <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
+              Nutrient limits
+            </legend>
+            <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
+              {nutrientTargetFields.map((field) => (
+                <PlanTargetInput
+                  disabled={isSubmitting}
+                  field={field}
+                  key={field.name}
                 />
-                <span className="font-bold text-stone-500">g</span>
-              </span>
-            </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              <Plus aria-hidden="true" size={18} strokeWidth={3} />
+              {snapshot.matches("Failure") ? "Try again" : "Create plan"}
+            </button>
+            <BackToDayLink dateKey={search.dateKey} />
           </div>
-
-          <output
-            aria-live="polite"
-            className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-stone-950"
-            name="energyKcal"
-          >
-            <span className="inline-flex items-center gap-1.5 text-sm font-black uppercase tracking-normal">
-              <Flame aria-hidden="true" size={18} strokeWidth={2.6} />
-              Calories
-            </span>
-            <span className="grid justify-items-end gap-0.5">
-              <strong className="text-3xl font-black leading-none">
-                {formattedEnergyKcal}
-              </strong>
-              <span className="text-[0.68rem] font-black uppercase tracking-normal">
-                kcal
-              </span>
-            </span>
-          </output>
-
-          <button
-            className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-950 bg-stone-950 px-4 text-sm font-bold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
-            disabled={isSubmitting}
-            type="submit"
-          >
-            <Plus aria-hidden="true" className="mr-2" size={18} />
-            {snapshot.matches("Failure") ? "Try again" : "Create plan"}
-          </button>
         </form>
       </section>
     </main>
+  );
+}
+
+function PlanTargetInput({
+  disabled,
+  field,
+}: {
+  readonly disabled: boolean;
+  readonly field: PlanTargetField;
+}) {
+  return (
+    <label className={planFieldLabelClassName}>
+      <span className={field.accentClassName}>{field.label}</span>
+      <span className="relative">
+        <input
+          className={`${planFieldClassName} pr-9`}
+          disabled={disabled}
+          inputMode="decimal"
+          min="0"
+          name={field.name}
+          placeholder={field.placeholder}
+          required
+          step={field.step}
+          type="number"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
+          {field.unit}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
+  if (dateKey === undefined) {
+    return (
+      <Link className={secondaryActionClassName} to="/">
+        <X aria-hidden="true" size={17} strokeWidth={3} />
+        Cancel
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      className={secondaryActionClassName}
+      params={{ dateKey }}
+      to="/days/$dateKey"
+    >
+      <X aria-hidden="true" size={17} strokeWidth={3} />
+      Cancel
+    </Link>
   );
 }
 
@@ -304,5 +430,5 @@ function _formNonNegativeNumber({
 
   const parsedValue = Number(value);
 
-  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 0;
+  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
 }

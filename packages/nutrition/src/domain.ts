@@ -72,6 +72,7 @@ export class Plan extends Schema.Class<Plan>("Plan")({
   carbsTargetGrams: NonNegativeNumber,
   fatTargetGrams: NonNegativeNumber,
   fiberTargetGrams: Schema.optional(NonNegativeNumber),
+  sugarTargetGrams: Schema.optional(NonNegativeNumber),
   saltTargetGrams: Schema.optional(NonNegativeNumber),
   saturatedFatTargetGrams: Schema.optional(NonNegativeNumber),
   createdAt: Schema.DateTimeUtcFromMillis,

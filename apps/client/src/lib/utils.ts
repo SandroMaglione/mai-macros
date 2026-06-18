@@ -34,6 +34,18 @@ const _formTrimmedString = ({
   return _formString({ formData, name }).trim();
 };
 
+const _formOptionalString = ({
+  formData,
+  name,
+}: {
+  readonly formData: FormData;
+  readonly name: string;
+}) => {
+  const value = _formTrimmedString({ formData, name });
+
+  return value === "" ? undefined : value;
+};
+
 export const shiftDateKey = ({
   dateKey,
   days,
@@ -52,6 +64,23 @@ export const createMealPlanInputFromFormData = ({
 }: {
   readonly formData: FormData;
 }): CreateMealPlanInput => {
+  const fiberTargetGrams = _formOptionalString({
+    formData,
+    name: "fiberTargetGrams",
+  });
+  const sugarTargetGrams = _formOptionalString({
+    formData,
+    name: "sugarTargetGrams",
+  });
+  const saltTargetGrams = _formOptionalString({
+    formData,
+    name: "saltTargetGrams",
+  });
+  const saturatedFatTargetGrams = _formOptionalString({
+    formData,
+    name: "saturatedFatTargetGrams",
+  });
+
   return {
     name: _formString({ formData, name: "name" }),
     proteinTargetGrams: _formString({
@@ -66,6 +95,12 @@ export const createMealPlanInputFromFormData = ({
       formData,
       name: "fatTargetGrams",
     }),
+    ...(fiberTargetGrams === undefined ? {} : { fiberTargetGrams }),
+    ...(sugarTargetGrams === undefined ? {} : { sugarTargetGrams }),
+    ...(saltTargetGrams === undefined ? {} : { saltTargetGrams }),
+    ...(saturatedFatTargetGrams === undefined
+      ? {}
+      : { saturatedFatTargetGrams }),
   };
 };
 

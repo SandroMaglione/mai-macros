@@ -26,6 +26,10 @@ const _CreateMealPlanInput = Schema.Struct({
   proteinTargetGrams: _FormNonNegativeNumber,
   carbsTargetGrams: _FormNonNegativeNumber,
   fatTargetGrams: _FormNonNegativeNumber,
+  fiberTargetGrams: Schema.optional(_FormNonNegativeNumber),
+  sugarTargetGrams: Schema.optional(_FormNonNegativeNumber),
+  saltTargetGrams: Schema.optional(_FormNonNegativeNumber),
+  saturatedFatTargetGrams: Schema.optional(_FormNonNegativeNumber),
 });
 
 const _SetActiveMealPlanInput = Schema.Struct({
@@ -73,6 +77,20 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
           proteinTargetGrams: decodedInput.proteinTargetGrams,
           carbsTargetGrams: decodedInput.carbsTargetGrams,
           fatTargetGrams: decodedInput.fatTargetGrams,
+          ...(decodedInput.fiberTargetGrams === undefined
+            ? {}
+            : { fiberTargetGrams: decodedInput.fiberTargetGrams }),
+          ...(decodedInput.sugarTargetGrams === undefined
+            ? {}
+            : { sugarTargetGrams: decodedInput.sugarTargetGrams }),
+          ...(decodedInput.saltTargetGrams === undefined
+            ? {}
+            : { saltTargetGrams: decodedInput.saltTargetGrams }),
+          ...(decodedInput.saturatedFatTargetGrams === undefined
+            ? {}
+            : {
+                saturatedFatTargetGrams: decodedInput.saturatedFatTargetGrams,
+              }),
           createdAt: now,
         });
 
