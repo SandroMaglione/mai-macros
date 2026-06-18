@@ -1,0 +1,24 @@
+{
+  "name": "@mai/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@mai/nutrition": "workspace:^",
+    "@tanstack/react-router": "^1.170.16",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tanstack/router-plugin": "^1.168.18",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16"
+  }
+}
