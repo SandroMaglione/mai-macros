@@ -9,13 +9,7 @@ import {
   type MealEntry,
 } from "@mai/nutrition";
 import { Array, Effect } from "effect";
-import {
-  ChartPie,
-  ChevronLeft,
-  ChevronRight,
-  CirclePlus,
-  EllipsisVertical,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { assign, assertEvent, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
@@ -326,6 +320,14 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
     foods,
     mealEntries,
   });
+  const displayedDate = new Date(`${day.dailyLog.dateKey}T00:00:00`);
+  const displayedDateWeekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  }).format(displayedDate);
+  const displayedDateDay = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+  }).format(displayedDate);
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
@@ -345,37 +347,27 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
               <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
             </Link>
             <Link
-              aria-label="Today"
-              className="rounded-full px-6 py-2 text-center text-2xl font-black leading-none text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              title={day.dailyLog.dateKey}
+              aria-label="Go to today"
+              className="grid rounded-full px-6 py-1.5 text-center text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              title={`Go to today from ${day.dailyLog.dateKey}`}
               to="/"
             >
-              Today
+              <span className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
+                {displayedDateWeekday}
+              </span>
+              <span className="text-xl font-black leading-tight">
+                {displayedDateDay}
+              </span>
             </Link>
-            <div className="flex items-center justify-end gap-2">
-              <Link
-                aria-label="Next day"
-                className={headerActionClassName}
-                params={{ dateKey: nextDateKey }}
-                title="Next day"
-                to="/days/$dateKey"
-              >
-                <ChevronRight aria-hidden="true" size={31} strokeWidth={2.6} />
-              </Link>
-              <Link
-                aria-label="Create food"
-                className={headerActionClassName}
-                search={{ dateKey: day.dailyLog.dateKey }}
-                title="Create food"
-                to="/foods/new"
-              >
-                <EllipsisVertical
-                  aria-hidden="true"
-                  size={30}
-                  strokeWidth={3}
-                />
-              </Link>
-            </div>
+            <Link
+              aria-label="Next day"
+              className={`${headerActionClassName} justify-self-end`}
+              params={{ dateKey: nextDateKey }}
+              title="Next day"
+              to="/days/$dateKey"
+            >
+              <ChevronRight aria-hidden="true" size={31} strokeWidth={2.6} />
+            </Link>
           </nav>
         </header>
 
@@ -477,16 +469,10 @@ function MealSection({
 
   return (
     <section className="overflow-hidden rounded-[10px] bg-[#1b1b1e] shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
-      <header className="flex min-w-0 items-center justify-between gap-3 px-3 py-4">
+      <header className="flex min-w-0 items-center px-3 py-4">
         <h2 className="truncate text-xl font-black leading-tight text-[#efeff2]">
           {mealLabel}
         </h2>
-        <EllipsisVertical
-          aria-hidden="true"
-          className="shrink-0 text-white"
-          size={29}
-          strokeWidth={3}
-        />
       </header>
 
       <MealMacroStripe nutrients={mealNutrients} />
@@ -504,17 +490,23 @@ function MealSection({
       ) : null}
 
       <MealTotalColumns nutrients={mealNutrients} />
+      <MealNutrientColumns nutrients={mealNutrients} />
 
       <details className="group border-t border-[#29292d]">
         <summary
           className={`flex cursor-pointer list-none items-center justify-center gap-2 px-4 py-4 text-base font-black ${actionColorClassName} transition-colors hover:bg-[#202024] [&::-webkit-details-marker]:hidden`}
         >
-          <CirclePlus aria-hidden="true" fill="currentColor" size={18} />
           Add food
+          <ChevronDown
+            aria-hidden="true"
+            className="transition-transform duration-200 ease-out group-open:rotate-180"
+            size={19}
+            strokeWidth={3}
+          />
         </summary>
 
         <form
-          className="grid gap-3 px-4 pb-4"
+          className="grid gap-3 px-4 pb-4 opacity-0 transition-opacity duration-200 group-open:opacity-100"
           onSubmit={(event) => {
             event.preventDefault();
 
@@ -699,7 +691,7 @@ function MealTotalColumns({
         <dt
           className={`truncate text-sm font-medium leading-tight ${macroToneClassNames.carbs.text}`}
         >
-          Carbohydrate
+          Carbs
         </dt>
         <dd
           className={`order-first text-xl font-black leading-none ${macroToneClassNames.carbs.text}`}
@@ -743,6 +735,57 @@ function MealTotalColumns({
   );
 }
 
+function MealNutrientColumns({
+  nutrients,
+}: {
+  readonly nutrients: NutrientTotals;
+}) {
+  return (
+    <dl className="grid grid-cols-3 border-t border-[#29292d] bg-[#18181b]">
+      <MealNutrientColumn
+        label="Fiber"
+        textClassName={macroToneClassNames.carbs.text}
+        value={nutrients.fiberGrams}
+      />
+      <MealNutrientColumn
+        label="Salt"
+        textClassName="text-[#aaaab1]"
+        value={nutrients.saltGrams}
+      />
+      <MealNutrientColumn
+        label="Sat fat"
+        textClassName={macroToneClassNames.fat.text}
+        value={nutrients.saturatedFatGrams}
+      />
+    </dl>
+  );
+}
+
+function MealNutrientColumn({
+  label,
+  textClassName,
+  value,
+}: {
+  readonly label: string;
+  readonly textClassName: string;
+  readonly value: number;
+}) {
+  return (
+    <div className="grid min-w-0 justify-items-center gap-0.5 px-1 py-2 text-center">
+      <dt
+        className={`truncate text-xs font-medium leading-tight ${textClassName}`}
+      >
+        {label}
+      </dt>
+      <dd
+        className={`order-first text-base font-black leading-none ${textClassName}`}
+      >
+        {_formatNumber({ value })}g
+      </dd>
+    </div>
+  );
+}
+
 function DailyProgress({
   day,
   disabled,
@@ -764,7 +807,7 @@ function DailyProgress({
     >
       <dl className="grid grid-cols-3 gap-4">
         <MacroProgressLine
-          label="Carbohydrate"
+          label="Carbs"
           target={plan.carbsTargetGrams}
           tone="carbs"
           unit="g"
@@ -791,18 +834,20 @@ function DailyProgress({
         value={nutrients.energyKcal}
       />
 
-      <div className="mt-4 flex min-w-0 items-center justify-between gap-4 px-7">
-        <label className="flex min-w-0 items-center gap-2 text-[#ffbd35]">
-          <ChartPie
-            aria-hidden="true"
-            className="shrink-0"
-            fill="currentColor"
-            size={19}
-            strokeWidth={0}
-          />
+      <DailyNutrientDetails
+        fiberTargetGrams={plan.fiberTargetGrams ?? plan.carbsTargetGrams}
+        nutrients={nutrients}
+        saturatedFatTargetGrams={
+          plan.saturatedFatTargetGrams ?? plan.fatTargetGrams
+        }
+        sugarTargetGrams={plan.carbsTargetGrams}
+      />
+
+      <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 px-2">
+        <label className="relative flex min-h-11 min-w-0 items-center rounded-md border border-[#343438] bg-[#202024] px-3 text-[#ffbd35] transition-colors focus-within:border-[#ff5a51]/70 focus-within:ring-2 focus-within:ring-[#ff5a51]/25">
           <span className="sr-only">Meal plan</span>
           <select
-            className="max-w-48 min-w-0 appearance-none truncate border-0 bg-transparent p-0 text-base font-black text-[#ffbd35] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 min-w-0 flex-1 appearance-none truncate border-0 bg-transparent py-0 pl-0 pr-7 text-base font-black text-[#ffbd35] outline-none disabled:cursor-not-allowed disabled:opacity-60"
             disabled={disabled}
             value={plan.id}
             onChange={(event) => {
@@ -819,9 +864,15 @@ function DailyProgress({
               </option>
             ))}
           </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+            size={18}
+            strokeWidth={3}
+          />
         </label>
         <Link
-          className={`${actionColorClassName} shrink-0 text-base font-black no-underline`}
+          className={`${actionColorClassName} inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-[#3d2827] bg-[#241918] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2c1d1c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
           search={{ dateKey: day.dailyLog.dateKey }}
           title="Create a new plan"
           to="/plans/new"
@@ -829,7 +880,104 @@ function DailyProgress({
           Details
         </Link>
       </div>
+
+      <div className="mt-2 px-2">
+        <Link
+          aria-label="Create food"
+          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
+          search={{ dateKey: day.dailyLog.dateKey }}
+          title="Create food"
+          to="/foods/new"
+        >
+          <Plus aria-hidden="true" size={18} strokeWidth={3} />
+          New food
+        </Link>
+      </div>
     </section>
+  );
+}
+
+function DailyNutrientDetails({
+  fiberTargetGrams,
+  nutrients,
+  saturatedFatTargetGrams,
+  sugarTargetGrams,
+}: {
+  readonly fiberTargetGrams: number;
+  readonly nutrients: NutrientTotals;
+  readonly saturatedFatTargetGrams: number;
+  readonly sugarTargetGrams: number;
+}) {
+  return (
+    <dl className="mt-3 grid grid-cols-3 gap-3">
+      <DailyNutrientProgressLine
+        label="Fiber"
+        target={fiberTargetGrams}
+        tone="carbs"
+        value={nutrients.fiberGrams}
+      />
+      <DailyNutrientProgressLine
+        label="Sugar"
+        target={sugarTargetGrams}
+        tone="carbs"
+        value={nutrients.sugarGrams}
+      />
+      <DailyNutrientProgressLine
+        label="Sat fat"
+        target={saturatedFatTargetGrams}
+        tone="fat"
+        value={nutrients.saturatedFatGrams}
+      />
+    </dl>
+  );
+}
+
+function DailyNutrientProgressLine({
+  label,
+  target,
+  tone,
+  value,
+}: {
+  readonly label: string;
+  readonly target: number;
+  readonly tone: "carbs" | "fat";
+  readonly value: number;
+}) {
+  const progressPercent =
+    target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
+  const cappedProgressPercent = Math.min(progressPercent, 100);
+  const toneClassNames = macroToneClassNames[tone];
+
+  return (
+    <div className="grid min-w-0 gap-1.5 text-center">
+      <dt
+        className={`truncate text-xs font-medium leading-tight ${toneClassNames.text}`}
+      >
+        {label}
+      </dt>
+      <div
+        aria-label={`${label} progress`}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(cappedProgressPercent)}
+        aria-valuetext={`${_formatValueWithUnit({
+          unit: "g",
+          value,
+        })} of ${_formatValueWithUnit({ unit: "g", value: target })}`}
+        className={`h-2 overflow-hidden rounded-full ${toneClassNames.track}`}
+        role="progressbar"
+      >
+        <span
+          className={`block h-full rounded-full transition-[inline-size] duration-200 ${toneClassNames.bar}`}
+          style={{ inlineSize: `${cappedProgressPercent}%` }}
+        />
+      </div>
+      <dd
+        className={`truncate text-sm font-black leading-tight ${toneClassNames.text}`}
+      >
+        {_formatNumber({ value })} / {_formatNumber({ value: target })} g
+      </dd>
+    </div>
   );
 }
 
@@ -1055,6 +1203,6 @@ function _formatValueWithUnit({
 
 function _formatNumber({ value }: { readonly value: number }) {
   return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 1,
+    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
   }).format(value);
 }
