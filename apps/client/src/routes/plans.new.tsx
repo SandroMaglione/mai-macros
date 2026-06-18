@@ -6,6 +6,7 @@ import {
 import { useMachine } from "@xstate/react";
 import { calculateMacronutrientEnergyKcal } from "@mai/nutrition";
 import { DateTime, Effect } from "effect";
+import { ClipboardList, Flame, Plus } from "lucide-react";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../lib/runtime-client.ts";
@@ -160,18 +161,25 @@ function Component() {
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
   return (
-    <main className="app-shell">
-      <section className="plan-create">
-        <div className="page-heading">
-          <p className="eyebrow">Meal plans</p>
-          <h1>Create a meal plan</h1>
-          <p className="lede">
+    <main className="flex min-h-screen items-start justify-center px-4 py-5 sm:items-center sm:px-6 sm:py-8 lg:px-8">
+      <section className="mx-auto flex w-full max-w-3xl flex-col">
+        <div className="mb-7 mt-6 grid justify-items-center text-center sm:mt-8">
+          <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25">
+            <ClipboardList aria-hidden="true" size={30} strokeWidth={2.4} />
+          </div>
+          <p className="mb-2 text-xs font-extrabold uppercase tracking-normal text-emerald-700">
+            Meal plans
+          </p>
+          <h1 className="text-3xl font-black leading-tight text-stone-950 sm:text-4xl">
+            Create a meal plan
+          </h1>
+          <p className="mt-3 max-w-xl text-base font-medium leading-7 text-stone-700">
             Set the default macro target used when opening a new day.
           </p>
         </div>
 
         <form
-          className="plan-form"
+          className="grid gap-5 rounded-lg border border-stone-200 bg-white/90 p-5 shadow-[0_18px_45px_rgb(15_23_42_/_0.08)] backdrop-blur sm:p-6"
           onInput={(event) => {
             send({
               type: "changeTargets",
@@ -188,21 +196,23 @@ function Component() {
             });
           }}
         >
-          <label>
+          <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
             Name
             <input
               autoComplete="off"
+              className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
               name="name"
               placeholder="Training day"
               required
             />
           </label>
 
-          <div className="macro-grid">
-            <label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Protein
-              <span className="input-with-unit">
+              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                 <input
+                  className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                   inputMode="decimal"
                   min="0"
                   name="proteinTargetGrams"
@@ -210,14 +220,15 @@ function Component() {
                   step="0.1"
                   type="number"
                 />
-                <span>g</span>
+                <span className="font-bold text-emerald-700">g</span>
               </span>
             </label>
 
-            <label>
+            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Carbs
-              <span className="input-with-unit">
+              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                 <input
+                  className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                   inputMode="decimal"
                   min="0"
                   name="carbsTargetGrams"
@@ -225,14 +236,15 @@ function Component() {
                   step="0.1"
                   type="number"
                 />
-                <span>g</span>
+                <span className="font-bold text-emerald-700">g</span>
               </span>
             </label>
 
-            <label>
+            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Fat
-              <span className="input-with-unit">
+              <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                 <input
+                  className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                   inputMode="decimal"
                   min="0"
                   name="fatTargetGrams"
@@ -240,22 +252,36 @@ function Component() {
                   step="0.1"
                   type="number"
                 />
-                <span>g</span>
+                <span className="font-bold text-emerald-700">g</span>
               </span>
             </label>
           </div>
 
           <output
             aria-live="polite"
-            className="plan-calorie-preview"
+            className="flex flex-col gap-3 rounded-lg border-2 border-orange-300 bg-orange-100 p-5 text-orange-950 shadow-sm sm:flex-row sm:items-center sm:justify-between"
             name="energyKcal"
           >
-            <span>Calories</span>
-            <strong>{formattedEnergyKcal}</strong>
-            <span>kcal from macros</span>
+            <span className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-normal">
+              <Flame aria-hidden="true" size={20} strokeWidth={2.6} />
+              Calories
+            </span>
+            <span className="flex items-baseline gap-2">
+              <strong className="text-4xl font-black leading-none">
+                {formattedEnergyKcal}
+              </strong>
+              <span className="text-sm font-black uppercase tracking-normal">
+                kcal from macros
+              </span>
+            </span>
           </output>
 
-          <button disabled={isSubmitting} type="submit">
+          <button
+            className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+            disabled={isSubmitting}
+            type="submit"
+          >
+            <Plus aria-hidden="true" className="mr-2" size={18} />
             {snapshot.matches("Failure") ? "Try again" : "Create plan"}
           </button>
         </form>

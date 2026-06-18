@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect } from "effect";
+import { Apple, Plus, X } from "lucide-react";
 import { fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../lib/runtime-client.ts";
@@ -114,18 +115,25 @@ function Component() {
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
   return (
-    <main className="app-shell">
-      <section className="food-create">
-        <div className="page-heading">
-          <p className="eyebrow">Foods</p>
-          <h1>Create a food</h1>
-          <p className="lede">
+    <main className="flex min-h-screen items-start justify-center px-4 py-5 sm:items-center sm:px-6 sm:py-8 lg:px-8">
+      <section className="mx-auto flex w-full max-w-4xl flex-col">
+        <div className="mb-7 mt-6 grid justify-items-center text-center sm:mt-8">
+          <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-600/25">
+            <Apple aria-hidden="true" size={30} strokeWidth={2.4} />
+          </div>
+          <p className="mb-2 text-xs font-extrabold uppercase tracking-normal text-rose-700">
+            Foods
+          </p>
+          <h1 className="text-3xl font-black leading-tight text-stone-950 sm:text-4xl">
+            Create a food
+          </h1>
+          <p className="mt-3 max-w-xl text-base font-medium leading-7 text-stone-700">
             Add nutrition values per 100g so the food can be used in daily logs.
           </p>
         </div>
 
         <form
-          className="food-form"
+          className="grid gap-5 rounded-lg border border-stone-200 bg-white/90 p-5 shadow-[0_18px_45px_rgb(15_23_42_/_0.08)] backdrop-blur sm:p-6"
           onSubmit={(event) => {
             event.preventDefault();
             send({
@@ -136,31 +144,40 @@ function Component() {
             });
           }}
         >
-          <div className="form-section">
-            <label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Name
               <input
                 autoComplete="off"
+                className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                 name="name"
                 placeholder="Greek yogurt"
                 required
               />
             </label>
 
-            <label>
+            <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Brand
-              <input autoComplete="off" name="brand" placeholder="Mai" />
+              <input
+                autoComplete="off"
+                className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                name="brand"
+                placeholder="Mai"
+              />
             </label>
           </div>
 
-          <fieldset>
-            <legend>Nutrition per 100g</legend>
+          <fieldset className="min-w-0 border-0 p-0">
+            <legend className="mb-3 text-sm font-extrabold text-stone-800">
+              Nutrition per 100g
+            </legend>
 
-            <div className="macro-grid">
-              <label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Calories
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="energyKcalPer100g"
@@ -168,14 +185,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>kcal</span>
+                  <span className="font-bold text-emerald-700">kcal</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Protein
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="proteinGramsPer100g"
@@ -183,14 +201,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Carbs
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="carbsGramsPer100g"
@@ -198,14 +217,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Fat
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="fatGramsPer100g"
@@ -213,14 +233,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Fiber
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="fiberGramsPer100g"
@@ -228,14 +249,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Sugar
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="sugarGramsPer100g"
@@ -243,14 +265,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Saturated fat
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="saturatedFatGramsPer100g"
@@ -258,14 +281,15 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
 
-              <label>
+              <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Salt
-                <span className="input-with-unit">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
+                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="saltGramsPer100g"
@@ -273,14 +297,19 @@ function Component() {
                     step="0.01"
                     type="number"
                   />
-                  <span>g</span>
+                  <span className="font-bold text-emerald-700">g</span>
                 </span>
               </label>
             </div>
           </fieldset>
 
-          <div className="form-actions">
-            <button disabled={isSubmitting} type="submit">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              <Plus aria-hidden="true" className="mr-2" size={18} />
               {snapshot.matches("Failure") ? "Try again" : "Create food"}
             </button>
             <BackToDayLink dateKey={search.dateKey} />
@@ -294,14 +323,23 @@ function Component() {
 function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
   if (dateKey === undefined) {
     return (
-      <Link className="secondary-link" to="/">
+      <Link
+        className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+        to="/"
+      >
+        <X aria-hidden="true" className="mr-2" size={17} />
         Cancel
       </Link>
     );
   }
 
   return (
-    <Link className="secondary-link" params={{ dateKey }} to="/days/$dateKey">
+    <Link
+      className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+      params={{ dateKey }}
+      to="/days/$dateKey"
+    >
+      <X aria-hidden="true" className="mr-2" size={17} />
       Cancel
     </Link>
   );
