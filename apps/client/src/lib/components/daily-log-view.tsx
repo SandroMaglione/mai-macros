@@ -19,7 +19,6 @@ import {
   Dumbbell,
   Flame,
   Home,
-  MoreHorizontal,
   Plus,
   Target,
   Utensils,
@@ -42,6 +41,11 @@ export type DailyLogViewData = {
 
 type NutrientTotals = ReturnType<typeof calculateEntryNutrients>;
 type ProgressTone = "energy" | "protein" | "carbs" | "fat";
+type SecondaryNutrientMetric = {
+  readonly label: string;
+  readonly target: number | undefined;
+  readonly value: number;
+};
 
 const statTermClassName =
   "text-xs font-black uppercase tracking-normal text-current opacity-75";
@@ -86,6 +90,10 @@ const overTargetProgressClassNames = {
   fill: "bg-red-600",
   text: "text-red-800",
 };
+const compactHeaderLinkClassName =
+  "inline-flex size-9 items-center justify-center rounded-md border border-stone-300 bg-white text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60";
+const compactPrimaryActionLinkClassName =
+  "inline-flex min-h-10 items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-3 text-sm font-bold text-white no-underline shadow-sm transition-colors hover:border-emerald-800 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60";
 
 const mealOptions: readonly {
   readonly value: Meal;
@@ -349,113 +357,114 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   });
 
   return (
-    <main className="flex min-h-screen items-start justify-center px-4 py-5 sm:items-center sm:px-6 sm:py-8 lg:px-8">
+    <main className="flex min-h-screen items-start justify-center px-3 pb-5 sm:px-5 lg:px-8">
       <section className="mx-auto flex w-full max-w-5xl flex-col">
-        <div className="mb-7 mt-6 grid justify-items-center text-center sm:mt-8">
-          <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-600/25">
-            <CalendarDays aria-hidden="true" size={30} strokeWidth={2.4} />
-          </div>
-          <p className="mb-2 text-xs font-extrabold uppercase tracking-normal text-sky-700">
-            Daily log
-          </p>
-          <h1 className="text-3xl font-black leading-tight text-stone-950 sm:text-4xl">
-            {day.dailyLog.dateKey}
-          </h1>
-          <p className="mt-3 max-w-xl text-base font-medium leading-7 text-stone-700">
-            Opening this date creates a daily log from the active meal plan.
-          </p>
-        </div>
-
-        <nav
-          className="flex flex-wrap justify-center gap-2"
-          aria-label="Day navigation"
-        >
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            params={{ dateKey: previousDateKey }}
-            to="/days/$dateKey"
-          >
-            <ChevronLeft aria-hidden="true" className="mr-2" size={17} />
-            Previous
-          </Link>
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
-            to="/"
-          >
-            <Home aria-hidden="true" className="mr-2" size={17} />
-            Today
-          </Link>
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            params={{ dateKey: nextDateKey }}
-            to="/days/$dateKey"
-          >
-            Next
-            <ChevronRight aria-hidden="true" className="ml-2" size={17} />
-          </Link>
-        </nav>
-
-        <div className="mt-6 flex flex-col gap-4 rounded-lg border-2 border-emerald-200 bg-white/95 p-5 shadow-[0_18px_45px_rgb(15_23_42_/_0.09)] backdrop-blur sm:flex-row sm:items-end sm:justify-between">
-          <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
-            <span className="inline-flex items-center gap-2">
-              <Target aria-hidden="true" size={17} strokeWidth={2.5} />
-              Meal plan
-            </span>
-            <select
-              className="min-h-11 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70 sm:min-w-80"
-              disabled={isChangingPlan}
-              value={day.selectedPlan.id}
-              onChange={(event) => {
-                send({
-                  type: "changePlan",
-                  input: {
-                    dateKey: day.dailyLog.dateKey,
-                    planId: event.currentTarget.value,
-                  },
-                  invalidate: () => router.invalidate(),
-                });
-              }}
-            >
-              {day.plans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Link
-              className="inline-flex min-h-10 items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-              search={{ dateKey: day.dailyLog.dateKey }}
-              to="/plans/new"
-            >
-              <Plus aria-hidden="true" className="mr-2" size={17} />
-              New plan
-            </Link>
-
-            <details className="relative">
-              <summary className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 list-none [&::-webkit-details-marker]:hidden">
-                <MoreHorizontal aria-hidden="true" className="mr-2" size={18} />
-                Actions
-              </summary>
-              <div className="absolute inset-x-0 z-10 mt-2 grid rounded-lg border border-stone-200 bg-white p-1.5 shadow-xl sm:left-auto sm:right-0 sm:w-48">
-                <Link
-                  className="flex min-h-10 items-center rounded-md px-3 text-sm font-bold text-stone-900 no-underline transition-colors hover:bg-emerald-50"
-                  search={{ dateKey: day.dailyLog.dateKey }}
-                  to="/foods/new"
-                >
-                  <Apple aria-hidden="true" className="mr-2" size={17} />
-                  Create food
-                </Link>
+        <header className="sticky top-0 z-30 -mx-3 border-b border-stone-200 bg-white/95 px-3 py-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] shadow-sm backdrop-blur sm:-mx-5 sm:px-5 lg:mx-0">
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-sky-600 text-white shadow-sm">
+                  <CalendarDays
+                    aria-hidden="true"
+                    size={19}
+                    strokeWidth={2.5}
+                  />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[0.68rem] font-black uppercase leading-tight tracking-normal text-sky-700">
+                    Daily log
+                  </p>
+                  <h1 className="truncate text-lg font-black leading-tight text-stone-950 sm:text-xl">
+                    {day.dailyLog.dateKey}
+                  </h1>
+                </div>
               </div>
-            </details>
+
+              <nav
+                className="grid shrink-0 grid-cols-3 gap-1"
+                aria-label="Day navigation"
+              >
+                <Link
+                  aria-label="Previous day"
+                  className={compactHeaderLinkClassName}
+                  params={{ dateKey: previousDateKey }}
+                  title="Previous day"
+                  to="/days/$dateKey"
+                >
+                  <ChevronLeft aria-hidden="true" size={17} />
+                </Link>
+                <Link
+                  aria-label="Today"
+                  className="inline-flex size-9 items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  title="Today"
+                  to="/"
+                >
+                  <Home aria-hidden="true" size={17} />
+                </Link>
+                <Link
+                  aria-label="Next day"
+                  className={compactHeaderLinkClassName}
+                  params={{ dateKey: nextDateKey }}
+                  title="Next day"
+                  to="/days/$dateKey"
+                >
+                  <ChevronRight aria-hidden="true" size={17} />
+                </Link>
+              </nav>
+            </div>
+
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+              <label className="min-w-0">
+                <span className="sr-only">Meal plan</span>
+                <select
+                  className="min-h-10 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 text-sm font-bold text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                  disabled={isChangingPlan}
+                  value={day.selectedPlan.id}
+                  onChange={(event) => {
+                    send({
+                      type: "changePlan",
+                      input: {
+                        dateKey: day.dailyLog.dateKey,
+                        planId: event.currentTarget.value,
+                      },
+                      invalidate: () => router.invalidate(),
+                    });
+                  }}
+                >
+                  {day.plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Link
+                aria-label="Create meal plan"
+                className={compactHeaderLinkClassName}
+                search={{ dateKey: day.dailyLog.dateKey }}
+                title="Create meal plan"
+                to="/plans/new"
+              >
+                <Target aria-hidden="true" size={17} strokeWidth={2.5} />
+              </Link>
+              <Link
+                aria-label="Create food"
+                className={compactPrimaryActionLinkClassName}
+                search={{ dateKey: day.dailyLog.dateKey }}
+                to="/foods/new"
+              >
+                <Apple aria-hidden="true" className="mr-2" size={17} />
+                Food
+              </Link>
+            </div>
           </div>
+        </header>
+
+        <div className="mt-3">
+          <DailyProgress nutrients={dailyNutrients} plan={day.selectedPlan} />
         </div>
 
-        <DailyProgress nutrients={dailyNutrients} plan={day.selectedPlan} />
-
-        <div className="mt-5 grid gap-4">
+        <div className="mt-3 grid gap-3">
           {mealOptions.map((mealOption) => (
             <MealSection
               dateKey={day.dailyLog.dateKey}
@@ -536,15 +545,15 @@ function MealSection({
     !disabled && selectedFood === undefined && hasFoodSearchQuery;
 
   return (
-    <section className="rounded-lg border-2 border-stone-200 bg-white/95 p-4 shadow-[0_12px_32px_rgb(15_23_42_/_0.07)] sm:p-5">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="inline-flex items-center gap-2 text-lg font-black leading-tight text-stone-950">
-          <span className="inline-flex size-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
-            <Utensils aria-hidden="true" size={19} strokeWidth={2.5} />
+    <section className="rounded-lg border-2 border-stone-200 bg-white/95 p-3 shadow-[0_10px_24px_rgb(15_23_42_/_0.06)] sm:p-4">
+      <header className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="inline-flex items-center gap-2 text-base font-black leading-tight text-stone-950 sm:text-lg">
+          <span className="inline-flex size-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+            <Utensils aria-hidden="true" size={18} strokeWidth={2.5} />
           </span>
           {mealLabel}
         </h2>
-        <span className="rounded-full border-2 border-emerald-300 bg-emerald-100 px-3 py-1 text-center text-xs font-black uppercase tracking-normal text-emerald-900">
+        <span className="rounded-full border-2 border-emerald-300 bg-emerald-100 px-2.5 py-1 text-center text-[0.68rem] font-black uppercase tracking-normal text-emerald-900">
           {mealEntries.length} logged
         </span>
       </header>
@@ -552,7 +561,7 @@ function MealSection({
       <MealTotalList nutrients={mealNutrients} />
 
       <form
-        className="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,1fr)_minmax(140px,180px)_auto]"
+        className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(116px,150px)_auto]"
         onSubmit={(event) => {
           event.preventDefault();
 
@@ -578,7 +587,7 @@ function MealSection({
           type="hidden"
           value={foodSearch.selectedFoodId ?? ""}
         />
-        <div className="grid min-w-0 gap-2">
+        <div className="grid min-w-0 gap-1.5">
           <label
             className="text-sm font-bold text-stone-700"
             htmlFor={`${mealValue}-food-search`}
@@ -592,7 +601,7 @@ function MealSection({
               aria-haspopup="listbox"
               aria-label={`${mealLabel} food search`}
               autoComplete="off"
-              className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+              className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
               disabled={disabled}
               id={`${mealValue}-food-search`}
               onChange={(event) => {
@@ -620,7 +629,7 @@ function MealSection({
                     return (
                       <button
                         aria-selected="false"
-                        className="grid min-h-11 w-full justify-items-start gap-0.5 rounded border-0 bg-white px-3 py-2 text-left text-stone-900 transition-colors hover:bg-emerald-50"
+                        className="grid min-h-10 w-full justify-items-start gap-0.5 rounded border-0 bg-white px-3 py-2 text-left text-stone-900 transition-colors hover:bg-emerald-50"
                         key={food.id}
                         onClick={() => {
                           sendFoodSearch({
@@ -648,11 +657,11 @@ function MealSection({
             ) : null}
           </div>
         </div>
-        <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
+        <label className="grid min-w-0 gap-1.5 text-sm font-bold text-stone-700">
           Quantity
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <input
-              className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+              className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
               disabled={disabled || selectedFood === undefined}
               min="0.1"
               name="quantityGrams"
@@ -665,7 +674,7 @@ function MealSection({
           </div>
         </label>
         <button
-          className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
+          className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           disabled={disabled || selectedFood === undefined}
           type="submit"
         >
@@ -675,15 +684,15 @@ function MealSection({
       </form>
 
       {!Array.isReadonlyArrayNonEmpty(foods) ? (
-        <p className="mt-4 text-sm text-stone-500">
+        <p className="mt-3 text-sm text-stone-500">
           Create a food to start logging this meal.
         </p>
       ) : !Array.isReadonlyArrayNonEmpty(mealEntries) ? (
-        <p className="mt-4 text-sm text-stone-500">
+        <p className="mt-3 text-sm text-stone-500">
           No foods logged for this meal.
         </p>
       ) : (
-        <ul className="mt-4 grid list-none gap-3 p-0">
+        <ul className="mt-3 grid list-none gap-2 p-0">
           {mealEntries.map((mealEntry) => (
             <MealEntryItem
               foods={foods}
@@ -705,27 +714,47 @@ function DailyProgress({
   readonly plan: Plan;
 }) {
   const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+  const carbsSecondaryMetrics: readonly SecondaryNutrientMetric[] = [
+    {
+      label: "Fiber",
+      target: plan.fiberTargetGrams,
+      value: nutrients.fiberGrams,
+    },
+    {
+      label: "Salt",
+      target: plan.saltTargetGrams,
+      value: nutrients.saltGrams,
+    },
+  ];
+  const fatSecondaryMetrics: readonly SecondaryNutrientMetric[] = [
+    {
+      label: "Sat fat",
+      target: plan.saturatedFatTargetGrams,
+      value: nutrients.saturatedFatGrams,
+    },
+  ];
 
   return (
-    <section className="mt-5" aria-label="Daily progress">
-      <div className="mb-3 flex flex-col items-center gap-1 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
-        <h2 className="inline-flex items-center gap-2 text-xl font-black leading-tight text-stone-950">
-          <Target aria-hidden="true" size={22} strokeWidth={2.5} />
-          Daily progress
+    <section className="grid gap-2" aria-label="Daily progress">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="inline-flex items-center gap-2 text-lg font-black leading-tight text-stone-950">
+          <Target aria-hidden="true" size={19} strokeWidth={2.5} />
+          Live progress
         </h2>
-        <p className="text-sm font-black text-emerald-800">{plan.name}</p>
+        <p className="truncate text-sm font-black text-emerald-800">
+          {plan.name}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ProgressMetric
-          label="Calories"
-          target={targetEnergyKcal}
-          tone="energy"
-          unit="kcal"
-          value={nutrients.energyKcal}
-        />
+      <EnergyProgressMetric
+        target={targetEnergyKcal}
+        value={nutrients.energyKcal}
+      />
+
+      <div className="grid grid-cols-3 gap-2">
         <ProgressMetric
           label="Protein"
+          secondaryMetrics={[]}
           target={plan.proteinTargetGrams}
           tone="protein"
           unit="g"
@@ -733,6 +762,7 @@ function DailyProgress({
         />
         <ProgressMetric
           label="Carbs"
+          secondaryMetrics={carbsSecondaryMetrics}
           target={plan.carbsTargetGrams}
           tone="carbs"
           unit="g"
@@ -740,6 +770,7 @@ function DailyProgress({
         />
         <ProgressMetric
           label="Fat"
+          secondaryMetrics={fatSecondaryMetrics}
           target={plan.fatTargetGrams}
           tone="fat"
           unit="g"
@@ -750,17 +781,95 @@ function DailyProgress({
   );
 }
 
+function EnergyProgressMetric({
+  target,
+  value,
+}: {
+  readonly target: number;
+  readonly value: number;
+}) {
+  const progressPercent =
+    target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
+  const cappedProgressPercent = Math.min(progressPercent, 100);
+  const difference = target - value;
+  const balanceLabel = difference >= 0 ? "left" : "over";
+  const balanceValue = _formatValueWithUnit({
+    unit: "kcal",
+    value: Math.abs(difference),
+  });
+  const isOverTarget = target - value < 0;
+  const progressClassNames = isOverTarget
+    ? overTargetProgressClassNames
+    : progressToneClassNames.energy;
+
+  return (
+    <article
+      className={`min-w-0 rounded-lg border-2 p-3 shadow-sm ${progressClassNames.card}`}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+        <div className="min-w-0">
+          <h3 className="inline-flex items-center gap-2 text-sm font-black leading-tight text-stone-950">
+            <span
+              className={`inline-flex size-8 items-center justify-center rounded-lg bg-white/75 ${progressClassNames.text}`}
+            >
+              <Flame aria-hidden="true" size={18} strokeWidth={2.5} />
+            </span>
+            Calories
+          </h3>
+          <p className="mt-2 text-sm font-bold text-stone-700">
+            <strong className="mr-1 text-3xl font-black leading-none text-stone-950">
+              {_formatValueWithUnit({ unit: "kcal", value })}
+            </strong>
+            <span className="whitespace-nowrap text-stone-700">
+              / {_formatValueWithUnit({ unit: "kcal", value: target })}
+            </span>
+          </p>
+        </div>
+        <div className="text-right">
+          <strong
+            className={`block text-base font-black leading-tight ${progressClassNames.text}`}
+          >
+            {_formatNumber({ value: progressPercent })}%
+          </strong>
+          <p className="mt-1 text-[0.68rem] font-black uppercase leading-tight tracking-normal text-stone-700">
+            {balanceValue} {balanceLabel}
+          </p>
+        </div>
+      </div>
+      <div
+        aria-label="Calories progress"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(cappedProgressPercent)}
+        aria-valuetext={`${_formatValueWithUnit({
+          unit: "kcal",
+          value,
+        })} of ${_formatValueWithUnit({ unit: "kcal", value: target })}`}
+        className="mt-3 h-3 overflow-hidden rounded-full bg-white/80"
+        role="progressbar"
+      >
+        <span
+          className={`block h-full rounded-full transition-[inline-size] duration-200 ${progressClassNames.fill}`}
+          style={{ inlineSize: `${cappedProgressPercent}%` }}
+        />
+      </div>
+    </article>
+  );
+}
+
 function ProgressMetric({
   label,
+  secondaryMetrics,
   target,
   tone,
   unit,
   value,
 }: {
   readonly label: string;
+  readonly secondaryMetrics: readonly SecondaryNutrientMetric[];
   readonly target: number;
-  readonly tone: "energy" | "protein" | "carbs" | "fat";
-  readonly unit: "kcal" | "g";
+  readonly tone: "protein" | "carbs" | "fat";
+  readonly unit: "g";
   readonly value: number;
 }) {
   const progressPercent =
@@ -780,28 +889,28 @@ function ProgressMetric({
 
   return (
     <article
-      className={`min-w-0 rounded-lg border-2 p-4 shadow-sm ${progressClassNames.card}`}
+      className={`grid min-w-0 gap-2 rounded-lg border-2 p-2.5 shadow-sm ${progressClassNames.card}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="inline-flex items-center gap-2 text-sm font-black leading-tight text-stone-950">
+      <div className="flex min-w-0 items-center justify-between gap-1">
+        <h3 className="inline-flex min-w-0 items-center gap-1.5 text-xs font-black leading-tight text-stone-950">
           <span
-            className={`inline-flex size-8 items-center justify-center rounded-lg bg-white/75 ${progressClassNames.text}`}
+            className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-white/75 ${progressClassNames.text}`}
           >
-            <ProgressIcon aria-hidden="true" size={18} strokeWidth={2.5} />
+            <ProgressIcon aria-hidden="true" size={16} strokeWidth={2.5} />
           </span>
-          {label}
+          <span className="truncate">{label}</span>
         </h3>
         <strong
-          className={`text-xs font-black leading-tight ${progressClassNames.text}`}
+          className={`text-[0.68rem] font-black leading-tight ${progressClassNames.text}`}
         >
           {_formatNumber({ value: progressPercent })}%
         </strong>
       </div>
-      <p className="my-4 text-sm font-bold text-stone-700">
-        <strong className="mr-1 text-2xl font-black text-stone-950">
+      <p className="grid gap-0.5 text-xs font-bold text-stone-700">
+        <strong className="text-xl font-black leading-none text-stone-950">
           {_formatValueWithUnit({ unit, value })}
         </strong>
-        <span className="text-stone-700">
+        <span className="truncate text-stone-700">
           / {_formatValueWithUnit({ unit, value: target })}
         </span>
       </p>
@@ -814,7 +923,7 @@ function ProgressMetric({
           unit,
           value,
         })} of ${_formatValueWithUnit({ unit, value: target })}`}
-        className="h-3 overflow-hidden rounded-full bg-white/80"
+        className="h-2 overflow-hidden rounded-full bg-white/80"
         role="progressbar"
       >
         <span
@@ -822,46 +931,97 @@ function ProgressMetric({
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
-      <p className="mt-2 text-xs font-black uppercase tracking-normal text-stone-700">
+      <p className="text-[0.68rem] font-black uppercase leading-tight tracking-normal text-stone-700">
         {balanceValue} {balanceLabel}
       </p>
+      {Array.isReadonlyArrayNonEmpty(secondaryMetrics) ? (
+        <dl className="grid gap-1 border-t border-current/15 pt-1.5">
+          {secondaryMetrics.map((metric) => (
+            <div
+              className="flex min-w-0 items-center justify-between gap-1 text-[0.68rem] font-black leading-tight text-stone-800"
+              key={metric.label}
+            >
+              <dt className="truncate opacity-75">{metric.label}</dt>
+              <dd className="whitespace-nowrap">
+                {_formatNestedNutrient({ metric })}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </article>
   );
 }
 
 function MealTotalList({ nutrients }: { readonly nutrients: NutrientTotals }) {
+  const carbsSecondaryMetrics: readonly SecondaryNutrientMetric[] = [
+    {
+      label: "Fiber",
+      target: undefined,
+      value: nutrients.fiberGrams,
+    },
+    {
+      label: "Salt",
+      target: undefined,
+      value: nutrients.saltGrams,
+    },
+  ];
+  const fatSecondaryMetrics: readonly SecondaryNutrientMetric[] = [
+    {
+      label: "Sat fat",
+      target: undefined,
+      value: nutrients.saturatedFatGrams,
+    },
+  ];
+
   return (
-    <dl className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <dl className="mb-3 grid gap-2">
       <MealTotalCard
         Icon={Flame}
         className="border-orange-300 bg-orange-100 text-orange-950"
         label="Calories"
+        secondaryMetrics={[]}
         value={_formatValueWithUnit({
           unit: "kcal",
           value: nutrients.energyKcal,
         })}
+        variant="energy"
       />
-      <MealTotalCard
-        Icon={Dumbbell}
-        className="border-emerald-300 bg-emerald-100 text-emerald-950"
-        label="Protein"
-        value={_formatValueWithUnit({
-          unit: "g",
-          value: nutrients.proteinGrams,
-        })}
-      />
-      <MealTotalCard
-        Icon={Wheat}
-        className="border-sky-300 bg-sky-100 text-sky-950"
-        label="Carbs"
-        value={_formatValueWithUnit({ unit: "g", value: nutrients.carbsGrams })}
-      />
-      <MealTotalCard
-        Icon={Droplet}
-        className="border-rose-300 bg-rose-100 text-rose-950"
-        label="Fat"
-        value={_formatValueWithUnit({ unit: "g", value: nutrients.fatGrams })}
-      />
+      <div className="grid grid-cols-3 gap-2">
+        <MealTotalCard
+          Icon={Dumbbell}
+          className="border-emerald-300 bg-emerald-100 text-emerald-950"
+          label="Protein"
+          secondaryMetrics={[]}
+          value={_formatValueWithUnit({
+            unit: "g",
+            value: nutrients.proteinGrams,
+          })}
+          variant="macro"
+        />
+        <MealTotalCard
+          Icon={Wheat}
+          className="border-sky-300 bg-sky-100 text-sky-950"
+          label="Carbs"
+          secondaryMetrics={carbsSecondaryMetrics}
+          value={_formatValueWithUnit({
+            unit: "g",
+            value: nutrients.carbsGrams,
+          })}
+          variant="macro"
+        />
+        <MealTotalCard
+          Icon={Droplet}
+          className="border-rose-300 bg-rose-100 text-rose-950"
+          label="Fat"
+          secondaryMetrics={fatSecondaryMetrics}
+          value={_formatValueWithUnit({
+            unit: "g",
+            value: nutrients.fatGrams,
+          })}
+          variant="macro"
+        />
+      </div>
     </dl>
   );
 }
@@ -870,22 +1030,66 @@ function MealTotalCard({
   className,
   Icon,
   label,
+  secondaryMetrics,
   value,
+  variant,
 }: {
   readonly className: string;
   readonly Icon: typeof Flame;
   readonly label: string;
+  readonly secondaryMetrics: readonly SecondaryNutrientMetric[];
   readonly value: string;
+  readonly variant: "energy" | "macro";
 }) {
+  const valueClassName =
+    variant === "energy"
+      ? "mt-1 text-2xl font-black leading-none"
+      : "mt-1 text-lg font-black leading-none";
+
   return (
-    <div className={`min-w-0 rounded-lg border-2 p-3 ${className}`}>
-      <dt className="flex items-center gap-2 text-xs font-black uppercase tracking-normal">
-        <Icon aria-hidden="true" size={16} strokeWidth={2.6} />
-        {label}
+    <div className={`min-w-0 rounded-lg border-2 p-2.5 ${className}`}>
+      <dt className="flex min-w-0 items-center gap-1.5 text-[0.68rem] font-black uppercase leading-tight tracking-normal">
+        <Icon
+          aria-hidden="true"
+          className="shrink-0"
+          size={15}
+          strokeWidth={2.6}
+        />
+        <span className="truncate">{label}</span>
       </dt>
-      <dd className="mt-2 text-2xl font-black leading-none">{value}</dd>
+      <dd className={valueClassName}>{value}</dd>
+      {Array.isReadonlyArrayNonEmpty(secondaryMetrics) ? (
+        <div className="mt-2 grid gap-1 border-t border-current/15 pt-1.5">
+          {secondaryMetrics.map((metric) => (
+            <div
+              className="flex min-w-0 items-center justify-between gap-1 text-[0.68rem] font-black leading-tight"
+              key={metric.label}
+            >
+              <dt className="truncate opacity-75">{metric.label}</dt>
+              <dd className="whitespace-nowrap">
+                {_formatNestedNutrient({ metric })}
+              </dd>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function _formatNestedNutrient({
+  metric,
+}: {
+  readonly metric: SecondaryNutrientMetric;
+}) {
+  const value = _formatValueWithUnit({
+    unit: "g",
+    value: metric.value,
+  });
+
+  return metric.target === undefined
+    ? value
+    : `${value}/${_formatValueWithUnit({ unit: "g", value: metric.target })}`;
 }
 
 function MealEntryItem({
