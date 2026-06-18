@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlansNewRouteImport } from './routes/plans.new'
+import { Route as FoodsNewRouteImport } from './routes/foods.new'
 import { Route as DaysDateKeyRouteImport } from './routes/days.$dateKey'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const PlansNewRoute = PlansNewRouteImport.update({
   path: '/plans/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FoodsNewRoute = FoodsNewRouteImport.update({
+  id: '/foods/new',
+  path: '/foods/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DaysDateKeyRoute = DaysDateKeyRouteImport.update({
   id: '/days/$dateKey',
   path: '/days/$dateKey',
@@ -32,30 +38,34 @@ const DaysDateKeyRoute = DaysDateKeyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/days/$dateKey': typeof DaysDateKeyRoute
+  '/foods/new': typeof FoodsNewRoute
   '/plans/new': typeof PlansNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/days/$dateKey': typeof DaysDateKeyRoute
+  '/foods/new': typeof FoodsNewRoute
   '/plans/new': typeof PlansNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/days/$dateKey': typeof DaysDateKeyRoute
+  '/foods/new': typeof FoodsNewRoute
   '/plans/new': typeof PlansNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/days/$dateKey' | '/plans/new'
+  fullPaths: '/' | '/days/$dateKey' | '/foods/new' | '/plans/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/days/$dateKey' | '/plans/new'
-  id: '__root__' | '/' | '/days/$dateKey' | '/plans/new'
+  to: '/' | '/days/$dateKey' | '/foods/new' | '/plans/new'
+  id: '__root__' | '/' | '/days/$dateKey' | '/foods/new' | '/plans/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DaysDateKeyRoute: typeof DaysDateKeyRoute
+  FoodsNewRoute: typeof FoodsNewRoute
   PlansNewRoute: typeof PlansNewRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlansNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/foods/new': {
+      id: '/foods/new'
+      path: '/foods/new'
+      fullPath: '/foods/new'
+      preLoaderRoute: typeof FoodsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/days/$dateKey': {
       id: '/days/$dateKey'
       path: '/days/$dateKey'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DaysDateKeyRoute: DaysDateKeyRoute,
+  FoodsNewRoute: FoodsNewRoute,
   PlansNewRoute: PlansNewRoute,
 }
 export const routeTree = rootRouteImport

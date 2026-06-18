@@ -58,7 +58,8 @@ button:hover,
 }
 
 .day-view,
-.plan-create {
+.plan-create,
+.food-create {
   width: min(100%, 920px);
   margin: 0 auto;
 }
@@ -96,7 +97,8 @@ h1 {
 }
 
 .plan-row,
-.plan-form {
+.plan-form,
+.food-form {
   border: 1px solid #d9dfd1;
   border-radius: 8px;
   background: #ffffff;
@@ -110,10 +112,87 @@ h1 {
   padding: 20px;
 }
 
-.plan-form {
+.plan-form,
+.food-form {
   display: grid;
   gap: 18px;
   padding: 24px;
+}
+
+.plan-actions,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day-actions {
+  position: relative;
+}
+
+.day-actions summary {
+  min-height: 40px;
+  border: 1px solid #cbd1c3;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #20231f;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  list-style: none;
+}
+
+.day-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.day-actions-menu {
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  min-width: 180px;
+  margin-top: 8px;
+  border: 1px solid #cbd1c3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgb(32 35 31 / 12%);
+  padding: 6px;
+}
+
+.day-action-link {
+  min-height: 38px;
+  border-radius: 6px;
+  color: #20231f;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  text-decoration: none;
+}
+
+.day-action-link:hover {
+  background: #eef3e9;
+}
+
+.form-section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+fieldset {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+legend {
+  margin-bottom: 12px;
+  color: #3d4436;
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
 label {
@@ -195,13 +274,29 @@ dd {
   }
 
   .macro-grid,
-  .target-grid {
+  .target-grid,
+  .form-section {
     grid-template-columns: 1fr;
   }
 
-  .plan-row {
+  .plan-row,
+  .form-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .plan-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .day-actions summary {
+    width: 100%;
+  }
+
+  .day-actions-menu {
+    left: 0;
+    right: 0;
   }
 
   select {

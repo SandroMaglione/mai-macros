@@ -216,13 +216,28 @@ function Component() {
             </select>
           </label>
 
-          <Link
-            className="secondary-link"
-            search={{ dateKey: day.dailyLog.dateKey }}
-            to="/plans/new"
-          >
-            New plan
-          </Link>
+          <div className="plan-actions">
+            <Link
+              className="secondary-link"
+              search={{ dateKey: day.dailyLog.dateKey }}
+              to="/plans/new"
+            >
+              New plan
+            </Link>
+
+            <details className="day-actions">
+              <summary>Actions</summary>
+              <div className="day-actions-menu">
+                <Link
+                  className="day-action-link"
+                  search={{ dateKey: day.dailyLog.dateKey }}
+                  to="/foods/new"
+                >
+                  Create food
+                </Link>
+              </div>
+            </details>
+          </div>
         </div>
 
         <dl className="target-grid">
