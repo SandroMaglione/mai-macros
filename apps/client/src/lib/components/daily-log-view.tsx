@@ -2,10 +2,12 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
 import {
   calculateEntryNutrients,
+  calculatePlanEnergyKcal,
   type DateKey,
   type Food,
   type Meal,
   type MealEntry,
+  type Plan,
 } from "@mai/nutrition";
 import { Array, Effect } from "effect";
 import { assertEvent, fromPromise, setup } from "xstate";
@@ -22,6 +24,8 @@ export type DailyLogViewData = {
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
 };
+
+type NutrientTotals = ReturnType<typeof calculateEntryNutrients>;
 
 const mealOptions: readonly {
   readonly value: Meal;
@@ -219,6 +223,10 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
     days: 1,
   });
   const hasFoods = Array.isReadonlyArrayNonEmpty(foods);
+  const dailyNutrients = _calculateEntriesNutrients({
+    foods,
+    mealEntries,
+  });
 
   return (
     <main className="app-shell">
@@ -300,20 +308,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
           </div>
         </div>
 
-        <dl className="target-grid">
-          <div>
-            <dt>Protein</dt>
-            <dd>{day.selectedPlan.proteinTargetGrams}g</dd>
-          </div>
-          <div>
-            <dt>Carbs</dt>
-            <dd>{day.selectedPlan.carbsTargetGrams}g</dd>
-          </div>
-          <div>
-            <dt>Fat</dt>
-            <dd>{day.selectedPlan.fatTargetGrams}g</dd>
-          </div>
-        </dl>
+        <DailyProgress nutrients={dailyNutrients} plan={day.selectedPlan} />
 
         <div className="meal-grid">
           {mealOptions.map((mealOption) => (
@@ -363,12 +358,19 @@ function MealSection({
     reset: () => void
   ) => void;
 }) {
+  const mealNutrients = _calculateEntriesNutrients({
+    foods,
+    mealEntries,
+  });
+
   return (
     <section className="meal-panel">
       <header className="meal-panel-header">
         <h2>{mealLabel}</h2>
         <span>{mealEntries.length}</span>
       </header>
+
+      <MealTotalList nutrients={mealNutrients} />
 
       <form
         className="meal-entry-form"
@@ -435,6 +437,144 @@ function MealSection({
   );
 }
 
+function DailyProgress({
+  nutrients,
+  plan,
+}: {
+  readonly nutrients: NutrientTotals;
+  readonly plan: Plan;
+}) {
+  const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+
+  return (
+    <section className="daily-progress" aria-label="Daily progress">
+      <div className="daily-progress-heading">
+        <h2>Daily progress</h2>
+        <p>{plan.name}</p>
+      </div>
+
+      <div className="progress-grid">
+        <ProgressMetric
+          label="Calories"
+          target={targetEnergyKcal}
+          tone="energy"
+          unit="kcal"
+          value={nutrients.energyKcal}
+        />
+        <ProgressMetric
+          label="Protein"
+          target={plan.proteinTargetGrams}
+          tone="protein"
+          unit="g"
+          value={nutrients.proteinGrams}
+        />
+        <ProgressMetric
+          label="Carbs"
+          target={plan.carbsTargetGrams}
+          tone="carbs"
+          unit="g"
+          value={nutrients.carbsGrams}
+        />
+        <ProgressMetric
+          label="Fat"
+          target={plan.fatTargetGrams}
+          tone="fat"
+          unit="g"
+          value={nutrients.fatGrams}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ProgressMetric({
+  label,
+  target,
+  tone,
+  unit,
+  value,
+}: {
+  readonly label: string;
+  readonly target: number;
+  readonly tone: "energy" | "protein" | "carbs" | "fat";
+  readonly unit: "kcal" | "g";
+  readonly value: number;
+}) {
+  const progressPercent =
+    target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
+  const cappedProgressPercent = Math.min(progressPercent, 100);
+  const difference = target - value;
+  const balanceLabel = difference >= 0 ? "left" : "over";
+  const balanceValue = _formatValueWithUnit({
+    unit,
+    value: Math.abs(difference),
+  });
+  const isOverTarget = target - value < 0;
+
+  return (
+    <article
+      className="progress-card"
+      data-over-target={isOverTarget ? "true" : undefined}
+      data-tone={tone}
+    >
+      <div className="progress-card-heading">
+        <h3>{label}</h3>
+        <strong>{_formatNumber({ value: progressPercent })}%</strong>
+      </div>
+      <p className="progress-values">
+        <strong>{_formatValueWithUnit({ unit, value })}</strong>
+        <span>/ {_formatValueWithUnit({ unit, value: target })}</span>
+      </p>
+      <div
+        aria-label={`${label} progress`}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(cappedProgressPercent)}
+        aria-valuetext={`${_formatValueWithUnit({
+          unit,
+          value,
+        })} of ${_formatValueWithUnit({ unit, value: target })}`}
+        className="progress-track"
+        role="progressbar"
+      >
+        <span style={{ inlineSize: `${cappedProgressPercent}%` }} />
+      </div>
+      <p className="progress-balance">
+        {balanceValue} {balanceLabel}
+      </p>
+    </article>
+  );
+}
+
+function MealTotalList({ nutrients }: { readonly nutrients: NutrientTotals }) {
+  return (
+    <dl className="meal-total-list">
+      <div>
+        <dt>Kcal</dt>
+        <dd>{_formatNumber({ value: nutrients.energyKcal })}</dd>
+      </div>
+      <div>
+        <dt>Protein</dt>
+        <dd>
+          {_formatValueWithUnit({ unit: "g", value: nutrients.proteinGrams })}
+        </dd>
+      </div>
+      <div>
+        <dt>Carbs</dt>
+        <dd>
+          {_formatValueWithUnit({ unit: "g", value: nutrients.carbsGrams })}
+        </dd>
+      </div>
+      <div>
+        <dt>Fat</dt>
+        <dd>
+          {_formatValueWithUnit({ unit: "g", value: nutrients.fatGrams })}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 function MealEntryItem({
   foods,
   mealEntry,
@@ -490,6 +630,63 @@ function MealEntryItem({
 
 function _formatFoodName({ food }: { readonly food: Food }) {
   return food.brand === undefined ? food.name : `${food.name} (${food.brand})`;
+}
+
+function _calculateEntriesNutrients({
+  foods,
+  mealEntries,
+}: {
+  readonly foods: readonly Food[];
+  readonly mealEntries: readonly MealEntry[];
+}): NutrientTotals {
+  return mealEntries.reduce(
+    (totals, mealEntry) => {
+      const food = foods.find((food) => food.id === mealEntry.foodId);
+
+      if (food === undefined) {
+        return totals;
+      }
+
+      const nutrients = calculateEntryNutrients({
+        food,
+        quantityGrams: mealEntry.quantityGrams,
+      });
+
+      return {
+        energyKcal: totals.energyKcal + nutrients.energyKcal,
+        proteinGrams: totals.proteinGrams + nutrients.proteinGrams,
+        carbsGrams: totals.carbsGrams + nutrients.carbsGrams,
+        fatGrams: totals.fatGrams + nutrients.fatGrams,
+        fiberGrams: totals.fiberGrams + nutrients.fiberGrams,
+        sugarGrams: totals.sugarGrams + nutrients.sugarGrams,
+        saturatedFatGrams:
+          totals.saturatedFatGrams + nutrients.saturatedFatGrams,
+        saltGrams: totals.saltGrams + nutrients.saltGrams,
+      };
+    },
+    {
+      energyKcal: 0,
+      proteinGrams: 0,
+      carbsGrams: 0,
+      fatGrams: 0,
+      fiberGrams: 0,
+      sugarGrams: 0,
+      saturatedFatGrams: 0,
+      saltGrams: 0,
+    }
+  );
+}
+
+function _formatValueWithUnit({
+  unit,
+  value,
+}: {
+  readonly unit: "kcal" | "g";
+  readonly value: number;
+}) {
+  const formattedValue = _formatNumber({ value });
+
+  return unit === "kcal" ? `${formattedValue} kcal` : `${formattedValue}g`;
 }
 
 function _formatNumber({ value }: { readonly value: number }) {

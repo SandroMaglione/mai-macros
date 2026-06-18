@@ -250,6 +250,29 @@ select:focus {
   font-weight: 700;
 }
 
+.plan-calorie-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  border: 1px solid #d9dfd1;
+  border-radius: 8px;
+  background: #f8faf5;
+  padding: 16px;
+}
+
+.plan-calorie-preview span {
+  color: #637056;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.plan-calorie-preview strong {
+  color: #20231f;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
 .target-grid {
   margin: 18px 0 0;
 }
@@ -260,6 +283,115 @@ select:focus {
   border-radius: 8px;
   background: #ffffff;
   padding: 18px;
+}
+
+.daily-progress {
+  margin-top: 20px;
+}
+
+.daily-progress-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.daily-progress-heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.daily-progress-heading p {
+  margin: 0;
+  color: #637056;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.progress-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.progress-card {
+  --progress-color: #3e6f4f;
+
+  min-width: 0;
+  border: 1px solid #d9dfd1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.progress-card[data-tone="energy"] {
+  --progress-color: #545b4d;
+}
+
+.progress-card[data-tone="carbs"] {
+  --progress-color: #8a6f20;
+}
+
+.progress-card[data-tone="fat"] {
+  --progress-color: #80516a;
+}
+
+.progress-card[data-over-target="true"] {
+  --progress-color: #9a4f35;
+}
+
+.progress-card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progress-card-heading h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.progress-card-heading strong {
+  color: #637056;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.progress-values {
+  margin: 10px 0;
+  color: #637056;
+  font-size: 0.86rem;
+}
+
+.progress-values strong {
+  color: #20231f;
+  font-size: 1.15rem;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #edf1e8;
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--progress-color);
+  transition: inline-size 180ms ease;
+}
+
+.progress-balance {
+  margin: 8px 0 0;
+  color: #637056;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 dt {
@@ -311,6 +443,30 @@ dd {
   font-weight: 800;
   line-height: 26px;
   text-align: center;
+}
+
+.meal-total-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+  border-top: 1px solid #eef2e8;
+  border-bottom: 1px solid #eef2e8;
+  padding: 12px 0;
+}
+
+.meal-total-list div {
+  min-width: 0;
+}
+
+.meal-total-list dt {
+  font-size: 0.68rem;
+}
+
+.meal-total-list dd {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  line-height: 1.15;
 }
 
 .meal-entry-form {
@@ -391,8 +547,14 @@ dd {
 
   .macro-grid,
   .target-grid,
+  .progress-grid,
   .form-section {
     grid-template-columns: 1fr;
+  }
+
+  .daily-progress-heading {
+    align-items: start;
+    flex-direction: column;
   }
 
   .plan-row,
@@ -413,6 +575,10 @@ dd {
 
   .meal-entry dl {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .meal-total-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .day-actions summary {

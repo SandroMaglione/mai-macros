@@ -1,13 +1,25 @@
 import type { EntryNutrients, Food, Plan, QuantityGrams } from "./domain.ts";
 
+export const calculateMacronutrientEnergyKcal = ({
+  proteinGrams,
+  carbsGrams,
+  fatGrams,
+}: {
+  readonly proteinGrams: number;
+  readonly carbsGrams: number;
+  readonly fatGrams: number;
+}): number => proteinGrams * 4 + carbsGrams * 4 + fatGrams * 9;
+
 export const calculatePlanEnergyKcal = ({
   plan,
 }: {
   readonly plan: Plan;
 }): number =>
-  plan.proteinTargetGrams * 4 +
-  plan.carbsTargetGrams * 4 +
-  plan.fatTargetGrams * 9;
+  calculateMacronutrientEnergyKcal({
+    proteinGrams: plan.proteinTargetGrams,
+    carbsGrams: plan.carbsTargetGrams,
+    fatGrams: plan.fatTargetGrams,
+  });
 
 export const calculateEntryNutrients = ({
   food,

@@ -10,6 +10,7 @@ import {
 } from "../src/domain.ts";
 import {
   calculateEntryNutrients,
+  calculateMacronutrientEnergyKcal,
   calculatePlanEnergyKcal,
 } from "../src/utils.ts";
 
@@ -42,6 +43,16 @@ const planInput: typeof Plan.Encoded = {
 };
 
 describe("nutrition utils", () => {
+  it("calculates energy from macronutrients", () => {
+    const energyKcal = calculateMacronutrientEnergyKcal({
+      proteinGrams: 160,
+      carbsGrams: 220,
+      fatGrams: 70,
+    });
+
+    assert.equal(energyKcal, 2150);
+  });
+
   it("calculates plan energy from macro targets and validates the result", async () => {
     const program = Effect.gen(function* () {
       const plan = yield* Schema.decodeEffect(Plan)(planInput);

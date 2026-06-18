@@ -4,8 +4,9 @@ import {
   type UseNavigateResult,
 } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
+import { calculateMacronutrientEnergyKcal } from "@mai/nutrition";
 import { DateTime, Effect } from "effect";
-import { fromPromise, setup } from "xstate";
+import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../lib/runtime-client.ts";
 import { MealPlans } from "../lib/services/meal-plans.ts";
@@ -23,12 +24,20 @@ export const Route = createFileRoute("/plans/new")({
 
 const submitMealPlanMachine = setup({
   types: {
-    events: {} as {
-      readonly type: "submit";
-      readonly formData: FormData;
-      readonly dateKey: string | undefined;
-      readonly navigate: UseNavigateResult<string>;
+    context: {} as {
+      readonly energyKcal: number;
     },
+    events: {} as
+      | {
+          readonly type: "submit";
+          readonly formData: FormData;
+          readonly dateKey: string | undefined;
+          readonly navigate: UseNavigateResult<string>;
+        }
+      | {
+          readonly type: "changeTargets";
+          readonly formData: FormData;
+        },
   },
   actors: {
     submitMealPlan: fromPromise<
@@ -70,7 +79,34 @@ const submitMealPlanMachine = setup({
     ),
   },
 }).createMachine({
+  context: {
+    energyKcal: 0,
+  },
   initial: "Idle",
+  on: {
+    changeTargets: {
+      actions: assign({
+        energyKcal: ({ event }) => {
+          assertEvent(event, "changeTargets");
+
+          return calculateMacronutrientEnergyKcal({
+            proteinGrams: _formNonNegativeNumber({
+              formData: event.formData,
+              name: "proteinTargetGrams",
+            }),
+            carbsGrams: _formNonNegativeNumber({
+              formData: event.formData,
+              name: "carbsTargetGrams",
+            }),
+            fatGrams: _formNonNegativeNumber({
+              formData: event.formData,
+              name: "fatTargetGrams",
+            }),
+          });
+        },
+      }),
+    },
+  },
   states: {
     Idle: {
       on: {
@@ -82,11 +118,15 @@ const submitMealPlanMachine = setup({
     Submitting: {
       invoke: {
         src: "submitMealPlan",
-        input: ({ event }) => ({
-          formData: event.formData,
-          dateKey: event.dateKey,
-          navigate: event.navigate,
-        }),
+        input: ({ event }) => {
+          assertEvent(event, "submit");
+
+          return {
+            formData: event.formData,
+            dateKey: event.dateKey,
+            navigate: event.navigate,
+          };
+        },
         onDone: {
           target: "Created",
         },
@@ -113,6 +153,9 @@ function Component() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const [snapshot, send] = useMachine(submitMealPlanMachine);
+  const formattedEnergyKcal = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+  }).format(snapshot.context.energyKcal);
   const isSubmitting =
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
@@ -129,6 +172,12 @@ function Component() {
 
         <form
           className="plan-form"
+          onInput={(event) => {
+            send({
+              type: "changeTargets",
+              formData: new FormData(event.currentTarget),
+            });
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             send({
@@ -196,6 +245,16 @@ function Component() {
             </label>
           </div>
 
+          <output
+            aria-live="polite"
+            className="plan-calorie-preview"
+            name="energyKcal"
+          >
+            <span>Calories</span>
+            <strong>{formattedEnergyKcal}</strong>
+            <span>kcal from macros</span>
+          </output>
+
           <button disabled={isSubmitting} type="submit">
             {snapshot.matches("Failure") ? "Try again" : "Create plan"}
           </button>
@@ -203,4 +262,22 @@ function Component() {
       </section>
     </main>
   );
+}
+
+function _formNonNegativeNumber({
+  formData,
+  name,
+}: {
+  readonly formData: FormData;
+  readonly name: string;
+}) {
+  const value = formData.get(name);
+
+  if (typeof value !== "string" || value.trim() === "") {
+    return 0;
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 0;
 }
