@@ -46,6 +46,13 @@ button:hover,
   background: #3a3f35;
 }
 
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .secondary-link {
   border-color: #cbd1c3;
   background: #ffffff;
@@ -268,6 +275,115 @@ dd {
   font-weight: 800;
 }
 
+.meal-grid {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.meal-panel {
+  border: 1px solid #d9dfd1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.meal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.meal-panel-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.meal-panel-header span {
+  min-width: 28px;
+  border: 1px solid #d9dfd1;
+  border-radius: 999px;
+  color: #637056;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 26px;
+  text-align: center;
+}
+
+.meal-entry-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 180px) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.meal-empty {
+  margin: 14px 0 0;
+  color: #637056;
+  font-size: 0.9rem;
+}
+
+.meal-entry-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meal-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #eef2e8;
+  padding-top: 10px;
+}
+
+.meal-entry > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.meal-entry strong {
+  overflow-wrap: anywhere;
+}
+
+.meal-entry span {
+  color: #637056;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.meal-entry dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(44px, auto));
+  gap: 8px;
+  margin: 0;
+}
+
+.meal-entry dl div {
+  min-width: 0;
+  border: 1px solid #eef2e8;
+  border-radius: 6px;
+  padding: 7px 8px;
+  text-align: right;
+}
+
+.meal-entry dt {
+  font-size: 0.68rem;
+}
+
+.meal-entry dd {
+  margin-top: 3px;
+  font-size: 0.88rem;
+  line-height: 1.15;
+}
+
 @media (max-width: 680px) {
   .app-shell {
     padding: 20px;
@@ -288,6 +404,15 @@ dd {
   .plan-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .meal-entry,
+  .meal-entry-form {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-entry dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .day-actions summary {

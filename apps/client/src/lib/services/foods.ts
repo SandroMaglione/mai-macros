@@ -31,6 +31,10 @@ export class Foods extends Context.Service<Foods>()("Foods", {
     const crypto = yield* Crypto.Crypto;
 
     return {
+      list: Effect.fn("Foods.list")(function* () {
+        return yield* api.from("foods").select();
+      }),
+
       create: Effect.fn("Foods.create")(function* ({
         input,
       }: {

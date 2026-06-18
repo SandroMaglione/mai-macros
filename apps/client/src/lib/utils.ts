@@ -1,5 +1,6 @@
 import type { DateKey } from "@mai/nutrition";
 
+import type { CreateMealEntryInput } from "./services/meal-entries.ts";
 import type { CreateFoodInput } from "./services/foods.ts";
 import type { CreateMealPlanInput } from "./services/meal-plans.ts";
 
@@ -110,5 +111,23 @@ export const createFoodInputFromFormData = ({
       formData,
       name: "saltGramsPer100g",
     }),
+  };
+};
+
+export const createMealEntryInputFromFormData = ({
+  dateKey,
+  formData,
+}: {
+  readonly dateKey: DateKey;
+  readonly formData: FormData;
+}): CreateMealEntryInput => {
+  return {
+    dateKey,
+    meal: _formString({
+      formData,
+      name: "meal",
+    }),
+    foodId: _formString({ formData, name: "foodId" }),
+    quantityGrams: _formString({ formData, name: "quantityGrams" }),
   };
 };
