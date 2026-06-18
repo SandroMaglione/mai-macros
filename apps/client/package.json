@@ -9,10 +9,14 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@effect/platform-browser": "4.0.0-beta.84",
     "@mai/nutrition": "workspace:^",
     "@tanstack/react-router": "^1.170.16",
+    "@xstate/react": "^6.1.0",
+    "effect": "4.0.0-beta.84",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "xstate": "^5.32.1"
   },
   "devDependencies": {
     "@tanstack/router-plugin": "^1.168.18",

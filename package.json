@@ -5,6 +5,7 @@
   "scripts": {
     "format": "oxfmt",
     "test": "pnpm -r test",
+    "dev": "pnpm -r dev",
     "typecheck": "pnpm -r typecheck",
     "lint:all": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config",
     "lint": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config --quiet",

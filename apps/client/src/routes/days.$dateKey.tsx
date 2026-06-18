@@ -5,62 +5,42 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
-import { Data, DateTime, Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { fromPromise, setup } from "xstate";
 
-import { DateKey } from "@mai/nutrition";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import type {
-  ChangeDayPlanInput,
-  OpenedDay,
-} from "../lib/services/daily-logs.ts";
+import type { ChangeDayPlanInput } from "../lib/services/daily-logs.ts";
 import { DailyLogs } from "../lib/services/daily-logs.ts";
-import { dateKeyFromDate, shiftDateKey } from "../lib/utils.ts";
+import { shiftDateKey } from "../lib/utils.ts";
 
-type RouteLoaderResult = Data.TaggedEnum<{
-  NoMealPlans: { readonly dateKey: DateKey };
-  OpenedDay: { readonly day: OpenedDay };
-  InvalidDateKey: {};
-}>;
-const RouteLoaderResult = Data.taggedEnum<RouteLoaderResult>();
-
-export const Route = createFileRoute("/")({
-  loader: async () => {
+export const Route = createFileRoute("/days/$dateKey")({
+  loader: async ({ params }) => {
     const result = await RuntimeClient.runPromise(
       Effect.gen(function* () {
         const dailyLogs = yield* DailyLogs;
-        const dateKey = yield* Schema.decodeEffect(DateKey)(
-          dateKeyFromDate({ date: yield* DateTime.nowAsDate })
-        );
-        return yield* dailyLogs.open({ input: { dateKey } }).pipe(
-          Effect.map((day) => RouteLoaderResult.OpenedDay({ day })),
-          Effect.catchTag("NoMealPlans", () =>
-            Effect.succeed(RouteLoaderResult.NoMealPlans({ dateKey }))
-          ),
-          Effect.catchTag("SchemaError", () =>
-            Effect.succeed(RouteLoaderResult.InvalidDateKey())
-          )
-        );
-      })
+        return yield* dailyLogs.open({
+          input: {
+            dateKey: params.dateKey,
+          },
+        });
+      }).pipe(Effect.catchTag("NoMealPlans", () => Effect.succeed(null)))
     );
 
-    return RouteLoaderResult.$match(result, {
-      NoMealPlans: ({ dateKey }) => {
-        throw redirect({
-          to: "/plans/new",
-          search: { dateKey },
-        });
-      },
-      InvalidDateKey: () => {
-        throw redirect({ to: "/" });
-      },
-      OpenedDay: ({ day }) => day,
-    });
+    if (result === null) {
+      throw redirect({
+        to: "/plans/new",
+        search: {
+          dateKey: params.dateKey,
+        },
+      });
+    }
+
+    return result;
   },
   component: Component,
 });
 
-const machine = setup({
+const changeDayPlanMachine = setup({
   types: {
     events: {} as {
       readonly type: "changePlan";
@@ -149,7 +129,7 @@ const machine = setup({
 function Component() {
   const day = Route.useLoaderData();
   const router = useRouter();
-  const [snapshot, send] = useMachine(machine);
+  const [snapshot, send] = useMachine(changeDayPlanMachine);
   const isChangingPlan = snapshot.matches("Changing");
   const previousDateKey = shiftDateKey({
     dateKey: day.dailyLog.dateKey,
@@ -159,6 +139,11 @@ function Component() {
     dateKey: day.dailyLog.dateKey,
     days: 1,
   });
+  const planOptions = day.plans.map((plan) => (
+    <option key={plan.id} value={plan.id}>
+      {plan.name}
+    </option>
+  ));
 
   return (
     <main className="app-shell">
@@ -208,11 +193,7 @@ function Component() {
                 });
               }}
             >
-              {day.plans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
+              {planOptions}
             </select>
           </label>
 

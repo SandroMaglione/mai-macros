@@ -18,11 +18,11 @@ import {
 
 const layerFakeIndexedDb = Layer.succeed(
   IndexedDb.IndexedDb,
-  IndexedDb.make({ indexedDB, IDBKeyRange }),
+  IndexedDb.make({ indexedDB, IDBKeyRange })
 );
 
 const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
-  Layer.provide(layerFakeIndexedDb),
+  Layer.provide(layerFakeIndexedDb)
 );
 
 afterEach(() => {
@@ -81,18 +81,18 @@ describe("MaiDatabase", () => {
       const name = yield* api.use((database) => database.name);
       const version = yield* api.use((database) => database.version);
       const storeNames = yield* api.use((database) =>
-        Array.from(database.objectStoreNames),
+        Array.from(database.objectStoreNames)
       );
       const foodIndexes = yield* api.use((database) =>
         Array.from(
-          database.transaction("foods").objectStore("foods").indexNames,
-        ),
+          database.transaction("foods").objectStore("foods").indexNames
+        )
       );
       const entryIndexes = yield* api.use((database) =>
         Array.from(
           database.transaction("mealEntries").objectStore("mealEntries")
-            .indexNames,
-        ),
+            .indexNames
+        )
       );
 
       return { entryIndexes, foodIndexes, name, storeNames, version };
@@ -103,6 +103,7 @@ describe("MaiDatabase", () => {
     assert.equal(result.name, DatabaseName);
     assert.equal(result.version, 1);
     assert.deepStrictEqual(result.storeNames, [
+      "activeMealPlanSelections",
       "dailyLogs",
       "foods",
       "mealEntries",

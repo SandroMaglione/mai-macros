@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PlansNewRouteImport } from './routes/plans.new'
+import { Route as DaysDateKeyRouteImport } from './routes/days.$dateKey'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlansNewRoute = PlansNewRouteImport.update({
+  id: '/plans/new',
+  path: '/plans/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DaysDateKeyRoute = DaysDateKeyRouteImport.update({
+  id: '/days/$dateKey',
+  path: '/days/$dateKey',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/days/$dateKey': typeof DaysDateKeyRoute
+  '/plans/new': typeof PlansNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/days/$dateKey': typeof DaysDateKeyRoute
+  '/plans/new': typeof PlansNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/days/$dateKey': typeof DaysDateKeyRoute
+  '/plans/new': typeof PlansNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/days/$dateKey' | '/plans/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/days/$dateKey' | '/plans/new'
+  id: '__root__' | '/' | '/days/$dateKey' | '/plans/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DaysDateKeyRoute: typeof DaysDateKeyRoute
+  PlansNewRoute: typeof PlansNewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plans/new': {
+      id: '/plans/new'
+      path: '/plans/new'
+      fullPath: '/plans/new'
+      preLoaderRoute: typeof PlansNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/days/$dateKey': {
+      id: '/days/$dateKey'
+      path: '/days/$dateKey'
+      fullPath: '/days/$dateKey'
+      preLoaderRoute: typeof DaysDateKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DaysDateKeyRoute: DaysDateKeyRoute,
+  PlansNewRoute: PlansNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

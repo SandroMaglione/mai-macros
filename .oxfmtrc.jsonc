@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 80,
+  "sortPackageJson": {
+    "sortScripts": false,
+  },
   "trailingComma": "es5",
   "ignorePatterns": [
     ".repos/**",

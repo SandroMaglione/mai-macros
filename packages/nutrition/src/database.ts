@@ -6,7 +6,13 @@ import {
 } from "@effect/platform-browser";
 import { Effect, Layer } from "effect";
 
-import { DailyLog, Food, MealEntry, Plan } from "./domain.ts";
+import {
+  ActiveMealPlanSelection,
+  DailyLog,
+  Food,
+  MealEntry,
+  Plan,
+} from "./domain.ts";
 
 export const DatabaseName = "mai";
 
@@ -37,6 +43,12 @@ export class DailyLogsTable extends IndexedDbTable.make({
   },
 }) {}
 
+export class ActiveMealPlanSelectionsTable extends IndexedDbTable.make({
+  name: "activeMealPlanSelections",
+  schema: ActiveMealPlanSelection,
+  keyPath: "id",
+}) {}
+
 export class MealEntriesTable extends IndexedDbTable.make({
   name: "mealEntries",
   schema: MealEntry,
@@ -52,6 +64,7 @@ export class MaiVersion1 extends IndexedDbVersion.make(
   FoodsTable,
   PlansTable,
   DailyLogsTable,
+  ActiveMealPlanSelectionsTable,
   MealEntriesTable
 ) {}
 
@@ -64,6 +77,7 @@ export class MaiDatabase extends IndexedDbDatabase.make(
     yield* api.createIndex("plans", "byName");
     yield* api.createObjectStore("dailyLogs");
     yield* api.createIndex("dailyLogs", "byPlan");
+    yield* api.createObjectStore("activeMealPlanSelections");
     yield* api.createObjectStore("mealEntries");
     yield* api.createIndex("mealEntries", "byDate");
     yield* api.createIndex("mealEntries", "byDateMeal");

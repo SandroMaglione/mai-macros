@@ -36,6 +36,10 @@ export const DateKey = Schema.String.check(
 
 export type DateKey = typeof DateKey.Type;
 
+export const ActiveMealPlanSelectionId = Schema.Literal("active-meal-plan");
+
+export type ActiveMealPlanSelectionId = typeof ActiveMealPlanSelectionId.Type;
+
 export const QuantityGrams = PositiveNumber.pipe(Schema.brand("QuantityGrams"));
 
 export type QuantityGrams = typeof QuantityGrams.Type;
@@ -77,6 +81,14 @@ export class DailyLog extends Schema.Class<DailyLog>("DailyLog")({
   dateKey: DateKey,
   planId: PlanId,
   createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+export class ActiveMealPlanSelection extends Schema.Class<ActiveMealPlanSelection>(
+  "ActiveMealPlanSelection"
+)({
+  id: ActiveMealPlanSelectionId,
+  planId: PlanId,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
