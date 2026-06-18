@@ -115,25 +115,24 @@ function Component() {
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
   return (
-    <main className="flex min-h-screen items-start justify-center px-4 py-5 sm:items-center sm:px-6 sm:py-8 lg:px-8">
-      <section className="mx-auto flex w-full max-w-4xl flex-col">
-        <div className="mb-7 mt-6 grid justify-items-center text-center sm:mt-8">
-          <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-lg shadow-rose-600/25">
-            <Apple aria-hidden="true" size={30} strokeWidth={2.4} />
+    <main className="min-h-screen px-2 py-3 sm:px-4">
+      <section className="mx-auto flex w-full max-w-[430px] flex-col">
+        <header className="mb-3 flex items-center gap-2">
+          <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-stone-950 text-white">
+            <Apple aria-hidden="true" size={22} strokeWidth={2.4} />
           </div>
-          <p className="mb-2 text-xs font-extrabold uppercase tracking-normal text-rose-700">
-            Foods
-          </p>
-          <h1 className="text-3xl font-black leading-tight text-stone-950 sm:text-4xl">
-            Create a food
-          </h1>
-          <p className="mt-3 max-w-xl text-base font-medium leading-7 text-stone-700">
-            Add nutrition values per 100g so the food can be used in daily logs.
-          </p>
-        </div>
+          <div className="min-w-0">
+            <p className="text-[0.68rem] font-black uppercase leading-tight tracking-normal text-stone-500">
+              Foods
+            </p>
+            <h1 className="truncate text-xl font-black leading-tight text-stone-950">
+              Create food
+            </h1>
+          </div>
+        </header>
 
         <form
-          className="grid gap-5 rounded-lg border border-stone-200 bg-white/90 p-5 shadow-[0_18px_45px_rgb(15_23_42_/_0.08)] backdrop-blur sm:p-6"
+          className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3"
           onSubmit={(event) => {
             event.preventDefault();
             send({
@@ -144,12 +143,12 @@ function Component() {
             });
           }}
         >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
             <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
               Name
               <input
                 autoComplete="off"
-                className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                 name="name"
                 placeholder="Greek yogurt"
                 required
@@ -160,7 +159,7 @@ function Component() {
               Brand
               <input
                 autoComplete="off"
-                className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                 name="brand"
                 placeholder="Mai"
               />
@@ -168,16 +167,16 @@ function Component() {
           </div>
 
           <fieldset className="min-w-0 border-0 p-0">
-            <legend className="mb-3 text-sm font-extrabold text-stone-800">
+            <legend className="mb-2 text-sm font-extrabold text-stone-800">
               Nutrition per 100g
             </legend>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3">
               <label className="grid min-w-0 gap-2 text-sm font-bold text-stone-700">
                 Calories
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="energyKcalPer100g"
@@ -185,7 +184,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">kcal</span>
+                  <span className="font-bold text-stone-500">kcal</span>
                 </span>
               </label>
 
@@ -193,7 +192,7 @@ function Component() {
                 Protein
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="proteinGramsPer100g"
@@ -201,7 +200,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -209,7 +208,7 @@ function Component() {
                 Carbs
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="carbsGramsPer100g"
@@ -217,7 +216,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -225,7 +224,7 @@ function Component() {
                 Fat
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="fatGramsPer100g"
@@ -233,7 +232,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -241,7 +240,7 @@ function Component() {
                 Fiber
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="fiberGramsPer100g"
@@ -249,7 +248,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -257,7 +256,7 @@ function Component() {
                 Sugar
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="sugarGramsPer100g"
@@ -265,7 +264,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -273,7 +272,7 @@ function Component() {
                 Saturated fat
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="saturatedFatGramsPer100g"
@@ -281,7 +280,7 @@ function Component() {
                     step="0.1"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
 
@@ -289,7 +288,7 @@ function Component() {
                 Salt
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                   <input
-                    className="min-h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 shadow-sm outline-none transition placeholder:text-stone-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
+                    className="min-h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-stone-950 focus:ring-2 focus:ring-stone-200 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-70"
                     inputMode="decimal"
                     min="0"
                     name="saltGramsPer100g"
@@ -297,7 +296,7 @@ function Component() {
                     step="0.01"
                     type="number"
                   />
-                  <span className="font-bold text-emerald-700">g</span>
+                  <span className="font-bold text-stone-500">g</span>
                 </span>
               </label>
             </div>
@@ -305,7 +304,7 @@ function Component() {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
-              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-emerald-950 bg-emerald-950 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-950 bg-stone-950 px-4 text-sm font-bold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
               disabled={isSubmitting}
               type="submit"
             >
@@ -324,7 +323,7 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
   if (dateKey === undefined) {
     return (
       <Link
-        className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+        className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
         to="/"
       >
         <X aria-hidden="true" className="mr-2" size={17} />
@@ -335,7 +334,7 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
 
   return (
     <Link
-      className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+      className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-stone-300 bg-white px-4 text-sm font-bold text-stone-900 no-underline transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
       params={{ dateKey }}
       to="/days/$dateKey"
     >
