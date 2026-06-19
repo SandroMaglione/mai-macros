@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Pencil,
   Plus,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,6 +32,11 @@ import {
 } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
+import {
+  filterFoodsByQuery,
+  FoodSearchField,
+  FoodSearchResults,
+} from "./food-search.tsx";
 import type { ChangeDayPlanInput, OpenedDay } from "../services/daily-logs.ts";
 import { DailyLogs } from "../services/daily-logs.ts";
 import type {
@@ -308,21 +312,10 @@ const addMealFoodDialogMachine = setup({
         changeQuery: {
           actions: assign(({ context, event }) => {
             assertEvent(event, "changeQuery");
-            const normalizedQuery = event.query.trim().toLocaleLowerCase();
-            const queryTokens =
-              normalizedQuery === "" ? [] : normalizedQuery.split(/\s+/);
-            const matchingFoods = Array.isReadonlyArrayNonEmpty(queryTokens)
-              ? context.foods.filter((food) => {
-                  const searchableFood =
-                    food.brand === undefined
-                      ? food.name.toLocaleLowerCase()
-                      : `${food.name} ${food.brand}`.toLocaleLowerCase();
-
-                  return queryTokens.every((queryToken) =>
-                    searchableFood.includes(queryToken)
-                  );
-                })
-              : context.foods;
+            const matchingFoods = filterFoodsByQuery({
+              foods: context.foods,
+              query: event.query,
+            });
 
             return {
               matchingFoods,
@@ -1099,6 +1092,37 @@ function AddMealFoodDialog({
       : `${_formatNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
+  const getFoodPrimaryLabel = (food: Food) => {
+    const foodHistory = _findFoodUsage({
+      foodId: food.id,
+      foodUsage,
+    });
+    const nutrients =
+      foodHistory === undefined
+        ? undefined
+        : calculateEntryNutrients({
+            food,
+            quantityGrams: foodHistory.latestQuantityGrams,
+          });
+
+    return nutrients === undefined
+      ? "New"
+      : `${_formatNumber({
+          value: nutrients.energyKcal,
+        })} kcal`;
+  };
+  const getFoodSecondaryLabel = (food: Food) => {
+    const foodHistory = _findFoodUsage({
+      foodId: food.id,
+      foodUsage,
+    });
+
+    return foodHistory === undefined
+      ? "No previous"
+      : `${_formatNumber({
+          value: foodHistory.latestQuantityGrams,
+        })} g`;
+  };
 
   return (
     <div
@@ -1171,124 +1195,51 @@ function AddMealFoodDialog({
           ) : (
             <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
               <div className="border-b border-[#29292d] bg-[#161618] p-4">
-                <label
-                  className={darkFieldLabelClassName}
-                  htmlFor="add-food-search"
-                >
-                  Search
-                  <span className="relative">
-                    <Search
-                      aria-hidden="true"
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#77777e]"
-                      size={17}
-                      strokeWidth={3}
-                    />
-                    <input
-                      aria-controls="add-food-results"
-                      aria-label={`${mealLabel} food search`}
-                      autoComplete="off"
-                      autoFocus
-                      className={`${darkFieldClassName} pl-9`}
-                      disabled={disabled}
-                      id="add-food-search"
-                      onChange={(event) => {
-                        actor.send({
-                          type: "changeQuery",
-                          query: event.currentTarget.value,
-                        });
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") {
-                          return;
-                        }
-
-                        event.preventDefault();
-
-                        actor.send({
-                          type: "selectFirstMatchingFood",
-                        });
-                        globalThis.requestAnimationFrame(() => {
-                          quantityInputRef.current?.focus();
-                        });
-                      }}
-                      placeholder="Search food or brand"
-                      role="combobox"
-                      type="search"
-                      value={query}
-                    />
-                  </span>
-                </label>
-              </div>
-
-              <div
-                className="min-h-0 overflow-y-auto p-2"
-                id="add-food-results"
-                role="listbox"
-              >
-                {!Array.isReadonlyArrayNonEmpty(foods) ? (
-                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-                    Create a food before logging this meal.
-                  </p>
-                ) : Array.isReadonlyArrayNonEmpty(matchingFoods) ? (
-                  matchingFoods.map((food) => {
-                    const foodHistory = _findFoodUsage({
-                      foodId: food.id,
-                      foodUsage,
+                <FoodSearchField
+                  ariaControls="add-food-results"
+                  ariaLabel={`${mealLabel} food search`}
+                  autoFocus
+                  disabled={disabled}
+                  id="add-food-search"
+                  label="Search"
+                  onChange={(query) => {
+                    actor.send({
+                      type: "changeQuery",
+                      query,
                     });
-                    const nutrients =
-                      foodHistory === undefined
-                        ? undefined
-                        : calculateEntryNutrients({
-                            food,
-                            quantityGrams: foodHistory.latestQuantityGrams,
-                          });
-
-                    return (
-                      <button
-                        aria-selected="false"
-                        className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-[#f0f0f2] transition-colors hover:bg-[#202024]"
-                        key={food.id}
-                        onClick={() => {
-                          actor.send({
-                            type: "selectFood",
-                            foodId: food.id,
-                          });
-                          globalThis.requestAnimationFrame(() => {
-                            quantityInputRef.current?.focus();
-                          });
-                        }}
-                        role="option"
-                        type="button"
-                      >
-                        <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
-                          {food.name}
-                        </span>
-                        <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
-                          {nutrients === undefined
-                            ? "New"
-                            : `${_formatNumber({
-                                value: nutrients.energyKcal,
-                              })} kcal`}
-                        </span>
-                        <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
-                          {food.brand ?? "No brand"}
-                        </span>
-                        <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
-                          {foodHistory === undefined
-                            ? "No previous"
-                            : `${_formatNumber({
-                                value: foodHistory.latestQuantityGrams,
-                              })} g`}
-                        </span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-                    No foods found.
-                  </p>
-                )}
+                  }}
+                  onEnter={() => {
+                    actor.send({
+                      type: "selectFirstMatchingFood",
+                    });
+                    globalThis.requestAnimationFrame(() => {
+                      quantityInputRef.current?.focus();
+                    });
+                  }}
+                  placeholder="Search food or brand"
+                  value={query}
+                />
               </div>
+
+              <FoodSearchResults
+                emptyFoodsText="Create a food before logging this meal."
+                emptySearchText="No foods found."
+                foods={foods}
+                getPrimaryLabel={getFoodPrimaryLabel}
+                getSecondaryLabel={getFoodSecondaryLabel}
+                id="add-food-results"
+                matchingFoods={matchingFoods}
+                onSelectFood={(foodId) => {
+                  actor.send({
+                    type: "selectFood",
+                    foodId,
+                  });
+                  globalThis.requestAnimationFrame(() => {
+                    quantityInputRef.current?.focus();
+                  });
+                }}
+                selectedFoodId={selectedFood?.id ?? null}
+              />
             </div>
           )}
 
@@ -1724,10 +1675,20 @@ function DailyProgress({
         </Link>
       </div>
 
-      <div className="mt-2 px-2">
+      <div className="mt-2 grid grid-cols-2 gap-2 px-2">
+        <Link
+          aria-label="Edit foods"
+          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
+          search={{ dateKey: day.dailyLog.dateKey }}
+          title="Edit foods"
+          to="/foods/edit"
+        >
+          <Pencil aria-hidden="true" size={18} strokeWidth={3} />
+          Edit foods
+        </Link>
         <Link
           aria-label="Create food"
-          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
+          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
           search={{ dateKey: day.dailyLog.dateKey }}
           title="Create food"
           to="/foods/new"

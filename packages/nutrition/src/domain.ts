@@ -50,6 +50,7 @@ export type Meal = typeof Meal.Type;
 
 export class Food extends Schema.Class<Food>("Food")({
   id: FoodId,
+  basedOnFoodId: Schema.optional(FoodId),
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
   energyKcalPer100g: NonNegativeNumber,
