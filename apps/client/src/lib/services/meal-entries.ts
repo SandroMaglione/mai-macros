@@ -37,6 +37,16 @@ export type CreateMealEntryInput = {
 export type ListMealEntriesForDayInput =
   typeof _ListMealEntriesForDayInput.Encoded;
 
+export type MealFoodUsage = {
+  readonly foodId: FoodId;
+  readonly latestQuantityGrams: MealEntry["quantityGrams"];
+  readonly latestUsedAt: MealEntry["createdAt"];
+  readonly meals: readonly {
+    readonly latestUsedAt: MealEntry["createdAt"];
+    readonly meal: Meal;
+  }[];
+};
+
 export class CreatedMealEntry extends Data.TaggedClass("CreatedMealEntry")<{
   readonly mealEntry: MealEntry;
 }> {}
@@ -64,6 +74,77 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
           .from("mealEntries")
           .select("byDate")
           .equals(decodedInput.dateKey);
+      }),
+
+      listFoodUsage: Effect.fn("MealEntries.listFoodUsage")(function* () {
+        const mealEntries = yield* api.from("mealEntries").select();
+
+        return mealEntries.reduce<readonly MealFoodUsage[]>(
+          (foodUsage, mealEntry) => {
+            const existingFoodUsage = foodUsage.find(
+              (usage) => usage.foodId === mealEntry.foodId
+            );
+
+            if (existingFoodUsage === undefined) {
+              return [
+                ...foodUsage,
+                {
+                  foodId: mealEntry.foodId,
+                  latestQuantityGrams: mealEntry.quantityGrams,
+                  latestUsedAt: mealEntry.createdAt,
+                  meals: [
+                    {
+                      latestUsedAt: mealEntry.createdAt,
+                      meal: mealEntry.meal,
+                    },
+                  ],
+                },
+              ];
+            }
+
+            const latestFoodUsage =
+              mealEntry.createdAt.epochMilliseconds >=
+              existingFoodUsage.latestUsedAt.epochMilliseconds
+                ? {
+                    latestQuantityGrams: mealEntry.quantityGrams,
+                    latestUsedAt: mealEntry.createdAt,
+                  }
+                : {};
+            const existingMealUsage = existingFoodUsage.meals.find(
+              (usage) => usage.meal === mealEntry.meal
+            );
+            const meals =
+              existingMealUsage === undefined
+                ? [
+                    ...existingFoodUsage.meals,
+                    {
+                      latestUsedAt: mealEntry.createdAt,
+                      meal: mealEntry.meal,
+                    },
+                  ]
+                : existingFoodUsage.meals.map((usage) =>
+                    usage.meal === mealEntry.meal &&
+                    mealEntry.createdAt.epochMilliseconds >=
+                      usage.latestUsedAt.epochMilliseconds
+                      ? {
+                          latestUsedAt: mealEntry.createdAt,
+                          meal: mealEntry.meal,
+                        }
+                      : usage
+                  );
+
+            return foodUsage.map((usage) =>
+              usage.foodId === mealEntry.foodId
+                ? {
+                    ...usage,
+                    ...latestFoodUsage,
+                    meals,
+                  }
+                : usage
+            );
+          },
+          []
+        );
       }),
 
       create: Effect.fn("MealEntries.create")(function* ({

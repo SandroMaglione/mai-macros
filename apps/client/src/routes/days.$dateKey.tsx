@@ -25,9 +25,11 @@ export const Route = createFileRoute("/days/$dateKey")({
             dateKey: day.dailyLog.dateKey,
           },
         });
+        const foodUsage = yield* mealEntriesService.listFoodUsage();
 
         return {
           day,
+          foodUsage,
           foods,
           mealEntries,
         };

@@ -38,10 +38,12 @@ export const Route = createFileRoute("/")({
               dateKey: day.dailyLog.dateKey,
             },
           });
+          const foodUsage = yield* mealEntriesService.listFoodUsage();
 
           return RouteLoaderResult.OpenedDay({
             data: {
               day,
+              foodUsage,
               foods,
               mealEntries,
             },
