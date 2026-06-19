@@ -9,8 +9,8 @@ import { fromPromise, setup } from "xstate";
 
 import { FoodForm } from "../lib/components/food-form.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { Foods } from "../lib/services/foods.ts";
-import { createFoodInputFromFormData, dateKeyFromDate } from "../lib/utils.ts";
+import { Foods, type CreateFoodInput } from "../lib/services/foods.ts";
+import { dateKeyFromDate } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/foods/new")({
   validateSearch: (search) => ({
@@ -23,7 +23,7 @@ const submitFoodMachine = setup({
   types: {
     events: {} as {
       readonly type: "submit";
-      readonly formData: FormData;
+      readonly input: CreateFoodInput;
       readonly dateKey: string | undefined;
       readonly navigate: UseNavigateResult<string>;
     },
@@ -32,7 +32,7 @@ const submitFoodMachine = setup({
     submitFood: fromPromise<
       void,
       {
-        readonly formData: FormData;
+        readonly input: CreateFoodInput;
         readonly dateKey: string | undefined;
         readonly navigate: UseNavigateResult<string>;
       }
@@ -40,12 +40,7 @@ const submitFoodMachine = setup({
       RuntimeClient.runPromise(
         Effect.gen(function* () {
           const foods = yield* Foods;
-          const foodInput = yield* Effect.sync(() =>
-            createFoodInputFromFormData({
-              formData: input.formData,
-            })
-          );
-          yield* foods.create({ input: foodInput });
+          yield* foods.create({ input: input.input });
 
           const today = dateKeyFromDate({
             date: yield* DateTime.nowAsDate,
@@ -80,7 +75,7 @@ const submitFoodMachine = setup({
       invoke: {
         src: "submitFood",
         input: ({ event }) => ({
-          formData: event.formData,
+          input: event.input,
           dateKey: event.dateKey,
           navigate: event.navigate,
         }),
@@ -120,10 +115,10 @@ function Component() {
       disabled={isSubmitting}
       hasFailed={snapshot.matches("Failure")}
       initialFood={null}
-      onSubmit={(formData) => {
+      onSubmit={(input) => {
         send({
           type: "submit",
-          formData,
+          input,
           dateKey: search.dateKey,
           navigate,
         });

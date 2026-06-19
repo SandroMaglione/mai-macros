@@ -1,11 +1,58 @@
-import type { Food } from "@mai/nutrition";
+import {
+  parseFoodQuickInput,
+  type Food,
+  type FoodQuickInput,
+  type FoodQuickInputParseError,
+} from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
-import { Apple, Plus, Save, X } from "lucide-react";
-import { useRef, type FocusEvent } from "react";
+import { useMachine } from "@xstate/react";
+import { Effect, Result } from "effect";
+import { Apple, Plus, Rows3, Save, TextCursorInput, X } from "lucide-react";
+import { useMemo, useRef, type FocusEvent } from "react";
+import { assign, setup } from "xstate";
 
+import type { CreateFoodInput } from "../services/foods.ts";
+import {
+  createFoodInputFromFoodQuickInput,
+  createFoodInputFromFormData,
+} from "../utils.ts";
 import { FoodBarcodeImport } from "./food-barcode-import.tsx";
+import {
+  FoodNutrientOverview,
+  formatFoodNutrientNumber,
+  foodQuickInputNutrients,
+} from "./food-nutrient-overview.tsx";
 
 type FoodFormAction = "create" | "edit";
+type FoodCreateMode = "manual" | "quick";
+type FoodQuickInputParseState =
+  | {
+      readonly status: "empty";
+    }
+  | {
+      readonly error: FoodQuickInputParseError;
+      readonly status: "failure";
+    }
+  | {
+      readonly createInput: CreateFoodInput;
+      readonly food: FoodQuickInput;
+      readonly status: "success";
+    };
+
+type FoodFormMachineContext = {
+  readonly createMode: FoodCreateMode;
+  readonly quickInput: string;
+};
+
+type FoodFormMachineEvent =
+  | {
+      readonly mode: FoodCreateMode;
+      readonly type: "selectCreateMode";
+    }
+  | {
+      readonly input: string;
+      readonly type: "changeQuickInput";
+    };
 
 type FoodNutrientFieldName =
   | "energyKcalPer100g"
@@ -33,6 +80,30 @@ const foodFieldLabelClassName =
   "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
 const secondaryActionClassName =
   "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black text-[#ff5a51] no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45 sm:w-fit";
+
+const foodFormMachine = setup({
+  types: {
+    context: {} as FoodFormMachineContext,
+    events: {} as FoodFormMachineEvent,
+  },
+}).createMachine({
+  context: {
+    createMode: "manual",
+    quickInput: "",
+  },
+  on: {
+    changeQuickInput: {
+      actions: assign(({ event }) => ({
+        quickInput: event.input,
+      })),
+    },
+    selectCreateMode: {
+      actions: assign(({ event }) => ({
+        createMode: event.mode,
+      })),
+    },
+  },
+});
 
 const macroFields: readonly FoodNutrientField[] = [
   {
@@ -125,13 +196,15 @@ export function FoodForm({
   readonly disabled: boolean;
   readonly hasFailed: boolean;
   readonly initialFood: Food | null;
-  readonly onSubmit: (formData: FormData) => void;
+  readonly onSubmit: (input: CreateFoodInput) => void;
 }) {
   const isCreating = action === "create";
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
   const formRef = useRef<HTMLFormElement>(null);
+  const [snapshot, send] = useMachine(foodFormMachine);
+  const createMode = snapshot.context.createMode;
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
@@ -156,34 +229,274 @@ export function FoodForm({
           className="grid gap-4 px-4 py-5"
           onSubmit={(event) => {
             event.preventDefault();
-            onSubmit(new FormData(event.currentTarget));
+
+            onSubmit(
+              createFoodInputFromFormData({
+                formData: new FormData(event.currentTarget),
+              })
+            );
           }}
           ref={formRef}
         >
           {isCreating ? (
-            <FoodBarcodeImport disabled={disabled} formRef={formRef} />
+            <FoodCreateModeSwitch
+              disabled={disabled}
+              mode={createMode}
+              onChange={(mode) => {
+                send({
+                  type: "selectCreateMode",
+                  mode,
+                });
+              }}
+            />
           ) : null}
 
-          <FoodFormFields
-            autoFocusName
-            disabled={disabled}
-            initialFood={initialFood}
-          />
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+          {isCreating && createMode === "quick" ? (
+            <FoodQuickInputForm
+              dateKey={dateKey}
               disabled={disabled}
-              type="submit"
-            >
-              <SubmitIcon aria-hidden="true" size={18} strokeWidth={3} />
-              {submitText}
-            </button>
-            <BackToDayLink dateKey={dateKey} />
-          </div>
+              hasFailed={hasFailed}
+              input={snapshot.context.quickInput}
+              onChangeInput={(input) => {
+                send({
+                  type: "changeQuickInput",
+                  input,
+                });
+              }}
+              onSubmit={onSubmit}
+            />
+          ) : (
+            <>
+              {isCreating ? (
+                <FoodBarcodeImport disabled={disabled} formRef={formRef} />
+              ) : null}
+
+              <FoodFormFields
+                autoFocusName
+                disabled={disabled}
+                initialFood={initialFood}
+              />
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+                  disabled={disabled}
+                  type="submit"
+                >
+                  <SubmitIcon aria-hidden="true" size={18} strokeWidth={3} />
+                  {submitText}
+                </button>
+                <BackToDayLink dateKey={dateKey} />
+              </div>
+            </>
+          )}
         </form>
       </section>
     </main>
+  );
+}
+
+function FoodCreateModeSwitch({
+  disabled,
+  mode,
+  onChange,
+}: {
+  readonly disabled: boolean;
+  readonly mode: FoodCreateMode;
+  readonly onChange: (mode: FoodCreateMode) => void;
+}) {
+  return (
+    <div
+      aria-label="Food creation mode"
+      className="grid grid-cols-2 gap-2 rounded-[10px] bg-[#161618] p-1"
+      role="group"
+    >
+      <FoodCreateModeButton
+        disabled={disabled}
+        icon="manual"
+        isSelected={mode === "manual"}
+        label="Manual"
+        onClick={() => {
+          onChange("manual");
+        }}
+      />
+      <FoodCreateModeButton
+        disabled={disabled}
+        icon="quick"
+        isSelected={mode === "quick"}
+        label="Text"
+        onClick={() => {
+          onChange("quick");
+        }}
+      />
+    </div>
+  );
+}
+
+function FoodCreateModeButton({
+  disabled,
+  icon,
+  isSelected,
+  label,
+  onClick,
+}: {
+  readonly disabled: boolean;
+  readonly icon: FoodCreateMode;
+  readonly isSelected: boolean;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  const Icon = icon === "manual" ? Rows3 : TextCursorInput;
+
+  return (
+    <button
+      aria-pressed={isSelected}
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-transparent px-3 text-sm font-black text-[#aaaab1] transition-colors hover:bg-[#202024] aria-pressed:border-[#3d2827] aria-pressed:bg-[#201717] aria-pressed:text-[#ff5a51] disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <Icon aria-hidden="true" size={16} strokeWidth={3} />
+      {label}
+    </button>
+  );
+}
+
+function FoodQuickInputForm({
+  dateKey,
+  disabled,
+  hasFailed,
+  input,
+  onChangeInput,
+  onSubmit,
+}: {
+  readonly dateKey: string | undefined;
+  readonly disabled: boolean;
+  readonly hasFailed: boolean;
+  readonly input: string;
+  readonly onChangeInput: (input: string) => void;
+  readonly onSubmit: (input: CreateFoodInput) => void;
+}) {
+  const parseState = useMemo<FoodQuickInputParseState>(() => {
+    if (input.trim() === "") {
+      return { status: "empty" };
+    }
+
+    const result = Effect.runSync(
+      Effect.result(parseFoodQuickInput({ input }))
+    );
+
+    return Result.match(result, {
+      onFailure: (error) => ({
+        error,
+        status: "failure" as const,
+      }),
+      onSuccess: (food) => ({
+        createInput: createFoodInputFromFoodQuickInput({ food }),
+        food,
+        status: "success" as const,
+      }),
+    });
+  }, [input]);
+  const canSubmit = parseState.status === "success";
+
+  return (
+    <div className="grid gap-4">
+      <label className={foodFieldLabelClassName}>
+        Food text
+        <textarea
+          autoComplete="off"
+          autoFocus
+          className={`${foodFieldClassName} min-h-28 resize-y py-3 leading-relaxed`}
+          disabled={disabled}
+          onChange={(event) => {
+            onChangeInput(event.currentTarget.value);
+          }}
+          placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
+          value={input}
+        />
+      </label>
+
+      <FoodQuickInputPreview parseState={parseState} />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+          disabled={disabled || !canSubmit}
+          onClick={() => {
+            if (parseState.status === "success") {
+              onSubmit(parseState.createInput);
+            }
+          }}
+          type="button"
+        >
+          <Plus aria-hidden="true" size={18} strokeWidth={3} />
+          {hasFailed ? "Try again" : "Create food"}
+        </button>
+        <BackToDayLink dateKey={dateKey} />
+      </div>
+    </div>
+  );
+}
+
+function FoodQuickInputPreview({
+  parseState,
+}: {
+  readonly parseState: FoodQuickInputParseState;
+}) {
+  if (parseState.status === "empty") {
+    return (
+      <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+        <p className="text-sm font-bold leading-relaxed text-[#aaaab1]">
+          No food text yet.
+        </p>
+      </div>
+    );
+  }
+
+  if (parseState.status === "failure") {
+    return <FoodQuickInputError error={parseState.error} />;
+  }
+
+  return (
+    <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <FoodNutrientOverview
+        brand={parseState.food.brand}
+        name={parseState.food.name}
+        nutrients={foodQuickInputNutrients({ food: parseState.food })}
+        primaryLabel={`${formatFoodNutrientNumber({
+          value: parseState.food.energyKcalPer100g,
+        })} kcal`}
+        secondaryLabel="per 100g"
+      />
+    </div>
+  );
+}
+
+function FoodQuickInputError({
+  error,
+}: {
+  readonly error: FoodQuickInputParseError;
+}) {
+  return (
+    <div className="grid gap-3 rounded-[10px] border border-[#74322f] bg-[#201717] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <div className="grid gap-1">
+        <p className="text-sm font-black leading-tight text-[#ff5a51]">
+          {error.message}
+        </p>
+        <p className="text-xs font-bold uppercase leading-tight tracking-normal text-[#d79a95]">
+          {error.reason}
+        </p>
+      </div>
+      {error.field === undefined ? null : (
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-sm leading-tight">
+          <dt className="font-bold text-[#aaaab1]">Field</dt>
+          <dd className="min-w-0 font-black text-[#f0f0f2] wrap-anywhere">
+            {error.field}
+          </dd>
+        </dl>
+      )}
+    </div>
   );
 }
 

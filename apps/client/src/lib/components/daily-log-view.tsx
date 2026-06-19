@@ -32,6 +32,7 @@ import {
 } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
+import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import {
   filterFoodsByQuery,
   FoodMetadataTags,
@@ -58,7 +59,6 @@ export type DailyLogViewData = {
   readonly mealEntries: readonly MealEntry[];
 };
 
-type CalculatedNutrients = ReturnType<typeof calculateEntryNutrients>;
 type NutrientTotals = {
   readonly energyKcal: number;
   readonly proteinGrams: number;
@@ -1193,20 +1193,24 @@ function AddMealFoodDialog({
                   Could not find this food.
                 </p>
               ) : (
-                <SelectedFoodDetails
-                  food={selectedFood}
+                <FoodNutrientOverview
+                  brand={selectedFood.brand}
+                  metadata={<FoodMetadataTags food={selectedFood} />}
+                  name={selectedFood.name}
                   nutrients={selectedFoodNutrients}
-                  quantityLabel={selectedFoodQuantityLabel}
+                  secondaryLabel={selectedFoodQuantityLabel}
                 />
               )}
             </div>
           ) : selectedFood !== null ? (
             <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
               <div className="grid gap-4">
-                <SelectedFoodDetails
-                  food={selectedFood}
+                <FoodNutrientOverview
+                  brand={selectedFood.brand}
+                  metadata={<FoodMetadataTags food={selectedFood} />}
+                  name={selectedFood.name}
                   nutrients={selectedFoodNutrients}
-                  quantityLabel={selectedFoodQuantityLabel}
+                  secondaryLabel={selectedFoodQuantityLabel}
                 />
                 <button
                   className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
@@ -1338,121 +1342,6 @@ function AddMealFoodDialog({
           </footer>
         </form>
       </section>
-    </div>
-  );
-}
-
-function SelectedFoodDetails({
-  food,
-  nutrients,
-  quantityLabel,
-}: {
-  readonly food: Food;
-  readonly nutrients: CalculatedNutrients | undefined;
-  readonly quantityLabel: string | undefined;
-}) {
-  return (
-    <div className="grid w-full gap-3 text-left text-[#f5f5f7]">
-      <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-        <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
-          {food.name}
-        </span>
-        <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
-          {nutrients === undefined
-            ? "New"
-            : `${_formatNumber({
-                value: nutrients.energyKcal,
-              })} kcal`}
-        </span>
-        <span className="grid min-w-0 gap-1 text-sm leading-tight text-[#aaaab1]">
-          <span className="min-w-0 font-bold wrap-anywhere">
-            {food.brand ?? "No brand"}
-          </span>
-          <FoodMetadataTags food={food} />
-        </span>
-        {quantityLabel === undefined ? null : (
-          <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
-            {quantityLabel}
-          </span>
-        )}
-      </div>
-
-      {nutrients === undefined ? null : (
-        <dl className="divide-y divide-[#29292d]">
-          <SelectedFoodNutrientRow
-            label="Carbs"
-            textClassName={macroToneClassNames.carbs.text}
-            value={nutrients.carbsGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Protein"
-            textClassName={macroToneClassNames.protein.text}
-            value={nutrients.proteinGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Fat"
-            textClassName={macroToneClassNames.fat.text}
-            value={nutrients.fatGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Fiber"
-            textClassName={macroToneClassNames.carbs.text}
-            value={nutrients.fiberGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Sugar"
-            textClassName={macroToneClassNames.carbs.text}
-            value={nutrients.sugarGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Sat fat"
-            textClassName={macroToneClassNames.fat.text}
-            value={nutrients.saturatedFatGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Salt"
-            textClassName="text-[#aaaab1]"
-            value={nutrients.saltGrams}
-          />
-          <SelectedFoodNutrientRow
-            label="Calories"
-            textClassName="text-[#4c7dff]"
-            unit="kcal"
-            value={nutrients.energyKcal}
-          />
-        </dl>
-      )}
-    </div>
-  );
-}
-
-function SelectedFoodNutrientRow({
-  label,
-  textClassName,
-  unit = "g",
-  value,
-}: {
-  readonly label: string;
-  readonly textClassName: string;
-  readonly unit?: "g" | "kcal";
-  readonly value: number | undefined;
-}) {
-  return (
-    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2">
-      <dt
-        className={`truncate text-sm font-medium leading-tight ${textClassName}`}
-      >
-        {label}
-      </dt>
-      <dd
-        className={`truncate text-right text-sm font-black leading-tight ${textClassName}`}
-      >
-        {value === undefined
-          ? "n/a"
-          : unit === "kcal"
-            ? _formatNumber({ value })
-            : `${_formatNumber({ value })}g`}
-      </dd>
     </div>
   );
 }

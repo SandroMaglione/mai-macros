@@ -1,4 +1,8 @@
-import { calculateMacronutrientEnergyKcal, type DateKey } from "@mai/nutrition";
+import {
+  calculateMacronutrientEnergyKcal,
+  type DateKey,
+  type FoodQuickInput,
+} from "@mai/nutrition";
 
 import type { CreateMealEntryInput } from "./services/meal-entries.ts";
 import type { CreateFoodInput } from "./services/foods.ts";
@@ -175,6 +179,57 @@ export const createFoodInputFromFormData = ({
   };
 };
 
+export const createFoodInputFromFoodQuickInput = ({
+  food,
+}: {
+  readonly food: FoodQuickInput;
+}): CreateFoodInput => {
+  return {
+    name: food.name,
+    ...(food.brand === undefined ? {} : { brand: food.brand }),
+    energyKcalPer100g: _numberInputValue({
+      value: food.energyKcalPer100g,
+    }),
+    proteinGramsPer100g: _numberInputValue({
+      value: food.proteinGramsPer100g,
+    }),
+    carbsGramsPer100g: _numberInputValue({
+      value: food.carbsGramsPer100g,
+    }),
+    fatGramsPer100g: _numberInputValue({
+      value: food.fatGramsPer100g,
+    }),
+    ...(food.fiberGramsPer100g === undefined
+      ? {}
+      : {
+          fiberGramsPer100g: _numberInputValue({
+            value: food.fiberGramsPer100g,
+          }),
+        }),
+    ...(food.sugarGramsPer100g === undefined
+      ? {}
+      : {
+          sugarGramsPer100g: _numberInputValue({
+            value: food.sugarGramsPer100g,
+          }),
+        }),
+    ...(food.saturatedFatGramsPer100g === undefined
+      ? {}
+      : {
+          saturatedFatGramsPer100g: _numberInputValue({
+            value: food.saturatedFatGramsPer100g,
+          }),
+        }),
+    ...(food.saltGramsPer100g === undefined
+      ? {}
+      : {
+          saltGramsPer100g: _numberInputValue({
+            value: food.saltGramsPer100g,
+          }),
+        }),
+  };
+};
+
 export const createMealEntryInputFromFormData = ({
   dateKey,
   formData,
@@ -210,3 +265,5 @@ const _formNonNegativeNumber = ({
 
   return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
 };
+
+const _numberInputValue = ({ value }: { readonly value: number }) => `${value}`;
