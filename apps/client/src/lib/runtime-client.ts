@@ -1,5 +1,5 @@
 import { BrowserCrypto } from "@effect/platform-browser";
-import { BrowserDatabaseLayer } from "@mai/nutrition";
+import { Backups, BrowserDatabaseLayer } from "@mai/nutrition";
 import { Layer, ManagedRuntime } from "effect";
 
 import { DailyLogs } from "./services/daily-logs.ts";
@@ -8,6 +8,7 @@ import { MealEntries } from "./services/meal-entries.ts";
 import { MealPlans } from "./services/meal-plans.ts";
 
 const ClientLayer = Layer.mergeAll(
+  Backups.layer,
   MealPlans.layer,
   DailyLogs.layer,
   Foods.layer,

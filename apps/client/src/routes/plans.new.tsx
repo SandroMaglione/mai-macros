@@ -4,9 +4,11 @@ import {
   type UseNavigateResult,
 } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
-import { DateTime, Effect } from "effect";
+import { DateKey } from "@mai/nutrition";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
+import { BackupTransferControls } from "../lib/components/backup-transfer-controls.tsx";
 import { MealPlanForm } from "../lib/components/meal-plan-form.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
 import { MealPlans } from "../lib/services/meal-plans.ts";
@@ -18,7 +20,15 @@ import {
 
 export const Route = createFileRoute("/plans/new")({
   validateSearch: (search) => ({
-    dateKey: typeof search.dateKey === "string" ? search.dateKey : undefined,
+    dateKey:
+      typeof search.dateKey === "string"
+        ? Schema.decodeOption(DateKey)(search.dateKey).pipe(
+            Option.match({
+              onNone: () => undefined,
+              onSome: (dateKey) => dateKey,
+            })
+          )
+        : undefined,
   }),
   component: Component,
 });
@@ -151,6 +161,21 @@ function Component() {
   return (
     <MealPlanForm
       action="create"
+      backupControls={
+        <BackupTransferControls
+          afterImport={() => {
+            if (search.dateKey === undefined) {
+              return navigate({ to: "/" });
+            }
+
+            return navigate({
+              to: "/days/$dateKey",
+              params: { dateKey: search.dateKey },
+            });
+          }}
+          mode="importOnly"
+        />
+      }
       dateKey={search.dateKey}
       disabled={isSubmitting}
       energyKcal={snapshot.context.energyKcal}

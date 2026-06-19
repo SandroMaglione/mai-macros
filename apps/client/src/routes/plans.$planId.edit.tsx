@@ -191,6 +191,7 @@ function Component() {
   return (
     <MealPlanForm
       action="edit"
+      backupControls={null}
       dateKey={search.dateKey}
       disabled={isSubmitting}
       energyKcal={snapshot.context.energyKcal}

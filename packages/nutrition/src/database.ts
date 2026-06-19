@@ -187,3 +187,19 @@ export class MaiDatabase extends IndexedDbDatabase.make(
 export const BrowserDatabaseLayer = MaiDatabase.layer(DatabaseName).pipe(
   Layer.provide(IndexedDb.layerWindow)
 );
+
+type DatabaseSchemaNode = {
+  readonly previous: DatabaseSchemaNode | undefined;
+};
+
+export const CurrentDatabaseVersion = (() => {
+  let version = 1;
+  let schema: DatabaseSchemaNode = MaiDatabase;
+
+  while (schema.previous !== undefined) {
+    version += 1;
+    schema = schema.previous;
+  }
+
+  return version;
+})();

@@ -32,6 +32,7 @@ import {
 } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
+import { BackupTransferControls } from "./backup-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import {
   filterFoodsByQuery,
@@ -949,6 +950,13 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
               mealValue={mealOption.value}
             />
           ))}
+        </div>
+
+        <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+          <BackupTransferControls
+            afterImport={() => router.invalidate()}
+            mode="full"
+          />
         </div>
 
         <AddMealFoodDialog actor={addMealFoodDialogActor} />

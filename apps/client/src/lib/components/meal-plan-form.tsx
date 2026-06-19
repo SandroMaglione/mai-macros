@@ -1,6 +1,7 @@
-import { Link } from "@tanstack/react-router";
 import type { Plan } from "@mai/nutrition";
+import { Link } from "@tanstack/react-router";
 import { ClipboardList, Flame, Plus, Save, X } from "lucide-react";
+import type { ReactNode } from "react";
 
 type MealPlanFormAction = "create" | "edit";
 
@@ -101,6 +102,7 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
 
 export function MealPlanForm({
   action,
+  backupControls,
   dateKey,
   disabled,
   energyKcal,
@@ -110,6 +112,7 @@ export function MealPlanForm({
   onSubmit,
 }: {
   readonly action: MealPlanFormAction;
+  readonly backupControls: ReactNode | null;
   readonly dateKey: string | undefined;
   readonly disabled: boolean;
   readonly energyKcal: number;
@@ -168,7 +171,7 @@ export function MealPlanForm({
             />
           </label>
 
-          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
+          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
             <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               Macros
             </legend>
@@ -203,7 +206,7 @@ export function MealPlanForm({
             </output>
           </fieldset>
 
-          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
+          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
             <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               Nutrient limits
             </legend>
@@ -231,6 +234,12 @@ export function MealPlanForm({
             <BackToDayLink dateKey={dateKey} />
           </div>
         </form>
+
+        {backupControls === null ? null : (
+          <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+            {backupControls}
+          </div>
+        )}
       </section>
     </main>
   );
