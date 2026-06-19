@@ -1,7 +1,9 @@
 import type { Food } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { Apple, Plus, Save, X } from "lucide-react";
-import type { FocusEvent } from "react";
+import { useRef, type FocusEvent } from "react";
+
+import { FoodBarcodeImport } from "./food-barcode-import.tsx";
 
 type FoodFormAction = "create" | "edit";
 
@@ -120,6 +122,7 @@ export function FoodForm({
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
+  const formRef = useRef<HTMLFormElement>(null);
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
@@ -146,7 +149,12 @@ export function FoodForm({
             event.preventDefault();
             onSubmit(new FormData(event.currentTarget));
           }}
+          ref={formRef}
         >
+          {isCreating ? (
+            <FoodBarcodeImport disabled={disabled} formRef={formRef} />
+          ) : null}
+
           <FoodFormFields
             autoFocusName
             disabled={disabled}
