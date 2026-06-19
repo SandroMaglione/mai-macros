@@ -4,17 +4,51 @@ import {
   IndexedDbTable,
   IndexedDbVersion,
 } from "@effect/platform-browser";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, References, Schema } from "effect";
 
 import {
   ActiveMealPlanSelection,
   DailyLog,
   Food,
+  FoodCategory,
+  FoodId,
+  FoodOrigin,
   MealEntry,
+  NonEmptyString,
+  NonNegativeNumber,
   Plan,
 } from "./domain.ts";
+import { DefaultFoods } from "./default-foods.ts";
 
 export const DatabaseName = "mai";
+
+class LegacyFood extends Schema.Class<LegacyFood>("LegacyFood")({
+  id: FoodId,
+  basedOnFoodId: Schema.optional(FoodId),
+  name: NonEmptyString,
+  brand: Schema.optional(NonEmptyString),
+  category: Schema.optional(FoodCategory),
+  origin: Schema.optional(FoodOrigin),
+  energyKcalPer100g: NonNegativeNumber,
+  proteinGramsPer100g: NonNegativeNumber,
+  carbsGramsPer100g: NonNegativeNumber,
+  fatGramsPer100g: NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+class LegacyFoodsTable extends IndexedDbTable.make({
+  name: "foods",
+  schema: LegacyFood,
+  keyPath: "id",
+  indexes: {
+    byName: "name",
+  },
+}) {}
 
 export class FoodsTable extends IndexedDbTable.make({
   name: "foods",
@@ -61,7 +95,7 @@ export class MealEntriesTable extends IndexedDbTable.make({
 }) {}
 
 export class MaiVersion1 extends IndexedDbVersion.make(
-  FoodsTable,
+  LegacyFoodsTable,
   PlansTable,
   DailyLogsTable,
   ActiveMealPlanSelectionsTable,
@@ -69,6 +103,14 @@ export class MaiVersion1 extends IndexedDbVersion.make(
 ) {}
 
 export class MaiVersion2 extends IndexedDbVersion.make(
+  LegacyFoodsTable,
+  PlansTable,
+  DailyLogsTable,
+  ActiveMealPlanSelectionsTable,
+  MealEntriesTable
+) {}
+
+export class MaiVersion3 extends IndexedDbVersion.make(
   FoodsTable,
   PlansTable,
   DailyLogsTable,
@@ -91,38 +133,56 @@ export class MaiDatabase extends IndexedDbDatabase.make(
     yield* api.createIndex("mealEntries", "byDateMeal");
     yield* api.createIndex("mealEntries", "byFood");
   })
-).add(
-  MaiVersion2,
-  Effect.fn(function* (from, to) {
-    const plans = yield* from.from("plans").select();
-    const usedNames: string[] = [];
-    const renamedPlans = yield* Effect.forEach(plans, (plan) =>
-      Effect.gen(function* () {
-        const baseName = plan.name.trim() === "" ? "Plan" : plan.name.trim();
-        let index = 0;
-        let name = baseName;
+)
+  .add(
+    MaiVersion2,
+    Effect.fn(function* (from, to) {
+      const plans = yield* from.from("plans").select();
+      const usedNames: string[] = [];
+      const renamedPlans = yield* Effect.forEach(plans, (plan) =>
+        Effect.gen(function* () {
+          const baseName = plan.name.trim() === "" ? "Plan" : plan.name.trim();
+          let index = 0;
+          let name = baseName;
 
-        while (usedNames.includes(name)) {
-          index += 1;
-          name = `${baseName} (${index})`;
-        }
+          while (usedNames.includes(name)) {
+            index += 1;
+            name = `${baseName} (${index})`;
+          }
 
-        usedNames.push(name);
+          usedNames.push(name);
 
-        const encodedPlan = yield* Schema.encodeEffect(Plan)(plan);
+          const encodedPlan = yield* Schema.encodeEffect(Plan)(plan);
 
-        return yield* Schema.decodeEffect(Plan)({
-          ...encodedPlan,
-          name,
-        });
-      })
-    );
+          return yield* Schema.decodeEffect(Plan)({
+            ...encodedPlan,
+            name,
+          });
+        })
+      );
 
-    yield* from.deleteIndex("plans", "byName");
-    yield* to.from("plans").upsertAll(renamedPlans);
-    yield* to.createIndex("plans", "byName", { unique: true });
-  })
-) {}
+      yield* from.deleteIndex("plans", "byName");
+      yield* to.from("plans").upsertAll(renamedPlans);
+      yield* to.createIndex("plans", "byName", { unique: true });
+    })
+  )
+  .add(
+    MaiVersion3,
+    Effect.fn(function* (from, to) {
+      yield* Effect.gen(function* () {
+        const legacyFoods = yield* from.from("foods").select();
+        const userFoods = legacyFoods.map((food) => ({
+          ...food,
+          origin: food.origin ?? "user",
+        }));
+        const defaultFoods = yield* Schema.decodeEffect(Schema.Array(Food))(
+          DefaultFoods
+        );
+
+        yield* to.from("foods").upsertAll([...userFoods, ...defaultFoods]);
+      }).pipe(Effect.provideService(References.PreventSchedulerYield, true));
+    })
+  ) {}
 
 export const BrowserDatabaseLayer = MaiDatabase.layer(DatabaseName).pipe(
   Layer.provide(IndexedDb.layerWindow)

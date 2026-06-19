@@ -48,19 +48,44 @@ export const Meal = Schema.Literals(["breakfast", "lunch", "dinner"]);
 
 export type Meal = typeof Meal.Type;
 
+export const FoodCategory = Schema.Literals([
+  "bread-like",
+  "dairy-egg",
+  "fish-seafood",
+  "fruit",
+  "grain",
+  "legume",
+  "meat",
+  "nut",
+  "oil-fat",
+  "plant-protein",
+  "seed",
+  "sweetener",
+  "tuber",
+  "vegetable",
+]);
+
+export type FoodCategory = typeof FoodCategory.Type;
+
+export const FoodOrigin = Schema.Literals(["app-default", "user"]);
+
+export type FoodOrigin = typeof FoodOrigin.Type;
+
 export class Food extends Schema.Class<Food>("Food")({
   id: FoodId,
   basedOnFoodId: Schema.optional(FoodId),
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
+  category: Schema.optional(FoodCategory),
+  origin: FoodOrigin,
   energyKcalPer100g: NonNegativeNumber,
   proteinGramsPer100g: NonNegativeNumber,
   carbsGramsPer100g: NonNegativeNumber,
   fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: NonNegativeNumber,
-  sugarGramsPer100g: NonNegativeNumber,
-  saturatedFatGramsPer100g: NonNegativeNumber,
-  saltGramsPer100g: NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(NonNegativeNumber),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
@@ -111,8 +136,8 @@ export class EntryNutrients extends Schema.Class<EntryNutrients>(
   proteinGrams: NonNegativeNumber,
   carbsGrams: NonNegativeNumber,
   fatGrams: NonNegativeNumber,
-  fiberGrams: NonNegativeNumber,
-  sugarGrams: NonNegativeNumber,
-  saturatedFatGrams: NonNegativeNumber,
-  saltGrams: NonNegativeNumber,
+  fiberGrams: Schema.optional(NonNegativeNumber),
+  sugarGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatGrams: Schema.optional(NonNegativeNumber),
+  saltGrams: Schema.optional(NonNegativeNumber),
 }) {}

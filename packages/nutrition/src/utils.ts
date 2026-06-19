@@ -35,9 +35,17 @@ export const calculateEntryNutrients = ({
     proteinGrams: food.proteinGramsPer100g * multiplier,
     carbsGrams: food.carbsGramsPer100g * multiplier,
     fatGrams: food.fatGramsPer100g * multiplier,
-    fiberGrams: food.fiberGramsPer100g * multiplier,
-    sugarGrams: food.sugarGramsPer100g * multiplier,
-    saturatedFatGrams: food.saturatedFatGramsPer100g * multiplier,
-    saltGrams: food.saltGramsPer100g * multiplier,
+    ...(food.fiberGramsPer100g === undefined
+      ? {}
+      : { fiberGrams: food.fiberGramsPer100g * multiplier }),
+    ...(food.sugarGramsPer100g === undefined
+      ? {}
+      : { sugarGrams: food.sugarGramsPer100g * multiplier }),
+    ...(food.saturatedFatGramsPer100g === undefined
+      ? {}
+      : { saturatedFatGrams: food.saturatedFatGramsPer100g * multiplier }),
+    ...(food.saltGramsPer100g === undefined
+      ? {}
+      : { saltGrams: food.saltGramsPer100g * multiplier }),
   };
 };

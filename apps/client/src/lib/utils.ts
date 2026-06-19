@@ -130,6 +130,22 @@ export const createFoodInputFromFormData = ({
   readonly formData: FormData;
 }): CreateFoodInput => {
   const brand = _formTrimmedString({ formData, name: "brand" });
+  const fiberGramsPer100g = _formOptionalString({
+    formData,
+    name: "fiberGramsPer100g",
+  });
+  const sugarGramsPer100g = _formOptionalString({
+    formData,
+    name: "sugarGramsPer100g",
+  });
+  const saturatedFatGramsPer100g = _formOptionalString({
+    formData,
+    name: "saturatedFatGramsPer100g",
+  });
+  const saltGramsPer100g = _formOptionalString({
+    formData,
+    name: "saltGramsPer100g",
+  });
 
   return {
     name: _formTrimmedString({ formData, name: "name" }),
@@ -150,22 +166,12 @@ export const createFoodInputFromFormData = ({
       formData,
       name: "fatGramsPer100g",
     }),
-    fiberGramsPer100g: _formString({
-      formData,
-      name: "fiberGramsPer100g",
-    }),
-    sugarGramsPer100g: _formString({
-      formData,
-      name: "sugarGramsPer100g",
-    }),
-    saturatedFatGramsPer100g: _formString({
-      formData,
-      name: "saturatedFatGramsPer100g",
-    }),
-    saltGramsPer100g: _formString({
-      formData,
-      name: "saltGramsPer100g",
-    }),
+    ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
+    ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
+    ...(saturatedFatGramsPer100g === undefined
+      ? {}
+      : { saturatedFatGramsPer100g }),
+    ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
   };
 };
 

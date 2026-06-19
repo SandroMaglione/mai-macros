@@ -23,10 +23,10 @@ const foodInputFields = {
   proteinGramsPer100g: _FormNonNegativeNumber,
   carbsGramsPer100g: _FormNonNegativeNumber,
   fatGramsPer100g: _FormNonNegativeNumber,
-  fiberGramsPer100g: _FormNonNegativeNumber,
-  sugarGramsPer100g: _FormNonNegativeNumber,
-  saturatedFatGramsPer100g: _FormNonNegativeNumber,
-  saltGramsPer100g: _FormNonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(_FormNonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(_FormNonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(_FormNonNegativeNumber),
+  saltGramsPer100g: Schema.optional(_FormNonNegativeNumber),
 };
 
 const _CreateFoodInput = Schema.Struct(foodInputFields);
@@ -103,14 +103,12 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           id: yield* crypto.randomUUIDv4,
           name: decodedInput.name,
           brand: decodedInput.brand,
+          origin: "user",
           energyKcalPer100g: decodedInput.energyKcalPer100g,
           proteinGramsPer100g: decodedInput.proteinGramsPer100g,
           carbsGramsPer100g: decodedInput.carbsGramsPer100g,
           fatGramsPer100g: decodedInput.fatGramsPer100g,
-          fiberGramsPer100g: decodedInput.fiberGramsPer100g,
-          sugarGramsPer100g: decodedInput.sugarGramsPer100g,
-          saturatedFatGramsPer100g: decodedInput.saturatedFatGramsPer100g,
-          saltGramsPer100g: decodedInput.saltGramsPer100g,
+          ..._optionalNutrientFields(decodedInput),
           createdAt: now,
           updatedAt: now,
         });
@@ -150,34 +148,36 @@ export class Foods extends Context.Service<Foods>()("Foods", {
                 const hasMealEntries = mealEntryCount > 0;
                 const encodedPreviousFood =
                   yield* Schema.encodeEffect(Food)(previousFood);
-                const foodId = hasMealEntries
+                const shouldCreateRevision =
+                  hasMealEntries || previousFood.origin === "app-default";
+                const foodId = shouldCreateRevision
                   ? yield* crypto.randomUUIDv4
                   : previousFood.id;
                 const food = yield* Schema.decodeEffect(Food)({
                   id: foodId,
-                  ...(hasMealEntries
+                  ...(shouldCreateRevision
                     ? { basedOnFoodId: previousFood.id }
                     : encodedPreviousFood.basedOnFoodId === undefined
                       ? {}
                       : { basedOnFoodId: encodedPreviousFood.basedOnFoodId }),
                   name: decodedInput.name,
                   brand: decodedInput.brand,
+                  ...(encodedPreviousFood.category === undefined
+                    ? {}
+                    : { category: encodedPreviousFood.category }),
+                  origin: "user",
                   energyKcalPer100g: decodedInput.energyKcalPer100g,
                   proteinGramsPer100g: decodedInput.proteinGramsPer100g,
                   carbsGramsPer100g: decodedInput.carbsGramsPer100g,
                   fatGramsPer100g: decodedInput.fatGramsPer100g,
-                  fiberGramsPer100g: decodedInput.fiberGramsPer100g,
-                  sugarGramsPer100g: decodedInput.sugarGramsPer100g,
-                  saturatedFatGramsPer100g:
-                    decodedInput.saturatedFatGramsPer100g,
-                  saltGramsPer100g: decodedInput.saltGramsPer100g,
-                  createdAt: hasMealEntries
+                  ..._optionalNutrientFields(decodedInput),
+                  createdAt: shouldCreateRevision
                     ? now
                     : encodedPreviousFood.createdAt,
                   updatedAt: now,
                 });
 
-                if (hasMealEntries) {
+                if (shouldCreateRevision) {
                   yield* api.from("foods").insert(food);
                 } else {
                   yield* api.from("foods").upsert(food);
@@ -195,4 +195,25 @@ export class Foods extends Context.Service<Foods>()("Foods", {
   }),
 }) {
   static readonly layer = Layer.effect(this)(this.make);
+}
+
+function _optionalNutrientFields({
+  fiberGramsPer100g,
+  saltGramsPer100g,
+  saturatedFatGramsPer100g,
+  sugarGramsPer100g,
+}: {
+  readonly fiberGramsPer100g?: number | undefined;
+  readonly saltGramsPer100g?: number | undefined;
+  readonly saturatedFatGramsPer100g?: number | undefined;
+  readonly sugarGramsPer100g?: number | undefined;
+}) {
+  return {
+    ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
+    ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
+    ...(saturatedFatGramsPer100g === undefined
+      ? {}
+      : { saturatedFatGramsPer100g }),
+    ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
+  };
 }

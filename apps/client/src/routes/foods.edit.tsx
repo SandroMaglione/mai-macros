@@ -18,7 +18,7 @@ import {
   filterFoodsByQuery,
   FoodSearchField,
   FoodSearchResults,
-  sortFoodsByName,
+  sortFoodsByOriginAndName,
 } from "../lib/components/food-search.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
 import { Foods, type ReviseFoodInput } from "../lib/services/foods.ts";
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/foods/edit")({
       Effect.gen(function* () {
         const foodsService = yield* Foods;
         const mealEntriesService = yield* MealEntries;
-        const foods = sortFoodsByName({
+        const foods = sortFoodsByOriginAndName({
           foods: yield* foodsService.list(),
         });
         const foodUsage = yield* mealEntriesService.listFoodUsage();
@@ -337,7 +337,7 @@ const editFoodsMachine = setup({
                           food.id === output.food.id ? output.food : food
                         )
                       : [...context.foods, output.food];
-                const foods = sortFoodsByName({
+                const foods = sortFoodsByOriginAndName({
                   foods: foodsWithRevision,
                 });
 
@@ -546,7 +546,7 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
             });
           }}
         >
-          <div className="min-h-0 overflow-y-auto p-4">
+          <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
             <FoodFormFields
               autoFocusName
               disabled={disabled}

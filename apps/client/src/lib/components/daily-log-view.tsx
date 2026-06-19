@@ -9,7 +9,7 @@ import {
 } from "@mai/nutrition";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
-import { Array, Effect, Option, Schema } from "effect";
+import { Array, Effect, Option, Order, Schema } from "effect";
 import {
   ChevronDown,
   ChevronLeft,
@@ -34,8 +34,11 @@ import {
 import { RuntimeClient } from "../runtime-client.ts";
 import {
   filterFoodsByQuery,
+  FoodMetadataTags,
   FoodSearchField,
   FoodSearchResults,
+  foodLowercaseNameOrder,
+  foodUserOriginOrder,
 } from "./food-search.tsx";
 import type { ChangeDayPlanInput, OpenedDay } from "../services/daily-logs.ts";
 import { DailyLogs } from "../services/daily-logs.ts";
@@ -55,7 +58,17 @@ export type DailyLogViewData = {
   readonly mealEntries: readonly MealEntry[];
 };
 
-type NutrientTotals = ReturnType<typeof calculateEntryNutrients>;
+type CalculatedNutrients = ReturnType<typeof calculateEntryNutrients>;
+type NutrientTotals = {
+  readonly energyKcal: number;
+  readonly proteinGrams: number;
+  readonly carbsGrams: number;
+  readonly fatGrams: number;
+  readonly fiberGrams: number;
+  readonly sugarGrams: number;
+  readonly saturatedFatGrams: number;
+  readonly saltGrams: number;
+};
 type MacroTone = "protein" | "carbs" | "fat";
 type DailyNutrientTone = "carbs" | "fat" | "salt";
 type AddMealFoodDialogMode = "create" | "revise";
@@ -152,6 +165,9 @@ type AddMealFoodDialogEvent =
       readonly type: "selectFirstMatchingFood";
     }
   | {
+      readonly type: "clearSelectedFood";
+    }
+  | {
       readonly type: "changeQuantity";
       readonly quantityGrams: string;
     }
@@ -231,35 +247,20 @@ const addMealFoodDialogMachine = setup({
       target: ".Open",
       actions: assign(({ event }) => {
         assertEvent(event, "open");
-        const foods = [...event.foods].sort((leftFood, rightFood) => {
-          const leftMealUsage = _findFoodMealUsage({
-            foodId: leftFood.id,
-            foodUsage: event.foodUsage,
-            meal: event.meal,
-          });
-          const rightMealUsage = _findFoodMealUsage({
-            foodId: rightFood.id,
-            foodUsage: event.foodUsage,
-            meal: event.meal,
-          });
-
-          if (leftMealUsage === undefined && rightMealUsage === undefined) {
-            return 0;
-          }
-
-          if (leftMealUsage === undefined) {
-            return 1;
-          }
-
-          if (rightMealUsage === undefined) {
-            return -1;
-          }
-
-          return (
-            rightMealUsage.latestUsedAt.epochMilliseconds -
-            leftMealUsage.latestUsedAt.epochMilliseconds
-          );
-        });
+        const mealFoodRecencyOrder = Order.mapInput(
+          Order.flip(Order.Number),
+          (food: Food) =>
+            _findFoodUsage({
+              foodId: food.id,
+              foodUsage: event.foodUsage,
+            })?.meals.find((usage) => usage.meal === event.meal)?.latestUsedAt
+              .epochMilliseconds ?? Number.NEGATIVE_INFINITY
+        );
+        const foods = Array.sortBy(
+          mealFoodRecencyOrder,
+          foodUserOriginOrder,
+          foodLowercaseNameOrder
+        )(event.foods);
 
         return {
           canSubmit: false,
@@ -389,6 +390,13 @@ const addMealFoodDialogMachine = setup({
               quantityGrams,
               selectedFood,
             };
+          }),
+        },
+        clearSelectedFood: {
+          actions: assign({
+            canSubmit: false,
+            quantityGrams: "",
+            selectedFood: null,
           }),
         },
         submit: {
@@ -1179,7 +1187,7 @@ function AddMealFoodDialog({
           }}
         >
           {isEditingMealEntry ? (
-            <div className="min-h-0 overflow-y-auto p-4">
+            <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
               {selectedFood === null ? (
                 <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
                   Could not find this food.
@@ -1191,6 +1199,29 @@ function AddMealFoodDialog({
                   quantityLabel={selectedFoodQuantityLabel}
                 />
               )}
+            </div>
+          ) : selectedFood !== null ? (
+            <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+              <div className="grid gap-4">
+                <SelectedFoodDetails
+                  food={selectedFood}
+                  nutrients={selectedFoodNutrients}
+                  quantityLabel={selectedFoodQuantityLabel}
+                />
+                <button
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={disabled}
+                  onClick={() => {
+                    actor.send({
+                      type: "clearSelectedFood",
+                    });
+                  }}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" size={16} strokeWidth={3} />
+                  Change food
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
@@ -1238,20 +1269,12 @@ function AddMealFoodDialog({
                     quantityInputRef.current?.focus();
                   });
                 }}
-                selectedFoodId={selectedFood?.id ?? null}
+                selectedFoodId={null}
               />
             </div>
           )}
 
           <div className="grid gap-4 border-t border-[#29292d] bg-[#161618] p-4">
-            {selectedFood === null || isEditingMealEntry ? null : (
-              <SelectedFoodDetails
-                food={selectedFood}
-                nutrients={selectedFoodNutrients}
-                quantityLabel={selectedFoodQuantityLabel}
-              />
-            )}
-
             <label className={darkFieldLabelClassName}>
               Grams
               <span className="relative">
@@ -1325,7 +1348,7 @@ function SelectedFoodDetails({
   quantityLabel,
 }: {
   readonly food: Food;
-  readonly nutrients: NutrientTotals | undefined;
+  readonly nutrients: CalculatedNutrients | undefined;
   readonly quantityLabel: string | undefined;
 }) {
   return (
@@ -1341,8 +1364,11 @@ function SelectedFoodDetails({
                 value: nutrients.energyKcal,
               })} kcal`}
         </span>
-        <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
-          {food.brand ?? "No brand"}
+        <span className="grid min-w-0 gap-1 text-sm leading-tight text-[#aaaab1]">
+          <span className="min-w-0 font-bold wrap-anywhere">
+            {food.brand ?? "No brand"}
+          </span>
+          <FoodMetadataTags food={food} />
         </span>
         {quantityLabel === undefined ? null : (
           <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
@@ -1409,7 +1435,7 @@ function SelectedFoodNutrientRow({
   readonly label: string;
   readonly textClassName: string;
   readonly unit?: "g" | "kcal";
-  readonly value: number;
+  readonly value: number | undefined;
 }) {
   return (
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2">
@@ -1421,9 +1447,11 @@ function SelectedFoodNutrientRow({
       <dd
         className={`truncate text-right text-sm font-black leading-tight ${textClassName}`}
       >
-        {unit === "kcal"
-          ? _formatNumber({ value })
-          : `${_formatNumber({ value })}g`}
+        {value === undefined
+          ? "n/a"
+          : unit === "kcal"
+            ? _formatNumber({ value })
+            : `${_formatNumber({ value })}g`}
       </dd>
     </div>
   );
@@ -2016,20 +2044,6 @@ function _findFoodUsage({
   return foodUsage.find((usage) => usage.foodId === foodId);
 }
 
-function _findFoodMealUsage({
-  foodId,
-  foodUsage,
-  meal,
-}: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly meal: Meal;
-}) {
-  return _findFoodUsage({ foodId, foodUsage })?.meals.find(
-    (usage) => usage.meal === meal
-  );
-}
-
 function _formatQuantityGramsInputValue({
   quantityGrams,
 }: {
@@ -2063,11 +2077,11 @@ function _calculateEntriesNutrients({
         proteinGrams: totals.proteinGrams + nutrients.proteinGrams,
         carbsGrams: totals.carbsGrams + nutrients.carbsGrams,
         fatGrams: totals.fatGrams + nutrients.fatGrams,
-        fiberGrams: totals.fiberGrams + nutrients.fiberGrams,
-        sugarGrams: totals.sugarGrams + nutrients.sugarGrams,
+        fiberGrams: totals.fiberGrams + (nutrients.fiberGrams ?? 0),
+        sugarGrams: totals.sugarGrams + (nutrients.sugarGrams ?? 0),
         saturatedFatGrams:
-          totals.saturatedFatGrams + nutrients.saturatedFatGrams,
-        saltGrams: totals.saltGrams + nutrients.saltGrams,
+          totals.saturatedFatGrams + (nutrients.saturatedFatGrams ?? 0),
+        saltGrams: totals.saltGrams + (nutrients.saltGrams ?? 0),
       };
     },
     {

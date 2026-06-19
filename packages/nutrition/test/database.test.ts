@@ -8,6 +8,7 @@ import {
   DailyLog,
   DatabaseName,
   DateKey,
+  DefaultFoods,
   EntryNutrients,
   Food,
   MaiDatabase,
@@ -33,6 +34,7 @@ const foodInput: typeof Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   brand: "Mai",
+  origin: "user",
   energyKcalPer100g: 59,
   proteinGramsPer100g: 10,
   carbsGramsPer100g: 3.6,
@@ -79,6 +81,7 @@ describe("MaiDatabase", () => {
   it("opens the latest version with stores and indexes", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase;
+      const query = yield* MaiDatabase.getQueryBuilder;
       const name = yield* api.use((database) => database.name);
       const version = yield* api.use((database) => database.version);
       const storeNames = yield* api.use((database) =>
@@ -100,12 +103,15 @@ describe("MaiDatabase", () => {
           database.transaction("plans").objectStore("plans").index("byName")
             .unique
       );
+      const foods = yield* query.from("foods").select();
 
       return {
         entryIndexes,
         foodIndexes,
         name,
         planNameIndexIsUnique,
+        seededFoodCount: foods.filter((food) => food.origin === "app-default")
+          .length,
         storeNames,
         version,
       };
@@ -114,7 +120,7 @@ describe("MaiDatabase", () => {
     const result = await Effect.runPromise(program);
 
     assert.equal(result.name, DatabaseName);
-    assert.equal(result.version, 2);
+    assert.equal(result.version, 3);
     assert.equal(result.planNameIndexIsUnique, true);
     assert.deepStrictEqual(result.storeNames, [
       "activeMealPlanSelections",
@@ -129,6 +135,7 @@ describe("MaiDatabase", () => {
       "byDateMeal",
       "byFood",
     ]);
+    assert.equal(result.seededFoodCount, DefaultFoods.length);
   });
 
   it("persists and reads daily meal data through plan and food references", async () => {
@@ -203,6 +210,176 @@ describe("MaiDatabase", () => {
     assert.equal(result.storedFood.name, "Greek yogurt");
     assert.equal(result.validatedNutrients.energyKcal, 88.5);
     assert.equal(result.validatedNutrients.proteinGrams, 15);
+  });
+
+  it("migrates legacy foods with optional secondary nutrients and seeds defaults", async () => {
+    const baseLegacyFoodInput = {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c30",
+      name: "Legacy complete yogurt",
+      brand: "Mai",
+      category: "dairy-egg",
+      energyKcalPer100g: 62,
+      proteinGramsPer100g: 11,
+      carbsGramsPer100g: 3.8,
+      fatGramsPer100g: 0.5,
+      fiberGramsPer100g: 0,
+      sugarGramsPer100g: 3.6,
+      saturatedFatGramsPer100g: 0.1,
+      saltGramsPer100g: 0.04,
+      createdAt: 10,
+      updatedAt: 20,
+    };
+    const sparseLegacyFoodInput = {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c31",
+      name: "Legacy sparse rice",
+      energyKcalPer100g: 130,
+      proteinGramsPer100g: 2.7,
+      carbsGramsPer100g: 28,
+      fatGramsPer100g: 0.3,
+      createdAt: 30,
+      updatedAt: 40,
+    };
+    const derivedLegacyFoodInput = {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c32",
+      basedOnFoodId: baseLegacyFoodInput.id,
+      name: "Legacy derived yogurt",
+      energyKcalPer100g: 64,
+      proteinGramsPer100g: 12,
+      carbsGramsPer100g: 4,
+      fatGramsPer100g: 0.4,
+      fiberGramsPer100g: 0,
+      sugarGramsPer100g: 0,
+      createdAt: 50,
+      updatedAt: 60,
+    };
+    const legacyFoodInputs = [
+      baseLegacyFoodInput,
+      sparseLegacyFoodInput,
+      derivedLegacyFoodInput,
+    ];
+
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DatabaseName, 2);
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        const foodStore = database.createObjectStore("foods", {
+          keyPath: "id",
+        });
+        foodStore.createIndex("byName", "name");
+
+        const planStore = database.createObjectStore("plans", {
+          keyPath: "id",
+        });
+        planStore.createIndex("byName", "name", { unique: true });
+
+        const dailyLogStore = database.createObjectStore("dailyLogs", {
+          keyPath: "dateKey",
+        });
+        dailyLogStore.createIndex("byPlan", "planId");
+
+        database.createObjectStore("activeMealPlanSelections", {
+          keyPath: "id",
+        });
+
+        const mealEntryStore = database.createObjectStore("mealEntries", {
+          keyPath: "id",
+        });
+        mealEntryStore.createIndex("byDate", "dateKey");
+        mealEntryStore.createIndex("byDateMeal", ["dateKey", "meal"]);
+        mealEntryStore.createIndex("byFood", "foodId");
+      };
+
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction("foods", "readwrite");
+        const foodStore = transaction.objectStore("foods");
+
+        for (const food of legacyFoodInputs) {
+          foodStore.put(food);
+        }
+
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+      };
+    });
+
+    const program = Effect.gen(function* () {
+      const api = yield* MaiDatabase.getQueryBuilder;
+      const foods = yield* api.from("foods").select();
+      const foodIndexes = yield* api.use((database) =>
+        Array.from(
+          database.transaction("foods").objectStore("foods").indexNames
+        )
+      );
+
+      return { foodIndexes, foods };
+    }).pipe(Effect.provide(databaseLayer));
+
+    const result = await Effect.runPromise(program);
+    const completeFood = _expectFood({
+      foods: result.foods,
+      name: baseLegacyFoodInput.name,
+    });
+    const sparseFood = _expectFood({
+      foods: result.foods,
+      name: sparseLegacyFoodInput.name,
+    });
+    const derivedFood = _expectFood({
+      foods: result.foods,
+      name: derivedLegacyFoodInput.name,
+    });
+    const apple = _expectFood({ foods: result.foods, name: "apple" });
+    const lemon = _expectFood({ foods: result.foods, name: "lemon" });
+    const unmatchedDefaultNames = [
+      "yam",
+      "cannellini beans",
+      "soybeans",
+      "bulgur",
+      "cornmeal",
+      "pumpkin seeds",
+    ];
+
+    assert.deepStrictEqual(result.foodIndexes, ["byName"]);
+    assert.equal(
+      result.foods.filter((food) => food.origin === "app-default").length,
+      DefaultFoods.length
+    );
+    assert.equal(result.foods.length, DefaultFoods.length + 3);
+    assert.equal(completeFood.origin, "user");
+    assert.equal(completeFood.category, "dairy-egg");
+    assert.equal(completeFood.fiberGramsPer100g, 0);
+    assert.equal(completeFood.sugarGramsPer100g, 3.6);
+    assert.equal(sparseFood.origin, "user");
+    assert.equal(sparseFood.brand, undefined);
+    assert.equal(sparseFood.fiberGramsPer100g, undefined);
+    assert.equal(sparseFood.saltGramsPer100g, undefined);
+    assert.equal(derivedFood.origin, "user");
+    assert.equal(derivedFood.basedOnFoodId, baseLegacyFoodInput.id);
+    assert.equal(derivedFood.sugarGramsPer100g, 0);
+    assert.equal(apple.origin, "app-default");
+    assert.equal(apple.category, "fruit");
+    assert.equal(lemon.origin, "app-default");
+    assert.equal(lemon.saltGramsPer100g, undefined);
+
+    for (const name of unmatchedDefaultNames) {
+      assert.equal(
+        result.foods.some(
+          (food) => food.name === name && food.origin === "app-default"
+        ),
+        false
+      );
+    }
   });
 
   it("renames duplicate legacy plan names before making the index unique", async () => {
@@ -306,3 +483,19 @@ describe("MaiDatabase", () => {
     ]);
   });
 });
+
+function _expectFood({
+  foods,
+  name,
+}: {
+  readonly foods: readonly Food[];
+  readonly name: string;
+}) {
+  const food = foods.find((item) => item.name === name);
+
+  if (food === undefined) {
+    throw new Error(`Expected food ${name}`);
+  }
+
+  return food;
+}

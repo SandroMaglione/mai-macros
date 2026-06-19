@@ -22,6 +22,7 @@ type FoodNutrientField = {
   readonly label: string;
   readonly name: FoodNutrientFieldName;
   readonly placeholder: string;
+  readonly required: boolean;
   readonly step: "0.1" | "0.01";
   readonly unit: "g" | "kcal";
 };
@@ -39,6 +40,7 @@ const macroFields: readonly FoodNutrientField[] = [
     label: "Calories",
     name: "energyKcalPer100g",
     placeholder: "62",
+    required: true,
     step: "0.1",
     unit: "kcal",
   },
@@ -47,6 +49,7 @@ const macroFields: readonly FoodNutrientField[] = [
     label: "Protein",
     name: "proteinGramsPer100g",
     placeholder: "10",
+    required: true,
     step: "0.1",
     unit: "g",
   },
@@ -55,6 +58,7 @@ const macroFields: readonly FoodNutrientField[] = [
     label: "Carbs",
     name: "carbsGramsPer100g",
     placeholder: "3.6",
+    required: true,
     step: "0.1",
     unit: "g",
   },
@@ -63,6 +67,7 @@ const macroFields: readonly FoodNutrientField[] = [
     label: "Fat",
     name: "fatGramsPer100g",
     placeholder: "0.4",
+    required: true,
     step: "0.1",
     unit: "g",
   },
@@ -74,6 +79,7 @@ const nutrientFields: readonly FoodNutrientField[] = [
     label: "Fiber",
     name: "fiberGramsPer100g",
     placeholder: "0",
+    required: false,
     step: "0.1",
     unit: "g",
   },
@@ -82,6 +88,7 @@ const nutrientFields: readonly FoodNutrientField[] = [
     label: "Sugar",
     name: "sugarGramsPer100g",
     placeholder: "3.2",
+    required: false,
     step: "0.1",
     unit: "g",
   },
@@ -90,6 +97,7 @@ const nutrientFields: readonly FoodNutrientField[] = [
     label: "Saturated fat",
     name: "saturatedFatGramsPer100g",
     placeholder: "0.1",
+    required: false,
     step: "0.1",
     unit: "g",
   },
@@ -98,6 +106,7 @@ const nutrientFields: readonly FoodNutrientField[] = [
     label: "Salt",
     name: "saltGramsPer100g",
     placeholder: "0.1",
+    required: false,
     step: "0.01",
     unit: "g",
   },
@@ -278,14 +287,14 @@ function FoodNutrientInput({
       <span className="relative">
         <input
           className={`${foodFieldClassName} ${unitPaddingClassName}`}
-          defaultValue={initialFood?.[field.name]}
+          defaultValue={initialFood?.[field.name] ?? ""}
           disabled={disabled}
           inputMode="decimal"
           min="0"
           name={field.name}
           onFocus={_selectInputText}
           placeholder={field.placeholder}
-          required
+          required={field.required}
           step={field.step}
           type="number"
         />
