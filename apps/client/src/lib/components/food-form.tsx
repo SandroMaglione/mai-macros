@@ -1,14 +1,14 @@
 import {
   parseFoodQuickInput,
   type Food,
-  type FoodQuickInput,
-  type FoodQuickInputParseError,
+  type FoodQuickInputParseIssue,
+  type FoodQuickInputParseResult,
 } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import { Apple, Plus, Rows3, Save, TextCursorInput, X } from "lucide-react";
-import { useMemo, useRef, type FocusEvent } from "react";
+import { useMemo, type FocusEvent } from "react";
 import { assign, setup } from "xstate";
 
 import type { CreateFoodInput } from "../services/foods.ts";
@@ -16,28 +16,15 @@ import {
   createFoodInputFromFoodQuickInput,
   createFoodInputFromFormData,
 } from "../utils.ts";
-import { FoodBarcodeImport } from "./food-barcode-import.tsx";
 import {
   FoodNutrientOverview,
+  foodQuickInputNutrientOverviewOrder,
   formatFoodNutrientNumber,
   foodQuickInputNutrients,
 } from "./food-nutrient-overview.tsx";
 
 type FoodFormAction = "create" | "edit";
 type FoodCreateMode = "manual" | "quick";
-type FoodQuickInputParseState =
-  | {
-      readonly status: "empty";
-    }
-  | {
-      readonly error: FoodQuickInputParseError;
-      readonly status: "failure";
-    }
-  | {
-      readonly createInput: CreateFoodInput;
-      readonly food: FoodQuickInput;
-      readonly status: "success";
-    };
 
 type FoodFormMachineContext = {
   readonly createMode: FoodCreateMode;
@@ -202,7 +189,6 @@ export function FoodForm({
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
-  const formRef = useRef<HTMLFormElement>(null);
   const [snapshot, send] = useMachine(foodFormMachine);
   const createMode = snapshot.context.createMode;
 
@@ -236,7 +222,6 @@ export function FoodForm({
               })
             );
           }}
-          ref={formRef}
         >
           {isCreating ? (
             <FoodCreateModeSwitch
@@ -267,10 +252,6 @@ export function FoodForm({
             />
           ) : (
             <>
-              {isCreating ? (
-                <FoodBarcodeImport disabled={disabled} formRef={formRef} />
-              ) : null}
-
               <FoodFormFields
                 autoFocusName
                 disabled={disabled}
@@ -377,55 +358,49 @@ function FoodQuickInputForm({
   readonly onChangeInput: (input: string) => void;
   readonly onSubmit: (input: CreateFoodInput) => void;
 }) {
-  const parseState = useMemo<FoodQuickInputParseState>(() => {
-    if (input.trim() === "") {
-      return { status: "empty" };
-    }
-
-    const result = Effect.runSync(
-      Effect.result(parseFoodQuickInput({ input }))
-    );
-
-    return Result.match(result, {
-      onFailure: (error) => ({
-        error,
-        status: "failure" as const,
-      }),
-      onSuccess: (food) => ({
-        createInput: createFoodInputFromFoodQuickInput({ food }),
-        food,
-        status: "success" as const,
-      }),
-    });
+  const parseResult = useMemo<FoodQuickInputParseResult>(() => {
+    return Effect.runSync(parseFoodQuickInput({ input }));
   }, [input]);
-  const canSubmit = parseState.status === "success";
+  const canSubmit = parseResult.status === "complete";
 
   return (
     <div className="grid gap-4">
       <label className={foodFieldLabelClassName}>
         Food text
         <textarea
+          aria-describedby="food-quick-input-examples"
           autoComplete="off"
           autoFocus
-          className={`${foodFieldClassName} min-h-28 resize-y py-3 leading-relaxed`}
+          className={`${foodFieldClassName} resize-none py-2.5 leading-relaxed`}
           disabled={disabled}
           onChange={(event) => {
             onChangeInput(event.currentTarget.value);
           }}
           placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
+          rows={2}
           value={input}
         />
       </label>
+      <p
+        className="-mt-2 text-xs font-semibold leading-relaxed text-[#77777e]"
+        id="food-quick-input-examples"
+      >
+        Examples: Yogurt greco 0%, Fage, 59, 0.4, 0.1, 3.6, 3.2, 0, 10, 0.1 ·
+        Skyr bianco, Milbona, k63 f0.2 c4 p11
+      </p>
 
-      <FoodQuickInputPreview parseState={parseState} />
+      <FoodQuickInputPreview parseResult={parseResult} />
+      <FoodQuickInputIssues issues={parseResult.issues} />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
           disabled={disabled || !canSubmit}
           onClick={() => {
-            if (parseState.status === "success") {
-              onSubmit(parseState.createInput);
+            if (parseResult.status === "complete") {
+              onSubmit(
+                createFoodInputFromFoodQuickInput({ food: parseResult.food })
+              );
             }
           }}
           type="button"
@@ -440,11 +415,11 @@ function FoodQuickInputForm({
 }
 
 function FoodQuickInputPreview({
-  parseState,
+  parseResult,
 }: {
-  readonly parseState: FoodQuickInputParseState;
+  readonly parseResult: FoodQuickInputParseResult;
 }) {
-  if (parseState.status === "empty") {
+  if (parseResult.status === "empty") {
     return (
       <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
         <p className="text-sm font-bold leading-relaxed text-[#aaaab1]">
@@ -454,48 +429,63 @@ function FoodQuickInputPreview({
     );
   }
 
-  if (parseState.status === "failure") {
-    return <FoodQuickInputError error={parseState.error} />;
-  }
+  const food =
+    parseResult.status === "complete" ? parseResult.food : parseResult.partial;
+  const energyKcalPer100g = food.energyKcalPer100g;
 
   return (
     <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
       <FoodNutrientOverview
-        brand={parseState.food.brand}
-        name={parseState.food.name}
-        nutrients={foodQuickInputNutrients({ food: parseState.food })}
-        primaryLabel={`${formatFoodNutrientNumber({
-          value: parseState.food.energyKcalPer100g,
-        })} kcal`}
+        brand={food.brand}
+        name={food.name ?? "Unnamed food"}
+        nutrients={foodQuickInputNutrients({ food })}
+        nutrientOrder={foodQuickInputNutrientOverviewOrder}
+        primaryLabel={
+          energyKcalPer100g === undefined
+            ? "Partial"
+            : `${formatFoodNutrientNumber({
+                value: energyKcalPer100g,
+              })} kcal`
+        }
         secondaryLabel="per 100g"
       />
     </div>
   );
 }
 
-function FoodQuickInputError({
-  error,
+function FoodQuickInputIssues({
+  issues,
 }: {
-  readonly error: FoodQuickInputParseError;
+  readonly issues: readonly FoodQuickInputParseIssue[];
+}) {
+  const firstIssue = issues[0];
+
+  if (firstIssue === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[10px] border border-[#74322f] bg-[#201717] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      {issues.map((issue) => (
+        <FoodQuickInputIssue
+          issue={issue}
+          key={`${issue.reason}:${issue.field ?? "input"}:${issue.message}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FoodQuickInputIssue({
+  issue,
+}: {
+  readonly issue: FoodQuickInputParseIssue;
 }) {
   return (
-    <div className="grid gap-3 rounded-[10px] border border-[#74322f] bg-[#201717] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
-      <div className="grid gap-1">
-        <p className="text-sm font-black leading-tight text-[#ff5a51]">
-          {error.message}
-        </p>
-        <p className="text-xs font-bold uppercase leading-tight tracking-normal text-[#d79a95]">
-          {error.reason}
-        </p>
-      </div>
-      {error.field === undefined ? null : (
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 text-sm leading-tight">
-          <dt className="font-bold text-[#aaaab1]">Field</dt>
-          <dd className="min-w-0 font-black text-[#f0f0f2] wrap-anywhere">
-            {error.field}
-          </dd>
-        </dl>
-      )}
+    <div className="border-b border-[#3d2827] py-2 first:pt-0 last:border-b-0 last:pb-0">
+      <p className="text-sm font-black leading-tight text-[#ff5a51]">
+        {issue.message}
+      </p>
     </div>
   );
 }

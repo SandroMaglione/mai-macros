@@ -1,4 +1,4 @@
-import { Data, Effect, Schema } from "effect";
+import { Array, Data, Effect, Schema } from "effect";
 
 import { NonEmptyString, NonNegativeNumber } from "./domain.ts";
 
@@ -17,6 +17,12 @@ export const FoodQuickInput = Schema.Struct({
 
 export type FoodQuickInput = typeof FoodQuickInput.Type;
 
+export type FoodQuickInputParseStatus =
+  | "complete"
+  | "empty"
+  | "incomplete"
+  | "invalid";
+
 export type FoodQuickInputParseErrorReason =
   | "duplicate-tag"
   | "invalid-number"
@@ -26,7 +32,7 @@ export type FoodQuickInputParseErrorReason =
   | "too-many-fields"
   | "unrecognized-token";
 
-type FoodQuickInputFieldName =
+export type FoodQuickInputFieldName =
   | "brand"
   | "carbsGramsPer100g"
   | "energyKcalPer100g"
@@ -38,37 +44,108 @@ type FoodQuickInputFieldName =
   | "saturatedFatGramsPer100g"
   | "sugarGramsPer100g";
 
-type FoodQuickInputNutrientTag =
-  | "c"
-  | "f"
-  | "fi"
-  | "k"
-  | "p"
-  | "sa"
-  | "sf"
-  | "su";
-
-type FoodQuickInputPartialFields = {
-  energyKcalPer100g?: number;
-  fatGramsPer100g?: number;
-  saturatedFatGramsPer100g?: number;
-  carbsGramsPer100g?: number;
-  sugarGramsPer100g?: number;
-  fiberGramsPer100g?: number;
-  proteinGramsPer100g?: number;
-  saltGramsPer100g?: number;
+export type FoodQuickInputPartial = {
+  readonly name?: string;
+  readonly brand?: string;
+  readonly energyKcalPer100g?: number;
+  readonly proteinGramsPer100g?: number;
+  readonly carbsGramsPer100g?: number;
+  readonly fatGramsPer100g?: number;
+  readonly fiberGramsPer100g?: number;
+  readonly sugarGramsPer100g?: number;
+  readonly saturatedFatGramsPer100g?: number;
+  readonly saltGramsPer100g?: number;
 };
 
-export class FoodQuickInputParseError extends Data.TaggedError(
-  "FoodQuickInputParseError"
-)<{
+export type FoodQuickInputParseIssue = {
   readonly field?: FoodQuickInputFieldName;
   readonly input: string;
   readonly message: string;
   readonly reason: FoodQuickInputParseErrorReason;
-}> {}
+};
+
+export type FoodQuickInputParseResult =
+  | {
+      readonly food?: never;
+      readonly input: string;
+      readonly issues: readonly FoodQuickInputParseIssue[];
+      readonly partial: FoodQuickInputPartial;
+      readonly status: Exclude<FoodQuickInputParseStatus, "complete">;
+    }
+  | {
+      readonly food: FoodQuickInput;
+      readonly input: string;
+      readonly issues: readonly FoodQuickInputParseIssue[];
+      readonly partial: FoodQuickInputPartial;
+      readonly status: "complete";
+    };
+
+export class FoodQuickInputParseError extends Data.TaggedError(
+  "FoodQuickInputParseError"
+)<FoodQuickInputParseIssue> {}
+
+type FoodQuickInputNutrientFieldName =
+  | "carbsGramsPer100g"
+  | "energyKcalPer100g"
+  | "fatGramsPer100g"
+  | "fiberGramsPer100g"
+  | "proteinGramsPer100g"
+  | "saltGramsPer100g"
+  | "saturatedFatGramsPer100g"
+  | "sugarGramsPer100g";
+
+type FoodQuickInputRequiredNutrientFieldName =
+  | "carbsGramsPer100g"
+  | "energyKcalPer100g"
+  | "fatGramsPer100g"
+  | "proteinGramsPer100g";
+
+type FoodQuickInputMutablePartial = {
+  name?: string;
+  brand?: string;
+  energyKcalPer100g?: number;
+  proteinGramsPer100g?: number;
+  carbsGramsPer100g?: number;
+  fatGramsPer100g?: number;
+  fiberGramsPer100g?: number;
+  sugarGramsPer100g?: number;
+  saturatedFatGramsPer100g?: number;
+  saltGramsPer100g?: number;
+};
+
+type FoodQuickInputNutrientNumberParseResult =
+  | {
+      readonly issue: FoodQuickInputParseIssue;
+      readonly status: "failure";
+    }
+  | {
+      readonly status: "success";
+      readonly value: number;
+    };
 
 const nutrientFieldCount = 8;
+
+const requiredNutrients = [
+  {
+    field: "energyKcalPer100g",
+    label: "calories",
+  },
+  {
+    field: "fatGramsPer100g",
+    label: "fat",
+  },
+  {
+    field: "carbsGramsPer100g",
+    label: "carbs",
+  },
+  {
+    field: "proteinGramsPer100g",
+    label: "protein",
+  },
+] satisfies readonly {
+  readonly field: FoodQuickInputRequiredNutrientFieldName;
+  readonly label: string;
+}[];
 
 const taggedNutrientPattern =
   /(^|[\s,]+)(sf|su|fi|sa|k|f|c|p)\s*(\d+(?:\.\d+)?|\.\d+)/g;
@@ -79,287 +156,300 @@ export const parseFoodQuickInput = Effect.fn("parseFoodQuickInput")(function* ({
   readonly input: string;
 }) {
   const fields = input.split(",");
+  const partial: FoodQuickInputMutablePartial = {};
+  const issues: FoodQuickInputParseIssue[] = [];
+
+  if (input.trim() === "") {
+    return {
+      input,
+      issues: [],
+      partial,
+      status: "empty",
+    } satisfies FoodQuickInputParseResult;
+  }
+
   const name = _optionalTrimmedString({ value: fields[0] });
 
   if (name === undefined) {
-    return yield* new FoodQuickInputParseError({
-      input,
-      message: "Food quick input is missing a food name.",
-      reason: "missing-name",
-      field: "name",
-    });
+    issues.push(
+      _parseIssue({
+        field: "name",
+        input,
+        message: "Food quick input is missing a food name.",
+        reason: "missing-name",
+      })
+    );
+  } else {
+    partial.name = name;
   }
 
   const brand = _optionalTrimmedString({ value: fields[1] });
+
+  if (brand !== undefined) {
+    partial.brand = brand;
+  }
+
   const nutrientInput = fields.slice(2).join(",");
   taggedNutrientPattern.lastIndex = 0;
   const hasTaggedNutrients = taggedNutrientPattern.test(nutrientInput);
-  const nutrients = hasTaggedNutrients
-    ? yield* Effect.gen(function* () {
-        const fields: FoodQuickInputPartialFields = {};
-        taggedNutrientPattern.lastIndex = 0;
 
-        for (const match of nutrientInput.matchAll(taggedNutrientPattern)) {
-          const matchedTag = match[2];
+  if (hasTaggedNutrients) {
+    taggedNutrientPattern.lastIndex = 0;
 
-          if (
-            matchedTag !== "c" &&
-            matchedTag !== "f" &&
-            matchedTag !== "fi" &&
-            matchedTag !== "k" &&
-            matchedTag !== "p" &&
-            matchedTag !== "sa" &&
-            matchedTag !== "sf" &&
-            matchedTag !== "su"
-          ) {
-            return yield* new FoodQuickInputParseError({
-              input,
-              message: "Food quick input contains an unsupported nutrient tag.",
-              reason: "unrecognized-token",
-            });
-          }
+    for (const match of nutrientInput.matchAll(taggedNutrientPattern)) {
+      const matchedTag = match[2];
 
-          const tag = matchedTag;
-          const value = yield* _parseNutrientNumber({
-            field: _fieldNameFromTag({ tag }),
+      if (
+        matchedTag !== "c" &&
+        matchedTag !== "f" &&
+        matchedTag !== "fi" &&
+        matchedTag !== "k" &&
+        matchedTag !== "p" &&
+        matchedTag !== "sa" &&
+        matchedTag !== "sf" &&
+        matchedTag !== "su"
+      ) {
+        issues.push(
+          _parseIssue({
             input,
-            value: match[3],
-          });
-          const existingValue =
-            tag === "k"
-              ? fields.energyKcalPer100g
-              : tag === "f"
-                ? fields.fatGramsPer100g
-                : tag === "sf"
-                  ? fields.saturatedFatGramsPer100g
-                  : tag === "c"
-                    ? fields.carbsGramsPer100g
-                    : tag === "su"
-                      ? fields.sugarGramsPer100g
-                      : tag === "fi"
-                        ? fields.fiberGramsPer100g
-                        : tag === "p"
-                          ? fields.proteinGramsPer100g
-                          : fields.saltGramsPer100g;
-
-          if (existingValue !== undefined) {
-            return yield* new FoodQuickInputParseError({
-              field: _fieldNameFromTag({ tag }),
-              input,
-              message: `Food quick input repeats the ${tag} nutrient tag.`,
-              reason: "duplicate-tag",
-            });
-          }
-
-          if (tag === "k") {
-            fields.energyKcalPer100g = value;
-          } else if (tag === "f") {
-            fields.fatGramsPer100g = value;
-          } else if (tag === "sf") {
-            fields.saturatedFatGramsPer100g = value;
-          } else if (tag === "c") {
-            fields.carbsGramsPer100g = value;
-          } else if (tag === "su") {
-            fields.sugarGramsPer100g = value;
-          } else if (tag === "fi") {
-            fields.fiberGramsPer100g = value;
-          } else if (tag === "p") {
-            fields.proteinGramsPer100g = value;
-          } else {
-            fields.saltGramsPer100g = value;
-          }
-        }
-
-        taggedNutrientPattern.lastIndex = 0;
-        const unparsedInput = nutrientInput
-          .replace(taggedNutrientPattern, " ")
-          .replaceAll(/[,\s]/g, "");
-
-        if (unparsedInput !== "") {
-          return yield* new FoodQuickInputParseError({
-            input,
-            message: "Food quick input contains unrecognized tagged nutrients.",
+            message: "Food quick input contains an unsupported nutrient tag.",
             reason: "unrecognized-token",
-          });
-        }
+          })
+        );
+        continue;
+      }
 
-        return {
-          energyKcalPer100g: yield* _requireTaggedNutrient({
-            field: "energyKcalPer100g",
+      const tag = matchedTag;
+      const field =
+        tag === "k"
+          ? "energyKcalPer100g"
+          : tag === "f"
+            ? "fatGramsPer100g"
+            : tag === "sf"
+              ? "saturatedFatGramsPer100g"
+              : tag === "c"
+                ? "carbsGramsPer100g"
+                : tag === "su"
+                  ? "sugarGramsPer100g"
+                  : tag === "fi"
+                    ? "fiberGramsPer100g"
+                    : tag === "p"
+                      ? "proteinGramsPer100g"
+                      : "saltGramsPer100g";
+      const existingValue = partial[field];
+
+      if (existingValue !== undefined) {
+        issues.push(
+          _parseIssue({
+            field,
             input,
-            label: "calories",
-            value: fields.energyKcalPer100g,
-          }),
-          fatGramsPer100g: yield* _requireTaggedNutrient({
-            field: "fatGramsPer100g",
-            input,
-            label: "fat",
-            value: fields.fatGramsPer100g,
-          }),
-          ...(fields.saturatedFatGramsPer100g === undefined
-            ? {}
-            : { saturatedFatGramsPer100g: fields.saturatedFatGramsPer100g }),
-          carbsGramsPer100g: yield* _requireTaggedNutrient({
-            field: "carbsGramsPer100g",
-            input,
-            label: "carbs",
-            value: fields.carbsGramsPer100g,
-          }),
-          ...(fields.sugarGramsPer100g === undefined
-            ? {}
-            : { sugarGramsPer100g: fields.sugarGramsPer100g }),
-          ...(fields.fiberGramsPer100g === undefined
-            ? {}
-            : { fiberGramsPer100g: fields.fiberGramsPer100g }),
-          proteinGramsPer100g: yield* _requireTaggedNutrient({
-            field: "proteinGramsPer100g",
-            input,
-            label: "protein",
-            value: fields.proteinGramsPer100g,
-          }),
-          ...(fields.saltGramsPer100g === undefined
-            ? {}
-            : { saltGramsPer100g: fields.saltGramsPer100g }),
-        };
-      })
-    : yield* Effect.gen(function* () {
-        const nutrientFields = fields.slice(2);
-        let endIndex = nutrientFields.length;
+            message: `Food quick input repeats the ${tag} nutrient tag.`,
+            reason: "duplicate-tag",
+          })
+        );
+        continue;
+      }
 
-        while (
-          endIndex > nutrientFieldCount &&
-          (nutrientFields[endIndex - 1]?.trim() ?? "") === ""
-        ) {
-          endIndex = endIndex - 1;
-        }
-
-        const normalizedFields = nutrientFields.slice(0, endIndex);
-
-        if (normalizedFields.length > nutrientFieldCount) {
-          return yield* new FoodQuickInputParseError({
-            input,
-            message:
-              "Food quick input has too many positional nutrient fields.",
-            reason: "too-many-fields",
-          });
-        }
-
-        const energyKcalPer100g = yield* _parseRequiredNutrient({
-          field: "energyKcalPer100g",
-          input,
-          label: "calories",
-          value: normalizedFields[0],
-        });
-        const fatGramsPer100g = yield* _parseRequiredNutrient({
-          field: "fatGramsPer100g",
-          input,
-          label: "fat",
-          value: normalizedFields[1],
-        });
-        const saturatedFatGramsPer100g = yield* _parseOptionalNutrient({
-          field: "saturatedFatGramsPer100g",
-          input,
-          value: normalizedFields[2],
-        });
-        const carbsGramsPer100g = yield* _parseRequiredNutrient({
-          field: "carbsGramsPer100g",
-          input,
-          label: "carbs",
-          value: normalizedFields[3],
-        });
-        const sugarGramsPer100g = yield* _parseOptionalNutrient({
-          field: "sugarGramsPer100g",
-          input,
-          value: normalizedFields[4],
-        });
-        const fiberGramsPer100g = yield* _parseOptionalNutrient({
-          field: "fiberGramsPer100g",
-          input,
-          value: normalizedFields[5],
-        });
-        const proteinGramsPer100g = yield* _parseRequiredNutrient({
-          field: "proteinGramsPer100g",
-          input,
-          label: "protein",
-          value: normalizedFields[6],
-        });
-        const saltGramsPer100g = yield* _parseOptionalNutrient({
-          field: "saltGramsPer100g",
-          input,
-          value: normalizedFields[7],
-        });
-
-        return {
-          energyKcalPer100g,
-          fatGramsPer100g,
-          ...(saturatedFatGramsPer100g === undefined
-            ? {}
-            : { saturatedFatGramsPer100g }),
-          carbsGramsPer100g,
-          ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
-          ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
-          proteinGramsPer100g,
-          ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
-        };
+      const result = _parseNutrientNumber({
+        field,
+        input,
+        value: match[3],
       });
 
-  return yield* Schema.decodeEffect(FoodQuickInput)({
-    name,
-    ...(brand === undefined ? {} : { brand }),
-    ...nutrients,
-  }).pipe(
-    Effect.mapError(
-      () =>
-        new FoodQuickInputParseError({
+      if (result.status === "failure") {
+        issues.push(result.issue);
+      } else {
+        partial[field] = result.value;
+      }
+    }
+
+    taggedNutrientPattern.lastIndex = 0;
+    const unparsedInput = nutrientInput
+      .replace(taggedNutrientPattern, " ")
+      .replaceAll(/[,\s]/g, "");
+
+    if (unparsedInput !== "") {
+      issues.push(
+        _parseIssue({
+          input,
+          message: "Food quick input contains unrecognized tagged nutrients.",
+          reason: "unrecognized-token",
+        })
+      );
+    }
+  } else {
+    const nutrientFields = fields.slice(2);
+    let endIndex = nutrientFields.length;
+
+    while (
+      endIndex > nutrientFieldCount &&
+      (nutrientFields[endIndex - 1]?.trim() ?? "") === ""
+    ) {
+      endIndex = endIndex - 1;
+    }
+
+    const normalizedFields = nutrientFields.slice(0, endIndex);
+
+    if (normalizedFields.length > nutrientFieldCount) {
+      issues.push(
+        _parseIssue({
+          input,
+          message: "Food quick input has too many positional nutrient fields.",
+          reason: "too-many-fields",
+        })
+      );
+    }
+
+    _parsePositionalNutrient({
+      field: "energyKcalPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[0],
+    });
+    _parsePositionalNutrient({
+      field: "fatGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[1],
+    });
+    _parsePositionalNutrient({
+      field: "saturatedFatGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[2],
+    });
+    _parsePositionalNutrient({
+      field: "carbsGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[3],
+    });
+    _parsePositionalNutrient({
+      field: "sugarGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[4],
+    });
+    _parsePositionalNutrient({
+      field: "fiberGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[5],
+    });
+    _parsePositionalNutrient({
+      field: "proteinGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[6],
+    });
+    _parsePositionalNutrient({
+      field: "saltGramsPer100g",
+      input,
+      issues,
+      partial,
+      value: normalizedFields[7],
+    });
+  }
+
+  for (const nutrient of requiredNutrients) {
+    if (
+      partial[nutrient.field] === undefined &&
+      !issues.some((issue) => issue.field === nutrient.field)
+    ) {
+      issues.push(
+        _parseIssue({
+          field: nutrient.field,
+          input,
+          message: `Food quick input is missing required ${nutrient.label}.`,
+          reason: "missing-required-nutrient",
+        })
+      );
+    }
+  }
+
+  const decodedFood = yield* Schema.decodeUnknownEffect(FoodQuickInput)(
+    partial
+  ).pipe(
+    Effect.match({
+      onFailure: () => undefined,
+      onSuccess: (food) => food,
+    })
+  );
+
+  const hasIssues = Array.isArrayNonEmpty(issues);
+
+  if (!hasIssues && decodedFood !== undefined) {
+    return {
+      food: decodedFood,
+      input,
+      issues: [],
+      partial: decodedFood,
+      status: "complete",
+    } satisfies FoodQuickInputParseResult;
+  }
+
+  const resultIssues = hasIssues
+    ? issues
+    : [
+        _parseIssue({
           input,
           message: "Food quick input did not match the food schema.",
           reason: "schema-error",
-        })
-    )
-  );
+        }),
+      ];
+  const status = resultIssues.some(
+    (issue) =>
+      issue.reason !== "missing-name" &&
+      issue.reason !== "missing-required-nutrient"
+  )
+    ? "invalid"
+    : "incomplete";
+
+  return {
+    input,
+    issues: resultIssues,
+    partial,
+    status,
+  } satisfies FoodQuickInputParseResult;
 });
 
-function _parseRequiredNutrient({
+function _parsePositionalNutrient({
   field,
   input,
-  label,
+  issues,
+  partial,
   value,
 }: {
-  readonly field: FoodQuickInputFieldName;
+  readonly field: FoodQuickInputNutrientFieldName;
   readonly input: string;
-  readonly label: string;
-  readonly value: string | undefined;
-}) {
-  return Effect.gen(function* () {
-    const trimmedValue = value?.trim() ?? "";
-
-    if (trimmedValue === "") {
-      return yield* new FoodQuickInputParseError({
-        field,
-        input,
-        message: `Food quick input is missing required ${label}.`,
-        reason: "missing-required-nutrient",
-      });
-    }
-
-    return yield* _parseNutrientNumber({ field, input, value: trimmedValue });
-  });
-}
-
-function _parseOptionalNutrient({
-  field,
-  input,
-  value,
-}: {
-  readonly field: FoodQuickInputFieldName;
-  readonly input: string;
+  readonly issues: FoodQuickInputParseIssue[];
+  readonly partial: FoodQuickInputMutablePartial;
   readonly value: string | undefined;
 }) {
   const trimmedValue = value?.trim() ?? "";
 
-  return trimmedValue === ""
-    ? Effect.succeed(undefined)
-    : _parseNutrientNumber({ field, input, value: trimmedValue });
+  if (trimmedValue === "") {
+    return;
+  }
+
+  const result = _parseNutrientNumber({
+    field,
+    input,
+    value: trimmedValue,
+  });
+
+  if (result.status === "failure") {
+    issues.push(result.issue);
+  } else {
+    partial[field] = result.value;
+  }
 }
 
 function _parseNutrientNumber({
@@ -367,10 +457,10 @@ function _parseNutrientNumber({
   input,
   value,
 }: {
-  readonly field: FoodQuickInputFieldName;
+  readonly field: FoodQuickInputNutrientFieldName;
   readonly input: string;
   readonly value: string | undefined;
-}) {
+}): FoodQuickInputNutrientNumberParseResult {
   const trimmedValue = value?.trim() ?? "";
   const parsedValue = Number(trimmedValue);
 
@@ -380,72 +470,35 @@ function _parseNutrientNumber({
     !Number.isFinite(parsedValue) ||
     parsedValue < 0
   ) {
-    return new FoodQuickInputParseError({
-      field,
-      input,
-      message: "Food quick input contains an invalid nutrient number.",
-      reason: "invalid-number",
-    });
-  }
-
-  return Effect.succeed(parsedValue);
-}
-
-function _requireTaggedNutrient({
-  field,
-  input,
-  label,
-  value,
-}: {
-  readonly field: FoodQuickInputFieldName;
-  readonly input: string;
-  readonly label: string;
-  readonly value: number | undefined;
-}) {
-  return value === undefined
-    ? new FoodQuickInputParseError({
+    return {
+      issue: _parseIssue({
         field,
         input,
-        message: `Food quick input is missing required ${label}.`,
-        reason: "missing-required-nutrient",
-      })
-    : Effect.succeed(value);
+        message: "Food quick input contains an invalid nutrient number.",
+        reason: "invalid-number",
+      }),
+      status: "failure",
+    };
+  }
+
+  return {
+    status: "success",
+    value: parsedValue,
+  };
 }
 
-function _fieldNameFromTag({
-  tag,
-}: {
-  readonly tag: FoodQuickInputNutrientTag;
-}): FoodQuickInputFieldName {
-  if (tag === "k") {
-    return "energyKcalPer100g";
-  }
-
-  if (tag === "f") {
-    return "fatGramsPer100g";
-  }
-
-  if (tag === "sf") {
-    return "saturatedFatGramsPer100g";
-  }
-
-  if (tag === "c") {
-    return "carbsGramsPer100g";
-  }
-
-  if (tag === "su") {
-    return "sugarGramsPer100g";
-  }
-
-  if (tag === "fi") {
-    return "fiberGramsPer100g";
-  }
-
-  if (tag === "p") {
-    return "proteinGramsPer100g";
-  }
-
-  return "saltGramsPer100g";
+function _parseIssue({
+  field,
+  input,
+  message,
+  reason,
+}: FoodQuickInputParseIssue): FoodQuickInputParseIssue {
+  return {
+    ...(field === undefined ? {} : { field }),
+    input,
+    message,
+    reason,
+  };
 }
 
 function _optionalTrimmedString({

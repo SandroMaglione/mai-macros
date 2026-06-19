@@ -1,15 +1,25 @@
 import type { ReactNode } from "react";
 
 export type FoodNutrientOverviewNutrients = {
-  readonly energyKcal: number;
-  readonly proteinGrams: number;
-  readonly carbsGrams: number;
-  readonly fatGrams: number;
+  readonly energyKcal?: number | undefined;
+  readonly proteinGrams?: number | undefined;
+  readonly carbsGrams?: number | undefined;
+  readonly fatGrams?: number | undefined;
   readonly fiberGrams?: number | undefined;
   readonly sugarGrams?: number | undefined;
   readonly saturatedFatGrams?: number | undefined;
   readonly saltGrams?: number | undefined;
 };
+
+export type FoodNutrientOverviewNutrientName =
+  | "carbsGrams"
+  | "energyKcal"
+  | "fatGrams"
+  | "fiberGrams"
+  | "proteinGrams"
+  | "saltGrams"
+  | "saturatedFatGrams"
+  | "sugarGrams";
 
 const nutrientToneClassNames = {
   carbs: "text-[#ff4f8b]",
@@ -19,11 +29,84 @@ const nutrientToneClassNames = {
   salt: "text-[#aaaab1]",
 } satisfies Record<"carbs" | "energy" | "fat" | "protein" | "salt", string>;
 
+const defaultFoodNutrientOverviewOrder = [
+  "carbsGrams",
+  "proteinGrams",
+  "fatGrams",
+  "fiberGrams",
+  "sugarGrams",
+  "saturatedFatGrams",
+  "saltGrams",
+  "energyKcal",
+] satisfies readonly FoodNutrientOverviewNutrientName[];
+
+export const foodQuickInputNutrientOverviewOrder = [
+  "energyKcal",
+  "fatGrams",
+  "saturatedFatGrams",
+  "carbsGrams",
+  "sugarGrams",
+  "fiberGrams",
+  "proteinGrams",
+  "saltGrams",
+] satisfies readonly FoodNutrientOverviewNutrientName[];
+
+const foodNutrientOverviewRows = {
+  carbsGrams: {
+    label: "Carbs",
+    textClassName: nutrientToneClassNames.carbs,
+    unit: "g",
+  },
+  energyKcal: {
+    label: "Calories",
+    textClassName: nutrientToneClassNames.energy,
+    unit: "kcal",
+  },
+  fatGrams: {
+    label: "Fat",
+    textClassName: nutrientToneClassNames.fat,
+    unit: "g",
+  },
+  fiberGrams: {
+    label: "Fiber",
+    textClassName: nutrientToneClassNames.carbs,
+    unit: "g",
+  },
+  proteinGrams: {
+    label: "Protein",
+    textClassName: nutrientToneClassNames.protein,
+    unit: "g",
+  },
+  saltGrams: {
+    label: "Salt",
+    textClassName: nutrientToneClassNames.salt,
+    unit: "g",
+  },
+  saturatedFatGrams: {
+    label: "Sat fat",
+    textClassName: nutrientToneClassNames.fat,
+    unit: "g",
+  },
+  sugarGrams: {
+    label: "Sugar",
+    textClassName: nutrientToneClassNames.carbs,
+    unit: "g",
+  },
+} satisfies Record<
+  FoodNutrientOverviewNutrientName,
+  {
+    readonly label: string;
+    readonly textClassName: string;
+    readonly unit: "g" | "kcal";
+  }
+>;
+
 export function FoodNutrientOverview({
   brand,
   metadata,
   name,
   nutrients,
+  nutrientOrder = defaultFoodNutrientOverviewOrder,
   primaryLabel,
   secondaryLabel,
 }: {
@@ -31,12 +114,13 @@ export function FoodNutrientOverview({
   readonly metadata?: ReactNode;
   readonly name: string;
   readonly nutrients: FoodNutrientOverviewNutrients | undefined;
+  readonly nutrientOrder?: readonly FoodNutrientOverviewNutrientName[];
   readonly primaryLabel?: string;
   readonly secondaryLabel?: string;
 }) {
   const displayedPrimaryLabel =
     primaryLabel ??
-    (nutrients === undefined
+    (nutrients?.energyKcal === undefined
       ? "New"
       : `${formatFoodNutrientNumber({
           value: nutrients.energyKcal,
@@ -66,47 +150,19 @@ export function FoodNutrientOverview({
 
       {nutrients === undefined ? null : (
         <dl className="divide-y divide-[#29292d]">
-          <FoodNutrientOverviewRow
-            label="Carbs"
-            textClassName={nutrientToneClassNames.carbs}
-            value={nutrients.carbsGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Protein"
-            textClassName={nutrientToneClassNames.protein}
-            value={nutrients.proteinGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Fat"
-            textClassName={nutrientToneClassNames.fat}
-            value={nutrients.fatGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Fiber"
-            textClassName={nutrientToneClassNames.carbs}
-            value={nutrients.fiberGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Sugar"
-            textClassName={nutrientToneClassNames.carbs}
-            value={nutrients.sugarGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Sat fat"
-            textClassName={nutrientToneClassNames.fat}
-            value={nutrients.saturatedFatGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Salt"
-            textClassName={nutrientToneClassNames.salt}
-            value={nutrients.saltGrams}
-          />
-          <FoodNutrientOverviewRow
-            label="Calories"
-            textClassName={nutrientToneClassNames.energy}
-            unit="kcal"
-            value={nutrients.energyKcal}
-          />
+          {nutrientOrder.map((nutrientName) => {
+            const row = foodNutrientOverviewRows[nutrientName];
+
+            return (
+              <FoodNutrientOverviewRow
+                key={nutrientName}
+                label={row.label}
+                textClassName={row.textClassName}
+                unit={row.unit}
+                value={nutrients[nutrientName]}
+              />
+            );
+          })}
         </dl>
       )}
     </div>
@@ -117,10 +173,10 @@ export function foodQuickInputNutrients({
   food,
 }: {
   readonly food: {
-    readonly energyKcalPer100g: number;
-    readonly proteinGramsPer100g: number;
-    readonly carbsGramsPer100g: number;
-    readonly fatGramsPer100g: number;
+    readonly energyKcalPer100g?: number | undefined;
+    readonly proteinGramsPer100g?: number | undefined;
+    readonly carbsGramsPer100g?: number | undefined;
+    readonly fatGramsPer100g?: number | undefined;
     readonly fiberGramsPer100g?: number | undefined;
     readonly sugarGramsPer100g?: number | undefined;
     readonly saturatedFatGramsPer100g?: number | undefined;
@@ -128,10 +184,18 @@ export function foodQuickInputNutrients({
   };
 }): FoodNutrientOverviewNutrients {
   return {
-    energyKcal: food.energyKcalPer100g,
-    proteinGrams: food.proteinGramsPer100g,
-    carbsGrams: food.carbsGramsPer100g,
-    fatGrams: food.fatGramsPer100g,
+    ...(food.energyKcalPer100g === undefined
+      ? {}
+      : { energyKcal: food.energyKcalPer100g }),
+    ...(food.proteinGramsPer100g === undefined
+      ? {}
+      : { proteinGrams: food.proteinGramsPer100g }),
+    ...(food.carbsGramsPer100g === undefined
+      ? {}
+      : { carbsGrams: food.carbsGramsPer100g }),
+    ...(food.fatGramsPer100g === undefined
+      ? {}
+      : { fatGrams: food.fatGramsPer100g }),
     ...(food.fiberGramsPer100g === undefined
       ? {}
       : { fiberGrams: food.fiberGramsPer100g }),
