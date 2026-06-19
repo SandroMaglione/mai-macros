@@ -1,5 +1,3 @@
-import { Link, useRouter } from "@tanstack/react-router";
-import { useMachine } from "@xstate/react";
 import {
   calculateEntryNutrients,
   calculatePlanEnergyKcal,
@@ -8,6 +6,8 @@ import {
   type Meal,
   type MealEntry,
 } from "@mai/nutrition";
+import { Link, useRouter } from "@tanstack/react-router";
+import { useMachine, useSelector } from "@xstate/react";
 import { Array, Effect } from "effect";
 import {
   ChevronDown,
@@ -15,15 +15,27 @@ import {
   ChevronRight,
   Pencil,
   Plus,
+  Search,
+  X,
 } from "lucide-react";
-import { assign, assertEvent, fromPromise, setup } from "xstate";
+import { useRef } from "react";
+import {
+  assertEvent,
+  assign,
+  fromPromise,
+  sendParent,
+  sendTo,
+  setup,
+  type ActorRefFrom,
+  type SnapshotFrom,
+} from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
 import type { ChangeDayPlanInput, OpenedDay } from "../services/daily-logs.ts";
 import { DailyLogs } from "../services/daily-logs.ts";
 import type { CreateMealEntryInput } from "../services/meal-entries.ts";
 import { MealEntries } from "../services/meal-entries.ts";
-import { createMealEntryInputFromFormData, shiftDateKey } from "../utils.ts";
+import { shiftDateKey } from "../utils.ts";
 
 export type DailyLogViewData = {
   readonly day: OpenedDay;
@@ -98,60 +110,208 @@ const mealOptions: readonly {
   { value: "dinner", label: "Dinner" },
 ];
 
-const foodSearchMachine = setup({
-  types: {
-    context: {} as {
+type AddMealFoodDialogEvent =
+  | {
+      readonly type: "open";
+      readonly dateKey: DateKey;
+      readonly foods: readonly Food[];
+      readonly meal: Meal;
+    }
+  | {
+      readonly type: "close";
+    }
+  | {
+      readonly type: "changeQuery";
       readonly query: string;
-      readonly selectedFoodId: Food["id"] | null;
-    },
-    events: {} as
-      | {
-          readonly type: "changeQuery";
-          readonly query: string;
-        }
-      | {
-          readonly type: "selectFood";
-          readonly foodId: Food["id"];
-          readonly query: string;
-        }
-      | {
-          readonly type: "reset";
-        },
+    }
+  | {
+      readonly type: "selectFood";
+      readonly foodId: Food["id"];
+    }
+  | {
+      readonly type: "selectFirstMatchingFood";
+    }
+  | {
+      readonly type: "changeQuantity";
+      readonly quantityGrams: string;
+    }
+  | {
+      readonly type: "submit";
+    }
+  | {
+      readonly type: "submissionSucceeded";
+    }
+  | {
+      readonly type: "submissionFailed";
+    };
+
+type AddMealFoodDialogContext = {
+  readonly canSubmit: boolean;
+  readonly dateKey: DateKey | null;
+  readonly foods: readonly Food[];
+  readonly matchingFoods: readonly Food[];
+  readonly meal: Meal | null;
+  readonly query: string;
+  readonly quantityGrams: string;
+  readonly selectedFood: Food | null;
+};
+
+type DailyLogEvent =
+  | {
+      readonly type: "addMealEntry";
+      readonly input: CreateMealEntryInput;
+    }
+  | {
+      readonly type: "changePlan";
+      readonly input: ChangeDayPlanInput;
+    };
+
+const addMealFoodDialogClosedContext = {
+  canSubmit: false,
+  dateKey: null,
+  foods: [],
+  matchingFoods: [],
+  meal: null,
+  query: "",
+  quantityGrams: "",
+  selectedFood: null,
+} satisfies AddMealFoodDialogContext;
+
+const addMealFoodDialogMachine = setup({
+  types: {
+    context: {} as AddMealFoodDialogContext,
+    events: {} as AddMealFoodDialogEvent,
   },
 }).createMachine({
-  context: {
-    query: "",
-    selectedFoodId: null,
+  context: addMealFoodDialogClosedContext,
+  initial: "Closed",
+  on: {
+    close: {
+      target: ".Closed",
+      actions: assign(addMealFoodDialogClosedContext),
+    },
+    open: {
+      target: ".Open",
+      actions: assign(({ event }) => {
+        assertEvent(event, "open");
+
+        return {
+          canSubmit: false,
+          dateKey: event.dateKey,
+          foods: event.foods,
+          matchingFoods: event.foods,
+          meal: event.meal,
+          query: "",
+          quantityGrams: "",
+          selectedFood: null,
+        };
+      }),
+    },
   },
-  initial: "Ready",
   states: {
-    Ready: {
+    Closed: {},
+    Open: {
       on: {
         changeQuery: {
-          actions: assign(({ event }) => {
+          actions: assign(({ context, event }) => {
             assertEvent(event, "changeQuery");
+            const normalizedQuery = event.query.trim().toLocaleLowerCase();
+            const queryTokens =
+              normalizedQuery === "" ? [] : normalizedQuery.split(/\s+/);
+            const matchingFoods = Array.isReadonlyArrayNonEmpty(queryTokens)
+              ? context.foods.filter((food) => {
+                  const searchableFood =
+                    food.brand === undefined
+                      ? food.name.toLocaleLowerCase()
+                      : `${food.name} ${food.brand}`.toLocaleLowerCase();
+
+                  return queryTokens.every((queryToken) =>
+                    searchableFood.includes(queryToken)
+                  );
+                })
+              : context.foods;
 
             return {
+              matchingFoods,
               query: event.query,
-              selectedFoodId: null,
             };
           }),
         },
-        reset: {
-          actions: assign(() => ({
-            query: "",
-            selectedFoodId: null,
-          })),
+        changeQuantity: {
+          actions: assign(({ context, event }) => {
+            assertEvent(event, "changeQuantity");
+
+            return {
+              canSubmit:
+                context.selectedFood !== null &&
+                event.quantityGrams.trim() !== "",
+              quantityGrams: event.quantityGrams,
+            };
+          }),
         },
         selectFood: {
-          actions: assign(({ event }) => {
+          actions: assign(({ context, event }) => {
             assertEvent(event, "selectFood");
+            const selectedFood =
+              _findFoodById({
+                foods: context.foods,
+                foodId: event.foodId,
+              }) ?? null;
 
             return {
-              query: event.query,
-              selectedFoodId: event.foodId,
+              canSubmit:
+                selectedFood !== null && context.quantityGrams.trim() !== "",
+              selectedFood,
             };
           }),
+        },
+        selectFirstMatchingFood: {
+          actions: assign(({ context }) => {
+            const firstMatchingFood = context.matchingFoods[0];
+            const selectedFood = firstMatchingFood ?? context.selectedFood;
+
+            return {
+              canSubmit:
+                selectedFood !== null && context.quantityGrams.trim() !== "",
+              selectedFood,
+            };
+          }),
+        },
+        submit: {
+          guard: ({ context }) => context.canSubmit,
+          target: "Submitting",
+          actions: sendParent(({ context }) => {
+            if (
+              context.dateKey === null ||
+              context.meal === null ||
+              context.selectedFood === null
+            ) {
+              throw new Error(
+                "Add food dialog cannot submit incomplete input."
+              );
+            }
+
+            return {
+              type: "addMealEntry",
+              input: {
+                dateKey: context.dateKey,
+                foodId: context.selectedFood.id,
+                meal: context.meal,
+                quantityGrams: context.quantityGrams,
+              },
+            } satisfies DailyLogEvent;
+          }),
+        },
+      },
+    },
+    Submitting: {
+      on: {
+        submissionFailed: {
+          target: "Open",
+        },
+        submissionSucceeded: {
+          target: "Closed",
+          actions: assign(addMealFoodDialogClosedContext),
         },
       },
     },
@@ -160,26 +320,24 @@ const foodSearchMachine = setup({
 
 const dailyLogMachine = setup({
   types: {
-    events: {} as
-      | {
-          readonly type: "addMealEntry";
-          readonly input: CreateMealEntryInput;
-          readonly invalidate: () => Promise<void>;
-          readonly reset: () => void;
-        }
-      | {
-          readonly type: "changePlan";
-          readonly input: ChangeDayPlanInput;
-          readonly invalidate: () => Promise<void>;
-        },
+    context: {} as {
+      readonly addMealFoodDialogActor: ActorRefFrom<
+        typeof addMealFoodDialogMachine
+      >;
+      readonly invalidate: () => Promise<void>;
+    },
+    events: {} as DailyLogEvent,
+    input: {} as {
+      readonly invalidate: () => Promise<void>;
+    },
   },
   actors: {
+    addMealFoodDialog: addMealFoodDialogMachine,
     addMealEntry: fromPromise<
       "added" | "foodNotFound",
       {
         readonly input: CreateMealEntryInput;
         readonly invalidate: () => Promise<void>;
-        readonly reset: () => void;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
@@ -190,7 +348,6 @@ const dailyLogMachine = setup({
           });
           return "added" as const;
         }).pipe(
-          Effect.tap(() => Effect.sync(() => input.reset())),
           Effect.tap(() => Effect.promise(() => input.invalidate())),
           Effect.catchTag("FoodNotFound", () =>
             Effect.succeed("foodNotFound" as const)
@@ -222,6 +379,12 @@ const dailyLogMachine = setup({
     ),
   },
 }).createMachine({
+  context: ({ input, spawn }) => ({
+    addMealFoodDialogActor: spawn("addMealFoodDialog", {
+      id: "addMealFoodDialog",
+    }),
+    invalidate: input.invalidate,
+  }),
   initial: "Idle",
   states: {
     Idle: {
@@ -237,44 +400,56 @@ const dailyLogMachine = setup({
     AddingMealEntry: {
       invoke: {
         src: "addMealEntry",
-        input: ({ event }) => {
+        input: ({ context, event }) => {
           assertEvent(event, "addMealEntry");
 
           return {
             input: event.input,
-            invalidate: event.invalidate,
-            reset: event.reset,
+            invalidate: context.invalidate,
           };
         },
         onDone: [
           {
             guard: ({ event }) => event.output === "foodNotFound",
             target: "FoodNotFound",
-            actions: () => {
-              globalThis.alert("Could not find that food.");
-            },
+            actions: [
+              () => {
+                globalThis.alert("Could not find that food.");
+              },
+              sendTo(({ context }) => context.addMealFoodDialogActor, {
+                type: "submissionFailed",
+              } satisfies AddMealFoodDialogEvent),
+            ],
           },
           {
             target: "Idle",
+            actions: sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionSucceeded",
+            } satisfies AddMealFoodDialogEvent),
           },
         ],
         onError: {
           target: "Failure",
-          actions: () => {
-            globalThis.alert("Could not add the meal entry.");
-          },
+          actions: [
+            () => {
+              globalThis.alert("Could not add the meal entry.");
+            },
+            sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionFailed",
+            } satisfies AddMealFoodDialogEvent),
+          ],
         },
       },
     },
     ChangingPlan: {
       invoke: {
         src: "changeDayPlan",
-        input: ({ event }) => {
+        input: ({ context, event }) => {
           assertEvent(event, "changePlan");
 
           return {
             input: event.input,
-            invalidate: event.invalidate,
+            invalidate: context.invalidate,
           };
         },
         onDone: [
@@ -330,10 +505,19 @@ const dailyLogMachine = setup({
   },
 });
 
+type AddMealFoodDialogActorRef = SnapshotFrom<
+  typeof dailyLogMachine
+>["context"]["addMealFoodDialogActor"];
+
 export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   const { day, foods, mealEntries } = data;
   const router = useRouter();
-  const [snapshot, send] = useMachine(dailyLogMachine);
+  const [snapshot, send] = useMachine(dailyLogMachine, {
+    input: {
+      invalidate: () => router.invalidate(),
+    },
+  });
+  const addMealFoodDialogActor = snapshot.context.addMealFoodDialogActor;
   const isAddingMealEntry = snapshot.matches("AddingMealEntry");
   const isChangingPlan = snapshot.matches("ChangingPlan");
   const previousDateKey = shiftDateKey({
@@ -411,7 +595,6 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
                 dateKey: day.dailyLog.dateKey,
                 planId,
               },
-              invalidate: () => router.invalidate(),
             });
           }}
         />
@@ -419,6 +602,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
         <div className="grid gap-5 px-4 py-5">
           {mealOptions.map((mealOption) => (
             <MealSection
+              addMealFoodDialogActor={addMealFoodDialogActor}
               dateKey={day.dailyLog.dateKey}
               disabled={isAddingMealEntry || !hasFoods}
               foods={foods}
@@ -428,76 +612,40 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
               )}
               mealLabel={mealOption.label}
               mealValue={mealOption.value}
-              onAddMealEntry={(input, reset) => {
-                send({
-                  type: "addMealEntry",
-                  input,
-                  invalidate: () => router.invalidate(),
-                  reset,
-                });
-              }}
             />
           ))}
         </div>
+
+        <AddMealFoodDialog actor={addMealFoodDialogActor} />
       </section>
     </main>
   );
 }
 
 function MealSection({
+  addMealFoodDialogActor,
   dateKey,
   disabled,
   foods,
   mealEntries,
   mealLabel,
   mealValue,
-  onAddMealEntry,
 }: {
+  readonly addMealFoodDialogActor: AddMealFoodDialogActorRef;
   readonly dateKey: DateKey;
   readonly disabled: boolean;
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
   readonly mealLabel: string;
   readonly mealValue: Meal;
-  readonly onAddMealEntry: (
-    input: CreateMealEntryInput,
-    reset: () => void
-  ) => void;
 }) {
   const mealNutrients = _calculateEntriesNutrients({
     foods,
     mealEntries,
   });
-  const [foodSearchSnapshot, sendFoodSearch] = useMachine(foodSearchMachine);
-  const foodSearch = foodSearchSnapshot.context;
-  const selectedFood = _findFoodById({
-    foods,
-    foodId: foodSearch.selectedFoodId,
-  });
-  const normalizedFoodSearchQuery = foodSearch.query.trim().toLocaleLowerCase();
-  const foodSearchTokens =
-    normalizedFoodSearchQuery === ""
-      ? []
-      : normalizedFoodSearchQuery.split(/\s+/);
-  const matchingFoods = Array.isReadonlyArrayNonEmpty(foodSearchTokens)
-    ? foods
-        .filter((food) => {
-          const searchableFood = _formatFoodName({
-            food,
-          }).toLocaleLowerCase();
-
-          return foodSearchTokens.every((foodSearchToken) =>
-            searchableFood.includes(foodSearchToken)
-          );
-        })
-        .slice(0, 8)
-    : [];
-  const hasFoodSearchQuery = normalizedFoodSearchQuery !== "";
-  const shouldShowFoodResults =
-    !disabled && selectedFood === undefined && hasFoodSearchQuery;
 
   return (
-    <section className="overflow-hidden rounded-[10px] bg-[#1b1b1e] shadow-[0_12px_28px_rgb(0_0_0_/_0.26)]">
+    <section className="overflow-hidden rounded-[10px] bg-[#1b1b1e] shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
       <header className="flex min-w-0 items-center px-3 py-4">
         <h2 className="truncate text-xl font-black leading-tight text-[#efeff2]">
           {mealLabel}
@@ -521,155 +669,272 @@ function MealSection({
       <MealTotalColumns nutrients={mealNutrients} />
       <MealNutrientColumns nutrients={mealNutrients} />
 
-      <details className="group border-t border-[#29292d]">
-        <summary
-          className={`flex cursor-pointer list-none items-center justify-center gap-2 px-4 py-4 text-base font-black ${actionColorClassName} transition-colors hover:bg-[#202024] [&::-webkit-details-marker]:hidden`}
+      <div className="border-t border-[#29292d]">
+        <button
+          aria-label={`Add food to ${mealLabel}`}
+          className={`flex min-h-14 w-full items-center justify-center gap-2 border-0 bg-transparent px-4 py-4 text-base font-black ${actionColorClassName} transition-colors hover:bg-[#202024] disabled:cursor-not-allowed disabled:opacity-50`}
+          disabled={disabled}
+          onClick={() => {
+            addMealFoodDialogActor.send({
+              type: "open",
+              dateKey,
+              foods,
+              meal: mealValue,
+            });
+          }}
+          type="button"
         >
+          <Plus aria-hidden="true" size={19} strokeWidth={3} />
           Add food
-          <ChevronDown
-            aria-hidden="true"
-            className="transition-transform duration-200 ease-out group-open:rotate-180"
-            size={19}
-            strokeWidth={3}
-          />
-        </summary>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AddMealFoodDialog({
+  actor,
+}: {
+  readonly actor: AddMealFoodDialogActorRef;
+}) {
+  const snapshot = useSelector(actor, (state) => state);
+  const {
+    canSubmit,
+    dateKey,
+    foods,
+    matchingFoods,
+    meal,
+    query,
+    quantityGrams,
+    selectedFood,
+  } = snapshot.context;
+  const quantityInputRef = useRef<HTMLInputElement | null>(null);
+
+  if (dateKey === null || meal === null) {
+    return null;
+  }
+
+  const disabled = snapshot.matches("Submitting");
+  const mealLabel =
+    mealOptions.find((mealOption) => mealOption.value === meal)?.label ??
+    "Meal";
+  const hasSelectedFood = selectedFood !== null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex bg-black/75 px-3 py-4 backdrop-blur-sm sm:items-center sm:justify-center"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          actor.send({ type: "close" });
+        }
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          actor.send({ type: "close" });
+        }
+      }}
+    >
+      <section
+        aria-labelledby="add-food-dialog-title"
+        aria-modal="true"
+        className="mx-auto grid max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60"
+        role="dialog"
+      >
+        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
+              {mealLabel}
+            </p>
+            <h2
+              className="truncate text-xl font-black leading-tight text-[#efeff2]"
+              id="add-food-dialog-title"
+            >
+              Add food
+            </h2>
+          </div>
+          <button
+            aria-label="Close add food"
+            className="inline-flex size-10 items-center justify-center rounded-md border border-[#343438] bg-[#202024] text-[#dedee3] transition-colors hover:bg-[#29292d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45"
+            onClick={() => {
+              actor.send({ type: "close" });
+            }}
+            type="button"
+          >
+            <X aria-hidden="true" size={19} strokeWidth={3} />
+          </button>
+        </header>
 
         <form
-          className="grid gap-3 px-4 pb-4 opacity-0 transition-opacity duration-200 group-open:opacity-100"
+          className="contents"
           onSubmit={(event) => {
             event.preventDefault();
 
-            if (selectedFood === undefined) {
-              return;
-            }
-
-            const form = event.currentTarget;
-            const input = createMealEntryInputFromFormData({
-              dateKey,
-              formData: new FormData(form),
-            });
-
-            onAddMealEntry(input, () => {
-              form.reset();
-              sendFoodSearch({ type: "reset" });
+            actor.send({
+              type: "submit",
             });
           }}
         >
-          {!Array.isReadonlyArrayNonEmpty(foods) ? (
-            <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-              Create a food before logging this meal.
-            </p>
-          ) : null}
+          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <div className="border-b border-[#29292d] bg-[#161618] p-4">
+              <label
+                className={darkFieldLabelClassName}
+                htmlFor="add-food-search"
+              >
+                Search
+                <span className="relative">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#77777e]"
+                    size={17}
+                    strokeWidth={3}
+                  />
+                  <input
+                    aria-controls="add-food-results"
+                    aria-label={`${mealLabel} food search`}
+                    autoComplete="off"
+                    autoFocus
+                    className={`${darkFieldClassName} pl-9`}
+                    disabled={disabled}
+                    id="add-food-search"
+                    onChange={(event) => {
+                      actor.send({
+                        type: "changeQuery",
+                        query: event.currentTarget.value,
+                      });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") {
+                        return;
+                      }
 
-          <input name="meal" type="hidden" value={mealValue} />
-          <input
-            name="foodId"
-            type="hidden"
-            value={foodSearch.selectedFoodId ?? ""}
-          />
-          <label
-            className={darkFieldLabelClassName}
-            htmlFor={`${mealValue}-food-search`}
-          >
-            Food
-            <div className="relative">
-              <input
-                aria-controls={`${mealValue}-food-results`}
-                aria-expanded={shouldShowFoodResults}
-                aria-haspopup="listbox"
-                aria-label={`${mealLabel} food search`}
-                autoComplete="off"
-                className={darkFieldClassName}
-                disabled={disabled}
-                id={`${mealValue}-food-search`}
-                onChange={(event) => {
-                  sendFoodSearch({
-                    type: "changeQuery",
-                    query: event.currentTarget.value,
-                  });
-                }}
-                placeholder="Search food or brand"
-                required
-                role="combobox"
-                type="search"
-                value={foodSearch.query}
-              />
-              {shouldShowFoodResults ? (
-                <div
-                  className="absolute inset-x-0 top-[calc(100%+0.35rem)] z-20 grid max-h-64 gap-1 overflow-auto rounded-md border border-[#38383d] bg-[#111113] p-1 shadow-xl shadow-black/40"
-                  id={`${mealValue}-food-results`}
-                  role="listbox"
-                >
-                  {Array.isReadonlyArrayNonEmpty(matchingFoods) ? (
-                    matchingFoods.map((food) => {
-                      const foodName = _formatFoodName({ food });
+                      event.preventDefault();
 
-                      return (
-                        <button
-                          aria-selected="false"
-                          className="grid min-h-10 w-full justify-items-start gap-0.5 rounded border-0 bg-transparent px-2.5 py-1.5 text-left text-sm text-[#f0f0f2] transition-colors hover:bg-[#242429]"
-                          key={food.id}
-                          onClick={() => {
-                            sendFoodSearch({
-                              type: "selectFood",
-                              foodId: food.id,
-                              query: foodName,
-                            });
-                          }}
-                          role="option"
-                          type="button"
-                        >
-                          <span className="font-extrabold">{food.name}</span>
-                          {food.brand === undefined ? null : (
-                            <small className="text-sm text-[#aaaab1]">
-                              {food.brand}
-                            </small>
-                          )}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="m-2 text-sm font-bold text-[#aaaab1]">
-                      No foods found.
-                    </p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </label>
-
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-            <label className={darkFieldLabelClassName}>
-              Grams
-              <span className="relative">
-                <input
-                  aria-label={`${mealLabel} quantity in grams`}
-                  className={`${darkFieldClassName} pr-9`}
-                  disabled={disabled || selectedFood === undefined}
-                  min="0.1"
-                  name="quantityGrams"
-                  placeholder="150"
-                  required
-                  step="0.1"
-                  type="number"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
-                  g
+                      actor.send({
+                        type: "selectFirstMatchingFood",
+                      });
+                      globalThis.requestAnimationFrame(() => {
+                        quantityInputRef.current?.focus();
+                      });
+                    }}
+                    placeholder="Search food or brand"
+                    role="combobox"
+                    type="search"
+                    value={query}
+                  />
                 </span>
-              </span>
-            </label>
-            <button
-              aria-label={`Add food to ${mealLabel}`}
-              className="inline-flex min-h-10 items-center justify-center rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
-              disabled={disabled || selectedFood === undefined}
-              type="submit"
+              </label>
+            </div>
+
+            <div
+              className="min-h-0 overflow-y-auto p-2"
+              id="add-food-results"
+              role="listbox"
             >
-              Add
-            </button>
+              {!Array.isReadonlyArrayNonEmpty(foods) ? (
+                <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                  Create a food before logging this meal.
+                </p>
+              ) : Array.isReadonlyArrayNonEmpty(matchingFoods) ? (
+                matchingFoods.map((food) => (
+                  <button
+                    aria-selected="false"
+                    className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-[#f0f0f2] transition-colors hover:bg-[#202024]"
+                    key={food.id}
+                    onClick={() => {
+                      actor.send({
+                        type: "selectFood",
+                        foodId: food.id,
+                      });
+                      globalThis.requestAnimationFrame(() => {
+                        quantityInputRef.current?.focus();
+                      });
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
+                      {food.name}
+                    </span>
+                    <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
+                      {_formatNumber({ value: food.energyKcalPer100g })} kcal
+                    </span>
+                    <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
+                      {food.brand ?? "No brand"}
+                    </span>
+                    <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
+                      100g
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                  No foods found.
+                </p>
+              )}
+            </div>
           </div>
+
+          <footer className="grid gap-3 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+            {selectedFood === null ? null : (
+              <div className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md bg-[#2b2424] px-3 py-2.5 text-left text-[#f5f5f7] ring-1 ring-[#ff5a51]/45">
+                <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
+                  {selectedFood.name}
+                </span>
+                <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
+                  {_formatNumber({
+                    value: selectedFood.energyKcalPer100g,
+                  })}{" "}
+                  kcal
+                </span>
+                <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
+                  {selectedFood.brand ?? "No brand"}
+                </span>
+                <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
+                  100g
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+              <label className={darkFieldLabelClassName}>
+                Grams
+                <span className="relative">
+                  <input
+                    aria-label={`${mealLabel} quantity in grams`}
+                    className={`${darkFieldClassName} pr-9`}
+                    disabled={disabled || !hasSelectedFood}
+                    min="0.1"
+                    onChange={(event) => {
+                      actor.send({
+                        type: "changeQuantity",
+                        quantityGrams: event.currentTarget.value,
+                      });
+                    }}
+                    placeholder="150"
+                    ref={quantityInputRef}
+                    required
+                    step="0.1"
+                    type="number"
+                    value={quantityGrams}
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
+                    g
+                  </span>
+                </span>
+              </label>
+              <button
+                aria-label={`Add food to ${mealLabel}`}
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
+                disabled={disabled || !canSubmit}
+                type="submit"
+              >
+                Add
+              </button>
+            </div>
+          </footer>
         </form>
-      </details>
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -708,7 +973,6 @@ function MealMacroStripe({
     </div>
   );
 }
-
 function MealTotalColumns({
   nutrients,
 }: {
@@ -1145,7 +1409,7 @@ function MealEntryItem({
   if (food === undefined) {
     return (
       <li className="grid gap-1 px-4 py-3">
-        <strong className="text-lg font-medium leading-tight text-[#dedee3] [overflow-wrap:anywhere]">
+        <strong className="text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
           Unknown food
         </strong>
         <p className="text-base font-black leading-tight text-[#aaaab1]">
@@ -1163,7 +1427,7 @@ function MealEntryItem({
   return (
     <li className="grid gap-1 px-4 py-3">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-        <strong className="min-w-0 text-lg font-medium leading-tight text-[#dedee3] [overflow-wrap:anywhere]">
+        <strong className="min-w-0 text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
           {food.name}
         </strong>
         <strong className="text-right text-lg font-medium leading-tight text-[#4c7dff]">
@@ -1189,10 +1453,6 @@ function MealEntryItem({
       </div>
     </li>
   );
-}
-
-function _formatFoodName({ food }: { readonly food: Food }) {
-  return food.brand === undefined ? food.name : `${food.name} (${food.brand})`;
 }
 
 function _findFoodById({
