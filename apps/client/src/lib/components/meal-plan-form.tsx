@@ -119,7 +119,7 @@ export function MealPlanForm({
   readonly onSubmit: (formData: FormData) => void;
 }) {
   const formattedEnergyKcal = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 2,
   }).format(energyKcal);
   const isCreating = action === "create";
   const SubmitIcon = isCreating ? Plus : Save;

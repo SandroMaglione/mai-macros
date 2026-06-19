@@ -248,6 +248,6 @@ export function formatFoodNutrientNumber({
   readonly value: number;
 }) {
   return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+    maximumFractionDigits: 2,
   }).format(value);
 }

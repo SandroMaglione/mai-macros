@@ -1094,10 +1094,10 @@ function AddMealFoodDialog({
   const selectedFoodQuantityLabel = isEditingMealEntry
     ? mealEntry === null
       ? undefined
-      : `${_formatNumber({ value: mealEntry.quantityGrams })} g logged`
+      : `${_formatPreciseNumber({ value: mealEntry.quantityGrams })} g logged`
     : selectedFoodUsage === undefined
       ? "No previous"
-      : `${_formatNumber({
+      : `${_formatPreciseNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
   const getFoodPrimaryLabel = (food: Food) => {
@@ -1115,7 +1115,7 @@ function AddMealFoodDialog({
 
     return nutrients === undefined
       ? "New"
-      : `${_formatNumber({
+      : `${_formatPreciseNumber({
           value: nutrients.energyKcal,
         })} kcal`;
   };
@@ -1127,7 +1127,7 @@ function AddMealFoodDialog({
 
     return foodHistory === undefined
       ? "No previous"
-      : `${_formatNumber({
+      : `${_formatPreciseNumber({
           value: foodHistory.latestQuantityGrams,
         })} g`;
   };
@@ -1297,7 +1297,7 @@ function AddMealFoodDialog({
                   placeholder="150"
                   ref={quantityInputRef}
                   required
-                  step="0.1"
+                  step="0.01"
                   type="number"
                   value={quantityGrams}
                 />
@@ -1397,7 +1397,7 @@ function MealTotalColumns({
         <dd
           className={`order-first text-xl font-black leading-none ${macroToneClassNames.carbs.text}`}
         >
-          {_formatNumber({ value: nutrients.carbsGrams })}
+          {_formatSummaryNumber({ value: nutrients.carbsGrams })}
         </dd>
       </div>
       <div className="grid min-w-0 justify-items-center gap-0.5 px-1 py-2.5 text-center">
@@ -1409,7 +1409,7 @@ function MealTotalColumns({
         <dd
           className={`order-first text-xl font-black leading-none ${macroToneClassNames.protein.text}`}
         >
-          {_formatNumber({ value: nutrients.proteinGrams })}
+          {_formatSummaryNumber({ value: nutrients.proteinGrams })}
         </dd>
       </div>
       <div className="grid min-w-0 justify-items-center gap-0.5 px-1 py-2.5 text-center">
@@ -1421,7 +1421,7 @@ function MealTotalColumns({
         <dd
           className={`order-first text-xl font-black leading-none ${macroToneClassNames.fat.text}`}
         >
-          {_formatNumber({ value: nutrients.fatGrams })}
+          {_formatSummaryNumber({ value: nutrients.fatGrams })}
         </dd>
       </div>
       <div className="grid min-w-0 justify-items-center gap-0.5 px-1 py-2.5 text-center">
@@ -1429,7 +1429,7 @@ function MealTotalColumns({
           Calories
         </dt>
         <dd className="order-first text-xl font-black leading-none text-[#4c7dff]">
-          {_formatNumber({ value: nutrients.energyKcal })}
+          {_formatSummaryNumber({ value: nutrients.energyKcal })}
         </dd>
       </div>
     </dl>
@@ -1481,7 +1481,7 @@ function MealNutrientColumn({
       <dd
         className={`order-first text-base font-black leading-none ${textClassName}`}
       >
-        {_formatNumber({ value })}g
+        {_formatSummaryNumber({ value })}g
       </dd>
     </div>
   );
@@ -1715,10 +1715,10 @@ function DailyNutrientProgressLine({
       <dd
         className={`truncate text-[0.72rem] font-black leading-tight ${toneClassNames.text}`}
       >
-        {_formatNumber({ value })}g
+        {_formatSummaryNumber({ value })}g
         {target === undefined
           ? null
-          : ` / ${_formatNumber({ value: target })}g`}
+          : ` / ${_formatSummaryNumber({ value: target })}g`}
       </dd>
     </div>
   );
@@ -1755,7 +1755,8 @@ function EnergyProgressMetric({
         />
       </div>
       <p className="mt-1.5 text-center text-base font-medium leading-tight text-[#4c7dff]">
-        {_formatNumber({ value })} / {_formatNumber({ value: target })} kcal
+        {_formatSummaryNumber({ value })} /{" "}
+        {_formatSummaryNumber({ value: target })} kcal
       </p>
     </div>
   );
@@ -1806,7 +1807,8 @@ function MacroProgressLine({
       <dd
         className={`truncate text-lg font-black leading-tight ${toneClassNames.text}`}
       >
-        {_formatNumber({ value })} / {_formatNumber({ value: target })} {unit}
+        {_formatSummaryNumber({ value })} /{" "}
+        {_formatSummaryNumber({ value: target })} {unit}
       </dd>
     </div>
   );
@@ -1853,7 +1855,7 @@ function MealEntryItem({
             Unknown food
           </strong>
           <span className="text-base font-black leading-tight text-[#aaaab1]">
-            {_formatNumber({ value: mealEntry.quantityGrams })} g
+            {_formatPreciseNumber({ value: mealEntry.quantityGrams })} g
           </span>
         </button>
       </li>
@@ -1886,25 +1888,25 @@ function MealEntryItem({
             {food.name}
           </strong>
           <strong className="text-right text-lg font-medium leading-tight text-[#4c7dff]">
-            {_formatNumber({ value: nutrients.energyKcal })}
+            {_formatPreciseNumber({ value: nutrients.energyKcal })}
           </strong>
           <span className="text-base font-black leading-tight text-[#aaaab1]">
-            {_formatNumber({ value: mealEntry.quantityGrams })} g
+            {_formatPreciseNumber({ value: mealEntry.quantityGrams })} g
           </span>
           <span className="text-right text-base font-medium leading-tight text-[#dedee3]">
             C:{" "}
             <strong className={`font-medium ${macroToneClassNames.carbs.text}`}>
-              {_formatNumber({ value: nutrients.carbsGrams })}
+              {_formatPreciseNumber({ value: nutrients.carbsGrams })}
             </strong>{" "}
             P:{" "}
             <strong
               className={`font-medium ${macroToneClassNames.protein.text}`}
             >
-              {_formatNumber({ value: nutrients.proteinGrams })}
+              {_formatPreciseNumber({ value: nutrients.proteinGrams })}
             </strong>{" "}
             F:{" "}
             <strong className={`font-medium ${macroToneClassNames.fat.text}`}>
-              {_formatNumber({ value: nutrients.fatGrams })}
+              {_formatPreciseNumber({ value: nutrients.fatGrams })}
             </strong>
           </span>
         </span>
@@ -1993,13 +1995,19 @@ function _formatValueWithUnit({
   readonly unit: "kcal" | "g";
   readonly value: number;
 }) {
-  const formattedValue = _formatNumber({ value });
+  const formattedValue = _formatSummaryNumber({ value });
 
   return unit === "kcal" ? `${formattedValue} kcal` : `${formattedValue}g`;
 }
 
-function _formatNumber({ value }: { readonly value: number }) {
+function _formatSummaryNumber({ value }: { readonly value: number }) {
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+  }).format(value);
+}
+
+function _formatPreciseNumber({ value }: { readonly value: number }) {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
   }).format(value);
 }

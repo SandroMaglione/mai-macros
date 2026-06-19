@@ -14,6 +14,7 @@ import {
 } from "xstate";
 
 import { FoodFormFields } from "../lib/components/food-form.tsx";
+import { formatFoodNutrientNumber } from "../lib/components/food-nutrient-overview.tsx";
 import {
   filterFoodsByQuery,
   FoodSearchField,
@@ -102,10 +103,6 @@ const editFoodDialogClosedContext = {
   foodUsage: [],
   selectedFood: null,
 } satisfies EditFoodDialogContext;
-
-const numberFormatter = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 1,
-});
 
 const editFoodDialogMachine = setup({
   types: {
@@ -449,7 +446,7 @@ function Component() {
           emptySearchText="No foods found."
           foods={snapshot.context.foods}
           getPrimaryLabel={(food) =>
-            `${numberFormatter.format(food.energyKcalPer100g)} kcal`
+            `${formatFoodNutrientNumber({ value: food.energyKcalPer100g })} kcal`
           }
           getSecondaryLabel={(food) =>
             _findFoodUsage({
