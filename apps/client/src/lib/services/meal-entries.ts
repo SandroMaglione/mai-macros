@@ -1,4 +1,11 @@
-import { DateKey, FoodId, MaiDatabase, Meal, MealEntry } from "@mai/nutrition";
+import {
+  DateKey,
+  FoodId,
+  MaiDatabase,
+  Meal,
+  MealEntry,
+  MealEntryId,
+} from "@mai/nutrition";
 import {
   Array,
   Context,
@@ -27,6 +34,15 @@ const _ListMealEntriesForDayInput = Schema.Struct({
   dateKey: DateKey,
 });
 
+const _ReviseMealEntryInput = Schema.Struct({
+  mealEntryId: MealEntryId,
+  quantityGrams: _FormPositiveNumber,
+});
+
+const _DeleteMealEntryInput = Schema.Struct({
+  mealEntryId: MealEntryId,
+});
+
 export type CreateMealEntryInput = {
   readonly dateKey: string;
   readonly meal: string;
@@ -34,8 +50,12 @@ export type CreateMealEntryInput = {
   readonly quantityGrams: string;
 };
 
+export type DeleteMealEntryInput = typeof _DeleteMealEntryInput.Encoded;
+
 export type ListMealEntriesForDayInput =
   typeof _ListMealEntriesForDayInput.Encoded;
+
+export type ReviseMealEntryInput = typeof _ReviseMealEntryInput.Encoded;
 
 export type MealFoodUsage = {
   readonly foodId: FoodId;
@@ -51,8 +71,21 @@ export class CreatedMealEntry extends Data.TaggedClass("CreatedMealEntry")<{
   readonly mealEntry: MealEntry;
 }> {}
 
+export class DeletedMealEntry extends Data.TaggedClass("DeletedMealEntry")<{
+  readonly mealEntry: MealEntry;
+}> {}
+
 export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
   readonly foodId: FoodId;
+}> {}
+
+export class MealEntryNotFound extends Data.TaggedError("MealEntryNotFound")<{
+  readonly mealEntryId: MealEntryId;
+}> {}
+
+export class RevisedMealEntry extends Data.TaggedClass("RevisedMealEntry")<{
+  readonly mealEntry: MealEntry;
+  readonly previousMealEntry: MealEntry;
 }> {}
 
 export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
@@ -183,6 +216,80 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                 yield* api.from("mealEntries").insert(mealEntry);
 
                 return new CreatedMealEntry({
+                  mealEntry,
+                });
+              }),
+          })
+        );
+      }),
+
+      revise: Effect.fn("MealEntries.revise")(function* ({
+        input,
+      }: {
+        readonly input: ReviseMealEntryInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_ReviseMealEntryInput)(
+          input
+        );
+        const mealEntries = yield* api
+          .from("mealEntries")
+          .select()
+          .equals(decodedInput.mealEntryId);
+
+        return yield* Array.head(mealEntries).pipe(
+          Option.match({
+            onNone: () =>
+              new MealEntryNotFound({
+                mealEntryId: decodedInput.mealEntryId,
+              }),
+            onSome: (previousMealEntry) =>
+              Effect.gen(function* () {
+                const encodedPreviousMealEntry =
+                  yield* Schema.encodeEffect(MealEntry)(previousMealEntry);
+                const mealEntry = yield* Schema.decodeEffect(MealEntry)({
+                  ...encodedPreviousMealEntry,
+                  quantityGrams: decodedInput.quantityGrams,
+                  updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
+                });
+
+                yield* api.from("mealEntries").upsert(mealEntry);
+
+                return new RevisedMealEntry({
+                  mealEntry,
+                  previousMealEntry,
+                });
+              }),
+          })
+        );
+      }),
+
+      delete: Effect.fn("MealEntries.delete")(function* ({
+        input,
+      }: {
+        readonly input: DeleteMealEntryInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_DeleteMealEntryInput)(
+          input
+        );
+        const mealEntries = yield* api
+          .from("mealEntries")
+          .select()
+          .equals(decodedInput.mealEntryId);
+
+        return yield* Array.head(mealEntries).pipe(
+          Option.match({
+            onNone: () =>
+              new MealEntryNotFound({
+                mealEntryId: decodedInput.mealEntryId,
+              }),
+            onSome: (mealEntry) =>
+              Effect.gen(function* () {
+                yield* api
+                  .from("mealEntries")
+                  .delete()
+                  .equals(decodedInput.mealEntryId);
+
+                return new DeletedMealEntry({
                   mealEntry,
                 });
               }),

@@ -5,10 +5,11 @@ import {
   type Food,
   type Meal,
   type MealEntry,
+  QuantityGrams,
 } from "@mai/nutrition";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
-import { Array, Effect } from "effect";
+import { Array, Effect, Option, Schema } from "effect";
 import {
   ChevronDown,
   ChevronLeft,
@@ -16,6 +17,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { useRef } from "react";
@@ -35,7 +37,9 @@ import type { ChangeDayPlanInput, OpenedDay } from "../services/daily-logs.ts";
 import { DailyLogs } from "../services/daily-logs.ts";
 import type {
   CreateMealEntryInput,
+  DeleteMealEntryInput,
   MealFoodUsage,
+  ReviseMealEntryInput,
 } from "../services/meal-entries.ts";
 import { MealEntries } from "../services/meal-entries.ts";
 import { shiftDateKey } from "../utils.ts";
@@ -50,6 +54,7 @@ export type DailyLogViewData = {
 type NutrientTotals = ReturnType<typeof calculateEntryNutrients>;
 type MacroTone = "protein" | "carbs" | "fat";
 type DailyNutrientTone = "carbs" | "fat" | "salt";
+type AddMealFoodDialogMode = "create" | "revise";
 
 const macroToneClassNames: Record<
   MacroTone,
@@ -123,6 +128,12 @@ type AddMealFoodDialogEvent =
       readonly meal: Meal;
     }
   | {
+      readonly type: "openMealEntry";
+      readonly foodUsage: readonly MealFoodUsage[];
+      readonly foods: readonly Food[];
+      readonly mealEntry: MealEntry;
+    }
+  | {
       readonly type: "close";
     }
   | {
@@ -144,6 +155,9 @@ type AddMealFoodDialogEvent =
       readonly type: "submit";
     }
   | {
+      readonly type: "deleteEntry";
+    }
+  | {
       readonly type: "submissionSucceeded";
     }
   | {
@@ -157,6 +171,8 @@ type AddMealFoodDialogContext = {
   readonly foods: readonly Food[];
   readonly matchingFoods: readonly Food[];
   readonly meal: Meal | null;
+  readonly mealEntry: MealEntry | null;
+  readonly mode: AddMealFoodDialogMode;
   readonly query: string;
   readonly quantityGrams: string;
   readonly selectedFood: Food | null;
@@ -166,6 +182,14 @@ type DailyLogEvent =
   | {
       readonly type: "addMealEntry";
       readonly input: CreateMealEntryInput;
+    }
+  | {
+      readonly type: "reviseMealEntry";
+      readonly input: ReviseMealEntryInput;
+    }
+  | {
+      readonly type: "deleteMealEntry";
+      readonly input: DeleteMealEntryInput;
     }
   | {
       readonly type: "changePlan";
@@ -179,6 +203,8 @@ const addMealFoodDialogClosedContext = {
   foods: [],
   matchingFoods: [],
   meal: null,
+  mealEntry: null,
+  mode: "create",
   query: "",
   quantityGrams: "",
   selectedFood: null,
@@ -238,9 +264,39 @@ const addMealFoodDialogMachine = setup({
           foods,
           matchingFoods: foods,
           meal: event.meal,
+          mealEntry: null,
+          mode: "create",
           query: "",
           quantityGrams: "",
           selectedFood: null,
+        };
+      }),
+    },
+    openMealEntry: {
+      target: ".Open",
+      actions: assign(({ event }) => {
+        assertEvent(event, "openMealEntry");
+        const selectedFood =
+          _findFoodById({
+            foods: event.foods,
+            foodId: event.mealEntry.foodId,
+          }) ?? null;
+        const quantityGrams = _formatQuantityGramsInputValue({
+          quantityGrams: event.mealEntry.quantityGrams,
+        });
+
+        return {
+          canSubmit: selectedFood !== null && quantityGrams.trim() !== "",
+          dateKey: event.mealEntry.dateKey,
+          foodUsage: event.foodUsage,
+          foods: event.foods,
+          matchingFoods: event.foods,
+          meal: event.mealEntry.meal,
+          mealEntry: event.mealEntry,
+          mode: "revise",
+          query: selectedFood?.name ?? "",
+          quantityGrams,
+          selectedFood,
         };
       }),
     },
@@ -356,13 +412,45 @@ const addMealFoodDialogMachine = setup({
               );
             }
 
+            if (context.mode === "create") {
+              return {
+                type: "addMealEntry",
+                input: {
+                  dateKey: context.dateKey,
+                  foodId: context.selectedFood.id,
+                  meal: context.meal,
+                  quantityGrams: context.quantityGrams,
+                },
+              } satisfies DailyLogEvent;
+            }
+
+            if (context.mealEntry === null) {
+              throw new Error(
+                "Edit food dialog cannot submit incomplete input."
+              );
+            }
+
             return {
-              type: "addMealEntry",
+              type: "reviseMealEntry",
               input: {
-                dateKey: context.dateKey,
-                foodId: context.selectedFood.id,
-                meal: context.meal,
+                mealEntryId: context.mealEntry.id,
                 quantityGrams: context.quantityGrams,
+              },
+            } satisfies DailyLogEvent;
+          }),
+        },
+        deleteEntry: {
+          guard: ({ context }) => context.mealEntry !== null,
+          target: "Submitting",
+          actions: sendParent(({ context }) => {
+            if (context.mealEntry === null) {
+              throw new Error("Edit food dialog cannot delete missing input.");
+            }
+
+            return {
+              type: "deleteMealEntry",
+              input: {
+                mealEntryId: context.mealEntry.id,
               },
             } satisfies DailyLogEvent;
           }),
@@ -420,6 +508,54 @@ const dailyLogMachine = setup({
         )
       )
     ),
+    reviseMealEntry: fromPromise<
+      "revised" | "mealEntryNotFound",
+      {
+        readonly input: ReviseMealEntryInput;
+        readonly invalidate: () => Promise<void>;
+      }
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        Effect.gen(function* () {
+          const mealEntries = yield* MealEntries;
+          yield* mealEntries.revise({
+            input: input.input,
+          });
+          return "revised" as const;
+        }).pipe(
+          Effect.tap(() => Effect.promise(() => input.invalidate())),
+          Effect.catchTag("MealEntryNotFound", () =>
+            Effect.promise(() => input.invalidate()).pipe(
+              Effect.as("mealEntryNotFound" as const)
+            )
+          )
+        )
+      )
+    ),
+    deleteMealEntry: fromPromise<
+      "deleted" | "mealEntryNotFound",
+      {
+        readonly input: DeleteMealEntryInput;
+        readonly invalidate: () => Promise<void>;
+      }
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        Effect.gen(function* () {
+          const mealEntries = yield* MealEntries;
+          yield* mealEntries.delete({
+            input: input.input,
+          });
+          return "deleted" as const;
+        }).pipe(
+          Effect.tap(() => Effect.promise(() => input.invalidate())),
+          Effect.catchTag("MealEntryNotFound", () =>
+            Effect.promise(() => input.invalidate()).pipe(
+              Effect.as("mealEntryNotFound" as const)
+            )
+          )
+        )
+      )
+    ),
     changeDayPlan: fromPromise<
       "changed" | "planNotFound",
       {
@@ -456,6 +592,12 @@ const dailyLogMachine = setup({
       on: {
         addMealEntry: {
           target: "AddingMealEntry",
+        },
+        deleteMealEntry: {
+          target: "DeletingMealEntry",
+        },
+        reviseMealEntry: {
+          target: "RevisingMealEntry",
         },
         changePlan: {
           target: "ChangingPlan",
@@ -506,6 +648,94 @@ const dailyLogMachine = setup({
         },
       },
     },
+    RevisingMealEntry: {
+      invoke: {
+        src: "reviseMealEntry",
+        input: ({ context, event }) => {
+          assertEvent(event, "reviseMealEntry");
+
+          return {
+            input: event.input,
+            invalidate: context.invalidate,
+          };
+        },
+        onDone: [
+          {
+            guard: ({ event }) => event.output === "mealEntryNotFound",
+            target: "MealEntryNotFound",
+            actions: [
+              () => {
+                globalThis.alert("Could not find that meal entry.");
+              },
+              sendTo(({ context }) => context.addMealFoodDialogActor, {
+                type: "submissionSucceeded",
+              } satisfies AddMealFoodDialogEvent),
+            ],
+          },
+          {
+            target: "Idle",
+            actions: sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionSucceeded",
+            } satisfies AddMealFoodDialogEvent),
+          },
+        ],
+        onError: {
+          target: "Failure",
+          actions: [
+            () => {
+              globalThis.alert("Could not update the meal entry.");
+            },
+            sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionFailed",
+            } satisfies AddMealFoodDialogEvent),
+          ],
+        },
+      },
+    },
+    DeletingMealEntry: {
+      invoke: {
+        src: "deleteMealEntry",
+        input: ({ context, event }) => {
+          assertEvent(event, "deleteMealEntry");
+
+          return {
+            input: event.input,
+            invalidate: context.invalidate,
+          };
+        },
+        onDone: [
+          {
+            guard: ({ event }) => event.output === "mealEntryNotFound",
+            target: "MealEntryNotFound",
+            actions: [
+              () => {
+                globalThis.alert("Could not find that meal entry.");
+              },
+              sendTo(({ context }) => context.addMealFoodDialogActor, {
+                type: "submissionSucceeded",
+              } satisfies AddMealFoodDialogEvent),
+            ],
+          },
+          {
+            target: "Idle",
+            actions: sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionSucceeded",
+            } satisfies AddMealFoodDialogEvent),
+          },
+        ],
+        onError: {
+          target: "Failure",
+          actions: [
+            () => {
+              globalThis.alert("Could not delete the meal entry.");
+            },
+            sendTo(({ context }) => context.addMealFoodDialogActor, {
+              type: "submissionFailed",
+            } satisfies AddMealFoodDialogEvent),
+          ],
+        },
+      },
+    },
     ChangingPlan: {
       invoke: {
         src: "changeDayPlan",
@@ -542,6 +772,12 @@ const dailyLogMachine = setup({
         addMealEntry: {
           target: "AddingMealEntry",
         },
+        deleteMealEntry: {
+          target: "DeletingMealEntry",
+        },
+        reviseMealEntry: {
+          target: "RevisingMealEntry",
+        },
         changePlan: {
           target: "ChangingPlan",
         },
@@ -552,6 +788,28 @@ const dailyLogMachine = setup({
         addMealEntry: {
           target: "AddingMealEntry",
         },
+        deleteMealEntry: {
+          target: "DeletingMealEntry",
+        },
+        reviseMealEntry: {
+          target: "RevisingMealEntry",
+        },
+        changePlan: {
+          target: "ChangingPlan",
+        },
+      },
+    },
+    MealEntryNotFound: {
+      on: {
+        addMealEntry: {
+          target: "AddingMealEntry",
+        },
+        deleteMealEntry: {
+          target: "DeletingMealEntry",
+        },
+        reviseMealEntry: {
+          target: "RevisingMealEntry",
+        },
         changePlan: {
           target: "ChangingPlan",
         },
@@ -561,6 +819,12 @@ const dailyLogMachine = setup({
       on: {
         addMealEntry: {
           target: "AddingMealEntry",
+        },
+        deleteMealEntry: {
+          target: "DeletingMealEntry",
+        },
+        reviseMealEntry: {
+          target: "RevisingMealEntry",
         },
         changePlan: {
           target: "ChangingPlan",
@@ -584,6 +848,8 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   });
   const addMealFoodDialogActor = snapshot.context.addMealFoodDialogActor;
   const isAddingMealEntry = snapshot.matches("AddingMealEntry");
+  const isDeletingMealEntry = snapshot.matches("DeletingMealEntry");
+  const isRevisingMealEntry = snapshot.matches("RevisingMealEntry");
   const isChangingPlan = snapshot.matches("ChangingPlan");
   const previousDateKey = shiftDateKey({
     dateKey: day.dailyLog.dateKey,
@@ -594,6 +860,8 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
     days: 1,
   });
   const hasFoods = Array.isReadonlyArrayNonEmpty(foods);
+  const isMealEntryMutationPending =
+    isAddingMealEntry || isDeletingMealEntry || isRevisingMealEntry;
   const dailyNutrients = _calculateEntriesNutrients({
     foods,
     mealEntries,
@@ -669,7 +937,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
             <MealSection
               addMealFoodDialogActor={addMealFoodDialogActor}
               dateKey={day.dailyLog.dateKey}
-              disabled={isAddingMealEntry || !hasFoods}
+              disabled={isMealEntryMutationPending || !hasFoods}
               foodUsage={foodUsage}
               foods={foods}
               key={mealOption.value}
@@ -726,9 +994,13 @@ function MealSection({
         <ul className="divide-y divide-[#29292d]">
           {mealEntries.map((mealEntry) => (
             <MealEntryItem
+              addMealFoodDialogActor={addMealFoodDialogActor}
+              disabled={disabled}
+              foodUsage={foodUsage}
               foods={foods}
               key={mealEntry.id}
               mealEntry={mealEntry}
+              mealLabel={mealLabel}
             />
           ))}
         </ul>
@@ -774,6 +1046,8 @@ function AddMealFoodDialog({
     foods,
     matchingFoods,
     meal,
+    mealEntry,
+    mode,
     query,
     quantityGrams,
     selectedFood,
@@ -788,6 +1062,7 @@ function AddMealFoodDialog({
   const mealLabel =
     mealOptions.find((mealOption) => mealOption.value === meal)?.label ??
     "Meal";
+  const isEditingMealEntry = mode === "revise" && mealEntry !== null;
   const hasSelectedFood = selectedFood !== null;
   const selectedFoodUsage =
     selectedFood === null
@@ -796,13 +1071,34 @@ function AddMealFoodDialog({
           foodId: selectedFood.id,
           foodUsage,
         });
-  const selectedFoodUsageNutrients =
-    selectedFood === null || selectedFoodUsage === undefined
+  const selectedFoodNutrients =
+    selectedFood === null
       ? undefined
-      : calculateEntryNutrients({
-          food: selectedFood,
-          quantityGrams: selectedFoodUsage.latestQuantityGrams,
-        });
+      : Schema.decodeOption(QuantityGrams)(Number(quantityGrams)).pipe(
+          Option.match({
+            onNone: () => undefined,
+            onSome: (validatedQuantityGrams) =>
+              calculateEntryNutrients({
+                food: selectedFood,
+                quantityGrams: validatedQuantityGrams,
+              }),
+          })
+        );
+  const dialogTitle = isEditingMealEntry ? "Edit food" : "Add food";
+  const closeLabel = isEditingMealEntry ? "Close edit food" : "Close add food";
+  const submitLabel = isEditingMealEntry ? "Save" : "Add";
+  const submitAriaLabel = isEditingMealEntry
+    ? `Save ${mealLabel} meal entry`
+    : `Add food to ${mealLabel}`;
+  const selectedFoodQuantityLabel = isEditingMealEntry
+    ? mealEntry === null
+      ? undefined
+      : `${_formatNumber({ value: mealEntry.quantityGrams })} g logged`
+    : selectedFoodUsage === undefined
+      ? "No previous"
+      : `${_formatNumber({
+          value: selectedFoodUsage.latestQuantityGrams,
+        })} g previous`;
 
   return (
     <div
@@ -833,11 +1129,11 @@ function AddMealFoodDialog({
               className="truncate text-xl font-black leading-tight text-[#efeff2]"
               id="add-food-dialog-title"
             >
-              Add food
+              {dialogTitle}
             </h2>
           </div>
           <button
-            aria-label="Close add food"
+            aria-label={closeLabel}
             className="inline-flex size-10 items-center justify-center rounded-md border border-[#343438] bg-[#202024] text-[#dedee3] transition-colors hover:bg-[#29292d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45"
             onClick={() => {
               actor.send({ type: "close" });
@@ -858,193 +1154,326 @@ function AddMealFoodDialog({
             });
           }}
         >
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <div className="border-b border-[#29292d] bg-[#161618] p-4">
-              <label
-                className={darkFieldLabelClassName}
-                htmlFor="add-food-search"
-              >
-                Search
-                <span className="relative">
-                  <Search
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#77777e]"
-                    size={17}
-                    strokeWidth={3}
-                  />
-                  <input
-                    aria-controls="add-food-results"
-                    aria-label={`${mealLabel} food search`}
-                    autoComplete="off"
-                    autoFocus
-                    className={`${darkFieldClassName} pl-9`}
-                    disabled={disabled}
-                    id="add-food-search"
-                    onChange={(event) => {
-                      actor.send({
-                        type: "changeQuery",
-                        query: event.currentTarget.value,
-                      });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") {
-                        return;
-                      }
-
-                      event.preventDefault();
-
-                      actor.send({
-                        type: "selectFirstMatchingFood",
-                      });
-                      globalThis.requestAnimationFrame(() => {
-                        quantityInputRef.current?.focus();
-                      });
-                    }}
-                    placeholder="Search food or brand"
-                    role="combobox"
-                    type="search"
-                    value={query}
-                  />
-                </span>
-              </label>
-            </div>
-
-            <div
-              className="min-h-0 overflow-y-auto p-2"
-              id="add-food-results"
-              role="listbox"
-            >
-              {!Array.isReadonlyArrayNonEmpty(foods) ? (
+          {isEditingMealEntry ? (
+            <div className="min-h-0 overflow-y-auto p-4">
+              {selectedFood === null ? (
                 <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-                  Create a food before logging this meal.
+                  Could not find this food.
                 </p>
-              ) : Array.isReadonlyArrayNonEmpty(matchingFoods) ? (
-                matchingFoods.map((food) => {
-                  const foodHistory = _findFoodUsage({
-                    foodId: food.id,
-                    foodUsage,
-                  });
-                  const nutrients =
-                    foodHistory === undefined
-                      ? undefined
-                      : calculateEntryNutrients({
-                          food,
-                          quantityGrams: foodHistory.latestQuantityGrams,
-                        });
-
-                  return (
-                    <button
-                      aria-selected="false"
-                      className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-[#f0f0f2] transition-colors hover:bg-[#202024]"
-                      key={food.id}
-                      onClick={() => {
+              ) : (
+                <SelectedFoodDetails
+                  food={selectedFood}
+                  nutrients={selectedFoodNutrients}
+                  quantityLabel={selectedFoodQuantityLabel}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+              <div className="border-b border-[#29292d] bg-[#161618] p-4">
+                <label
+                  className={darkFieldLabelClassName}
+                  htmlFor="add-food-search"
+                >
+                  Search
+                  <span className="relative">
+                    <Search
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#77777e]"
+                      size={17}
+                      strokeWidth={3}
+                    />
+                    <input
+                      aria-controls="add-food-results"
+                      aria-label={`${mealLabel} food search`}
+                      autoComplete="off"
+                      autoFocus
+                      className={`${darkFieldClassName} pl-9`}
+                      disabled={disabled}
+                      id="add-food-search"
+                      onChange={(event) => {
                         actor.send({
-                          type: "selectFood",
-                          foodId: food.id,
+                          type: "changeQuery",
+                          query: event.currentTarget.value,
+                        });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") {
+                          return;
+                        }
+
+                        event.preventDefault();
+
+                        actor.send({
+                          type: "selectFirstMatchingFood",
                         });
                         globalThis.requestAnimationFrame(() => {
                           quantityInputRef.current?.focus();
                         });
                       }}
-                      role="option"
-                      type="button"
-                    >
-                      <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
-                        {food.name}
-                      </span>
-                      <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
-                        {nutrients === undefined
-                          ? "New"
-                          : `${_formatNumber({
-                              value: nutrients.energyKcal,
-                            })} kcal`}
-                      </span>
-                      <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
-                        {food.brand ?? "No brand"}
-                      </span>
-                      <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
-                        {foodHistory === undefined
-                          ? "No previous"
-                          : `${_formatNumber({
-                              value: foodHistory.latestQuantityGrams,
-                            })} g`}
-                      </span>
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-                  No foods found.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <footer className="grid gap-3 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            {selectedFood === null ? null : (
-              <div className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md bg-[#2b2424] px-3 py-2.5 text-left text-[#f5f5f7] ring-1 ring-[#ff5a51]/45">
-                <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
-                  {selectedFood.name}
-                </span>
-                <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
-                  {selectedFoodUsageNutrients === undefined
-                    ? "New"
-                    : `${_formatNumber({
-                        value: selectedFoodUsageNutrients.energyKcal,
-                      })} kcal`}
-                </span>
-                <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
-                  {selectedFood.brand ?? "No brand"}
-                </span>
-                <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
-                  {selectedFoodUsage === undefined
-                    ? "No previous"
-                    : `${_formatNumber({
-                        value: selectedFoodUsage.latestQuantityGrams,
-                      })} g`}
-                </span>
+                      placeholder="Search food or brand"
+                      role="combobox"
+                      type="search"
+                      value={query}
+                    />
+                  </span>
+                </label>
               </div>
+
+              <div
+                className="min-h-0 overflow-y-auto p-2"
+                id="add-food-results"
+                role="listbox"
+              >
+                {!Array.isReadonlyArrayNonEmpty(foods) ? (
+                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                    Create a food before logging this meal.
+                  </p>
+                ) : Array.isReadonlyArrayNonEmpty(matchingFoods) ? (
+                  matchingFoods.map((food) => {
+                    const foodHistory = _findFoodUsage({
+                      foodId: food.id,
+                      foodUsage,
+                    });
+                    const nutrients =
+                      foodHistory === undefined
+                        ? undefined
+                        : calculateEntryNutrients({
+                            food,
+                            quantityGrams: foodHistory.latestQuantityGrams,
+                          });
+
+                    return (
+                      <button
+                        aria-selected="false"
+                        className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-[#f0f0f2] transition-colors hover:bg-[#202024]"
+                        key={food.id}
+                        onClick={() => {
+                          actor.send({
+                            type: "selectFood",
+                            foodId: food.id,
+                          });
+                          globalThis.requestAnimationFrame(() => {
+                            quantityInputRef.current?.focus();
+                          });
+                        }}
+                        role="option"
+                        type="button"
+                      >
+                        <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
+                          {food.name}
+                        </span>
+                        <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
+                          {nutrients === undefined
+                            ? "New"
+                            : `${_formatNumber({
+                                value: nutrients.energyKcal,
+                              })} kcal`}
+                        </span>
+                        <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
+                          {food.brand ?? "No brand"}
+                        </span>
+                        <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
+                          {foodHistory === undefined
+                            ? "No previous"
+                            : `${_formatNumber({
+                                value: foodHistory.latestQuantityGrams,
+                              })} g`}
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                    No foods found.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-4 border-t border-[#29292d] bg-[#161618] p-4">
+            {selectedFood === null || isEditingMealEntry ? null : (
+              <SelectedFoodDetails
+                food={selectedFood}
+                nutrients={selectedFoodNutrients}
+                quantityLabel={selectedFoodQuantityLabel}
+              />
             )}
 
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-              <label className={darkFieldLabelClassName}>
-                Grams
-                <span className="relative">
-                  <input
-                    aria-label={`${mealLabel} quantity in grams`}
-                    className={`${darkFieldClassName} pr-9`}
-                    disabled={disabled || !hasSelectedFood}
-                    min="0.1"
-                    onChange={(event) => {
-                      actor.send({
-                        type: "changeQuantity",
-                        quantityGrams: event.currentTarget.value,
-                      });
-                    }}
-                    placeholder="150"
-                    ref={quantityInputRef}
-                    required
-                    step="0.1"
-                    type="number"
-                    value={quantityGrams}
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
-                    g
-                  </span>
+            <label className={darkFieldLabelClassName}>
+              Grams
+              <span className="relative">
+                <input
+                  aria-label={`${mealLabel} quantity in grams`}
+                  autoFocus={isEditingMealEntry}
+                  className={`${darkFieldClassName} pr-9`}
+                  disabled={disabled || !hasSelectedFood}
+                  min="0.1"
+                  onChange={(event) => {
+                    actor.send({
+                      type: "changeQuantity",
+                      quantityGrams: event.currentTarget.value,
+                    });
+                  }}
+                  placeholder="150"
+                  ref={quantityInputRef}
+                  required
+                  step="0.1"
+                  type="number"
+                  value={quantityGrams}
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
+                  g
                 </span>
-              </label>
+              </span>
+            </label>
+          </div>
+
+          <footer
+            className={
+              isEditingMealEntry
+                ? "grid grid-cols-2 gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+                : "grid border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+            }
+          >
+            {isEditingMealEntry ? (
               <button
-                aria-label={`Add food to ${mealLabel}`}
-                className="inline-flex min-h-10 items-center justify-center rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
-                disabled={disabled || !canSubmit}
-                type="submit"
+                aria-label={`Delete ${mealLabel} meal entry`}
+                className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#74322f] bg-[#201717] px-3 text-sm font-black text-[#ff5a51] transition-colors hover:bg-[#2a1c1a] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={disabled}
+                onClick={() => {
+                  actor.send({
+                    type: "deleteEntry",
+                  });
+                }}
+                type="button"
               >
-                Add
+                <Trash2 aria-hidden="true" size={16} strokeWidth={3} />
+                Delete
               </button>
-            </div>
+            ) : null}
+            <button
+              aria-label={submitAriaLabel}
+              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
+              disabled={disabled || !canSubmit}
+              type="submit"
+            >
+              {submitLabel}
+            </button>
           </footer>
         </form>
       </section>
+    </div>
+  );
+}
+
+function SelectedFoodDetails({
+  food,
+  nutrients,
+  quantityLabel,
+}: {
+  readonly food: Food;
+  readonly nutrients: NutrientTotals | undefined;
+  readonly quantityLabel: string | undefined;
+}) {
+  return (
+    <div className="grid w-full gap-3 text-left text-[#f5f5f7]">
+      <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+        <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
+          {food.name}
+        </span>
+        <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
+          {nutrients === undefined
+            ? "New"
+            : `${_formatNumber({
+                value: nutrients.energyKcal,
+              })} kcal`}
+        </span>
+        <span className="min-w-0 text-sm font-bold leading-tight text-[#aaaab1] wrap-anywhere">
+          {food.brand ?? "No brand"}
+        </span>
+        {quantityLabel === undefined ? null : (
+          <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
+            {quantityLabel}
+          </span>
+        )}
+      </div>
+
+      {nutrients === undefined ? null : (
+        <dl className="divide-y divide-[#29292d]">
+          <SelectedFoodNutrientRow
+            label="Carbs"
+            textClassName={macroToneClassNames.carbs.text}
+            value={nutrients.carbsGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Protein"
+            textClassName={macroToneClassNames.protein.text}
+            value={nutrients.proteinGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Fat"
+            textClassName={macroToneClassNames.fat.text}
+            value={nutrients.fatGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Fiber"
+            textClassName={macroToneClassNames.carbs.text}
+            value={nutrients.fiberGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Sugar"
+            textClassName={macroToneClassNames.carbs.text}
+            value={nutrients.sugarGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Sat fat"
+            textClassName={macroToneClassNames.fat.text}
+            value={nutrients.saturatedFatGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Salt"
+            textClassName="text-[#aaaab1]"
+            value={nutrients.saltGrams}
+          />
+          <SelectedFoodNutrientRow
+            label="Calories"
+            textClassName="text-[#4c7dff]"
+            unit="kcal"
+            value={nutrients.energyKcal}
+          />
+        </dl>
+      )}
+    </div>
+  );
+}
+
+function SelectedFoodNutrientRow({
+  label,
+  textClassName,
+  unit = "g",
+  value,
+}: {
+  readonly label: string;
+  readonly textClassName: string;
+  readonly unit?: "g" | "kcal";
+  readonly value: number;
+}) {
+  return (
+    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2">
+      <dt
+        className={`truncate text-sm font-medium leading-tight ${textClassName}`}
+      >
+        {label}
+      </dt>
+      <dd
+        className={`truncate text-right text-sm font-black leading-tight ${textClassName}`}
+      >
+        {unit === "kcal"
+          ? _formatNumber({ value })
+          : `${_formatNumber({ value })}g`}
+      </dd>
     </div>
   );
 }
@@ -1506,11 +1935,19 @@ function MacroProgressLine({
 }
 
 function MealEntryItem({
+  addMealFoodDialogActor,
+  disabled,
+  foodUsage,
   foods,
   mealEntry,
+  mealLabel,
 }: {
+  readonly addMealFoodDialogActor: AddMealFoodDialogActorRef;
+  readonly disabled: boolean;
+  readonly foodUsage: readonly MealFoodUsage[];
   readonly foods: readonly Food[];
   readonly mealEntry: MealEntry;
+  readonly mealLabel: string;
 }) {
   const food = _findFoodById({
     foods,
@@ -1519,13 +1956,28 @@ function MealEntryItem({
 
   if (food === undefined) {
     return (
-      <li className="grid gap-1 px-4 py-3">
-        <strong className="text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
-          Unknown food
-        </strong>
-        <p className="text-base font-black leading-tight text-[#aaaab1]">
-          {_formatNumber({ value: mealEntry.quantityGrams })} g
-        </p>
+      <li>
+        <button
+          aria-label={`Edit unknown food in ${mealLabel}`}
+          className="grid w-full gap-1 border-0 bg-transparent px-4 py-3 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={disabled}
+          onClick={() => {
+            addMealFoodDialogActor.send({
+              type: "openMealEntry",
+              foodUsage,
+              foods,
+              mealEntry,
+            });
+          }}
+          type="button"
+        >
+          <strong className="text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
+            Unknown food
+          </strong>
+          <span className="text-base font-black leading-tight text-[#aaaab1]">
+            {_formatNumber({ value: mealEntry.quantityGrams })} g
+          </span>
+        </button>
       </li>
     );
   }
@@ -1536,32 +1988,49 @@ function MealEntryItem({
   });
 
   return (
-    <li className="grid gap-1 px-4 py-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-        <strong className="min-w-0 text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
-          {food.name}
-        </strong>
-        <strong className="text-right text-lg font-medium leading-tight text-[#4c7dff]">
-          {_formatNumber({ value: nutrients.energyKcal })}
-        </strong>
-        <span className="text-base font-black leading-tight text-[#aaaab1]">
-          {_formatNumber({ value: mealEntry.quantityGrams })} g
-        </span>
-        <span className="text-right text-base font-medium leading-tight text-[#dedee3]">
-          C:{" "}
-          <strong className={`font-medium ${macroToneClassNames.carbs.text}`}>
-            {_formatNumber({ value: nutrients.carbsGrams })}
-          </strong>{" "}
-          P:{" "}
-          <strong className={`font-medium ${macroToneClassNames.protein.text}`}>
-            {_formatNumber({ value: nutrients.proteinGrams })}
-          </strong>{" "}
-          F:{" "}
-          <strong className={`font-medium ${macroToneClassNames.fat.text}`}>
-            {_formatNumber({ value: nutrients.fatGrams })}
+    <li>
+      <button
+        aria-label={`Edit ${food.name} in ${mealLabel}`}
+        className="grid w-full gap-1 border-0 bg-transparent px-4 py-3 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={disabled}
+        onClick={() => {
+          addMealFoodDialogActor.send({
+            type: "openMealEntry",
+            foodUsage,
+            foods,
+            mealEntry,
+          });
+        }}
+        type="button"
+      >
+        <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+          <strong className="min-w-0 text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
+            {food.name}
           </strong>
+          <strong className="text-right text-lg font-medium leading-tight text-[#4c7dff]">
+            {_formatNumber({ value: nutrients.energyKcal })}
+          </strong>
+          <span className="text-base font-black leading-tight text-[#aaaab1]">
+            {_formatNumber({ value: mealEntry.quantityGrams })} g
+          </span>
+          <span className="text-right text-base font-medium leading-tight text-[#dedee3]">
+            C:{" "}
+            <strong className={`font-medium ${macroToneClassNames.carbs.text}`}>
+              {_formatNumber({ value: nutrients.carbsGrams })}
+            </strong>{" "}
+            P:{" "}
+            <strong
+              className={`font-medium ${macroToneClassNames.protein.text}`}
+            >
+              {_formatNumber({ value: nutrients.proteinGrams })}
+            </strong>{" "}
+            F:{" "}
+            <strong className={`font-medium ${macroToneClassNames.fat.text}`}>
+              {_formatNumber({ value: nutrients.fatGrams })}
+            </strong>
+          </span>
         </span>
-      </div>
+      </button>
     </li>
   );
 }
