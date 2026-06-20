@@ -3,18 +3,32 @@ import {
   type DateKey,
   type FoodQuickInput,
 } from "@mai/nutrition";
+import { Array, DateTime, Iterable, Option } from "effect";
 
 import type { CreateMealEntryInput } from "./services/meal-entries.ts";
 import type { CreateFoodInput } from "./services/foods.ts";
 import type { CreateMealPlanInput } from "./services/meal-plans.ts";
 
 export const dateKeyFromDate = ({ date }: { readonly date: Date }) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return DateTime.formatIsoDate(_localDateTimeFromDate({ date }));
 };
+
+const _localTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const _localDateTimeFromDate = ({ date }: { readonly date: Date }) =>
+  DateTime.makeZoned(date, {
+    timeZone: _localTimeZone(),
+  }).pipe(Option.getOrThrow);
+
+const _localDateTimeFromDateKey = ({
+  dateKey,
+}: {
+  readonly dateKey: DateKey | string;
+}) =>
+  DateTime.makeZoned(dateKey, {
+    adjustForTimeZone: true,
+    timeZone: _localTimeZone(),
+  }).pipe(Option.getOrThrow);
 
 const _formString = ({
   formData,
@@ -57,11 +71,65 @@ export const shiftDateKey = ({
   readonly dateKey: DateKey | string;
   readonly days: number;
 }) => {
-  const date = new Date(`${dateKey}T00:00:00`);
-  date.setDate(date.getDate() + days);
-
-  return dateKeyFromDate({ date });
+  return DateTime.formatIsoDate(
+    DateTime.add(_localDateTimeFromDateKey({ dateKey }), { days })
+  );
 };
+
+export const dateKeysInRange = ({
+  endDateKey,
+  startDateKey,
+}: {
+  readonly endDateKey: DateKey | string;
+  readonly startDateKey: DateKey | string;
+}) => {
+  const startDate = _localDateTimeFromDateKey({ dateKey: startDateKey });
+  const endDate = _localDateTimeFromDateKey({ dateKey: endDateKey });
+
+  if (DateTime.isGreaterThan(startDate, endDate)) {
+    return [];
+  }
+
+  const dates = Iterable.takeWhile(
+    Iterable.makeBy<DateTime.DateTime>((days) =>
+      DateTime.add(startDate, { days })
+    ),
+    (date) => DateTime.isLessThanOrEqualTo(date, endDate)
+  );
+
+  return Array.fromIterable(
+    Iterable.map(dates, (date) => DateTime.formatIsoDate(date))
+  );
+};
+
+export const startOfWeekDateKey = ({ date }: { readonly date: Date }) => {
+  return DateTime.formatIsoDate(
+    DateTime.startOf(_localDateTimeFromDate({ date }), "week", {
+      weekStartsOn: 1,
+    })
+  );
+};
+
+export const startOfMonthDateKey = ({ date }: { readonly date: Date }) => {
+  return DateTime.formatIsoDate(
+    DateTime.startOf(_localDateTimeFromDate({ date }), "month")
+  );
+};
+
+export const endOfMonthDateKey = ({ date }: { readonly date: Date }) => {
+  return DateTime.formatIsoDate(
+    DateTime.endOf(_localDateTimeFromDate({ date }), "month")
+  );
+};
+
+export const monthKeyFromDateKey = ({
+  dateKey,
+}: {
+  readonly dateKey: DateKey | string;
+}) => dateKey.slice(0, 7);
+
+export const dateFromMonthKey = ({ monthKey }: { readonly monthKey: string }) =>
+  DateTime.toDateUtc(_localDateTimeFromDateKey({ dateKey: `${monthKey}-01` }));
 
 export const createMealPlanInputFromFormData = ({
   formData,

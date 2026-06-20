@@ -19,6 +19,7 @@
   "rules": {
     "mai/no-banned-type-assertions": "error",
     "mai/no-comments": "error",
+    "mai/no-direct-browser-storage": "error",
     "mai/no-direct-fetch": "error",
     "mai/no-disable-validation": "error",
     "mai/no-effect-asvoid": "warn",
@@ -44,6 +45,7 @@
     "mai/no-sync-schema-apis": "error",
     "mai/no-typeof-object": "error",
     "mai/no-type-assertion": "warn",
+    "mai/no-try-catch": "error",
     "mai/pipe-max-arguments": "warn",
     "mai/prefer-option-from-nullable": "warn",
     "mai/private-function-prefix": "error",

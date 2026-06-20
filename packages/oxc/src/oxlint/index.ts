@@ -1,5 +1,6 @@
 import noBannedTypeAssertions from "./rules/no-banned-type-assertions.ts";
 import noComments from "./rules/no-comments.ts";
+import noDirectBrowserStorage from "./rules/no-direct-browser-storage.ts";
 import noDirectFetch from "./rules/no-direct-fetch.ts";
 import noDisableValidation from "./rules/no-disable-validation.ts";
 import noEffectAsvoid from "./rules/no-effect-asvoid.ts";
@@ -25,6 +26,7 @@ import noSwitch from "./rules/no-switch.ts";
 import noSyncSchemaApis from "./rules/no-sync-schema-apis.ts";
 import noTypeofObject from "./rules/no-typeof-object.ts";
 import noTypeAssertion from "./rules/no-type-assertion.ts";
+import noTryCatch from "./rules/no-try-catch.ts";
 import pipeMaxArguments from "./rules/pipe-max-arguments.ts";
 import preferOptionFromNullable from "./rules/prefer-option-from-nullable.ts";
 import privateFunctionPrefix from "./rules/private-function-prefix.ts";
@@ -37,6 +39,7 @@ export default {
   rules: {
     "no-banned-type-assertions": noBannedTypeAssertions,
     "no-comments": noComments,
+    "no-direct-browser-storage": noDirectBrowserStorage,
     "no-direct-fetch": noDirectFetch,
     "no-disable-validation": noDisableValidation,
     "no-effect-asvoid": noEffectAsvoid,
@@ -62,6 +65,7 @@ export default {
     "no-sync-schema-apis": noSyncSchemaApis,
     "no-typeof-object": noTypeofObject,
     "no-type-assertion": noTypeAssertion,
+    "no-try-catch": noTryCatch,
     "pipe-max-arguments": pipeMaxArguments,
     "prefer-option-from-nullable": preferOptionFromNullable,
     "private-function-prefix": privateFunctionPrefix,

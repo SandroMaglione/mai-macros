@@ -101,9 +101,17 @@ importers:
         specifier: ^4.0.8
         version: 4.1.8(@types/node@25.9.2)(vite@8.0.16(@types/node@25.9.2)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/oxc: {}
+  packages/oxc:
+    devDependencies:
+      vitest:
+        specifier: ^4.0.8
+        version: 4.1.8(@types/node@25.9.2)(vite@8.0.16(@types/node@25.9.2)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/typed-lint: {}
+  packages/typed-lint:
+    devDependencies:
+      vitest:
+        specifier: ^4.0.8
+        version: 4.1.8(@types/node@25.9.2)(vite@8.0.16(@types/node@25.9.2)(jiti@2.7.0)(yaml@2.9.0))
 
 packages:
 

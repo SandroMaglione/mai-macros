@@ -127,24 +127,32 @@ export function MealPlanForm({
   const isCreating = action === "create";
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create plan" : "Edit plan";
-  const submitText = hasFailed ? "Try again" : isCreating ? title : "Save plan";
+  const submitText = hasFailed
+    ? "Try again"
+    : isCreating
+      ? title
+      : "Save revised plan";
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-6">
         <header className="sticky top-0 z-30 bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
-          <div className="flex h-16 items-center gap-3 px-4">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-              <ClipboardList aria-hidden="true" size={24} strokeWidth={2.5} />
+          <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4">
+            <BackToDayIconLink dateKey={dateKey} />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+                <ClipboardList aria-hidden="true" size={24} strokeWidth={2.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
+                  Meal plans
+                </p>
+                <h1 className="truncate text-2xl font-black leading-tight text-white">
+                  {title}
+                </h1>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
-                Meal plans
-              </p>
-              <h1 className="truncate text-2xl font-black leading-tight text-white">
-                {title}
-              </h1>
-            </div>
+            <span aria-hidden="true" className="size-10" />
           </div>
         </header>
 
@@ -158,6 +166,12 @@ export function MealPlanForm({
             onSubmit(new FormData(event.currentTarget));
           }}
         >
+          <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+            {isCreating
+              ? "Creating a plan makes it the active meal plan."
+              : "Saving replaces this plan if it has no recorded meals. If logs already use it, Mai preserves those logs and creates a revised plan for the selected day."}
+          </p>
+
           <label className={planFieldLabelClassName}>
             Name
             <input
@@ -296,6 +310,34 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
     >
       <X aria-hidden="true" size={17} strokeWidth={3} />
       Cancel
+    </Link>
+  );
+}
+
+function BackToDayIconLink({
+  dateKey,
+}: {
+  readonly dateKey: string | undefined;
+}) {
+  const className =
+    "inline-flex size-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white no-underline transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
+
+  if (dateKey === undefined) {
+    return (
+      <Link aria-label="Back to today" className={className} to="/">
+        <X aria-hidden="true" size={18} strokeWidth={3} />
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      aria-label="Back to day"
+      className={className}
+      params={{ dateKey }}
+      to="/days/$dateKey"
+    >
+      <X aria-hidden="true" size={18} strokeWidth={3} />
     </Link>
   );
 }

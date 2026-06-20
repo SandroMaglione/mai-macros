@@ -6,40 +6,21 @@ import {
 } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
-import { Effect } from "effect";
-import { Apple, Plus, Rows3, Save, TextCursorInput, X } from "lucide-react";
-import { useMemo, type FocusEvent } from "react";
+import { Array, Effect } from "effect";
+import { AlertTriangle, Apple, Plus, Save, X } from "lucide-react";
+import { type FocusEvent } from "react";
 import { assign, setup } from "xstate";
 
 import type { CreateFoodInput } from "../services/foods.ts";
-import {
-  createFoodInputFromFoodQuickInput,
-  createFoodInputFromFormData,
-} from "../utils.ts";
+import { createFoodInputFromFormData } from "../utils.ts";
 import {
   FoodNutrientOverview,
   foodQuickInputNutrientOverviewOrder,
-  formatFoodNutrientNumber,
   foodQuickInputNutrients,
+  formatFoodNutrientNumber,
 } from "./food-nutrient-overview.tsx";
 
 type FoodFormAction = "create" | "edit";
-type FoodCreateMode = "manual" | "quick";
-
-type FoodFormMachineContext = {
-  readonly createMode: FoodCreateMode;
-  readonly quickInput: string;
-};
-
-type FoodFormMachineEvent =
-  | {
-      readonly mode: FoodCreateMode;
-      readonly type: "selectCreateMode";
-    }
-  | {
-      readonly input: string;
-      readonly type: "changeQuickInput";
-    };
 
 type FoodNutrientFieldName =
   | "energyKcalPer100g"
@@ -61,6 +42,32 @@ type FoodNutrientField = {
   readonly unit: "g" | "kcal";
 };
 
+type FoodFormValues = Record<"brand" | "name" | FoodNutrientFieldName, string>;
+
+type FoodNumberWarning = {
+  readonly field?: FoodNutrientFieldName;
+  readonly message: string;
+};
+
+type FoodFormMachineContext = {
+  readonly formValues: FoodFormValues;
+  readonly numberWarnings: readonly FoodNumberWarning[];
+  readonly quickInput: string;
+  readonly quickInputParseResult: FoodQuickInputParseResult;
+  readonly syncQuickInputFromFields: boolean;
+};
+
+type FoodFormMachineEvent =
+  | {
+      readonly input: string;
+      readonly type: "changeQuickInput";
+    }
+  | {
+      readonly name: keyof FoodFormValues;
+      readonly type: "changeFormValue";
+      readonly value: string;
+    };
+
 const foodFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const foodFieldLabelClassName =
@@ -72,22 +79,157 @@ const foodFormMachine = setup({
   types: {
     context: {} as FoodFormMachineContext,
     events: {} as FoodFormMachineEvent,
+    input: {} as {
+      readonly initialFood: Food | null;
+      readonly syncQuickInputFromFields: boolean;
+    },
   },
 }).createMachine({
-  context: {
-    createMode: "manual",
-    quickInput: "",
+  context: ({ input }) => {
+    const food = input.initialFood;
+    const formValues = {
+      name: food?.name ?? "",
+      brand: food?.brand ?? "",
+      energyKcalPer100g: food === null ? "" : `${food.energyKcalPer100g}`,
+      proteinGramsPer100g: food === null ? "" : `${food.proteinGramsPer100g}`,
+      carbsGramsPer100g: food === null ? "" : `${food.carbsGramsPer100g}`,
+      fatGramsPer100g: food === null ? "" : `${food.fatGramsPer100g}`,
+      fiberGramsPer100g:
+        food?.fiberGramsPer100g === undefined
+          ? ""
+          : `${food.fiberGramsPer100g}`,
+      sugarGramsPer100g:
+        food?.sugarGramsPer100g === undefined
+          ? ""
+          : `${food.sugarGramsPer100g}`,
+      saturatedFatGramsPer100g:
+        food?.saturatedFatGramsPer100g === undefined
+          ? ""
+          : `${food.saturatedFatGramsPer100g}`,
+      saltGramsPer100g:
+        food?.saltGramsPer100g === undefined ? "" : `${food.saltGramsPer100g}`,
+    } satisfies FoodFormValues;
+    const quickInput = "";
+
+    return {
+      formValues,
+      numberWarnings: _foodNumberWarningsFromFormValues({ formValues }),
+      quickInput,
+      quickInputParseResult: Effect.runSync(
+        parseFoodQuickInput({ input: quickInput })
+      ),
+      syncQuickInputFromFields: input.syncQuickInputFromFields,
+    };
   },
   on: {
-    changeQuickInput: {
-      actions: assign(({ event }) => ({
-        quickInput: event.input,
-      })),
+    changeFormValue: {
+      actions: assign(({ context, event }) => {
+        const formValues = {
+          ...context.formValues,
+          [event.name]: event.value,
+        };
+        const name = formValues.name.trim();
+        const brand = formValues.brand.trim();
+        const nutrients = [
+          _quickNutrientTag({
+            tag: "k",
+            value: formValues.energyKcalPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "f",
+            value: formValues.fatGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "sf",
+            value: formValues.saturatedFatGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "c",
+            value: formValues.carbsGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "su",
+            value: formValues.sugarGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "fi",
+            value: formValues.fiberGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "p",
+            value: formValues.proteinGramsPer100g,
+          }),
+          _quickNutrientTag({
+            tag: "sa",
+            value: formValues.saltGramsPer100g,
+          }),
+        ].filter((value): value is string => value !== undefined);
+        const quickInput = context.syncQuickInputFromFields
+          ? [name, brand, nutrients.join(" ")]
+              .join(", ")
+              .replace(/(?:, )+$/g, "")
+          : context.quickInput;
+
+        return {
+          formValues,
+          numberWarnings: _foodNumberWarningsFromFormValues({ formValues }),
+          quickInput,
+          quickInputParseResult: context.syncQuickInputFromFields
+            ? Effect.runSync(parseFoodQuickInput({ input: quickInput }))
+            : context.quickInputParseResult,
+        };
+      }),
     },
-    selectCreateMode: {
-      actions: assign(({ event }) => ({
-        createMode: event.mode,
-      })),
+    changeQuickInput: {
+      actions: assign(({ event }) => {
+        const quickInputParseResult = Effect.runSync(
+          parseFoodQuickInput({ input: event.input })
+        );
+        const { partial } = quickInputParseResult;
+        const formValues = {
+          name: partial.name ?? "",
+          brand: partial.brand ?? "",
+          energyKcalPer100g:
+            partial.energyKcalPer100g === undefined
+              ? ""
+              : `${partial.energyKcalPer100g}`,
+          proteinGramsPer100g:
+            partial.proteinGramsPer100g === undefined
+              ? ""
+              : `${partial.proteinGramsPer100g}`,
+          carbsGramsPer100g:
+            partial.carbsGramsPer100g === undefined
+              ? ""
+              : `${partial.carbsGramsPer100g}`,
+          fatGramsPer100g:
+            partial.fatGramsPer100g === undefined
+              ? ""
+              : `${partial.fatGramsPer100g}`,
+          fiberGramsPer100g:
+            partial.fiberGramsPer100g === undefined
+              ? ""
+              : `${partial.fiberGramsPer100g}`,
+          sugarGramsPer100g:
+            partial.sugarGramsPer100g === undefined
+              ? ""
+              : `${partial.sugarGramsPer100g}`,
+          saturatedFatGramsPer100g:
+            partial.saturatedFatGramsPer100g === undefined
+              ? ""
+              : `${partial.saturatedFatGramsPer100g}`,
+          saltGramsPer100g:
+            partial.saltGramsPer100g === undefined
+              ? ""
+              : `${partial.saltGramsPer100g}`,
+        } satisfies FoodFormValues;
+
+        return {
+          formValues,
+          numberWarnings: _foodNumberWarningsFromFormValues({ formValues }),
+          quickInput: event.input,
+          quickInputParseResult,
+        };
+      }),
     },
   },
 });
@@ -189,25 +331,35 @@ export function FoodForm({
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
-  const [snapshot, send] = useMachine(foodFormMachine);
-  const createMode = snapshot.context.createMode;
+  const [snapshot, send] = useMachine(foodFormMachine, {
+    input: {
+      initialFood,
+      syncQuickInputFromFields: isCreating,
+    },
+  });
+  const { formValues, numberWarnings, quickInput, quickInputParseResult } =
+    snapshot.context;
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-6">
         <header className="sticky top-0 z-30 bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
-          <div className="flex h-16 items-center gap-3 px-4">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-              <Apple aria-hidden="true" size={24} strokeWidth={2.5} />
+          <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4">
+            <BackToDayIconLink dateKey={dateKey} />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+                <Apple aria-hidden="true" size={24} strokeWidth={2.5} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
+                  Foods
+                </p>
+                <h1 className="truncate text-2xl font-black leading-tight text-white">
+                  {title}
+                </h1>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
-                Foods
-              </p>
-              <h1 className="truncate text-2xl font-black leading-tight text-white">
-                {title}
-              </h1>
-            </div>
+            <span aria-hidden="true" className="size-10" />
           </div>
         </header>
 
@@ -224,192 +376,99 @@ export function FoodForm({
           }}
         >
           {isCreating ? (
-            <FoodCreateModeSwitch
+            <FoodQuickInputTextField
               disabled={disabled}
-              mode={createMode}
-              onChange={(mode) => {
-                send({
-                  type: "selectCreateMode",
-                  mode,
-                });
-              }}
-            />
-          ) : null}
-
-          {isCreating && createMode === "quick" ? (
-            <FoodQuickInputForm
-              dateKey={dateKey}
-              disabled={disabled}
-              hasFailed={hasFailed}
-              input={snapshot.context.quickInput}
+              input={quickInput}
               onChangeInput={(input) => {
                 send({
                   type: "changeQuickInput",
                   input,
                 });
               }}
-              onSubmit={onSubmit}
             />
-          ) : (
-            <>
-              <FoodFormFields
-                autoFocusName
-                disabled={disabled}
-                initialFood={initialFood}
-              />
+          ) : null}
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <button
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
-                  disabled={disabled}
-                  type="submit"
-                >
-                  <SubmitIcon aria-hidden="true" size={18} strokeWidth={3} />
-                  {submitText}
-                </button>
-                <BackToDayLink dateKey={dateKey} />
-              </div>
-            </>
+          <FoodFormFields
+            autoFocusName={false}
+            disabled={disabled}
+            initialFood={initialFood}
+            values={formValues}
+            onChangeValue={({ name, value }) => {
+              send({
+                type: "changeFormValue",
+                name,
+                value,
+              });
+            }}
+          />
+
+          <FoodNumberWarnings warnings={numberWarnings} />
+
+          {isCreating ? (
+            <FoodQuickInputFeedback parseResult={quickInputParseResult} />
+          ) : null}
+
+          {isCreating ? null : (
+            <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+              Saving replaces this food when it is unused. If previous logs
+              already use it, Mai keeps those logs on the original food and
+              creates a revised copy for future use.
+            </p>
           )}
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+              disabled={disabled}
+              type="submit"
+            >
+              <SubmitIcon aria-hidden="true" size={18} strokeWidth={3} />
+              {submitText}
+            </button>
+            <BackToDayLink dateKey={dateKey} />
+          </div>
         </form>
       </section>
     </main>
   );
 }
 
-function FoodCreateModeSwitch({
+function FoodQuickInputTextField({
   disabled,
-  mode,
-  onChange,
-}: {
-  readonly disabled: boolean;
-  readonly mode: FoodCreateMode;
-  readonly onChange: (mode: FoodCreateMode) => void;
-}) {
-  return (
-    <div
-      aria-label="Food creation mode"
-      className="grid grid-cols-2 gap-2 rounded-[10px] bg-[#161618] p-1"
-      role="group"
-    >
-      <FoodCreateModeButton
-        disabled={disabled}
-        icon="manual"
-        isSelected={mode === "manual"}
-        label="Manual"
-        onClick={() => {
-          onChange("manual");
-        }}
-      />
-      <FoodCreateModeButton
-        disabled={disabled}
-        icon="quick"
-        isSelected={mode === "quick"}
-        label="Text"
-        onClick={() => {
-          onChange("quick");
-        }}
-      />
-    </div>
-  );
-}
-
-function FoodCreateModeButton({
-  disabled,
-  icon,
-  isSelected,
-  label,
-  onClick,
-}: {
-  readonly disabled: boolean;
-  readonly icon: FoodCreateMode;
-  readonly isSelected: boolean;
-  readonly label: string;
-  readonly onClick: () => void;
-}) {
-  const Icon = icon === "manual" ? Rows3 : TextCursorInput;
-
-  return (
-    <button
-      aria-pressed={isSelected}
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-transparent px-3 text-sm font-black text-[#aaaab1] transition-colors hover:bg-[#202024] aria-pressed:border-[#3d2827] aria-pressed:bg-[#201717] aria-pressed:text-[#ff5a51] disabled:cursor-not-allowed disabled:opacity-60"
-      disabled={disabled}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon aria-hidden="true" size={16} strokeWidth={3} />
-      {label}
-    </button>
-  );
-}
-
-function FoodQuickInputForm({
-  dateKey,
-  disabled,
-  hasFailed,
   input,
   onChangeInput,
-  onSubmit,
 }: {
-  readonly dateKey: string | undefined;
   readonly disabled: boolean;
-  readonly hasFailed: boolean;
   readonly input: string;
   readonly onChangeInput: (input: string) => void;
-  readonly onSubmit: (input: CreateFoodInput) => void;
 }) {
-  const parseResult = useMemo<FoodQuickInputParseResult>(() => {
-    return Effect.runSync(parseFoodQuickInput({ input }));
-  }, [input]);
-  const canSubmit = parseResult.status === "complete";
+  return (
+    <label className={foodFieldLabelClassName}>
+      Food text
+      <textarea
+        autoComplete="off"
+        className={`${foodFieldClassName} resize-none py-2.5 leading-relaxed`}
+        disabled={disabled}
+        onChange={(event) => {
+          onChangeInput(event.currentTarget.value);
+        }}
+        placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
+        rows={2}
+        value={input}
+      />
+    </label>
+  );
+}
 
+function FoodQuickInputFeedback({
+  parseResult,
+}: {
+  readonly parseResult: FoodQuickInputParseResult;
+}) {
   return (
     <div className="grid gap-4">
-      <label className={foodFieldLabelClassName}>
-        Food text
-        <textarea
-          aria-describedby="food-quick-input-examples"
-          autoComplete="off"
-          autoFocus
-          className={`${foodFieldClassName} resize-none py-2.5 leading-relaxed`}
-          disabled={disabled}
-          onChange={(event) => {
-            onChangeInput(event.currentTarget.value);
-          }}
-          placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
-          rows={2}
-          value={input}
-        />
-      </label>
-      <p
-        className="-mt-2 text-xs font-semibold leading-relaxed text-[#77777e]"
-        id="food-quick-input-examples"
-      >
-        Examples: Yogurt greco 0%, Fage, 59, 0.4, 0.1, 3.6, 3.2, 0, 10, 0.1 ·
-        Skyr bianco, Milbona, k63 f0.2 c4 p11
-      </p>
-
       <FoodQuickInputPreview parseResult={parseResult} />
       <FoodQuickInputIssues issues={parseResult.issues} />
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <button
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
-          disabled={disabled || !canSubmit}
-          onClick={() => {
-            if (parseResult.status === "complete") {
-              onSubmit(
-                createFoodInputFromFoodQuickInput({ food: parseResult.food })
-              );
-            }
-          }}
-          type="button"
-        >
-          <Plus aria-hidden="true" size={18} strokeWidth={3} />
-          {hasFailed ? "Try again" : "Create food"}
-        </button>
-        <BackToDayLink dateKey={dateKey} />
-      </div>
     </div>
   );
 }
@@ -490,14 +549,55 @@ function FoodQuickInputIssue({
   );
 }
 
+function FoodNumberWarnings({
+  warnings,
+}: {
+  readonly warnings: readonly FoodNumberWarning[];
+}) {
+  if (!Array.isReadonlyArrayNonEmpty(warnings)) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-live="polite"
+      className="grid gap-2 rounded-[10px] border border-[#5a4720] bg-[#1f1a0d] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]"
+    >
+      {warnings.map((warning) => (
+        <div
+          className="flex min-w-0 items-start gap-2 border-b border-[#5a4720] pb-2 last:border-b-0 last:pb-0"
+          key={`${warning.field ?? "food"}:${warning.message}`}
+        >
+          <AlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 shrink-0 text-[#ffbd35]"
+            size={16}
+            strokeWidth={3}
+          />
+          <p className="min-w-0 text-sm font-bold leading-snug text-[#d9bd6f]">
+            {warning.message}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function FoodFormFields({
   autoFocusName,
   disabled,
   initialFood,
+  onChangeValue,
+  values,
 }: {
   readonly autoFocusName: boolean;
   readonly disabled: boolean;
   readonly initialFood: Food | null;
+  readonly onChangeValue?: (input: {
+    readonly name: keyof FoodFormValues;
+    readonly value: string;
+  }) => void;
+  readonly values?: FoodFormValues;
 }) {
   return (
     <>
@@ -512,12 +612,20 @@ export function FoodFormFields({
               autoComplete="off"
               autoFocus={autoFocusName}
               className={foodFieldClassName}
-              defaultValue={initialFood?.name}
               disabled={disabled}
               name="name"
+              onChange={(event) => {
+                onChangeValue?.({
+                  name: "name",
+                  value: event.currentTarget.value,
+                });
+              }}
               onFocus={_selectInputText}
               placeholder="Greek yogurt"
               required
+              {...(values === undefined
+                ? { defaultValue: initialFood?.name }
+                : { value: values.name })}
             />
           </label>
 
@@ -526,11 +634,19 @@ export function FoodFormFields({
             <input
               autoComplete="off"
               className={foodFieldClassName}
-              defaultValue={initialFood?.brand ?? ""}
               disabled={disabled}
               name="brand"
+              onChange={(event) => {
+                onChangeValue?.({
+                  name: "brand",
+                  value: event.currentTarget.value,
+                });
+              }}
               onFocus={_selectInputText}
               placeholder="Mai"
+              {...(values === undefined
+                ? { defaultValue: initialFood?.brand ?? "" }
+                : { value: values.brand })}
             />
           </label>
         </div>
@@ -548,6 +664,8 @@ export function FoodFormFields({
               field={field}
               initialFood={initialFood}
               key={field.name}
+              onChangeValue={onChangeValue}
+              values={values}
             />
           ))}
         </div>
@@ -565,6 +683,8 @@ export function FoodFormFields({
               field={field}
               initialFood={initialFood}
               key={field.name}
+              onChangeValue={onChangeValue}
+              values={values}
             />
           ))}
         </div>
@@ -577,10 +697,17 @@ function FoodNutrientInput({
   disabled,
   field,
   initialFood,
+  onChangeValue,
+  values,
 }: {
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
   readonly initialFood: Food | null;
+  readonly onChangeValue?: (input: {
+    readonly name: keyof FoodFormValues;
+    readonly value: string;
+  }) => void;
+  readonly values?: FoodFormValues;
 }) {
   const unitPaddingClassName = field.unit === "kcal" ? "pr-14" : "pr-9";
 
@@ -590,16 +717,24 @@ function FoodNutrientInput({
       <span className="relative">
         <input
           className={`${foodFieldClassName} ${unitPaddingClassName}`}
-          defaultValue={initialFood?.[field.name] ?? ""}
           disabled={disabled}
           inputMode="decimal"
           min="0"
           name={field.name}
+          onChange={(event) => {
+            onChangeValue?.({
+              name: field.name,
+              value: event.currentTarget.value,
+            });
+          }}
           onFocus={_selectInputText}
           placeholder={field.placeholder}
           required={field.required}
           step={field.step}
           type="number"
+          {...(values === undefined
+            ? { defaultValue: initialFood?.[field.name] ?? "" }
+            : { value: values[field.name] })}
         />
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
           {field.unit}
@@ -629,6 +764,133 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
       Cancel
     </Link>
   );
+}
+
+function BackToDayIconLink({
+  dateKey,
+}: {
+  readonly dateKey: string | undefined;
+}) {
+  const className =
+    "inline-flex size-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white no-underline transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
+
+  if (dateKey === undefined) {
+    return (
+      <Link aria-label="Back to today" className={className} to="/">
+        <X aria-hidden="true" size={18} strokeWidth={3} />
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      aria-label="Back to day"
+      className={className}
+      params={{ dateKey }}
+      to="/days/$dateKey"
+    >
+      <X aria-hidden="true" size={18} strokeWidth={3} />
+    </Link>
+  );
+}
+
+function _foodNumberWarningsFromFormValues({
+  formValues,
+}: {
+  readonly formValues: FoodFormValues;
+}) {
+  const warnings: FoodNumberWarning[] = [];
+  const energyKcal = _formNumber(formValues.energyKcalPer100g);
+  const proteinGrams = _formNumber(formValues.proteinGramsPer100g);
+  const carbsGrams = _formNumber(formValues.carbsGramsPer100g);
+  const fatGrams = _formNumber(formValues.fatGramsPer100g);
+  const sugarGrams = _formNumber(formValues.sugarGramsPer100g);
+  const saturatedFatGrams = _formNumber(formValues.saturatedFatGramsPer100g);
+  const saltGrams = _formNumber(formValues.saltGramsPer100g);
+  const macroTotalGrams =
+    (proteinGrams ?? 0) + (carbsGrams ?? 0) + (fatGrams ?? 0);
+  const macroEnergyKcal =
+    (proteinGrams ?? 0) * 4 + (carbsGrams ?? 0) * 4 + (fatGrams ?? 0) * 9;
+
+  if (macroTotalGrams > 100) {
+    warnings.push({
+      message: "Protein, carbs, and fat add up to more than 100g per 100g.",
+    });
+  }
+
+  if (energyKcal !== undefined && energyKcal > 900) {
+    warnings.push({
+      field: "energyKcalPer100g",
+      message: "Calories are above 900 kcal per 100g.",
+    });
+  }
+
+  if (energyKcal !== undefined && macroEnergyKcal > 0) {
+    const difference = Math.abs(energyKcal - macroEnergyKcal);
+    const threshold = Math.max(50, energyKcal * 0.35);
+
+    if (difference > threshold) {
+      warnings.push({
+        message:
+          "Calories do not closely match the energy from protein, carbs, and fat.",
+      });
+    }
+  }
+
+  if (
+    sugarGrams !== undefined &&
+    carbsGrams !== undefined &&
+    sugarGrams > carbsGrams
+  ) {
+    warnings.push({
+      field: "sugarGramsPer100g",
+      message: "Sugar is greater than total carbs.",
+    });
+  }
+
+  if (
+    saturatedFatGrams !== undefined &&
+    fatGrams !== undefined &&
+    saturatedFatGrams > fatGrams
+  ) {
+    warnings.push({
+      field: "saturatedFatGramsPer100g",
+      message: "Saturated fat is greater than total fat.",
+    });
+  }
+
+  if (saltGrams !== undefined && saltGrams > 20) {
+    warnings.push({
+      field: "saltGramsPer100g",
+      message: "Salt is above 20g per 100g.",
+    });
+  }
+
+  return warnings;
+}
+
+function _quickNutrientTag({
+  tag,
+  value,
+}: {
+  readonly tag: string;
+  readonly value: string;
+}) {
+  const trimmedValue = value.trim();
+
+  return trimmedValue === "" ? undefined : `${tag}${trimmedValue}`;
+}
+
+function _formNumber(value: string) {
+  const trimmedValue = value.trim();
+
+  if (trimmedValue === "") {
+    return undefined;
+  }
+
+  const parsedValue = Number(trimmedValue);
+
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
 }
 
 function _selectInputText(event: FocusEvent<HTMLInputElement>) {

@@ -7,6 +7,10 @@
     "./oxlint": "./src/oxlint/index.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.8"
   }
 }

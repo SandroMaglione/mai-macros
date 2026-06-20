@@ -1,9 +1,13 @@
-import { IndexedDb } from "@effect/platform-browser";
+import {
+  IndexedDbDatabase,
+  IndexedDbTable,
+  IndexedDbVersion,
+} from "@effect/platform-browser";
 import { Effect, Layer, Schema } from "effect";
-import { IDBKeyRange, indexedDB } from "fake-indexeddb";
 import { afterEach, assert, describe, it } from "vitest";
 
 import {
+  ActiveMealPlanSelectionId,
   calculateEntryNutrients,
   DailyLog,
   DatabaseName,
@@ -11,24 +15,201 @@ import {
   DefaultFoods,
   EntryNutrients,
   Food,
+  FoodCategory,
+  FoodId,
+  FoodOrigin,
   MaiDatabase,
   Meal,
   MealEntry,
+  MealEntryId,
+  NonEmptyString,
+  NonNegativeNumber,
   Plan,
+  PlanId,
+  QuantityGrams,
 } from "../src/index.ts";
-
-const layerFakeIndexedDb = Layer.succeed(
-  IndexedDb.IndexedDb,
-  IndexedDb.make({ indexedDB, IDBKeyRange })
-);
+import {
+  deleteFakeDatabase,
+  layerFakeIndexedDb,
+} from "./indexed-db-test-utils.ts";
 
 const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
 );
 
-afterEach(() => {
-  indexedDB.deleteDatabase(DatabaseName);
-});
+class LegacySeedFood extends Schema.Class<LegacySeedFood>("LegacySeedFood")({
+  id: FoodId,
+  basedOnFoodId: Schema.optional(FoodId),
+  name: NonEmptyString,
+  brand: Schema.optional(NonEmptyString),
+  category: Schema.optional(FoodCategory),
+  origin: Schema.optional(FoodOrigin),
+  energyKcalPer100g: NonNegativeNumber,
+  proteinGramsPer100g: NonNegativeNumber,
+  carbsGramsPer100g: NonNegativeNumber,
+  fatGramsPer100g: NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number,
+}) {}
+
+class LegacySeedPlan extends Schema.Class<LegacySeedPlan>("LegacySeedPlan")({
+  id: PlanId,
+  basedOnPlanId: Schema.optional(PlanId),
+  name: NonEmptyString,
+  proteinTargetGrams: NonNegativeNumber,
+  carbsTargetGrams: NonNegativeNumber,
+  fatTargetGrams: NonNegativeNumber,
+  fiberTargetGrams: Schema.optional(NonNegativeNumber),
+  sugarTargetGrams: Schema.optional(NonNegativeNumber),
+  saltTargetGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatTargetGrams: Schema.optional(NonNegativeNumber),
+  createdAt: Schema.Number,
+}) {}
+
+class LegacySeedDailyLog extends Schema.Class<LegacySeedDailyLog>(
+  "LegacySeedDailyLog"
+)({
+  dateKey: DateKey,
+  planId: PlanId,
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number,
+}) {}
+
+class LegacySeedActiveMealPlanSelection extends Schema.Class<LegacySeedActiveMealPlanSelection>(
+  "LegacySeedActiveMealPlanSelection"
+)({
+  id: ActiveMealPlanSelectionId,
+  planId: PlanId,
+  updatedAt: Schema.Number,
+}) {}
+
+class LegacySeedMealEntry extends Schema.Class<LegacySeedMealEntry>(
+  "LegacySeedMealEntry"
+)({
+  id: MealEntryId,
+  dateKey: DateKey,
+  meal: Meal,
+  foodId: FoodId,
+  quantityGrams: QuantityGrams,
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number,
+}) {}
+
+class LegacySeedFoodsTable extends IndexedDbTable.make({
+  name: "foods",
+  schema: LegacySeedFood,
+  keyPath: "id",
+  indexes: {
+    byName: "name",
+  },
+}) {}
+
+class LegacySeedPlansTable extends IndexedDbTable.make({
+  name: "plans",
+  schema: LegacySeedPlan,
+  keyPath: "id",
+  indexes: {
+    byName: "name",
+  },
+}) {}
+
+class LegacySeedDailyLogsTable extends IndexedDbTable.make({
+  name: "dailyLogs",
+  schema: LegacySeedDailyLog,
+  keyPath: "dateKey",
+  indexes: {
+    byPlan: "planId",
+  },
+}) {}
+
+class LegacySeedActiveMealPlanSelectionsTable extends IndexedDbTable.make({
+  name: "activeMealPlanSelections",
+  schema: LegacySeedActiveMealPlanSelection,
+  keyPath: "id",
+}) {}
+
+class LegacySeedMealEntriesTable extends IndexedDbTable.make({
+  name: "mealEntries",
+  schema: LegacySeedMealEntry,
+  keyPath: "id",
+  indexes: {
+    byDate: "dateKey",
+    byDateMeal: ["dateKey", "meal"],
+    byFood: "foodId",
+  },
+}) {}
+
+class LegacySeedVersion1 extends IndexedDbVersion.make(
+  LegacySeedFoodsTable,
+  LegacySeedPlansTable,
+  LegacySeedDailyLogsTable,
+  LegacySeedActiveMealPlanSelectionsTable,
+  LegacySeedMealEntriesTable
+) {}
+
+class LegacySeedVersion2 extends IndexedDbVersion.make(
+  LegacySeedFoodsTable,
+  LegacySeedPlansTable,
+  LegacySeedDailyLogsTable,
+  LegacySeedActiveMealPlanSelectionsTable,
+  LegacySeedMealEntriesTable
+) {}
+
+class LegacyVersion1Database extends IndexedDbDatabase.make(
+  LegacySeedVersion1,
+  Effect.fn(function* (api) {
+    yield* api.createObjectStore("foods");
+    yield* api.createIndex("foods", "byName");
+    yield* api.createObjectStore("plans");
+    yield* api.createIndex("plans", "byName");
+    yield* api.createObjectStore("dailyLogs");
+    yield* api.createIndex("dailyLogs", "byPlan");
+    yield* api.createObjectStore("activeMealPlanSelections");
+    yield* api.createObjectStore("mealEntries");
+    yield* api.createIndex("mealEntries", "byDate");
+    yield* api.createIndex("mealEntries", "byDateMeal");
+    yield* api.createIndex("mealEntries", "byFood");
+  })
+) {}
+
+class LegacyVersion2Database extends IndexedDbDatabase.make(
+  LegacySeedVersion1,
+  Effect.fn(function* (api) {
+    yield* api.createObjectStore("foods");
+    yield* api.createIndex("foods", "byName");
+    yield* api.createObjectStore("plans");
+    yield* api.createIndex("plans", "byName");
+    yield* api.createObjectStore("dailyLogs");
+    yield* api.createIndex("dailyLogs", "byPlan");
+    yield* api.createObjectStore("activeMealPlanSelections");
+    yield* api.createObjectStore("mealEntries");
+    yield* api.createIndex("mealEntries", "byDate");
+    yield* api.createIndex("mealEntries", "byDateMeal");
+    yield* api.createIndex("mealEntries", "byFood");
+  })
+).add(
+  LegacySeedVersion2,
+  Effect.fn(function* (from, to) {
+    yield* from.deleteIndex("plans", "byName");
+    yield* to.createIndex("plans", "byName", { unique: true });
+  })
+) {}
+
+const legacyVersion1DatabaseLayer = LegacyVersion1Database.layer(
+  DatabaseName
+).pipe(Layer.provide(layerFakeIndexedDb));
+
+const legacyVersion2DatabaseLayer = LegacyVersion2Database.layer(
+  DatabaseName
+).pipe(Layer.provide(layerFakeIndexedDb));
+
+afterEach(() =>
+  Effect.runPromise(deleteFakeDatabase({ databaseName: DatabaseName }))
+);
 
 const foodInput: typeof Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
@@ -258,61 +439,16 @@ describe("MaiDatabase", () => {
       derivedLegacyFoodInput,
     ];
 
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open(DatabaseName, 2);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const api = yield* LegacyVersion2Database.getQueryBuilder;
+        const legacyFoods = yield* Schema.decodeEffect(
+          Schema.Array(LegacySeedFood)
+        )(legacyFoodInputs);
 
-      request.onerror = () => {
-        reject(request.error);
-      };
-
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        const foodStore = database.createObjectStore("foods", {
-          keyPath: "id",
-        });
-        foodStore.createIndex("byName", "name");
-
-        const planStore = database.createObjectStore("plans", {
-          keyPath: "id",
-        });
-        planStore.createIndex("byName", "name", { unique: true });
-
-        const dailyLogStore = database.createObjectStore("dailyLogs", {
-          keyPath: "dateKey",
-        });
-        dailyLogStore.createIndex("byPlan", "planId");
-
-        database.createObjectStore("activeMealPlanSelections", {
-          keyPath: "id",
-        });
-
-        const mealEntryStore = database.createObjectStore("mealEntries", {
-          keyPath: "id",
-        });
-        mealEntryStore.createIndex("byDate", "dateKey");
-        mealEntryStore.createIndex("byDateMeal", ["dateKey", "meal"]);
-        mealEntryStore.createIndex("byFood", "foodId");
-      };
-
-      request.onsuccess = () => {
-        const database = request.result;
-        const transaction = database.transaction("foods", "readwrite");
-        const foodStore = transaction.objectStore("foods");
-
-        for (const food of legacyFoodInputs) {
-          foodStore.put(food);
-        }
-
-        transaction.onerror = () => {
-          database.close();
-          reject(transaction.error);
-        };
-        transaction.oncomplete = () => {
-          database.close();
-          resolve();
-        };
-      };
-    });
+        yield* api.from("foods").upsertAll(Array.from(legacyFoods));
+      }).pipe(Effect.provide(legacyVersion2DatabaseLayer))
+    );
 
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;
@@ -401,61 +537,16 @@ describe("MaiDatabase", () => {
       },
     ];
 
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open(DatabaseName, 1);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const api = yield* LegacyVersion1Database.getQueryBuilder;
+        const decodedLegacyPlans = yield* Schema.decodeEffect(
+          Schema.Array(LegacySeedPlan)
+        )(legacyPlans);
 
-      request.onerror = () => {
-        reject(request.error);
-      };
-
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        const foodStore = database.createObjectStore("foods", {
-          keyPath: "id",
-        });
-        foodStore.createIndex("byName", "name");
-
-        const planStore = database.createObjectStore("plans", {
-          keyPath: "id",
-        });
-        planStore.createIndex("byName", "name");
-
-        const dailyLogStore = database.createObjectStore("dailyLogs", {
-          keyPath: "dateKey",
-        });
-        dailyLogStore.createIndex("byPlan", "planId");
-
-        database.createObjectStore("activeMealPlanSelections", {
-          keyPath: "id",
-        });
-
-        const mealEntryStore = database.createObjectStore("mealEntries", {
-          keyPath: "id",
-        });
-        mealEntryStore.createIndex("byDate", "dateKey");
-        mealEntryStore.createIndex("byDateMeal", ["dateKey", "meal"]);
-        mealEntryStore.createIndex("byFood", "foodId");
-      };
-
-      request.onsuccess = () => {
-        const database = request.result;
-        const transaction = database.transaction("plans", "readwrite");
-        const planStore = transaction.objectStore("plans");
-
-        for (const plan of legacyPlans) {
-          planStore.put(plan);
-        }
-
-        transaction.onerror = () => {
-          database.close();
-          reject(transaction.error);
-        };
-        transaction.oncomplete = () => {
-          database.close();
-          resolve();
-        };
-      };
-    });
+        yield* api.from("plans").upsertAll(Array.from(decodedLegacyPlans));
+      }).pipe(Effect.provide(legacyVersion1DatabaseLayer))
+    );
 
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;

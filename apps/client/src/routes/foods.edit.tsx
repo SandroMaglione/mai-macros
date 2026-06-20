@@ -1,5 +1,5 @@
 import type { Food } from "@mai/nutrition";
-import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
 import { Effect } from "effect";
 import { Apple, Save, X } from "lucide-react";
@@ -398,8 +398,8 @@ function Component() {
   const disabled = snapshot.matches("RevisingFood");
 
   return (
-    <main className="min-h-screen bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
-      <section className="mx-auto grid min-h-screen w-full max-w-[520px] grid-rows-[auto_auto_minmax(0,1fr)] bg-[#090909]">
+    <main className="h-dvh overflow-hidden bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
+      <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_auto_minmax(0,1fr)] bg-[#090909]">
         <header className="sticky top-0 z-30 grid h-[calc(env(safe-area-inset-top)+4.65rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-3 bg-[#ff5a51] px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
           <div className="flex min-w-0 items-center gap-3">
             <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
@@ -421,7 +421,7 @@ function Component() {
           <FoodSearchField
             ariaControls="edit-food-results"
             ariaLabel="Edit food search"
-            autoFocus
+            autoFocus={false}
             disabled={disabled}
             id="edit-food-search"
             label="Search"
@@ -487,10 +487,18 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
       foodId: selectedFood.id,
       foodUsage,
     }) !== undefined;
+  const willCreateRevision =
+    foodHasEntries || selectedFood.origin === "app-default";
+  const revisionMessage = willCreateRevision
+    ? selectedFood.origin === "app-default"
+      ? "Saving creates your copy. The pre-installed food stays unchanged."
+      : "Saving creates a revised copy. Existing logs keep the original food."
+    : "Saving replaces this unused food.";
+  const submitLabel = willCreateRevision ? "Save revised copy" : "Save food";
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-black/75 px-3 py-4 backdrop-blur-sm sm:items-center sm:justify-center"
+      className="fixed inset-0 z-50 flex items-end bg-black/75 px-3 py-3 backdrop-blur-sm sm:items-center sm:justify-center sm:py-4"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           actor.send({ type: "close" });
@@ -505,10 +513,10 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
       <section
         aria-labelledby="edit-food-dialog-title"
         aria-modal="true"
-        className="mx-auto grid max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60"
+        className="mx-auto grid max-h-[calc(100dvh-0.75rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)]"
         role="dialog"
       >
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-4 py-3">
+        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-3 py-2.5">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               {foodHasEntries ? "Used food" : "Unused food"}
@@ -544,8 +552,11 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
           }}
         >
           <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+            <p className="mb-4 rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+              {revisionMessage}
+            </p>
             <FoodFormFields
-              autoFocusName
+              autoFocusName={false}
               disabled={disabled}
               initialFood={selectedFood}
             />
@@ -553,13 +564,13 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
 
           <footer className="grid border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <button
-              aria-label="Save food"
+              aria-label={submitLabel}
               className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
               disabled={disabled}
               type="submit"
             >
               <Save aria-hidden="true" size={16} strokeWidth={3} />
-              Save food
+              {submitLabel}
             </button>
           </footer>
         </form>

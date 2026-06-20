@@ -1,24 +1,38 @@
 type Node = {
   body?: Array<Node>;
-  computed?: boolean;
-  declaration?: Node;
+  declaration?: Node | null;
   declarations?: Array<Node>;
-  exported?: Node;
+  expression?: Node;
+  exported?: Node | null;
   id?: Node | null;
   init?: Node | null;
-  key?: Node;
-  local?: Node;
+  local?: Node | null;
   name?: string;
   parent?: Node;
-  property?: Node;
+  right?: Node;
+  source?: Node | null;
   specifiers?: Array<Node>;
   type: string;
-  value?: Node | string;
+};
+
+type Reference = {
+  identifier: Node;
+  isRead: () => boolean;
+};
+
+type ScopeVariable = {
+  name: string;
+  references: Array<Reference>;
+};
+
+type SourceCode = {
+  getDeclaredVariables: (node: Node) => Array<ScopeVariable>;
 };
 
 type Candidate = {
   name: string;
   node: Node;
+  variable: ScopeVariable;
 };
 
 const functionExpressionTypes = new Set([
@@ -31,171 +45,220 @@ const _isFunctionExpression = ({ node }: { node: Node | null | undefined }) =>
 
 const _isPascalCase = ({ name }: { name: string }) => /^[A-Z]/.test(name);
 
-const _isPrivateFunctionName = ({ name }: { name: string }) =>
-  !_isPascalCase({ name });
-
 const _isTopLevelFunctionVariable = ({ node }: { node: Node }) =>
   node.id?.type === "Identifier" &&
   _isFunctionExpression({ node: node.init }) &&
   node.parent?.type === "VariableDeclaration" &&
   node.parent.parent?.type === "Program";
 
+const _addIdentifierName = ({
+  names,
+  node,
+}: {
+  names: Set<string>;
+  node: Node | null | undefined;
+}) => {
+  if (node?.type === "Identifier" && node.name !== undefined) {
+    names.add(node.name);
+  }
+};
+
+const _addDeclarationNames = ({
+  declaration,
+  names,
+}: {
+  declaration: Node | null | undefined;
+  names: Set<string>;
+}) => {
+  if (declaration?.type === "FunctionDeclaration") {
+    _addIdentifierName({ names, node: declaration.id });
+    return;
+  }
+
+  if (declaration?.type === "VariableDeclaration") {
+    for (const variable of declaration.declarations ?? []) {
+      _addIdentifierName({ names, node: variable.id });
+    }
+  }
+};
+
 const _exportedNames = ({ node }: { node: Node }) => {
   const names = new Set<string>();
 
   for (const statement of node.body ?? []) {
     if (statement.type === "ExportDefaultDeclaration") {
-      const name = statement.declaration?.name;
-
-      if (name !== undefined) {
-        names.add(name);
-      }
+      _addIdentifierName({ names, node: statement.declaration });
+      _addIdentifierName({ names, node: statement.declaration?.id });
     }
 
     if (statement.type === "ExportNamedDeclaration") {
-      for (const specifier of statement.specifiers ?? []) {
-        if (specifier.local?.name !== undefined) {
-          names.add(specifier.local.name);
+      _addDeclarationNames({ declaration: statement.declaration, names });
+
+      if (statement.source === null || statement.source === undefined) {
+        for (const specifier of statement.specifiers ?? []) {
+          _addIdentifierName({ names, node: specifier.local });
         }
       }
+    }
 
-      if (statement.declaration?.type === "FunctionDeclaration") {
-        const name = statement.declaration.id?.name;
-
-        if (name !== undefined) {
-          names.add(name);
-        }
-      }
-
-      for (const declaration of statement.declaration?.declarations ?? []) {
-        const name = declaration.id?.name;
-
-        if (name !== undefined) {
-          names.add(name);
-        }
-      }
+    if (statement.type === "TSExportAssignment") {
+      _addIdentifierName({ names, node: statement.expression });
     }
   }
 
   return names;
 };
 
-const _topLevelCandidates = ({
+const _declaredVariable = ({
+  name,
+  node,
+  sourceCode,
+}: {
+  name: string;
+  node: Node;
+  sourceCode: SourceCode;
+}) =>
+  sourceCode
+    .getDeclaredVariables(node)
+    .find((variable) => variable.name === name);
+
+const _functionDeclarationCandidate = ({
   exportedNames,
   node,
+  sourceCode,
 }: {
   exportedNames: Set<string>;
   node: Node;
+  sourceCode: SourceCode;
+}): Array<Candidate> => {
+  const name = node.id?.name;
+
+  if (
+    name === undefined ||
+    node.parent?.type !== "Program" ||
+    _isPascalCase({ name }) ||
+    exportedNames.has(name)
+  ) {
+    return [];
+  }
+
+  const variable = _declaredVariable({ name, node, sourceCode });
+
+  return variable === undefined ? [] : [{ name, node, variable }];
+};
+
+const _variableDeclarationCandidate = ({
+  exportedNames,
+  node,
+  sourceCode,
+}: {
+  exportedNames: Set<string>;
+  node: Node;
+  sourceCode: SourceCode;
+}): Array<Candidate> => {
+  const name = node.id?.name;
+
+  if (
+    name === undefined ||
+    _isPascalCase({ name }) ||
+    exportedNames.has(name) ||
+    !_isTopLevelFunctionVariable({ node })
+  ) {
+    return [];
+  }
+
+  const variable = _declaredVariable({ name, node, sourceCode });
+
+  return variable === undefined ? [] : [{ name, node, variable }];
+};
+
+const _topLevelCandidates = ({
+  exportedNames,
+  node,
+  sourceCode,
+}: {
+  exportedNames: Set<string>;
+  node: Node;
+  sourceCode: SourceCode;
 }) =>
   (node.body ?? []).flatMap((statement): Array<Candidate> => {
     if (statement.type === "FunctionDeclaration") {
-      const name = statement.id?.name;
-
-      return name !== undefined &&
-        _isPrivateFunctionName({ name }) &&
-        !exportedNames.has(name)
-        ? [{ name, node: statement }]
-        : [];
+      return _functionDeclarationCandidate({
+        exportedNames,
+        node: statement,
+        sourceCode,
+      });
     }
 
     if (statement.type !== "VariableDeclaration") {
       return [];
     }
 
-    return (statement.declarations ?? []).flatMap((declaration) => {
-      const name = declaration.id?.name;
-
-      return name !== undefined &&
-        _isPrivateFunctionName({ name }) &&
-        !exportedNames.has(name) &&
-        _isTopLevelFunctionVariable({ node: declaration })
-        ? [{ name, node: declaration }]
-        : [];
-    });
+    return (statement.declarations ?? []).flatMap((declaration) =>
+      _variableDeclarationCandidate({
+        exportedNames,
+        node: declaration,
+        sourceCode,
+      })
+    );
   });
 
-const _isBindingIdentifier = ({ node, parent }: { node: Node; parent: Node }) =>
-  (parent.type === "FunctionDeclaration" && parent.id === node) ||
-  (parent.type === "FunctionExpression" && parent.id === node) ||
-  (parent.type === "VariableDeclarator" && parent.id === node) ||
-  (parent.type === "ImportSpecifier" && parent.local === node) ||
-  (parent.type === "ImportDefaultSpecifier" && parent.local === node) ||
-  (parent.type === "ImportNamespaceSpecifier" && parent.local === node);
+const _hasTypeAncestor = ({ node }: { node: Node }) => {
+  let current = node.parent;
 
-const _isObjectKey = ({ node, parent }: { node: Node; parent: Node }) =>
-  (parent.type === "Property" ||
-    parent.type === "PropertyDefinition" ||
-    parent.type === "MethodDefinition") &&
-  parent.key === node &&
-  parent.value !== node &&
-  parent.computed !== true;
+  while (current !== undefined) {
+    if (current.type.startsWith("TS")) {
+      return true;
+    }
 
-const _isMemberProperty = ({ node, parent }: { node: Node; parent: Node }) =>
-  parent.type === "MemberExpression" &&
-  parent.property === node &&
-  parent.computed !== true;
+    if (
+      current.type === "Program" ||
+      current.type === "BlockStatement" ||
+      current.type === "ExpressionStatement"
+    ) {
+      return false;
+    }
 
-const _isExportSpecifier = ({ node, parent }: { node: Node; parent: Node }) =>
-  parent.type === "ExportSpecifier" &&
-  (parent.local === node || parent.exported === node);
-
-const _isTypeIdentifier = ({ parent }: { parent: Node }) =>
-  parent.type.startsWith("TS") || parent.type === "TSTypeAnnotation";
-
-const _isReference = ({ node }: { node: Node }) => {
-  const parent = node.parent;
-
-  return (
-    node.type === "Identifier" &&
-    parent !== undefined &&
-    !_isBindingIdentifier({ node, parent }) &&
-    !_isObjectKey({ node, parent }) &&
-    !_isMemberProperty({ node, parent }) &&
-    !_isExportSpecifier({ node, parent }) &&
-    !_isTypeIdentifier({ parent })
-  );
-};
-
-const _visit = ({
-  node,
-  onNode,
-  visited,
-}: {
-  node: Node;
-  onNode: (node: Node) => void;
-  visited: WeakSet<Node>;
-}) => {
-  if (visited.has(node)) {
-    return;
+    current = current.parent;
   }
 
-  visited.add(node);
-  onNode(node);
-
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "parent" || value === null || value === undefined) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (
-          item !== null &&
-          typeof item === "object" &&
-          typeof item.type === "string"
-        ) {
-          _visit({ node: item, onNode, visited });
-        }
-      }
-
-      continue;
-    }
-
-    if (typeof value === "object" && typeof value.type === "string") {
-      _visit({ node: value, onNode, visited });
-    }
-  }
+  return false;
 };
+
+const _hasExportAncestor = ({ node }: { node: Node }) => {
+  let current = node.parent;
+
+  while (current !== undefined) {
+    if (
+      current.type === "ExportDefaultDeclaration" ||
+      current.type === "ExportSpecifier" ||
+      current.type === "TSExportAssignment"
+    ) {
+      return true;
+    }
+
+    if (current.type === "Program" || current.type === "BlockStatement") {
+      return false;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+};
+
+const _isRuntimeReadReference = ({ reference }: { reference: Reference }) =>
+  reference.isRead() &&
+  !_hasTypeAncestor({ node: reference.identifier }) &&
+  !_hasExportAncestor({ node: reference.identifier });
+
+const _runtimeReadCount = ({ variable }: { variable: ScopeVariable }) =>
+  variable.references.filter((reference) =>
+    _isRuntimeReadReference({ reference })
+  ).length;
+
+const _message = ({ name }: { name: string }) =>
+  `Inline the private function "${name}" at its only usage site instead of defining it as a top-level function.`;
 
 const rule = {
   meta: {
@@ -207,48 +270,24 @@ const rule = {
   },
   create(context: {
     report: (opts: { node: unknown; message: string }) => void;
+    sourceCode: SourceCode;
   }) {
     return {
       Program(node: Node) {
         const candidates = _topLevelCandidates({
           exportedNames: _exportedNames({ node }),
           node,
-        });
-
-        if (candidates.length === 0) {
-          return;
-        }
-
-        const candidateNames = new Set(
-          candidates.map((candidate) => candidate.name)
-        );
-        const referenceCounts = new Map<string, number>();
-
-        _visit({
-          node,
-          onNode: (child) => {
-            if (
-              child.name !== undefined &&
-              candidateNames.has(child.name) &&
-              _isReference({ node: child })
-            ) {
-              referenceCounts.set(
-                child.name,
-                (referenceCounts.get(child.name) ?? 0) + 1
-              );
-            }
-          },
-          visited: new WeakSet(),
+          sourceCode: context.sourceCode,
         });
 
         for (const candidate of candidates) {
-          if ((referenceCounts.get(candidate.name) ?? 0) !== 1) {
+          if (_runtimeReadCount({ variable: candidate.variable }) !== 1) {
             continue;
           }
 
           context.report({
             node: candidate.node,
-            message: `Inline the private function "${candidate.name}" at its only usage site instead of defining it as a function.`,
+            message: _message({ name: candidate.name }),
           });
         }
       },

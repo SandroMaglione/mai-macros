@@ -9,22 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InsightsIndexRouteImport } from './routes/insights.index'
 import { Route as PlansNewRouteImport } from './routes/plans.new'
+import { Route as InsightsWeekRouteImport } from './routes/insights.week'
+import { Route as InsightsCalendarRouteImport } from './routes/insights.calendar'
 import { Route as FoodsNewRouteImport } from './routes/foods.new'
 import { Route as FoodsEditRouteImport } from './routes/foods.edit'
 import { Route as DaysDateKeyRouteImport } from './routes/days.$dateKey'
 import { Route as PlansPlanIdEditRouteImport } from './routes/plans.$planId.edit'
 
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InsightsIndexRoute = InsightsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => InsightsRoute,
+} as any)
 const PlansNewRoute = PlansNewRouteImport.update({
   id: '/plans/new',
   path: '/plans/new',
   getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsWeekRoute = InsightsWeekRouteImport.update({
+  id: '/week',
+  path: '/week',
+  getParentRoute: () => InsightsRoute,
+} as any)
+const InsightsCalendarRoute = InsightsCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => InsightsRoute,
 } as any)
 const FoodsNewRoute = FoodsNewRouteImport.update({
   id: '/foods/new',
@@ -49,10 +73,14 @@ const PlansPlanIdEditRoute = PlansPlanIdEditRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/insights': typeof InsightsRouteWithChildren
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
+  '/insights/calendar': typeof InsightsCalendarRoute
+  '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
+  '/insights/': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -60,26 +88,37 @@ export interface FileRoutesByTo {
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
+  '/insights/calendar': typeof InsightsCalendarRoute
+  '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
+  '/insights': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/insights': typeof InsightsRouteWithChildren
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
+  '/insights/calendar': typeof InsightsCalendarRoute
+  '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
+  '/insights/': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/insights'
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
+    | '/insights/calendar'
+    | '/insights/week'
     | '/plans/new'
+    | '/insights/'
     | '/plans/$planId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -87,20 +126,28 @@ export interface FileRouteTypes {
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
+    | '/insights/calendar'
+    | '/insights/week'
     | '/plans/new'
+    | '/insights'
     | '/plans/$planId/edit'
   id:
     | '__root__'
     | '/'
+    | '/insights'
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
+    | '/insights/calendar'
+    | '/insights/week'
     | '/plans/new'
+    | '/insights/'
     | '/plans/$planId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  InsightsRoute: typeof InsightsRouteWithChildren
   DaysDateKeyRoute: typeof DaysDateKeyRoute
   FoodsEditRoute: typeof FoodsEditRoute
   FoodsNewRoute: typeof FoodsNewRoute
@@ -110,6 +157,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -117,12 +171,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/insights/': {
+      id: '/insights/'
+      path: '/'
+      fullPath: '/insights/'
+      preLoaderRoute: typeof InsightsIndexRouteImport
+      parentRoute: typeof InsightsRoute
+    }
     '/plans/new': {
       id: '/plans/new'
       path: '/plans/new'
       fullPath: '/plans/new'
       preLoaderRoute: typeof PlansNewRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/insights/week': {
+      id: '/insights/week'
+      path: '/week'
+      fullPath: '/insights/week'
+      preLoaderRoute: typeof InsightsWeekRouteImport
+      parentRoute: typeof InsightsRoute
+    }
+    '/insights/calendar': {
+      id: '/insights/calendar'
+      path: '/calendar'
+      fullPath: '/insights/calendar'
+      preLoaderRoute: typeof InsightsCalendarRouteImport
+      parentRoute: typeof InsightsRoute
     }
     '/foods/new': {
       id: '/foods/new'
@@ -155,8 +230,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface InsightsRouteChildren {
+  InsightsCalendarRoute: typeof InsightsCalendarRoute
+  InsightsWeekRoute: typeof InsightsWeekRoute
+  InsightsIndexRoute: typeof InsightsIndexRoute
+}
+
+const InsightsRouteChildren: InsightsRouteChildren = {
+  InsightsCalendarRoute: InsightsCalendarRoute,
+  InsightsWeekRoute: InsightsWeekRoute,
+  InsightsIndexRoute: InsightsIndexRoute,
+}
+
+const InsightsRouteWithChildren = InsightsRoute._addFileChildren(
+  InsightsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  InsightsRoute: InsightsRouteWithChildren,
   DaysDateKeyRoute: DaysDateKeyRoute,
   FoodsEditRoute: FoodsEditRoute,
   FoodsNewRoute: FoodsNewRoute,

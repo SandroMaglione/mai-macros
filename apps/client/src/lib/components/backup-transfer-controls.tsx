@@ -1,31 +1,38 @@
 import { Backups, type MaiBackup } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { AlertTriangle, Download, Loader2, Upload } from "lucide-react";
 import { useRef } from "react";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
+import {
+  BackupExportMetadataStore,
+  type BackupExportMetadata,
+  type BackupTransferCounts,
+} from "../services/backup-export-metadata.ts";
 
 type BackupTransferMode = "full" | "importOnly";
 type BackupTransferAction = "export" | "import";
-
-type BackupTransferCounts = {
-  readonly activeMealPlanSelections: number;
-  readonly dailyLogs: number;
-  readonly foods: number;
-  readonly mealEntries: number;
-  readonly plans: number;
-};
+type BackupExportDelivery = "downloaded" | "shared";
 
 type BackupTransferResult = {
   readonly action: BackupTransferAction;
   readonly backupName: string;
   readonly counts: BackupTransferCounts;
   readonly databaseVersion: number;
+  readonly delivery?: BackupExportDelivery;
+  readonly earliestDateKey?: string;
   readonly exportedAt: string;
+  readonly exportedAtIso: string;
   readonly fileName: string;
   readonly formatVersion: number;
+  readonly latestDateKey?: string;
+};
+
+type BackupExportOutput = {
+  readonly metadata: BackupExportMetadata;
+  readonly result: BackupTransferResult;
 };
 
 type BackupTransferEvent =
@@ -42,6 +49,22 @@ type BackupTransferEvent =
       readonly file: File;
     };
 
+class BackupShareAborted extends Data.TaggedError("BackupShareAborted")<{}> {}
+
+class BackupShareFailed extends Data.TaggedError("BackupShareFailed")<{
+  readonly message: string;
+}> {}
+
+class BackupFileReadFailed extends Data.TaggedError("BackupFileReadFailed")<{
+  readonly message: string;
+}> {}
+
+class BackupAfterImportFailed extends Data.TaggedError(
+  "BackupAfterImportFailed"
+)<{
+  readonly message: string;
+}> {}
+
 const backupPanelClassName =
   "grid gap-3 rounded-lg border border-[#29292d] bg-[#161618] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]";
 const backupFieldClassName =
@@ -54,6 +77,7 @@ const backupSecondaryButtonClassName =
 const BackupTransferErrorSchema = Schema.Struct({
   _tag: Schema.String,
   detail: Schema.optional(Schema.String),
+  message: Schema.optional(Schema.String),
 });
 
 const BackupIsoDate = ({ exportedAt }: { readonly exportedAt: Date }) =>
@@ -85,24 +109,53 @@ const BackupTransferResultFromBackup = ({
   action,
   backup,
   backupName,
+  delivery,
   fileName,
 }: {
   readonly action: BackupTransferAction;
   readonly backup: MaiBackup;
   readonly backupName: string;
+  readonly delivery?: BackupExportDelivery;
   readonly fileName: string;
 }) => {
   const exportedAt = new Date(DateTime.toEpochMillis(backup.source.exportedAt));
+  const sortedDailyLogDateKeys = backup.stores.dailyLogs
+    .map((dailyLog) => dailyLog.dateKey)
+    .sort();
+  const earliestDateKey = sortedDailyLogDateKeys[0];
+  const latestDateKey = sortedDailyLogDateKeys.at(-1);
 
   return {
     action,
     backupName,
     counts: backup.integrity.counts,
     databaseVersion: backup.source.databaseVersion,
+    ...(delivery === undefined ? {} : { delivery }),
+    ...(earliestDateKey === undefined ? {} : { earliestDateKey }),
     exportedAt: exportedAt.toLocaleString(),
+    exportedAtIso: exportedAt.toISOString(),
     fileName,
     formatVersion: backup.formatVersion,
+    ...(latestDateKey === undefined ? {} : { latestDateKey }),
   } satisfies BackupTransferResult;
+};
+
+const BackupExportMetadataFromResult = ({
+  result,
+}: {
+  readonly result: BackupTransferResult;
+}) => {
+  return {
+    counts: result.counts,
+    ...(result.earliestDateKey === undefined
+      ? {}
+      : { earliestDateKey: result.earliestDateKey }),
+    exportedAtIso: result.exportedAtIso,
+    fileName: result.fileName,
+    ...(result.latestDateKey === undefined
+      ? {}
+      : { latestDateKey: result.latestDateKey }),
+  } satisfies BackupExportMetadata;
 };
 
 const BackupResultMessage = ({
@@ -117,7 +170,9 @@ const BackupResultMessage = ({
     result.counts.plans;
 
   if (result.action === "export") {
-    return `Exported ${result.backupName} as ${result.fileName}. Format v${result.formatVersion}, database v${result.databaseVersion}, ${totalRecords} records, ${result.exportedAt}.`;
+    const verb = result.delivery === "shared" ? "Shared" : "Downloaded";
+
+    return `${verb} ${result.backupName} as ${result.fileName}. Format v${result.formatVersion}, database v${result.databaseVersion}, ${totalRecords} records, ${result.exportedAt}.`;
   }
 
   return `Imported ${result.fileName}. Format v${result.formatVersion}, database v${result.databaseVersion}, ${totalRecords} records restored from ${result.exportedAt}.`;
@@ -135,6 +190,10 @@ const BackupTransferErrorMessage = ({
   ).pipe(Option.getOrNull);
   const actionLabel = action === "export" ? "export" : "import";
 
+  if (decodedError?._tag === "BackupShareAborted") {
+    return "Backup export was cancelled.";
+  }
+
   if (decodedError?._tag === "BackupIntegrityError") {
     return `Could not ${actionLabel} the backup. ${decodedError.detail ?? "The backup data failed validation."}`;
   }
@@ -145,8 +204,11 @@ const BackupTransferErrorMessage = ({
       : "Could not export the backup. The current data could not be encoded as a valid Mai backup.";
   }
 
-  if (error instanceof DOMException) {
-    return `Could not ${actionLabel} the backup. ${error.message}`;
+  if (
+    decodedError?._tag === "BackupFileReadFailed" ||
+    decodedError?._tag === "BackupAfterImportFailed"
+  ) {
+    return `Could not ${actionLabel} the backup. ${decodedError.message ?? "The browser could not finish the file operation."}`;
   }
 
   return action === "import"
@@ -154,97 +216,202 @@ const BackupTransferErrorMessage = ({
     : "Could not export the backup. Try again after refreshing the app.";
 };
 
+const ErrorMessageFromUnknown = ({ error }: { readonly error: unknown }) =>
+  error instanceof Error ? error.message : "Unexpected browser error.";
+
+const BrowserCanShareBackupFile = ({
+  file,
+}: {
+  readonly file: File;
+}): boolean =>
+  typeof navigator.share === "function" &&
+  typeof navigator.canShare === "function" &&
+  navigator.canShare({ files: [file] });
+
+const DownloadBackup = ({
+  blob,
+  fileName,
+}: {
+  readonly blob: Blob;
+  readonly fileName: string;
+}) =>
+  Effect.sync(() => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  });
+
+const ShareBackupFile = ({ file }: { readonly file: File }) =>
+  Effect.tryPromise({
+    try: () =>
+      navigator.share({
+        files: [file],
+        title: file.name,
+      }),
+    catch: (error) =>
+      error instanceof DOMException && error.name === "AbortError"
+        ? new BackupShareAborted()
+        : new BackupShareFailed({
+            message: ErrorMessageFromUnknown({ error }),
+          }),
+  });
+
+const DeliverBackup = ({
+  fileName,
+  json,
+}: {
+  readonly fileName: string;
+  readonly json: string;
+}) =>
+  Effect.gen(function* () {
+    const blob = new Blob([json], {
+      type: "application/json",
+    });
+    const file =
+      typeof File === "function"
+        ? new File([blob], fileName, {
+            type: "application/json",
+          })
+        : null;
+
+    if (file !== null && BrowserCanShareBackupFile({ file })) {
+      return yield* ShareBackupFile({ file }).pipe(
+        Effect.as("shared" as const),
+        Effect.catchTag("BackupShareFailed", () =>
+          DownloadBackup({ blob, fileName }).pipe(
+            Effect.as("downloaded" as const)
+          )
+        )
+      );
+    }
+
+    return yield* DownloadBackup({ blob, fileName }).pipe(
+      Effect.as("downloaded" as const)
+    );
+  });
+
+const ExportBackup = ({ backupName }: { readonly backupName: string }) =>
+  Effect.gen(function* () {
+    const backups = yield* Backups;
+    const metadataStore = yield* BackupExportMetadataStore;
+    const exportedBackup = yield* backups.exportToJson();
+    const exportedAt = new Date(
+      DateTime.toEpochMillis(exportedBackup.backup.source.exportedAt)
+    );
+    const fileName = BackupFileName({
+      backupName,
+      databaseVersion: exportedBackup.backup.source.databaseVersion,
+      exportedAt,
+      formatVersion: exportedBackup.backup.formatVersion,
+    });
+    const delivery = yield* DeliverBackup({
+      fileName,
+      json: exportedBackup.json,
+    });
+    const result = BackupTransferResultFromBackup({
+      action: "export",
+      backup: exportedBackup.backup,
+      backupName: backupName.trim() === "" ? "Mai backup" : backupName,
+      delivery,
+      fileName,
+    });
+    const metadata = BackupExportMetadataFromResult({ result });
+
+    yield* metadataStore.setLatest({ metadata });
+
+    return {
+      metadata,
+      result,
+    } satisfies BackupExportOutput;
+  });
+
+const ImportBackup = ({
+  afterImport,
+  file,
+}: {
+  readonly afterImport: () => Promise<void>;
+  readonly file: File;
+}) =>
+  Effect.gen(function* () {
+    const json = yield* Effect.tryPromise({
+      try: () => file.text(),
+      catch: (error) =>
+        new BackupFileReadFailed({
+          message: ErrorMessageFromUnknown({ error }),
+        }),
+    });
+    const backups = yield* Backups;
+    const importedBackup = yield* backups.importFromJson({
+      input: { json },
+    });
+
+    yield* Effect.tryPromise({
+      try: () => afterImport(),
+      catch: (error) =>
+        new BackupAfterImportFailed({
+          message: ErrorMessageFromUnknown({ error }),
+        }),
+    });
+
+    return BackupTransferResultFromBackup({
+      action: "import",
+      backup: importedBackup.backup,
+      backupName: file.name,
+      fileName: file.name,
+    });
+  });
+
 const backupTransferMachine = setup({
   types: {
     context: {} as {
       readonly backupName: string;
       readonly errorMessage: string | null;
+      readonly lastExport: BackupExportMetadata | null;
       readonly successMessage: string | null;
     },
     events: {} as BackupTransferEvent,
   },
   actors: {
     exportBackup: fromPromise<
-      BackupTransferResult,
-      {
-        readonly backupName: string;
-      }
-    >(async ({ input }) => {
-      const exportedBackup = await RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const backups = yield* Backups;
-
-          return yield* backups.exportToJson();
-        })
-      );
-      const exportedAt = new Date(
-        DateTime.toEpochMillis(exportedBackup.backup.source.exportedAt)
-      );
-      const fileName = BackupFileName({
-        backupName: input.backupName,
-        databaseVersion: exportedBackup.backup.source.databaseVersion,
-        exportedAt,
-        formatVersion: exportedBackup.backup.formatVersion,
-      });
-      const blob = new Blob([exportedBackup.json], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = fileName;
-      link.rel = "noopener";
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 0);
-
-      return BackupTransferResultFromBackup({
-        action: "export",
-        backup: exportedBackup.backup,
-        backupName:
-          input.backupName.trim() === "" ? "Mai backup" : input.backupName,
-        fileName,
-      });
-    }),
+      BackupExportOutput,
+      { readonly backupName: string }
+    >(({ input }) => RuntimeClient.runPromise(ExportBackup(input))),
     importBackup: fromPromise<
       BackupTransferResult,
       {
         readonly afterImport: () => Promise<void>;
         readonly file: File;
       }
-    >(async ({ input }) => {
-      const json = await input.file.text();
-      const importedBackup = await RuntimeClient.runPromise(
+    >(({ input }) => RuntimeClient.runPromise(ImportBackup(input))),
+    loadLastExport: fromPromise<BackupExportMetadata | null>(async () => {
+      const metadata = await RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const backups = yield* Backups;
+          const metadataStore = yield* BackupExportMetadataStore;
 
-          return yield* backups.importFromJson({
-            input: { json },
-          });
+          return yield* metadataStore.getLatest();
         })
       );
 
-      await input.afterImport();
-
-      return BackupTransferResultFromBackup({
-        action: "import",
-        backup: importedBackup.backup,
-        backupName: input.file.name,
-        fileName: input.file.name,
-      });
+      return metadata.pipe(Option.getOrNull);
     }),
   },
 }).createMachine({
-  context: {
+  context: () => ({
     backupName: "Mai backup",
     errorMessage: null,
+    lastExport: null,
     successMessage: null,
-  },
-  initial: "Idle",
+  }),
+  initial: "Loading",
   on: {
     changeBackupName: {
       actions: assign(({ event }) => {
@@ -257,6 +424,20 @@ const backupTransferMachine = setup({
     },
   },
   states: {
+    Loading: {
+      invoke: {
+        src: "loadLastExport",
+        onDone: {
+          target: "Idle",
+          actions: assign(({ event }) => ({
+            lastExport: event.output,
+          })),
+        },
+        onError: {
+          target: "Idle",
+        },
+      },
+    },
     Idle: {
       on: {
         export: {
@@ -307,7 +488,10 @@ const backupTransferMachine = setup({
           target: "Exported",
           actions: assign(({ event }) => ({
             errorMessage: null,
-            successMessage: BackupResultMessage({ result: event.output }),
+            lastExport: event.output.metadata,
+            successMessage: BackupResultMessage({
+              result: event.output.result,
+            }),
           })),
         },
         onError: {
@@ -366,9 +550,11 @@ export function BackupTransferControls({
   const [snapshot, send] = useMachine(backupTransferMachine);
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
-  const disabled = isExporting || isImporting;
+  const isLoading = snapshot.matches("Loading");
+  const disabled = isLoading || isExporting || isImporting;
   const showExport = mode === "full";
-  const { backupName, errorMessage, successMessage } = snapshot.context;
+  const { backupName, errorMessage, lastExport, successMessage } =
+    snapshot.context;
 
   return (
     <section className={backupPanelClassName} aria-label="Backups">
@@ -382,6 +568,10 @@ export function BackupTransferControls({
           </p>
         ) : null}
       </div>
+
+      {showExport ? (
+        <BackupExportRecency isLoading={isLoading} metadata={lastExport} />
+      ) : null}
 
       {showExport ? (
         <label className="grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]">
@@ -509,5 +699,50 @@ export function BackupTransferControls({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function BackupExportRecency({
+  isLoading,
+  metadata,
+}: {
+  readonly isLoading: boolean;
+  readonly metadata: BackupExportMetadata | null;
+}) {
+  if (isLoading) {
+    return (
+      <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-xs font-bold leading-snug text-[#aaaab1]">
+        Checking latest export on this device.
+      </p>
+    );
+  }
+
+  if (metadata === null) {
+    return (
+      <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-xs font-bold leading-snug text-[#aaaab1]">
+        No successful export on this device yet.
+      </p>
+    );
+  }
+
+  const exportedAt = new Date(metadata.exportedAtIso);
+  const totalRecords =
+    metadata.counts.dailyLogs +
+    metadata.counts.foods +
+    metadata.counts.mealEntries +
+    metadata.counts.plans;
+  const loggedDaysText =
+    metadata.latestDateKey === undefined
+      ? "No logged days included."
+      : metadata.earliestDateKey === metadata.latestDateKey ||
+          metadata.earliestDateKey === undefined
+        ? `Included logged day ${metadata.latestDateKey}.`
+        : `Included logged days ${metadata.earliestDateKey} through ${metadata.latestDateKey}.`;
+
+  return (
+    <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-xs font-bold leading-snug text-[#aaaab1]">
+      Last export {exportedAt.toLocaleString()}. {loggedDaysText} {totalRecords}{" "}
+      records saved.
+    </p>
   );
 }

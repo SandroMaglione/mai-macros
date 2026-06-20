@@ -11,15 +11,18 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array, Effect, Option, Order, Schema } from "effect";
 import {
+  Activity,
+  Apple,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
+  Download,
   Pencil,
   Plus,
   Trash2,
   X,
 } from "lucide-react";
-import { useRef } from "react";
 import {
   assertEvent,
   assign,
@@ -30,6 +33,7 @@ import {
   type ActorRefFrom,
   type SnapshotFrom,
 } from "xstate";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import { RuntimeClient } from "../runtime-client.ts";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
@@ -73,6 +77,7 @@ type NutrientTotals = {
 type MacroTone = "protein" | "carbs" | "fat";
 type DailyNutrientTone = "carbs" | "fat" | "salt";
 type AddMealFoodDialogMode = "create" | "revise";
+type MacroDisplayMode = "consumed" | "remaining";
 
 const macroToneClassNames: Record<
   MacroTone,
@@ -122,7 +127,12 @@ const dailyNutrientNoTargetClassNames = {
 const actionColorClassName = "text-[#ff5a51]";
 const headerActionClassName =
   "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
-const planActionClassName = `${actionColorClassName} inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-[#3d2827] bg-[#241918] no-underline transition-colors hover:bg-[#2c1d1c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`;
+const appHeaderActionClassName =
+  "inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-md border border-[#3d332a] bg-[#211914] px-2 text-sm font-black text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
+const bottomActionClassName =
+  "inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-1 text-[0.68rem] font-black leading-tight text-[#dfd2bd] no-underline transition-colors hover:border-[#5a3b26] hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
+const sheetIconActionClassName =
+  "inline-flex size-10 items-center justify-center rounded-md border border-[#3d332a] bg-[#211914] text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
 const darkFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const darkFieldLabelClassName =
@@ -230,6 +240,32 @@ const addMealFoodDialogClosedContext = {
   quantityGrams: "",
   selectedFood: null,
 } satisfies AddMealFoodDialogContext;
+
+const macroDisplayModeMachine = setup({
+  types: {
+    events: {} as {
+      readonly type: "toggle";
+    },
+  },
+}).createMachine({
+  initial: "Consumed",
+  states: {
+    Consumed: {
+      on: {
+        toggle: {
+          target: "Remaining",
+        },
+      },
+    },
+    Remaining: {
+      on: {
+        toggle: {
+          target: "Consumed",
+        },
+      },
+    },
+  },
+});
 
 const addMealFoodDialogMachine = setup({
   types: {
@@ -879,10 +915,10 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
-      <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-6">
-        <header className="sticky top-0 z-30 bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
+      <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
+        <header className="bg-[#090909] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
           <nav
-            className="grid h-16 grid-cols-[1fr_auto_1fr] items-center px-4"
+            className="grid h-14 grid-cols-[1fr_auto_1fr] items-center bg-[#ff5a51] px-4"
             aria-label="Day navigation"
           >
             <Link
@@ -919,20 +955,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
           </nav>
         </header>
 
-        <DailyProgress
-          day={day}
-          disabled={isChangingPlan}
-          nutrients={dailyNutrients}
-          onChangePlan={(planId) => {
-            send({
-              type: "changePlan",
-              input: {
-                dateKey: day.dailyLog.dateKey,
-                planId,
-              },
-            });
-          }}
-        />
+        <DailyProgress day={day} nutrients={dailyNutrients} />
 
         <div className="grid gap-5 px-4 py-5">
           {mealOptions.map((mealOption) => (
@@ -952,16 +975,250 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
           ))}
         </div>
 
-        <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-          <BackupTransferControls
-            afterImport={() => router.invalidate()}
-            mode="full"
-          />
-        </div>
-
         <AddMealFoodDialog actor={addMealFoodDialogActor} />
+        <BottomActionNav
+          afterImport={() => router.invalidate()}
+          day={day}
+          disabled={isChangingPlan}
+          onChangePlan={(planId) => {
+            send({
+              type: "changePlan",
+              input: {
+                dateKey: day.dailyLog.dateKey,
+                planId,
+              },
+            });
+          }}
+        />
       </section>
     </main>
+  );
+}
+
+function BottomActionNav({
+  afterImport,
+  day,
+  disabled,
+  onChangePlan,
+}: {
+  readonly afterImport: () => Promise<void>;
+  readonly day: OpenedDay;
+  readonly disabled: boolean;
+  readonly onChangePlan: (planId: string) => void;
+}) {
+  return (
+    <nav
+      aria-label="Primary work areas"
+      className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+    >
+      <div className="mx-auto grid w-full max-w-[520px] grid-cols-4 gap-1.5 rounded-lg border border-[#3d332a] bg-[#15120f]/95 p-1.5 shadow-[0_-12px_32px_rgb(0_0_0/0.36)] backdrop-blur">
+        <Link
+          aria-label="Work with stats"
+          className={bottomActionClassName}
+          to="/insights"
+        >
+          <Activity aria-hidden="true" size={18} strokeWidth={3} />
+          Stats
+        </Link>
+        <details>
+          <summary
+            aria-label="Work with plans"
+            className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
+          >
+            <ClipboardList aria-hidden="true" size={18} strokeWidth={3} />
+            Plans
+          </summary>
+          <PlansActionSheet
+            day={day}
+            disabled={disabled}
+            onChangePlan={onChangePlan}
+          />
+        </details>
+        <details>
+          <summary
+            aria-label="Work with foods"
+            className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
+          >
+            <Apple aria-hidden="true" size={18} strokeWidth={3} />
+            Foods
+          </summary>
+          <FoodsActionSheet dateKey={day.dailyLog.dateKey} />
+        </details>
+        <details>
+          <summary
+            aria-label="Work with backup"
+            className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
+          >
+            <Download aria-hidden="true" size={18} strokeWidth={3} />
+            Backup
+          </summary>
+          <BackupActionSheet afterImport={afterImport} />
+        </details>
+      </div>
+    </nav>
+  );
+}
+
+function ActionSheet({
+  children,
+  eyebrow,
+  title,
+}: {
+  readonly children: ReactNode;
+  readonly eyebrow: string;
+  readonly title: string;
+}) {
+  const closeSheet = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const details = event.currentTarget.closest("details");
+
+    if (details instanceof HTMLDetailsElement) {
+      details.open = false;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        aria-label={`Close ${title}`}
+        className="absolute inset-0 h-full w-full cursor-default border-0 bg-black/70 p-0 backdrop-blur-sm"
+        onClick={closeSheet}
+        type="button"
+      />
+      <section
+        aria-label={title}
+        className="absolute inset-x-0 bottom-0 mx-auto grid max-h-[calc(100dvh-1rem)] w-full max-w-[520px] gap-4 overflow-y-auto rounded-t-lg border border-[#3d332a] bg-[#16120f] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl shadow-black/60"
+      >
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#b7a997]">
+              {eyebrow}
+            </p>
+            <h2 className="truncate text-xl font-black leading-tight text-[#fff7ed]">
+              {title}
+            </h2>
+          </div>
+          <button
+            aria-label={`Close ${title}`}
+            className={sheetIconActionClassName}
+            onClick={closeSheet}
+            type="button"
+          >
+            <X aria-hidden="true" size={18} strokeWidth={3} />
+          </button>
+        </div>
+
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function PlansActionSheet({
+  day,
+  disabled,
+  onChangePlan,
+}: {
+  readonly day: OpenedDay;
+  readonly disabled: boolean;
+  readonly onChangePlan: (planId: string) => void;
+}) {
+  const plan = day.selectedPlan;
+
+  return (
+    <ActionSheet eyebrow={plan.name} title="Plans">
+      <label className="relative grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#dfd2bd]">
+        Active meal plan
+        <span className="relative flex min-h-11 min-w-0 items-center rounded-md border border-[#3d332a] bg-[#211914] px-3 text-[#ffbd35] transition-colors focus-within:border-[#ffbd35]/70 focus-within:ring-2 focus-within:ring-[#ffbd35]/25">
+          <ClipboardList
+            aria-hidden="true"
+            className="mr-2 shrink-0"
+            size={17}
+            strokeWidth={3}
+          />
+          <select
+            className="min-h-11 min-w-0 flex-1 appearance-none truncate border-0 bg-transparent py-0 pl-0 pr-7 text-sm font-black text-[#ffbd35] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={disabled}
+            value={plan.id}
+            onChange={(event) => {
+              onChangePlan(event.currentTarget.value);
+            }}
+          >
+            {day.plans.map((planOption) => (
+              <option
+                className="bg-[#161618] text-[#f0f0f2]"
+                key={planOption.id}
+                value={planOption.id}
+              >
+                {planOption.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+            size={16}
+            strokeWidth={3}
+          />
+        </span>
+      </label>
+
+      <nav aria-label="Plan actions" className="grid grid-cols-2 gap-2">
+        <Link
+          className={appHeaderActionClassName}
+          params={{ planId: plan.id }}
+          search={{ dateKey: day.dailyLog.dateKey }}
+          to="/plans/$planId/edit"
+        >
+          <Pencil aria-hidden="true" size={16} strokeWidth={3} />
+          Edit plan
+        </Link>
+        <Link
+          className={appHeaderActionClassName}
+          search={{ dateKey: day.dailyLog.dateKey }}
+          to="/plans/new"
+        >
+          <Plus aria-hidden="true" size={16} strokeWidth={3} />
+          New plan
+        </Link>
+      </nav>
+    </ActionSheet>
+  );
+}
+
+function FoodsActionSheet({ dateKey }: { readonly dateKey: DateKey }) {
+  return (
+    <ActionSheet eyebrow="Food library" title="Foods">
+      <nav aria-label="Food actions" className="grid grid-cols-2 gap-2">
+        <Link
+          className={appHeaderActionClassName}
+          search={{ dateKey }}
+          to="/foods/new"
+        >
+          <Plus aria-hidden="true" size={16} strokeWidth={3} />
+          Create food
+        </Link>
+        <Link
+          className={appHeaderActionClassName}
+          search={{ dateKey }}
+          to="/foods/edit"
+        >
+          <Pencil aria-hidden="true" size={16} strokeWidth={3} />
+          Edit foods
+        </Link>
+      </nav>
+    </ActionSheet>
+  );
+}
+
+function BackupActionSheet({
+  afterImport,
+}: {
+  readonly afterImport: () => Promise<void>;
+}) {
+  return (
+    <ActionSheet eyebrow="Database" title="Backup">
+      <BackupTransferControls afterImport={afterImport} mode="full" />
+    </ActionSheet>
   );
 }
 
@@ -1061,7 +1318,6 @@ function AddMealFoodDialog({
     quantityGrams,
     selectedFood,
   } = snapshot.context;
-  const quantityInputRef = useRef<HTMLInputElement | null>(null);
 
   if (dateKey === null || meal === null) {
     return null;
@@ -1142,7 +1398,7 @@ function AddMealFoodDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-black/75 px-3 py-4 backdrop-blur-sm sm:items-center sm:justify-center"
+      className="fixed inset-0 z-50 flex items-end bg-black/75 px-3 py-3 backdrop-blur-sm sm:items-center sm:justify-center sm:py-4"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           actor.send({ type: "close" });
@@ -1157,10 +1413,10 @@ function AddMealFoodDialog({
       <section
         aria-labelledby="add-food-dialog-title"
         aria-modal="true"
-        className="mx-auto grid max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60"
+        className="mx-auto grid max-h-[calc(100dvh-0.75rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)]"
         role="dialog"
       >
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-4 py-3">
+        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-3 py-2.5">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               {mealLabel}
@@ -1201,13 +1457,19 @@ function AddMealFoodDialog({
                   Could not find this food.
                 </p>
               ) : (
-                <FoodNutrientOverview
-                  brand={selectedFood.brand}
-                  metadata={<FoodMetadataTags food={selectedFood} />}
-                  name={selectedFood.name}
-                  nutrients={selectedFoodNutrients}
-                  secondaryLabel={selectedFoodQuantityLabel}
-                />
+                <div className="grid gap-4">
+                  <FoodNutrientOverview
+                    brand={selectedFood.brand}
+                    metadata={<FoodMetadataTags food={selectedFood} />}
+                    name={selectedFood.name}
+                    nutrients={selectedFoodNutrients}
+                    secondaryLabel={selectedFoodQuantityLabel}
+                  />
+                  <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+                    Saving updates this logged amount. The food definition stays
+                    unchanged.
+                  </p>
+                </div>
               )}
             </div>
           ) : selectedFood !== null ? (
@@ -1241,7 +1503,7 @@ function AddMealFoodDialog({
                 <FoodSearchField
                   ariaControls="add-food-results"
                   ariaLabel={`${mealLabel} food search`}
-                  autoFocus
+                  autoFocus={false}
                   disabled={disabled}
                   id="add-food-search"
                   label="Search"
@@ -1254,9 +1516,6 @@ function AddMealFoodDialog({
                   onEnter={() => {
                     actor.send({
                       type: "selectFirstMatchingFood",
-                    });
-                    globalThis.requestAnimationFrame(() => {
-                      quantityInputRef.current?.focus();
                     });
                   }}
                   placeholder="Search food or brand"
@@ -1277,9 +1536,6 @@ function AddMealFoodDialog({
                     type: "selectFood",
                     foodId,
                   });
-                  globalThis.requestAnimationFrame(() => {
-                    quantityInputRef.current?.focus();
-                  });
                 }}
                 selectedFoodId={null}
               />
@@ -1292,7 +1548,6 @@ function AddMealFoodDialog({
               <span className="relative">
                 <input
                   aria-label={`${mealLabel} quantity in grams`}
-                  autoFocus={isEditingMealEntry}
                   className={`${darkFieldClassName} pr-9`}
                   disabled={disabled || !hasSelectedFood}
                   min="0.1"
@@ -1303,7 +1558,6 @@ function AddMealFoodDialog({
                     });
                   }}
                   placeholder="150"
-                  ref={quantityInputRef}
                   required
                   step="0.01"
                   type="number"
@@ -1497,25 +1751,41 @@ function MealNutrientColumn({
 
 function DailyProgress({
   day,
-  disabled,
   nutrients,
-  onChangePlan,
 }: {
   readonly day: OpenedDay;
-  readonly disabled: boolean;
   readonly nutrients: NutrientTotals;
-  readonly onChangePlan: (planId: string) => void;
 }) {
   const plan = day.selectedPlan;
   const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+  const [macroDisplayModeSnapshot, sendMacroDisplayMode] = useMachine(
+    macroDisplayModeMachine
+  );
+  const macroDisplayMode = macroDisplayModeSnapshot.matches("Remaining")
+    ? "remaining"
+    : "consumed";
+  const toggleMacroDisplayMode = () => {
+    sendMacroDisplayMode({ type: "toggle" });
+  };
 
   return (
     <section
-      className="border-b border-[#222226] bg-[#161618] px-4 pb-4 pt-3"
       aria-label="Daily progress"
+      aria-pressed={macroDisplayMode === "remaining"}
+      className="cursor-pointer border-b border-[#222226] bg-[#161618] px-4 pb-4 pt-3 transition-colors hover:bg-[#1a1a1d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45"
+      onClick={toggleMacroDisplayMode}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleMacroDisplayMode();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       <dl className="grid grid-cols-3 gap-4">
         <MacroProgressLine
+          displayMode={macroDisplayMode}
           label="Carbs"
           target={plan.carbsTargetGrams}
           tone="carbs"
@@ -1523,6 +1793,7 @@ function DailyProgress({
           value={nutrients.carbsGrams}
         />
         <MacroProgressLine
+          displayMode={macroDisplayMode}
           label="Protein"
           target={plan.proteinTargetGrams}
           tone="protein"
@@ -1530,6 +1801,7 @@ function DailyProgress({
           value={nutrients.proteinGrams}
         />
         <MacroProgressLine
+          displayMode={macroDisplayMode}
           label="Fat"
           target={plan.fatTargetGrams}
           tone="fat"
@@ -1539,100 +1811,32 @@ function DailyProgress({
       </dl>
 
       <EnergyProgressMetric
+        displayMode={macroDisplayMode}
         target={targetEnergyKcal}
         value={nutrients.energyKcal}
       />
 
       <DailyNutrientDetails
+        displayMode={macroDisplayMode}
         fiberTargetGrams={plan.fiberTargetGrams}
         nutrients={nutrients}
         saltTargetGrams={plan.saltTargetGrams}
         saturatedFatTargetGrams={plan.saturatedFatTargetGrams}
         sugarTargetGrams={plan.sugarTargetGrams}
       />
-
-      <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-2">
-        <label className="relative flex min-h-11 min-w-0 items-center rounded-md border border-[#343438] bg-[#202024] px-3 text-[#ffbd35] transition-colors focus-within:border-[#ff5a51]/70 focus-within:ring-2 focus-within:ring-[#ff5a51]/25">
-          <span className="sr-only">Meal plan</span>
-          <select
-            className="min-h-11 min-w-0 flex-1 appearance-none truncate border-0 bg-transparent py-0 pl-0 pr-7 text-base font-black text-[#ffbd35] outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={disabled}
-            value={plan.id}
-            onChange={(event) => {
-              onChangePlan(event.currentTarget.value);
-            }}
-          >
-            {day.plans.map((planOption) => (
-              <option
-                className="bg-[#161618] text-[#f0f0f2]"
-                key={planOption.id}
-                value={planOption.id}
-              >
-                {planOption.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            aria-hidden="true"
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
-            size={18}
-            strokeWidth={3}
-          />
-        </label>
-        <Link
-          aria-label="Edit selected plan"
-          className={planActionClassName}
-          params={{ planId: plan.id }}
-          search={{ dateKey: day.dailyLog.dateKey }}
-          title="Edit selected plan"
-          to="/plans/$planId/edit"
-        >
-          <Pencil aria-hidden="true" size={18} strokeWidth={3} />
-        </Link>
-        <Link
-          aria-label="Create a new plan"
-          className={planActionClassName}
-          search={{ dateKey: day.dailyLog.dateKey }}
-          title="Create a new plan"
-          to="/plans/new"
-        >
-          <Plus aria-hidden="true" size={18} strokeWidth={3} />
-        </Link>
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-2 px-2">
-        <Link
-          aria-label="Edit foods"
-          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
-          search={{ dateKey: day.dailyLog.dateKey }}
-          title="Edit foods"
-          to="/foods/edit"
-        >
-          <Pencil aria-hidden="true" size={18} strokeWidth={3} />
-          Edit foods
-        </Link>
-        <Link
-          aria-label="Create food"
-          className={`${actionColorClassName} inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-3 text-sm font-black no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45`}
-          search={{ dateKey: day.dailyLog.dateKey }}
-          title="Create food"
-          to="/foods/new"
-        >
-          <Plus aria-hidden="true" size={18} strokeWidth={3} />
-          New food
-        </Link>
-      </div>
     </section>
   );
 }
 
 function DailyNutrientDetails({
+  displayMode,
   fiberTargetGrams,
   nutrients,
   saltTargetGrams,
   saturatedFatTargetGrams,
   sugarTargetGrams,
 }: {
+  readonly displayMode: MacroDisplayMode;
   readonly fiberTargetGrams: number | undefined;
   readonly nutrients: NutrientTotals;
   readonly saltTargetGrams: number | undefined;
@@ -1642,24 +1846,28 @@ function DailyNutrientDetails({
   return (
     <dl className="mt-3 grid grid-cols-4 gap-2">
       <DailyNutrientProgressLine
+        displayMode={displayMode}
         label="Fiber"
         target={fiberTargetGrams}
         tone="carbs"
         value={nutrients.fiberGrams}
       />
       <DailyNutrientProgressLine
+        displayMode={displayMode}
         label="Sugar"
         target={sugarTargetGrams}
         tone="carbs"
         value={nutrients.sugarGrams}
       />
       <DailyNutrientProgressLine
+        displayMode={displayMode}
         label="Sat fat"
         target={saturatedFatTargetGrams}
         tone="fat"
         value={nutrients.saturatedFatGrams}
       />
       <DailyNutrientProgressLine
+        displayMode={displayMode}
         label="Salt"
         target={saltTargetGrams}
         tone="salt"
@@ -1670,11 +1878,13 @@ function DailyNutrientDetails({
 }
 
 function DailyNutrientProgressLine({
+  displayMode,
   label,
   target,
   tone,
   value,
 }: {
+  readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number | undefined;
   readonly tone: DailyNutrientTone;
@@ -1696,6 +1906,21 @@ function DailyNutrientProgressLine({
   const targetText = hasTarget
     ? _formatValueWithUnit({ unit: "g", value: target })
     : undefined;
+  const displayValueText =
+    target === undefined || displayMode === "consumed"
+      ? `${_formatSummaryNumber({ value })}g${
+          target === undefined
+            ? ""
+            : ` / ${_formatSummaryNumber({ value: target })}g`
+        }`
+      : _formatMacroDisplayValue({
+          displayMode,
+          target,
+          unit: "g",
+          value,
+        });
+  const isOverTarget =
+    displayMode === "remaining" && target !== undefined && target - value < 0;
 
   return (
     <div className="grid min-w-0 gap-1 text-center">
@@ -1721,27 +1946,37 @@ function DailyNutrientProgressLine({
         />
       </div>
       <dd
-        className={`truncate text-[0.72rem] font-black leading-tight ${toneClassNames.text}`}
+        className={`truncate text-[0.72rem] font-black leading-tight ${
+          isOverTarget ? "text-[#ff8f88]" : toneClassNames.text
+        }`}
       >
-        {_formatSummaryNumber({ value })}g
-        {target === undefined
-          ? null
-          : ` / ${_formatSummaryNumber({ value: target })}g`}
+        {displayValueText}
       </dd>
     </div>
   );
 }
 
 function EnergyProgressMetric({
+  displayMode,
   target,
   value,
 }: {
+  readonly displayMode: MacroDisplayMode;
   readonly target: number;
   readonly value: number;
 }) {
   const progressPercent =
     target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
   const cappedProgressPercent = Math.min(progressPercent, 100);
+
+  const remainingValue = target - value;
+  const valueText = _formatMacroDisplayValue({
+    displayMode,
+    target,
+    unit: "kcal",
+    value,
+  });
+  const isOverTarget = displayMode === "remaining" && remainingValue < 0;
 
   return (
     <div className="mt-3">
@@ -1762,21 +1997,28 @@ function EnergyProgressMetric({
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
-      <p className="mt-1.5 text-center text-base font-medium leading-tight text-[#4c7dff]">
-        {_formatSummaryNumber({ value })} /{" "}
-        {_formatSummaryNumber({ value: target })} kcal
+      <p className="mt-1.5 text-center text-base font-medium leading-tight">
+        <span
+          className={`font-black ${
+            isOverTarget ? "text-[#ff8f88]" : "text-[#4c7dff]"
+          }`}
+        >
+          {valueText}
+        </span>
       </p>
     </div>
   );
 }
 
 function MacroProgressLine({
+  displayMode,
   label,
   target,
   tone,
   unit,
   value,
 }: {
+  readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number;
   readonly tone: MacroTone;
@@ -1787,6 +2029,14 @@ function MacroProgressLine({
     target <= 0 ? (value > 0 ? 100 : 0) : (value / target) * 100;
   const cappedProgressPercent = Math.min(progressPercent, 100);
   const toneClassNames = macroToneClassNames[tone];
+  const remainingValue = target - value;
+  const isOverTarget = displayMode === "remaining" && remainingValue < 0;
+  const valueText = _formatMacroDisplayValue({
+    displayMode,
+    target,
+    unit,
+    value,
+  });
 
   return (
     <div className="grid min-w-0 gap-1.5 text-center">
@@ -1813,10 +2063,11 @@ function MacroProgressLine({
         />
       </div>
       <dd
-        className={`truncate text-lg font-black leading-tight ${toneClassNames.text}`}
+        className={`truncate text-lg font-black leading-tight ${
+          isOverTarget ? "text-[#ff8f88]" : toneClassNames.text
+        }`}
       >
-        {_formatSummaryNumber({ value })} /{" "}
-        {_formatSummaryNumber({ value: target })} {unit}
+        {valueText}
       </dd>
     </div>
   );
@@ -1847,7 +2098,7 @@ function MealEntryItem({
       <li>
         <button
           aria-label={`Edit unknown food in ${mealLabel}`}
-          className="grid w-full gap-1 border-0 bg-transparent px-4 py-3 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+          className="grid w-full gap-1 border-0 bg-transparent px-4 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={disabled}
           onClick={() => {
             addMealFoodDialogActor.send({
@@ -1859,7 +2110,7 @@ function MealEntryItem({
           }}
           type="button"
         >
-          <strong className="text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
+          <strong className="truncate text-lg font-medium leading-tight text-[#dedee3]">
             Unknown food
           </strong>
           <span className="text-base font-black leading-tight text-[#aaaab1]">
@@ -1879,7 +2130,7 @@ function MealEntryItem({
     <li>
       <button
         aria-label={`Edit ${food.name} in ${mealLabel}`}
-        className="grid w-full gap-1 border-0 bg-transparent px-4 py-3 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+        className="grid w-full min-w-0 gap-1 border-0 bg-transparent px-4 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={disabled}
         onClick={() => {
           addMealFoodDialogActor.send({
@@ -1891,17 +2142,17 @@ function MealEntryItem({
         }}
         type="button"
       >
-        <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-          <strong className="min-w-0 text-lg font-medium leading-tight text-[#dedee3] wrap-anywhere">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+          <strong className="min-w-0 truncate text-lg font-medium leading-tight text-[#dedee3]">
             {food.name}
           </strong>
-          <strong className="text-right text-lg font-medium leading-tight text-[#4c7dff]">
+          <strong className="whitespace-nowrap text-right text-lg font-medium leading-tight text-[#4c7dff]">
             {_formatPreciseNumber({ value: nutrients.energyKcal })}
           </strong>
-          <span className="text-base font-black leading-tight text-[#aaaab1]">
+          <span className="min-w-0 truncate text-base font-black leading-tight text-[#aaaab1]">
             {_formatPreciseNumber({ value: mealEntry.quantityGrams })} g
           </span>
-          <span className="text-right text-base font-medium leading-tight text-[#dedee3]">
+          <span className="whitespace-nowrap text-right text-base font-medium leading-tight text-[#dedee3]">
             C:{" "}
             <strong className={`font-medium ${macroToneClassNames.carbs.text}`}>
               {_formatPreciseNumber({ value: nutrients.carbsGrams })}
@@ -2006,6 +2257,33 @@ function _formatValueWithUnit({
   const formattedValue = _formatSummaryNumber({ value });
 
   return unit === "kcal" ? `${formattedValue} kcal` : `${formattedValue}g`;
+}
+
+function _formatMacroDisplayValue({
+  displayMode,
+  target,
+  unit,
+  value,
+}: {
+  readonly displayMode: MacroDisplayMode;
+  readonly target: number;
+  readonly unit: "kcal" | "g";
+  readonly value: number;
+}) {
+  if (displayMode === "consumed") {
+    return `${_formatSummaryNumber({ value })} / ${_formatSummaryNumber({
+      value: target,
+    })} ${unit}`;
+  }
+
+  const remainingValue = target - value;
+  const formattedValue = _formatSummaryNumber({
+    value: Math.abs(remainingValue),
+  });
+
+  return remainingValue < 0
+    ? `${formattedValue} ${unit} over`
+    : `${formattedValue} ${unit} left`;
 }
 
 function _formatSummaryNumber({ value }: { readonly value: number }) {

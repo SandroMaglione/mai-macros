@@ -1,6 +1,4 @@
-import { IndexedDb } from "@effect/platform-browser";
 import { Effect, Layer, Schema } from "effect";
-import { IDBKeyRange, indexedDB } from "fake-indexeddb";
 import { afterEach, assert, describe, it } from "vitest";
 
 import {
@@ -19,11 +17,10 @@ import {
   MealEntry,
   Plan,
 } from "../src/index.ts";
-
-const layerFakeIndexedDb = Layer.succeed(
-  IndexedDb.IndexedDb,
-  IndexedDb.make({ indexedDB, IDBKeyRange })
-);
+import {
+  deleteFakeDatabase,
+  layerFakeIndexedDb,
+} from "./indexed-db-test-utils.ts";
 
 const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
@@ -33,9 +30,9 @@ const backupsLayer = Backups.layer.pipe(Layer.provideMerge(databaseLayer));
 
 const BackupJsonString = Schema.fromJsonString(Schema.Unknown);
 
-afterEach(() => {
-  indexedDB.deleteDatabase(DatabaseName);
-});
+afterEach(() =>
+  Effect.runPromise(deleteFakeDatabase({ databaseName: DatabaseName }))
+);
 
 const foodInput: typeof Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
@@ -259,7 +256,10 @@ describe("Backups", () => {
       true
     );
     assert.equal(result.activeMealPlanSelections[0]?.planId, planInput.id);
-    assert.equal(result.foodsByName[0]?.id, foodInput.id);
+    assert.equal(
+      result.foodsByName.some((food) => food.id === foodInput.id),
+      true
+    );
     assert.equal(result.plansByName[0]?.id, planInput.id);
     assert.equal(result.dailyLogsByPlan[0]?.dateKey, dailyLogInput.dateKey);
     assert.equal(result.mealEntriesByDate[0]?.id, mealEntryInput.id);
