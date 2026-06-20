@@ -51,4 +51,4 @@ yarn-error.log*
 env.sh
 count.txt
 data
-scripts
+scripts/food-catalogue.mjs

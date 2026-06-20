@@ -2,7 +2,7 @@ import type { Food } from "@mai/nutrition";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
 import { Effect } from "effect";
-import { Apple, Save, X } from "lucide-react";
+import { ChevronLeft, Save, X } from "lucide-react";
 import {
   assertEvent,
   assign,
@@ -30,6 +30,9 @@ import { Foods, type ReviseFoodInput } from "../lib/services/foods.ts";
 import type { MealFoodUsage } from "../lib/services/meal-entries.ts";
 import { MealEntries } from "../lib/services/meal-entries.ts";
 import { createFoodInputFromFormData } from "../lib/utils.ts";
+
+const headerActionClassName =
+  "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
 
 export const Route = createFileRoute("/foods/edit")({
   validateSearch: (search) => ({
@@ -366,36 +369,32 @@ function Component() {
 
   return (
     <main className="h-dvh overflow-hidden bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
-      <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_auto_minmax(0,1fr)] bg-[#090909]">
-        <header className="sticky top-0 z-30 grid h-[calc(env(safe-area-inset-top)+4.65rem)] grid-cols-[minmax(0,1fr)_auto] items-end gap-3 bg-[#ff5a51] px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-              <Apple aria-hidden="true" size={24} strokeWidth={2.5} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
-                Foods
-              </p>
-              <h1 className="truncate text-2xl font-black leading-tight text-white">
+      <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)] bg-[#090909]">
+        <header className="bg-[#ff5a51] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/25">
+          <div className="grid h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+            <BackToDayLink dateKey={search.dateKey} />
+            <div className="min-w-0 text-center text-white">
+              <h1 className="truncate text-2xl font-black leading-tight">
                 Edit foods
               </h1>
             </div>
+            <span aria-hidden="true" className="size-12" />
           </div>
-          <BackToDayLink dateKey={search.dateKey} />
-        </header>
 
-        <div className="border-b border-[#29292d] bg-[#161618] p-4">
-          <FoodSearchField
-            actor={snapshot.context.foodSearchActor}
-            ariaControls="edit-food-results"
-            ariaLabel="Edit food search"
-            autoFocus={false}
-            disabled={disabled}
-            id="edit-food-search"
-            label="Search"
-            placeholder="Search food or brand"
-          />
-        </div>
+          <div className="mt-3">
+            <FoodSearchField
+              actor={snapshot.context.foodSearchActor}
+              ariaControls="edit-food-results"
+              ariaLabel="Edit food search"
+              autoFocus={false}
+              disabled={disabled}
+              id="edit-food-search"
+              label="Search"
+              placeholder="Search food or brand"
+              showLabel={false}
+            />
+          </div>
+        </header>
 
         <FoodSearchResults
           actor={snapshot.context.foodSearchActor}
@@ -413,6 +412,7 @@ function Component() {
               : "Used"
           }
           id="edit-food-results"
+          shape="square"
         />
 
         <EditFoodDialog actor={snapshot.context.editFoodDialogActor} />
@@ -528,13 +528,15 @@ function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
 }
 
 function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
-  const className =
-    "inline-flex size-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white no-underline transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
-
   if (dateKey === undefined) {
     return (
-      <Link aria-label="Back to today" className={className} to="/">
-        <X aria-hidden="true" size={18} strokeWidth={3} />
+      <Link
+        aria-label="Back to today"
+        className={headerActionClassName}
+        title="Back to today"
+        to="/"
+      >
+        <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
       </Link>
     );
   }
@@ -542,11 +544,12 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
   return (
     <Link
       aria-label="Back to day"
-      className={className}
+      className={headerActionClassName}
       params={{ dateKey }}
+      title={`Back to ${dateKey}`}
       to="/days/$dateKey"
     >
-      <X aria-hidden="true" size={18} strokeWidth={3} />
+      <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
     </Link>
   );
 }

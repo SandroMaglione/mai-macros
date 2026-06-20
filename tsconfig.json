@@ -7,6 +7,13 @@
     "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "types": ["node"],
+    "verbatimModuleSyntax": true,
     "noEmit": true
-  }
+  },
+  "include": ["scripts/**/*.ts"]
 }

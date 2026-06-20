@@ -43,7 +43,7 @@ import {
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import {
-  FoodMetadataTags,
+  FoodDefaultOriginDot,
   FoodSearchField,
   FoodSearchResults,
 } from "./food-search.tsx";
@@ -142,7 +142,7 @@ const bottomActionClassName =
 const sheetIconActionClassName =
   "inline-flex size-10 items-center justify-center rounded-md border border-[#3d332a] bg-[#211914] text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
 const darkFieldClassName =
-  "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-10 w-full border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const darkFieldLabelClassName =
   "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
 
@@ -960,7 +960,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
-        <header className="bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
+        <header className="bg-[#ff5a51] pb-[calc(env(safe-area-inset-top)+0.45rem)] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
           <nav
             className="grid h-14 grid-cols-[1fr_auto_1fr] items-center bg-[#ff5a51] px-4"
             aria-label="Day navigation"
@@ -1003,7 +1003,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
 
         <DailyProgress day={day} nutrients={dailyNutrients} />
 
-        <div className="grid gap-5 px-4 py-5">
+        <div className="grid gap-5 px-3 py-5">
           {mealOptions.map((mealOption) => (
             <MealSection
               addMealFoodDialogActor={snapshot.context.addMealFoodDialogActor}
@@ -1106,20 +1106,12 @@ function ActionSheet({
   readonly eyebrow: string;
   readonly title: string;
 }) {
-  const closeSheet = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    const details = event.currentTarget.closest("details");
-
-    if (details instanceof HTMLDetailsElement) {
-      details.open = false;
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50">
       <button
         aria-label={`Close ${title}`}
         className="absolute inset-0 h-full w-full cursor-default border-0 bg-black/70 p-0 backdrop-blur-sm"
-        onClick={closeSheet}
+        onClick={_closeActionSheet}
         type="button"
       />
       <section
@@ -1138,7 +1130,7 @@ function ActionSheet({
           <button
             aria-label={`Close ${title}`}
             className={sheetIconActionClassName}
-            onClick={closeSheet}
+            onClick={_closeActionSheet}
             type="button"
           >
             <X aria-hidden="true" size={18} strokeWidth={3} />
@@ -1149,6 +1141,14 @@ function ActionSheet({
       </section>
     </div>
   );
+}
+
+function _closeActionSheet(event: ReactMouseEvent<HTMLButtonElement>) {
+  const details = event.currentTarget.closest("details");
+
+  if (details instanceof HTMLDetailsElement) {
+    details.open = false;
+  }
 }
 
 function PlansActionSheet({
@@ -1320,24 +1320,30 @@ function MealSection({
       <MealNutrientColumns nutrients={mealNutrients} />
 
       <div className="border-t border-[#29292d]">
-        <button
-          aria-label={`Add food to ${mealLabel}`}
-          className={`flex min-h-14 w-full items-center justify-center gap-2 border-0 bg-transparent px-4 py-4 text-base font-black ${actionColorClassName} transition-colors hover:bg-[#202024] disabled:cursor-not-allowed disabled:opacity-50`}
-          disabled={disabled}
-          onClick={() => {
-            addMealFoodDialogActor.send({
-              type: "open",
+        {disabled ? (
+          <button
+            aria-label={`Add food to ${mealLabel}`}
+            className={`flex min-h-14 w-full items-center justify-center gap-2 border-0 bg-transparent px-4 py-4 text-base font-black ${actionColorClassName} transition-colors hover:bg-[#202024] disabled:cursor-not-allowed disabled:opacity-50`}
+            disabled={true}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={19} strokeWidth={3} />
+            Add food
+          </button>
+        ) : (
+          <Link
+            aria-label={`Add food to ${mealLabel}`}
+            className={`flex min-h-14 w-full items-center justify-center gap-2 border-0 bg-transparent px-4 py-4 text-base font-black ${actionColorClassName} no-underline transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45`}
+            params={{
               dateKey,
-              foodUsage,
-              foods,
               meal: mealValue,
-            });
-          }}
-          type="button"
-        >
-          <Plus aria-hidden="true" size={19} strokeWidth={3} />
-          Add food
-        </button>
+            }}
+            to="/days/$dateKey/meals/$meal/add"
+          >
+            <Plus aria-hidden="true" size={19} strokeWidth={3} />
+            Add food
+          </Link>
+        )}
       </div>
     </section>
   );
@@ -1390,12 +1396,15 @@ function AddMealFoodDialog({
               }),
           })
         );
-  const dialogTitle = isEditingMealEntry ? "Edit food" : "Add food";
-  const closeLabel = isEditingMealEntry ? "Close edit food" : "Close add food";
   const submitLabel = isEditingMealEntry ? "Save" : "Add";
   const submitAriaLabel = isEditingMealEntry
     ? `Save ${mealLabel} meal entry`
     : `Add food to ${mealLabel}`;
+  const dialogLabel = isEditingMealEntry
+    ? "Edit food"
+    : `Add food to ${mealLabel}`;
+  const isSearchingFood = !isEditingMealEntry && selectedFood === null;
+  const isAddingSelectedFood = !isEditingMealEntry && selectedFood !== null;
   const selectedFoodQuantityLabel = isEditingMealEntry
     ? mealEntry === null
       ? undefined
@@ -1405,37 +1414,6 @@ function AddMealFoodDialog({
       : `${_formatPreciseNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
-  const getFoodPrimaryLabel = (food: Food) => {
-    const foodHistory = _findFoodUsage({
-      foodId: food.id,
-      foodUsage,
-    });
-    const nutrients =
-      foodHistory === undefined
-        ? undefined
-        : calculateEntryNutrients({
-            food,
-            quantityGrams: foodHistory.latestQuantityGrams,
-          });
-
-    return nutrients === undefined
-      ? "New"
-      : `${_formatPreciseNumber({
-          value: nutrients.energyKcal,
-        })} kcal`;
-  };
-  const getFoodSecondaryLabel = (food: Food) => {
-    const foodHistory = _findFoodUsage({
-      foodId: food.id,
-      foodUsage,
-    });
-
-    return foodHistory === undefined
-      ? "No previous"
-      : `${_formatPreciseNumber({
-          value: foodHistory.latestQuantityGrams,
-        })} g`;
-  };
   const quantityField = (
     <QuantityGramsField
       addMealFoodDialogActor={actor}
@@ -1444,6 +1422,21 @@ function AddMealFoodDialog({
       quantityGrams={quantityGrams}
     />
   );
+  const changeFoodButton = isAddingSelectedFood ? (
+    <button
+      className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      onClick={() => {
+        actor.send({
+          type: "clearSelectedFood",
+        });
+      }}
+      type="button"
+    >
+      <Pencil aria-hidden="true" size={16} strokeWidth={3} />
+      Change food
+    </button>
+  ) : null;
 
   return (
     <div
@@ -1460,35 +1453,11 @@ function AddMealFoodDialog({
       }}
     >
       <section
-        aria-labelledby="add-food-dialog-title"
+        aria-label={dialogLabel}
         aria-modal="true"
-        className="mx-auto grid max-h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-t-lg border-x border-t border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:border"
+        className="mx-auto grid max-h-dvh min-h-0 w-full max-w-[520px] grid-rows-[minmax(0,1fr)_auto] overflow-hidden border-x border-t border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)] sm:border"
         role="dialog"
       >
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
-              {mealLabel}
-            </p>
-            <h2
-              className="truncate text-xl font-black leading-tight text-[#efeff2]"
-              id="add-food-dialog-title"
-            >
-              {dialogTitle}
-            </h2>
-          </div>
-          <button
-            aria-label={closeLabel}
-            className="inline-flex size-10 items-center justify-center rounded-md border border-[#343438] bg-[#202024] text-[#dedee3] transition-colors hover:bg-[#29292d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45"
-            onClick={() => {
-              actor.send({ type: "close" });
-            }}
-            type="button"
-          >
-            <X aria-hidden="true" size={19} strokeWidth={3} />
-          </button>
-        </header>
-
         <form
           className="contents"
           onSubmit={(event) => {
@@ -1504,19 +1473,19 @@ function AddMealFoodDialog({
               <div className="grid gap-4">
                 {quantityField}
                 {selectedFood === null ? (
-                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                  <p className="bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
                     Could not find this food.
                   </p>
                 ) : (
                   <>
                     <FoodNutrientOverview
                       brand={selectedFood.brand}
-                      metadata={<FoodMetadataTags food={selectedFood} />}
                       name={selectedFood.name}
+                      namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
                       nutrients={selectedFoodNutrients}
                       secondaryLabel={selectedFoodQuantityLabel}
                     />
-                    <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+                    <p className="border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
                       Saving updates this logged amount. The food definition
                       stays unchanged.
                     </p>
@@ -1530,87 +1499,103 @@ function AddMealFoodDialog({
                 {quantityField}
                 <FoodNutrientOverview
                   brand={selectedFood.brand}
-                  metadata={<FoodMetadataTags food={selectedFood} />}
                   name={selectedFood.name}
+                  namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
                   nutrients={selectedFoodNutrients}
                   secondaryLabel={selectedFoodQuantityLabel}
                 />
-                <button
-                  className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={disabled}
-                  onClick={() => {
-                    actor.send({
-                      type: "clearSelectedFood",
-                    });
-                  }}
-                  type="button"
-                >
-                  <Pencil aria-hidden="true" size={16} strokeWidth={3} />
-                  Change food
-                </button>
               </div>
             </div>
           ) : (
-            <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
-              <div className="border-b border-[#29292d] bg-[#161618] p-4">
-                {quantityField}
-              </div>
-              <div className="border-b border-[#29292d] bg-[#161618] p-4">
-                <FoodSearchField
-                  actor={foodSearchActor}
-                  ariaControls="add-food-results"
-                  ariaLabel={`${mealLabel} food search`}
-                  autoFocus={false}
-                  disabled={disabled}
-                  id="add-food-search"
-                  label="Search"
-                  placeholder="Search food or brand"
-                />
-              </div>
-
+            <div className="grid max-h-[min(calc(100dvh-2rem),34rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)] p-4">
+              <FoodSearchField
+                actor={foodSearchActor}
+                ariaControls="add-food-results"
+                ariaLabel={`${mealLabel} food search`}
+                autoFocus={true}
+                disabled={disabled}
+                id="add-food-search"
+                label="Search"
+                placeholder="Search food or brand"
+                shape="square"
+                showLabel={false}
+              />
               <FoodSearchResults
                 actor={foodSearchActor}
                 emptyFoodsText="Create a food before logging this meal."
                 emptySearchText="No foods found."
-                getPrimaryLabel={getFoodPrimaryLabel}
-                getSecondaryLabel={getFoodSecondaryLabel}
+                getPrimaryLabel={(food) => {
+                  const foodHistory = _findFoodUsage({
+                    foodId: food.id,
+                    foodUsage,
+                  });
+                  const nutrients =
+                    foodHistory === undefined
+                      ? undefined
+                      : calculateEntryNutrients({
+                          food,
+                          quantityGrams: foodHistory.latestQuantityGrams,
+                        });
+
+                  return nutrients === undefined
+                    ? "New"
+                    : `${_formatPreciseNumber({
+                        value: nutrients.energyKcal,
+                      })} kcal`;
+                }}
+                getSecondaryLabel={(food) => {
+                  const foodHistory = _findFoodUsage({
+                    foodId: food.id,
+                    foodUsage,
+                  });
+
+                  return foodHistory === undefined
+                    ? "No previous"
+                    : `${_formatPreciseNumber({
+                        value: foodHistory.latestQuantityGrams,
+                      })} g`;
+                }}
                 id="add-food-results"
+                shape="square"
               />
             </div>
           )}
 
-          <footer
-            className={
-              isEditingMealEntry
-                ? "grid grid-cols-2 gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
-                : "grid border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
-            }
-          >
-            {isEditingMealEntry ? (
-              <button
-                aria-label={`Delete ${mealLabel} meal entry`}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#74322f] bg-[#201717] px-3 text-sm font-black text-[#ff5a51] transition-colors hover:bg-[#2a1c1a] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={disabled}
-                onClick={() => {
-                  actor.send({
-                    type: "deleteEntry",
-                  });
-                }}
-                type="button"
-              >
-                <Trash2 aria-hidden="true" size={16} strokeWidth={3} />
-                Delete
-              </button>
-            ) : null}
-            <button
-              aria-label={submitAriaLabel}
-              className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
-              disabled={disabled || !canSubmit}
-              type="submit"
+          {isSearchingFood ? null : (
+            <footer
+              className={
+                isEditingMealEntry
+                  ? "grid grid-cols-2 gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+                  : "grid gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+              }
             >
-              {submitLabel}
-            </button>
-          </footer>
+              {isEditingMealEntry ? (
+                <button
+                  aria-label={`Delete ${mealLabel} meal entry`}
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 border border-[#74322f] bg-[#201717] px-3 text-sm font-black text-[#ff5a51] transition-colors hover:bg-[#2a1c1a] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={disabled}
+                  onClick={() => {
+                    actor.send({
+                      type: "deleteEntry",
+                    });
+                  }}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" size={16} strokeWidth={3} />
+                  Delete
+                </button>
+              ) : null}
+              <button
+                aria-label={submitAriaLabel}
+                className="inline-flex min-h-10 w-full items-center justify-center border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
+                disabled={disabled || !canSubmit}
+                type="submit"
+              >
+                {submitLabel}
+              </button>
+              {changeFoodButton}
+            </footer>
+          )}
         </form>
       </section>
     </div>
@@ -1706,7 +1691,7 @@ function MealTotalColumns({
           Carbs
         </dt>
         <dd
-          className={`order-first text-xl font-black leading-none ${macroToneClassNames.carbs.text}`}
+          className={`order-first text-lg font-black leading-none ${macroToneClassNames.carbs.text}`}
         >
           {_formatSummaryNumber({ value: nutrients.carbsGrams })}
         </dd>
@@ -1718,7 +1703,7 @@ function MealTotalColumns({
           Protein
         </dt>
         <dd
-          className={`order-first text-xl font-black leading-none ${macroToneClassNames.protein.text}`}
+          className={`order-first text-lg font-black leading-none ${macroToneClassNames.protein.text}`}
         >
           {_formatSummaryNumber({ value: nutrients.proteinGrams })}
         </dd>
@@ -1730,7 +1715,7 @@ function MealTotalColumns({
           Fat
         </dt>
         <dd
-          className={`order-first text-xl font-black leading-none ${macroToneClassNames.fat.text}`}
+          className={`order-first text-lg font-black leading-none ${macroToneClassNames.fat.text}`}
         >
           {_formatSummaryNumber({ value: nutrients.fatGrams })}
         </dd>
@@ -1739,7 +1724,7 @@ function MealTotalColumns({
         <dt className="truncate text-sm font-medium leading-tight text-[#4c7dff]">
           Calories
         </dt>
-        <dd className="order-first text-xl font-black leading-none text-[#4c7dff]">
+        <dd className="order-first text-lg font-black leading-none text-[#4c7dff]">
           {_formatSummaryNumber({ value: nutrients.energyKcal })}
         </dd>
       </div>
@@ -2046,7 +2031,7 @@ function EnergyProgressMetric({
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
-      <p className="mt-1.5 text-center text-base font-medium leading-tight">
+      <p className="mt-1.5 text-center text-sm font-medium leading-tight">
         <span
           className={`font-black ${
             isOverTarget ? "text-[#ff8f88]" : "text-[#4c7dff]"
@@ -2112,7 +2097,7 @@ function MacroProgressLine({
         />
       </div>
       <dd
-        className={`truncate text-lg font-black leading-tight ${
+        className={`truncate text-base font-black leading-tight ${
           isOverTarget ? "text-[#ff8f88]" : toneClassNames.text
         }`}
       >
@@ -2147,7 +2132,7 @@ function MealEntryItem({
       <li>
         <button
           aria-label={`Edit unknown food in ${mealLabel}`}
-          className="grid w-full gap-1 border-0 bg-transparent px-4 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+          className="grid w-full gap-1 border-0 bg-transparent px-3 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={disabled}
           onClick={() => {
             addMealFoodDialogActor.send({
@@ -2159,10 +2144,10 @@ function MealEntryItem({
           }}
           type="button"
         >
-          <strong className="truncate text-lg font-medium leading-tight text-[#dedee3]">
+          <strong className="truncate text-base font-medium leading-tight text-[#dedee3]">
             Unknown food
           </strong>
-          <span className="text-base font-black leading-tight text-[#aaaab1]">
+          <span className="text-sm font-black leading-tight text-[#aaaab1]">
             {_formatPreciseNumber({ value: mealEntry.quantityGrams })} g
           </span>
         </button>
@@ -2179,7 +2164,7 @@ function MealEntryItem({
     <li>
       <button
         aria-label={`Edit ${food.name} in ${mealLabel}`}
-        className="grid w-full min-w-0 gap-1 border-0 bg-transparent px-4 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
+        className="grid w-full min-w-0 gap-1 border-0 bg-transparent px-3 py-2.5 text-left text-[#dedee3] transition-colors hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ff5a51]/45 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={disabled}
         onClick={() => {
           addMealFoodDialogActor.send({
@@ -2192,16 +2177,16 @@ function MealEntryItem({
         type="button"
       >
         <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-          <strong className="min-w-0 truncate text-lg font-medium leading-tight text-[#dedee3]">
+          <strong className="min-w-0 truncate text-base font-medium leading-tight text-[#dedee3]">
             {food.name}
           </strong>
           <strong className="whitespace-nowrap text-right text-lg font-medium leading-tight text-[#4c7dff]">
             {_formatPreciseNumber({ value: nutrients.energyKcal })}
           </strong>
-          <span className="min-w-0 truncate text-base font-black leading-tight text-[#aaaab1]">
+          <span className="min-w-0 truncate text-sm font-black leading-tight text-[#aaaab1]">
             {_formatPreciseNumber({ value: mealEntry.quantityGrams })} g
           </span>
-          <span className="whitespace-nowrap text-right text-base font-medium leading-tight text-[#dedee3]">
+          <span className="whitespace-nowrap text-right text-sm font-medium leading-tight text-[#dedee3]">
             C:{" "}
             <strong className={`font-medium ${macroToneClassNames.carbs.text}`}>
               {_formatPreciseNumber({ value: nutrients.carbsGrams })}

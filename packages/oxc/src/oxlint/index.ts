@@ -14,6 +14,7 @@ import noNestedEffectArrayMethods from "./rules/no-nested-effect-array-methods.t
 import noNestedLayerProvide from "./rules/no-nested-layer-provide.ts";
 import noOptionalFunctionParameters from "./rules/no-optional-function-parameters.ts";
 import noReactComponentEventHandlerProps from "./rules/no-react-component-event-handler-props.ts";
+import noReactComponentInnerFunctions from "./rules/no-react-component-inner-functions.ts";
 import noReactStateHooks from "./rules/no-react-state-hooks.ts";
 import noServiceOption from "./rules/no-service-option.ts";
 import noShadowedStandardArrayStatic from "./rules/no-shadowed-standard-array-static.ts";
@@ -54,6 +55,7 @@ export default {
     "no-nested-layer-provide": noNestedLayerProvide,
     "no-optional-function-parameters": noOptionalFunctionParameters,
     "no-react-component-event-handler-props": noReactComponentEventHandlerProps,
+    "no-react-component-inner-functions": noReactComponentInnerFunctions,
     "no-react-state-hooks": noReactStateHooks,
     "no-service-option": noServiceOption,
     "no-shadowed-standard-array-static": noShadowedStandardArrayStatic,

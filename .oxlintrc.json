@@ -33,6 +33,7 @@
     "mai/no-nested-layer-provide": "warn",
     "mai/no-optional-function-parameters": "error",
     "mai/no-react-component-event-handler-props": "warn",
+    "mai/no-react-component-inner-functions": "error",
     "mai/no-react-state-hooks": "error",
     "mai/no-service-option": "error",
     "mai/no-shadowed-standard-array-static": "error",

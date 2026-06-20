@@ -1,0 +1,3690 @@
+{
+  "format": "mai.backup",
+  "formatVersion": 1,
+  "integrity": {
+    "counts": {
+      "activeMealPlanSelections": 1,
+      "dailyLogs": 28,
+      "foods": 43,
+      "mealEntries": 306,
+      "plans": 3
+    }
+  },
+  "source": {
+    "databaseName": "mai",
+    "databaseVersion": 3,
+    "exportedAt": 1781949600000
+  },
+  "stores": {
+    "activeMealPlanSelections": [
+      {
+        "id": "active-meal-plan",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "updatedAt": 1781949600000
+      }
+    ],
+    "dailyLogs": [
+      {
+        "dateKey": "2026-05-24",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1779595200000,
+        "updatedAt": 1779645600000
+      },
+      {
+        "dateKey": "2026-05-25",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1779681600000,
+        "updatedAt": 1779732000000
+      },
+      {
+        "dateKey": "2026-05-26",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1779768000000,
+        "updatedAt": 1779818400000
+      },
+      {
+        "dateKey": "2026-05-27",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1779854400000,
+        "updatedAt": 1779904800000
+      },
+      {
+        "dateKey": "2026-05-28",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1779940800000,
+        "updatedAt": 1779991200000
+      },
+      {
+        "dateKey": "2026-05-29",
+        "planId": "20000000-0000-4000-8000-000000000002",
+        "createdAt": 1780027200000,
+        "updatedAt": 1780077600000
+      },
+      {
+        "dateKey": "2026-05-30",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1780113600000,
+        "updatedAt": 1780164000000
+      },
+      {
+        "dateKey": "2026-05-31",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780200000000,
+        "updatedAt": 1780250400000
+      },
+      {
+        "dateKey": "2026-06-01",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780286400000,
+        "updatedAt": 1780336800000
+      },
+      {
+        "dateKey": "2026-06-02",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780372800000,
+        "updatedAt": 1780423200000
+      },
+      {
+        "dateKey": "2026-06-03",
+        "planId": "20000000-0000-4000-8000-000000000002",
+        "createdAt": 1780459200000,
+        "updatedAt": 1780509600000
+      },
+      {
+        "dateKey": "2026-06-04",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1780545600000,
+        "updatedAt": 1780596000000
+      },
+      {
+        "dateKey": "2026-06-05",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780632000000,
+        "updatedAt": 1780682400000
+      },
+      {
+        "dateKey": "2026-06-06",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780718400000,
+        "updatedAt": 1780768800000
+      },
+      {
+        "dateKey": "2026-06-07",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780804800000,
+        "updatedAt": 1780855200000
+      },
+      {
+        "dateKey": "2026-06-08",
+        "planId": "20000000-0000-4000-8000-000000000002",
+        "createdAt": 1780891200000,
+        "updatedAt": 1780941600000
+      },
+      {
+        "dateKey": "2026-06-09",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1780977600000,
+        "updatedAt": 1781028000000
+      },
+      {
+        "dateKey": "2026-06-10",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781064000000,
+        "updatedAt": 1781114400000
+      },
+      {
+        "dateKey": "2026-06-11",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1781150400000,
+        "updatedAt": 1781200800000
+      },
+      {
+        "dateKey": "2026-06-12",
+        "planId": "20000000-0000-4000-8000-000000000002",
+        "createdAt": 1781236800000,
+        "updatedAt": 1781287200000
+      },
+      {
+        "dateKey": "2026-06-13",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781323200000,
+        "updatedAt": 1781373600000
+      },
+      {
+        "dateKey": "2026-06-14",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781409600000,
+        "updatedAt": 1781460000000
+      },
+      {
+        "dateKey": "2026-06-15",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781496000000,
+        "updatedAt": 1781546400000
+      },
+      {
+        "dateKey": "2026-06-16",
+        "planId": "20000000-0000-4000-8000-000000000002",
+        "createdAt": 1781582400000,
+        "updatedAt": 1781632800000
+      },
+      {
+        "dateKey": "2026-06-17",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781668800000,
+        "updatedAt": 1781719200000
+      },
+      {
+        "dateKey": "2026-06-18",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1781755200000,
+        "updatedAt": 1781805600000
+      },
+      {
+        "dateKey": "2026-06-19",
+        "planId": "20000000-0000-4000-8000-000000000003",
+        "createdAt": 1781841600000,
+        "updatedAt": 1781892000000
+      },
+      {
+        "dateKey": "2026-06-20",
+        "planId": "20000000-0000-4000-8000-000000000001",
+        "createdAt": 1781928000000,
+        "updatedAt": 1781978400000
+      }
+    ],
+    "foods": [
+      {
+        "id": "10000000-0000-4000-8000-000000000001",
+        "name": "Steel-cut oats",
+        "brand": "Seed Kitchen",
+        "category": "grain",
+        "energyKcalPer100g": 379,
+        "proteinGramsPer100g": 13.2,
+        "carbsGramsPer100g": 67.7,
+        "fatGramsPer100g": 6.5,
+        "fiberGramsPer100g": 10.1,
+        "sugarGramsPer100g": 1,
+        "saturatedFatGramsPer100g": 1.2,
+        "saltGramsPer100g": 0.02,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "name": "Greek yogurt 2%",
+        "brand": "Seed Dairy",
+        "category": "dairy-egg",
+        "energyKcalPer100g": 73,
+        "proteinGramsPer100g": 9.9,
+        "carbsGramsPer100g": 3.9,
+        "fatGramsPer100g": 2,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 3.6,
+        "saturatedFatGramsPer100g": 1.3,
+        "saltGramsPer100g": 0.09,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "name": "Blueberries",
+        "category": "fruit",
+        "energyKcalPer100g": 57,
+        "proteinGramsPer100g": 0.7,
+        "carbsGramsPer100g": 14.5,
+        "fatGramsPer100g": 0.3,
+        "fiberGramsPer100g": 2.4,
+        "sugarGramsPer100g": 10,
+        "saturatedFatGramsPer100g": 0.03,
+        "saltGramsPer100g": 0,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000004",
+        "name": "Banana",
+        "category": "fruit",
+        "energyKcalPer100g": 89,
+        "proteinGramsPer100g": 1.1,
+        "carbsGramsPer100g": 22.8,
+        "fatGramsPer100g": 0.3,
+        "fiberGramsPer100g": 2.6,
+        "sugarGramsPer100g": 12.2,
+        "saturatedFatGramsPer100g": 0.1,
+        "saltGramsPer100g": 0,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000005",
+        "name": "Whey isolate",
+        "brand": "Seed Sports",
+        "category": "dairy-egg",
+        "energyKcalPer100g": 370,
+        "proteinGramsPer100g": 82,
+        "carbsGramsPer100g": 7,
+        "fatGramsPer100g": 3,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 2,
+        "saturatedFatGramsPer100g": 1.2,
+        "saltGramsPer100g": 0.45,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000006",
+        "name": "Scrambled egg mix",
+        "brand": "Seed Kitchen",
+        "category": "dairy-egg",
+        "energyKcalPer100g": 155,
+        "proteinGramsPer100g": 13,
+        "carbsGramsPer100g": 1.1,
+        "fatGramsPer100g": 11,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 1.1,
+        "saturatedFatGramsPer100g": 3.3,
+        "saltGramsPer100g": 0.31,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000007",
+        "name": "Chicken breast grilled",
+        "category": "meat",
+        "energyKcalPer100g": 165,
+        "proteinGramsPer100g": 31,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 3.6,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 0,
+        "saturatedFatGramsPer100g": 1,
+        "saltGramsPer100g": 0.18,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000008",
+        "name": "Turkey mince lean",
+        "category": "meat",
+        "energyKcalPer100g": 150,
+        "proteinGramsPer100g": 27,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 5,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 0,
+        "saturatedFatGramsPer100g": 1.5,
+        "saltGramsPer100g": 0.16,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000009",
+        "name": "Salmon fillet",
+        "category": "fish-seafood",
+        "energyKcalPer100g": 208,
+        "proteinGramsPer100g": 20,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 13,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 0,
+        "saturatedFatGramsPer100g": 3.1,
+        "saltGramsPer100g": 0.15,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000010",
+        "name": "Tuna in water",
+        "category": "fish-seafood",
+        "energyKcalPer100g": 116,
+        "proteinGramsPer100g": 26,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 1,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 0,
+        "saturatedFatGramsPer100g": 0.2,
+        "saltGramsPer100g": 0.37,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000011",
+        "name": "Cooked jasmine rice",
+        "category": "grain",
+        "energyKcalPer100g": 130,
+        "proteinGramsPer100g": 2.7,
+        "carbsGramsPer100g": 28.2,
+        "fatGramsPer100g": 0.3,
+        "fiberGramsPer100g": 0.4,
+        "sugarGramsPer100g": 0.1,
+        "saturatedFatGramsPer100g": 0.1,
+        "saltGramsPer100g": 0.01,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000012",
+        "name": "Cooked quinoa",
+        "category": "grain",
+        "energyKcalPer100g": 120,
+        "proteinGramsPer100g": 4.4,
+        "carbsGramsPer100g": 21.3,
+        "fatGramsPer100g": 1.9,
+        "fiberGramsPer100g": 2.8,
+        "sugarGramsPer100g": 0.9,
+        "saturatedFatGramsPer100g": 0.2,
+        "saltGramsPer100g": 0.01,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000013",
+        "name": "Whole wheat pasta cooked",
+        "category": "grain",
+        "energyKcalPer100g": 149,
+        "proteinGramsPer100g": 5.8,
+        "carbsGramsPer100g": 30.1,
+        "fatGramsPer100g": 1.5,
+        "fiberGramsPer100g": 3.9,
+        "sugarGramsPer100g": 0.8,
+        "saturatedFatGramsPer100g": 0.3,
+        "saltGramsPer100g": 0.01,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000014",
+        "name": "Sweet potato roasted",
+        "category": "tuber",
+        "energyKcalPer100g": 90,
+        "proteinGramsPer100g": 2,
+        "carbsGramsPer100g": 20.7,
+        "fatGramsPer100g": 0.2,
+        "fiberGramsPer100g": 3.3,
+        "sugarGramsPer100g": 6.5,
+        "saturatedFatGramsPer100g": 0.04,
+        "saltGramsPer100g": 0.08,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000015",
+        "name": "Black beans cooked",
+        "category": "legume",
+        "energyKcalPer100g": 132,
+        "proteinGramsPer100g": 8.9,
+        "carbsGramsPer100g": 23.7,
+        "fatGramsPer100g": 0.5,
+        "fiberGramsPer100g": 8.7,
+        "sugarGramsPer100g": 0.3,
+        "saturatedFatGramsPer100g": 0.1,
+        "saltGramsPer100g": 0.24,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000016",
+        "name": "Tofu firm",
+        "category": "plant-protein",
+        "energyKcalPer100g": 144,
+        "proteinGramsPer100g": 15.7,
+        "carbsGramsPer100g": 3.9,
+        "fatGramsPer100g": 8.7,
+        "fiberGramsPer100g": 2.3,
+        "sugarGramsPer100g": 0.6,
+        "saturatedFatGramsPer100g": 1.3,
+        "saltGramsPer100g": 0.02,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000017",
+        "name": "Chickpeas cooked",
+        "category": "legume",
+        "energyKcalPer100g": 164,
+        "proteinGramsPer100g": 8.9,
+        "carbsGramsPer100g": 27.4,
+        "fatGramsPer100g": 2.6,
+        "fiberGramsPer100g": 7.6,
+        "sugarGramsPer100g": 4.8,
+        "saturatedFatGramsPer100g": 0.3,
+        "saltGramsPer100g": 0.24,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000018",
+        "name": "Avocado",
+        "category": "fruit",
+        "energyKcalPer100g": 160,
+        "proteinGramsPer100g": 2,
+        "carbsGramsPer100g": 8.5,
+        "fatGramsPer100g": 14.7,
+        "fiberGramsPer100g": 6.7,
+        "sugarGramsPer100g": 0.7,
+        "saturatedFatGramsPer100g": 2.1,
+        "saltGramsPer100g": 0.02,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000019",
+        "name": "Extra virgin olive oil",
+        "category": "oil-fat",
+        "energyKcalPer100g": 884,
+        "proteinGramsPer100g": 0,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 100,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 0,
+        "saturatedFatGramsPer100g": 13.8,
+        "saltGramsPer100g": 0,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000020",
+        "name": "Peanut butter",
+        "brand": "Seed Pantry",
+        "category": "nut",
+        "energyKcalPer100g": 588,
+        "proteinGramsPer100g": 25,
+        "carbsGramsPer100g": 20,
+        "fatGramsPer100g": 50,
+        "fiberGramsPer100g": 6,
+        "sugarGramsPer100g": 9,
+        "saturatedFatGramsPer100g": 10,
+        "saltGramsPer100g": 0.43,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000021",
+        "name": "Almonds roasted",
+        "category": "nut",
+        "energyKcalPer100g": 579,
+        "proteinGramsPer100g": 21.2,
+        "carbsGramsPer100g": 21.6,
+        "fatGramsPer100g": 49.9,
+        "fiberGramsPer100g": 12.5,
+        "sugarGramsPer100g": 4.4,
+        "saturatedFatGramsPer100g": 3.8,
+        "saltGramsPer100g": 0.01,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000022",
+        "name": "Broccoli steamed",
+        "category": "vegetable",
+        "energyKcalPer100g": 35,
+        "proteinGramsPer100g": 2.4,
+        "carbsGramsPer100g": 7.2,
+        "fatGramsPer100g": 0.4,
+        "fiberGramsPer100g": 3.3,
+        "sugarGramsPer100g": 1.4,
+        "saturatedFatGramsPer100g": 0.04,
+        "saltGramsPer100g": 0.04,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000023",
+        "name": "Spinach cooked",
+        "category": "vegetable",
+        "energyKcalPer100g": 23,
+        "proteinGramsPer100g": 3,
+        "carbsGramsPer100g": 3.8,
+        "fatGramsPer100g": 0.3,
+        "fiberGramsPer100g": 2.4,
+        "sugarGramsPer100g": 0.4,
+        "saturatedFatGramsPer100g": 0.1,
+        "saltGramsPer100g": 0.08,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000024",
+        "name": "Mixed salad greens",
+        "category": "vegetable",
+        "energyKcalPer100g": 17,
+        "proteinGramsPer100g": 1.4,
+        "carbsGramsPer100g": 3.3,
+        "fatGramsPer100g": 0.2,
+        "fiberGramsPer100g": 1.8,
+        "sugarGramsPer100g": 1.2,
+        "saturatedFatGramsPer100g": 0.03,
+        "saltGramsPer100g": 0.03,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000025",
+        "name": "Dark chocolate 70%",
+        "brand": "Seed Treats",
+        "category": "sweetener",
+        "energyKcalPer100g": 598,
+        "proteinGramsPer100g": 7.8,
+        "carbsGramsPer100g": 45.9,
+        "fatGramsPer100g": 42.6,
+        "fiberGramsPer100g": 10.9,
+        "sugarGramsPer100g": 24,
+        "saturatedFatGramsPer100g": 24.5,
+        "saltGramsPer100g": 0.02,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000026",
+        "name": "Honey",
+        "category": "sweetener",
+        "energyKcalPer100g": 304,
+        "proteinGramsPer100g": 0.3,
+        "carbsGramsPer100g": 82.4,
+        "fatGramsPer100g": 0,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 82.1,
+        "saturatedFatGramsPer100g": 0,
+        "saltGramsPer100g": 0.01,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000027",
+        "name": "Sourdough bread",
+        "category": "bread-like",
+        "energyKcalPer100g": 260,
+        "proteinGramsPer100g": 8.5,
+        "carbsGramsPer100g": 51,
+        "fatGramsPer100g": 1.5,
+        "fiberGramsPer100g": 2.9,
+        "sugarGramsPer100g": 2.8,
+        "saturatedFatGramsPer100g": 0.3,
+        "saltGramsPer100g": 1.2,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000028",
+        "name": "Cottage cheese",
+        "category": "dairy-egg",
+        "energyKcalPer100g": 98,
+        "proteinGramsPer100g": 11.1,
+        "carbsGramsPer100g": 3.4,
+        "fatGramsPer100g": 4.3,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 2.7,
+        "saturatedFatGramsPer100g": 1.7,
+        "saltGramsPer100g": 0.36,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000029",
+        "name": "Electrolyte drink",
+        "brand": "Seed Hydration",
+        "energyKcalPer100g": 0,
+        "proteinGramsPer100g": 0,
+        "carbsGramsPer100g": 0,
+        "fatGramsPer100g": 0,
+        "saltGramsPer100g": 0.08,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000030",
+        "name": "Frozen pizza slice",
+        "brand": "Seed Freezer",
+        "category": "bread-like",
+        "energyKcalPer100g": 266,
+        "proteinGramsPer100g": 11,
+        "carbsGramsPer100g": 33,
+        "fatGramsPer100g": 10,
+        "fiberGramsPer100g": 2.3,
+        "sugarGramsPer100g": 3.5,
+        "saturatedFatGramsPer100g": 4,
+        "saltGramsPer100g": 1.2,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000031",
+        "name": "Protein bar caramel",
+        "brand": "Seed Sports",
+        "category": "sweetener",
+        "energyKcalPer100g": 360,
+        "proteinGramsPer100g": 32,
+        "carbsGramsPer100g": 34,
+        "fatGramsPer100g": 12,
+        "fiberGramsPer100g": 8,
+        "sugarGramsPer100g": 4,
+        "saturatedFatGramsPer100g": 5,
+        "saltGramsPer100g": 0.4,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000032",
+        "name": "Granola clusters",
+        "brand": "Seed Pantry",
+        "category": "grain",
+        "energyKcalPer100g": 471,
+        "proteinGramsPer100g": 10,
+        "carbsGramsPer100g": 64,
+        "fatGramsPer100g": 19,
+        "fiberGramsPer100g": 7,
+        "sugarGramsPer100g": 18,
+        "saturatedFatGramsPer100g": 4,
+        "saltGramsPer100g": 0.2,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000033",
+        "name": "Seitan strips",
+        "category": "plant-protein",
+        "energyKcalPer100g": 130,
+        "proteinGramsPer100g": 25,
+        "carbsGramsPer100g": 5,
+        "fatGramsPer100g": 2,
+        "fiberGramsPer100g": 1,
+        "sugarGramsPer100g": 1,
+        "saturatedFatGramsPer100g": 0.4,
+        "saltGramsPer100g": 0.8,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000034",
+        "name": "Coconut milk curry sauce",
+        "category": "oil-fat",
+        "energyKcalPer100g": 190,
+        "proteinGramsPer100g": 2,
+        "carbsGramsPer100g": 6,
+        "fatGramsPer100g": 18,
+        "fiberGramsPer100g": 1.2,
+        "sugarGramsPer100g": 3,
+        "saturatedFatGramsPer100g": 15,
+        "saltGramsPer100g": 0.5,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000035",
+        "name": "White rice crackers",
+        "category": "grain",
+        "energyKcalPer100g": 387,
+        "proteinGramsPer100g": 7,
+        "carbsGramsPer100g": 82,
+        "fatGramsPer100g": 3,
+        "fiberGramsPer100g": 1,
+        "sugarGramsPer100g": 0.5,
+        "saturatedFatGramsPer100g": 0.6,
+        "saltGramsPer100g": 0.9,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000036",
+        "name": "Lentil soup",
+        "brand": "Seed Batch Cook",
+        "category": "legume",
+        "energyKcalPer100g": 72,
+        "proteinGramsPer100g": 4.5,
+        "carbsGramsPer100g": 11,
+        "fatGramsPer100g": 1.5,
+        "fiberGramsPer100g": 4,
+        "sugarGramsPer100g": 1.8,
+        "saturatedFatGramsPer100g": 0.2,
+        "saltGramsPer100g": 0.7,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1779602400000
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000037",
+        "name": "Greek yogurt 2% low-sugar batch",
+        "brand": "Seed Dairy",
+        "category": "dairy-egg",
+        "energyKcalPer100g": 73,
+        "proteinGramsPer100g": 9.9,
+        "carbsGramsPer100g": 3.9,
+        "fatGramsPer100g": 2,
+        "fiberGramsPer100g": 0,
+        "sugarGramsPer100g": 2.1,
+        "saturatedFatGramsPer100g": 1.3,
+        "saltGramsPer100g": 0.09,
+        "origin": "user",
+        "createdAt": 1779602400000,
+        "updatedAt": 1780383600000,
+        "basedOnFoodId": "10000000-0000-4000-8000-000000000002"
+      },
+      {
+        "id": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "name": "apple",
+        "category": "fruit",
+        "origin": "app-default",
+        "energyKcalPer100g": 52,
+        "proteinGramsPer100g": 0.26,
+        "carbsGramsPer100g": 13.81,
+        "fatGramsPer100g": 0.17,
+        "createdAt": 1781873744758,
+        "updatedAt": 1781873744758,
+        "fiberGramsPer100g": 2.4,
+        "sugarGramsPer100g": 10.39,
+        "saturatedFatGramsPer100g": 0.03,
+        "saltGramsPer100g": 0
+      },
+      {
+        "id": "5dff771d-f926-42d9-95b7-c573d8ce776c",
+        "name": "banana",
+        "category": "fruit",
+        "origin": "app-default",
+        "energyKcalPer100g": 89,
+        "proteinGramsPer100g": 1.09,
+        "carbsGramsPer100g": 22.84,
+        "fatGramsPer100g": 0.33,
+        "createdAt": 1781873744770,
+        "updatedAt": 1781873744770,
+        "fiberGramsPer100g": 2.6,
+        "sugarGramsPer100g": 12.23,
+        "saturatedFatGramsPer100g": 0.11,
+        "saltGramsPer100g": 0
+      },
+      {
+        "id": "128a7cc6-b90d-4ed0-9cd3-2be2f0aeb58d",
+        "name": "carrot",
+        "category": "vegetable",
+        "origin": "app-default",
+        "energyKcalPer100g": 41,
+        "proteinGramsPer100g": 0.93,
+        "carbsGramsPer100g": 9.58,
+        "fatGramsPer100g": 0.24,
+        "createdAt": 1781873745007,
+        "updatedAt": 1781873745007,
+        "fiberGramsPer100g": 2.8,
+        "sugarGramsPer100g": 4.54,
+        "saturatedFatGramsPer100g": 0.04,
+        "saltGramsPer100g": 0.17
+      },
+      {
+        "id": "98ec541c-ecb9-4f5e-a6ed-b0804261c724",
+        "name": "kiwi",
+        "category": "fruit",
+        "origin": "app-default",
+        "energyKcalPer100g": 61,
+        "proteinGramsPer100g": 1.14,
+        "carbsGramsPer100g": 14.66,
+        "fatGramsPer100g": 0.52,
+        "createdAt": 1781873744910,
+        "updatedAt": 1781873744910,
+        "fiberGramsPer100g": 3,
+        "sugarGramsPer100g": 8.99,
+        "saturatedFatGramsPer100g": 0.03,
+        "saltGramsPer100g": 0.01
+      },
+      {
+        "id": "91d58804-df00-47a4-9353-929f729570f5",
+        "name": "strawberry",
+        "category": "fruit",
+        "origin": "app-default",
+        "energyKcalPer100g": 32,
+        "proteinGramsPer100g": 0.67,
+        "carbsGramsPer100g": 7.68,
+        "fatGramsPer100g": 0.3,
+        "createdAt": 1781873744889,
+        "updatedAt": 1781873744889,
+        "fiberGramsPer100g": 2,
+        "sugarGramsPer100g": 4.66,
+        "saturatedFatGramsPer100g": 0.02,
+        "saltGramsPer100g": 0
+      },
+      {
+        "id": "2a3a09a5-c387-4efb-a084-a608a36f9890",
+        "name": "tomato",
+        "category": "vegetable",
+        "origin": "app-default",
+        "energyKcalPer100g": 18,
+        "proteinGramsPer100g": 0.88,
+        "carbsGramsPer100g": 3.92,
+        "fatGramsPer100g": 0.2,
+        "createdAt": 1781873744978,
+        "updatedAt": 1781873744978,
+        "fiberGramsPer100g": 1.2,
+        "sugarGramsPer100g": 2.63,
+        "saturatedFatGramsPer100g": 0.05,
+        "saltGramsPer100g": 0.01
+      }
+    ],
+    "mealEntries": [
+      {
+        "id": "30000000-0000-4000-8000-000000000001",
+        "dateKey": "2026-05-24",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 70,
+        "createdAt": 1779598801000,
+        "updatedAt": 1779598801000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000002",
+        "dateKey": "2026-05-24",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 220,
+        "createdAt": 1779598802000,
+        "updatedAt": 1779598802000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000003",
+        "dateKey": "2026-05-24",
+        "meal": "breakfast",
+        "foodId": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "quantityGrams": 160,
+        "createdAt": 1779598803000,
+        "updatedAt": 1779598803000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000004",
+        "dateKey": "2026-05-24",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 15,
+        "createdAt": 1779598804000,
+        "updatedAt": 1779598804000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000005",
+        "dateKey": "2026-05-24",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 180,
+        "createdAt": 1779616805000,
+        "updatedAt": 1779616805000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000006",
+        "dateKey": "2026-05-24",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 220,
+        "createdAt": 1779616806000,
+        "updatedAt": 1779616806000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000007",
+        "dateKey": "2026-05-24",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 180,
+        "createdAt": 1779616807000,
+        "updatedAt": 1779616807000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000008",
+        "dateKey": "2026-05-24",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1779616808000,
+        "updatedAt": 1779616808000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000009",
+        "dateKey": "2026-05-24",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 150,
+        "createdAt": 1779642009000,
+        "updatedAt": 1779642009000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000010",
+        "dateKey": "2026-05-24",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1779642010000,
+        "updatedAt": 1779642010000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000011",
+        "dateKey": "2026-05-24",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1779642011000,
+        "updatedAt": 1779642011000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000012",
+        "dateKey": "2026-05-24",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1779642012000,
+        "updatedAt": 1779642012000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000013",
+        "dateKey": "2026-05-24",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1779642013000,
+        "updatedAt": 1779642013000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000014",
+        "dateKey": "2026-05-25",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 100,
+        "createdAt": 1779685214000,
+        "updatedAt": 1779685214000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000015",
+        "dateKey": "2026-05-25",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000006",
+        "quantityGrams": 160,
+        "createdAt": 1779685215000,
+        "updatedAt": 1779685215000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000016",
+        "dateKey": "2026-05-25",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 80,
+        "createdAt": 1779685216000,
+        "updatedAt": 1779685216000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000017",
+        "dateKey": "2026-05-25",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000037",
+        "quantityGrams": 150,
+        "createdAt": 1779685217000,
+        "updatedAt": 1779685217000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000018",
+        "dateKey": "2026-05-25",
+        "meal": "breakfast",
+        "foodId": "98ec541c-ecb9-4f5e-a6ed-b0804261c724",
+        "quantityGrams": 90,
+        "createdAt": 1779685218000,
+        "updatedAt": 1779685218000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000019",
+        "dateKey": "2026-05-25",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 140,
+        "createdAt": 1779703219000,
+        "updatedAt": 1779703219000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000020",
+        "dateKey": "2026-05-25",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 260,
+        "createdAt": 1779703220000,
+        "updatedAt": 1779703220000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000021",
+        "dateKey": "2026-05-25",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1779703221000,
+        "updatedAt": 1779703221000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000022",
+        "dateKey": "2026-05-25",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 12,
+        "createdAt": 1779703222000,
+        "updatedAt": 1779703222000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000023",
+        "dateKey": "2026-05-25",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000008",
+        "quantityGrams": 180,
+        "createdAt": 1779728423000,
+        "updatedAt": 1779728423000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000024",
+        "dateKey": "2026-05-25",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 220,
+        "createdAt": 1779728424000,
+        "updatedAt": 1779728424000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000025",
+        "dateKey": "2026-05-25",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1779728425000,
+        "updatedAt": 1779728425000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000026",
+        "dateKey": "2026-05-25",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 15,
+        "createdAt": 1779728426000,
+        "updatedAt": 1779728426000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000027",
+        "dateKey": "2026-05-26",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 80,
+        "createdAt": 1779771627000,
+        "updatedAt": 1779771627000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000028",
+        "dateKey": "2026-05-26",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000004",
+        "quantityGrams": 120,
+        "createdAt": 1779771628000,
+        "updatedAt": 1779771628000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000029",
+        "dateKey": "2026-05-26",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000021",
+        "quantityGrams": 20,
+        "createdAt": 1779771629000,
+        "updatedAt": 1779771629000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000030",
+        "dateKey": "2026-05-26",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 120,
+        "createdAt": 1779771630000,
+        "updatedAt": 1779771630000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000031",
+        "dateKey": "2026-05-26",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 230,
+        "createdAt": 1779789631000,
+        "updatedAt": 1779789631000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000032",
+        "dateKey": "2026-05-26",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 240,
+        "createdAt": 1779789632000,
+        "updatedAt": 1779789632000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000033",
+        "dateKey": "2026-05-26",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 220,
+        "createdAt": 1779789633000,
+        "updatedAt": 1779789633000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000034",
+        "dateKey": "2026-05-26",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000034",
+        "quantityGrams": 80,
+        "createdAt": 1779789634000,
+        "updatedAt": 1779789634000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000035",
+        "dateKey": "2026-05-26",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000017",
+        "quantityGrams": 230,
+        "createdAt": 1779814835000,
+        "updatedAt": 1779814835000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000036",
+        "dateKey": "2026-05-26",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 180,
+        "createdAt": 1779814836000,
+        "updatedAt": 1779814836000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000037",
+        "dateKey": "2026-05-26",
+        "meal": "dinner",
+        "foodId": "2a3a09a5-c387-4efb-a084-a608a36f9890",
+        "quantityGrams": 160,
+        "createdAt": 1779814837000,
+        "updatedAt": 1779814837000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000038",
+        "dateKey": "2026-05-26",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 8,
+        "createdAt": 1779814838000,
+        "updatedAt": 1779814838000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000039",
+        "dateKey": "2026-05-27",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000005",
+        "quantityGrams": 45,
+        "createdAt": 1779858039000,
+        "updatedAt": 1779858039000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000040",
+        "dateKey": "2026-05-27",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 250,
+        "createdAt": 1779858040000,
+        "updatedAt": 1779858040000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000041",
+        "dateKey": "2026-05-27",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 80,
+        "createdAt": 1779858041000,
+        "updatedAt": 1779858041000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000042",
+        "dateKey": "2026-05-27",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 250,
+        "createdAt": 1779876042000,
+        "updatedAt": 1779876042000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000043",
+        "dateKey": "2026-05-27",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 150,
+        "createdAt": 1779876043000,
+        "updatedAt": 1779876043000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000044",
+        "dateKey": "2026-05-27",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 150,
+        "createdAt": 1779876044000,
+        "updatedAt": 1779876044000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000045",
+        "dateKey": "2026-05-27",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 8,
+        "createdAt": 1779876045000,
+        "updatedAt": 1779876045000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000046",
+        "dateKey": "2026-05-27",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 180,
+        "createdAt": 1779901246000,
+        "updatedAt": 1779901246000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000047",
+        "dateKey": "2026-05-27",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 170,
+        "createdAt": 1779901247000,
+        "updatedAt": 1779901247000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000048",
+        "dateKey": "2026-05-27",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 200,
+        "createdAt": 1779901248000,
+        "updatedAt": 1779901248000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000049",
+        "dateKey": "2026-05-27",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 200,
+        "createdAt": 1779901249000,
+        "updatedAt": 1779901249000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000050",
+        "dateKey": "2026-05-27",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000031",
+        "quantityGrams": 60,
+        "createdAt": 1779901250000,
+        "updatedAt": 1779901250000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000051",
+        "dateKey": "2026-05-28",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 90,
+        "createdAt": 1779944451000,
+        "updatedAt": 1779944451000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000052",
+        "dateKey": "2026-05-28",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000004",
+        "quantityGrams": 150,
+        "createdAt": 1779944452000,
+        "updatedAt": 1779944452000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000053",
+        "dateKey": "2026-05-28",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 20,
+        "createdAt": 1779944453000,
+        "updatedAt": 1779944453000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000054",
+        "dateKey": "2026-05-28",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 150,
+        "createdAt": 1779944454000,
+        "updatedAt": 1779944454000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000055",
+        "dateKey": "2026-05-28",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 350,
+        "createdAt": 1779962455000,
+        "updatedAt": 1779962455000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000056",
+        "dateKey": "2026-05-28",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 80,
+        "createdAt": 1779962456000,
+        "updatedAt": 1779962456000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000057",
+        "dateKey": "2026-05-28",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000036",
+        "quantityGrams": 300,
+        "createdAt": 1779962457000,
+        "updatedAt": 1779962457000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000058",
+        "dateKey": "2026-05-28",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1779962458000,
+        "updatedAt": 1779962458000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000059",
+        "dateKey": "2026-05-28",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 300,
+        "createdAt": 1779987659000,
+        "updatedAt": 1779987659000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000060",
+        "dateKey": "2026-05-28",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000015",
+        "quantityGrams": 220,
+        "createdAt": 1779987660000,
+        "updatedAt": 1779987660000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000061",
+        "dateKey": "2026-05-28",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 200,
+        "createdAt": 1779987661000,
+        "updatedAt": 1779987661000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000062",
+        "dateKey": "2026-05-28",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1779987662000,
+        "updatedAt": 1779987662000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000063",
+        "dateKey": "2026-05-29",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 150,
+        "createdAt": 1780030863000,
+        "updatedAt": 1780030863000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000064",
+        "dateKey": "2026-05-29",
+        "meal": "breakfast",
+        "foodId": "91d58804-df00-47a4-9353-929f729570f5",
+        "quantityGrams": 120,
+        "createdAt": 1780030864000,
+        "updatedAt": 1780030864000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000065",
+        "dateKey": "2026-05-29",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000029",
+        "quantityGrams": 500,
+        "createdAt": 1780030865000,
+        "updatedAt": 1780030865000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000066",
+        "dateKey": "2026-05-29",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 100,
+        "createdAt": 1780048866000,
+        "updatedAt": 1780048866000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000067",
+        "dateKey": "2026-05-29",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 150,
+        "createdAt": 1780048867000,
+        "updatedAt": 1780048867000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000068",
+        "dateKey": "2026-05-29",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 20,
+        "createdAt": 1780048868000,
+        "updatedAt": 1780048868000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000069",
+        "dateKey": "2026-05-29",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000036",
+        "quantityGrams": 250,
+        "createdAt": 1780074069000,
+        "updatedAt": 1780074069000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000070",
+        "dateKey": "2026-05-29",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1780074070000,
+        "updatedAt": 1780074070000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000071",
+        "dateKey": "2026-05-29",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 100,
+        "createdAt": 1780074071000,
+        "updatedAt": 1780074071000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000072",
+        "dateKey": "2026-05-30",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000032",
+        "quantityGrams": 120,
+        "createdAt": 1780117272000,
+        "updatedAt": 1780117272000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000073",
+        "dateKey": "2026-05-30",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 250,
+        "createdAt": 1780117273000,
+        "updatedAt": 1780117273000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000074",
+        "dateKey": "2026-05-30",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 35,
+        "createdAt": 1780117274000,
+        "updatedAt": 1780117274000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000075",
+        "dateKey": "2026-05-30",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 25,
+        "createdAt": 1780117275000,
+        "updatedAt": 1780117275000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000076",
+        "dateKey": "2026-05-30",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000030",
+        "quantityGrams": 350,
+        "createdAt": 1780135276000,
+        "updatedAt": 1780135276000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000077",
+        "dateKey": "2026-05-30",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 15,
+        "createdAt": 1780135277000,
+        "updatedAt": 1780135277000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000078",
+        "dateKey": "2026-05-30",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1780135278000,
+        "updatedAt": 1780135278000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000079",
+        "dateKey": "2026-05-30",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 350,
+        "createdAt": 1780160479000,
+        "updatedAt": 1780160479000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000080",
+        "dateKey": "2026-05-30",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 250,
+        "createdAt": 1780160480000,
+        "updatedAt": 1780160480000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000081",
+        "dateKey": "2026-05-30",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 50,
+        "createdAt": 1780160481000,
+        "updatedAt": 1780160481000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000082",
+        "dateKey": "2026-05-30",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 150,
+        "createdAt": 1780160482000,
+        "updatedAt": 1780160482000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000083",
+        "dateKey": "2026-05-31",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 70,
+        "createdAt": 1780203683000,
+        "updatedAt": 1780203683000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000084",
+        "dateKey": "2026-05-31",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 220,
+        "createdAt": 1780203684000,
+        "updatedAt": 1780203684000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000085",
+        "dateKey": "2026-05-31",
+        "meal": "breakfast",
+        "foodId": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "quantityGrams": 160,
+        "createdAt": 1780203685000,
+        "updatedAt": 1780203685000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000086",
+        "dateKey": "2026-05-31",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 15,
+        "createdAt": 1780203686000,
+        "updatedAt": 1780203686000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000087",
+        "dateKey": "2026-05-31",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 180,
+        "createdAt": 1780221687000,
+        "updatedAt": 1780221687000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000088",
+        "dateKey": "2026-05-31",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 220,
+        "createdAt": 1780221688000,
+        "updatedAt": 1780221688000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000089",
+        "dateKey": "2026-05-31",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 180,
+        "createdAt": 1780221689000,
+        "updatedAt": 1780221689000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000090",
+        "dateKey": "2026-05-31",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1780221690000,
+        "updatedAt": 1780221690000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000091",
+        "dateKey": "2026-05-31",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 150,
+        "createdAt": 1780246891000,
+        "updatedAt": 1780246891000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000092",
+        "dateKey": "2026-05-31",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1780246892000,
+        "updatedAt": 1780246892000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000093",
+        "dateKey": "2026-05-31",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1780246893000,
+        "updatedAt": 1780246893000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000094",
+        "dateKey": "2026-05-31",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1780246894000,
+        "updatedAt": 1780246894000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000095",
+        "dateKey": "2026-05-31",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1780246895000,
+        "updatedAt": 1780246895000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000096",
+        "dateKey": "2026-06-01",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 90,
+        "createdAt": 1780290096000,
+        "updatedAt": 1780290096000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000097",
+        "dateKey": "2026-06-01",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 200,
+        "createdAt": 1780290097000,
+        "updatedAt": 1780290097000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000098",
+        "dateKey": "2026-06-01",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000021",
+        "quantityGrams": 25,
+        "createdAt": 1780290098000,
+        "updatedAt": 1780290098000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000099",
+        "dateKey": "2026-06-01",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000015",
+        "quantityGrams": 300,
+        "createdAt": 1780308099000,
+        "updatedAt": 1780308099000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000100",
+        "dateKey": "2026-06-01",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 250,
+        "createdAt": 1780308100000,
+        "updatedAt": 1780308100000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000101",
+        "dateKey": "2026-06-01",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1780308101000,
+        "updatedAt": 1780308101000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000102",
+        "dateKey": "2026-06-01",
+        "meal": "lunch",
+        "foodId": "128a7cc6-b90d-4ed0-9cd3-2be2f0aeb58d",
+        "quantityGrams": 160,
+        "createdAt": 1780308102000,
+        "updatedAt": 1780308102000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000103",
+        "dateKey": "2026-06-01",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000017",
+        "quantityGrams": 280,
+        "createdAt": 1780333303000,
+        "updatedAt": 1780333303000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000104",
+        "dateKey": "2026-06-01",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1780333304000,
+        "updatedAt": 1780333304000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000105",
+        "dateKey": "2026-06-01",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 200,
+        "createdAt": 1780333305000,
+        "updatedAt": 1780333305000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000106",
+        "dateKey": "2026-06-01",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1780333306000,
+        "updatedAt": 1780333306000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000107",
+        "dateKey": "2026-06-02",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 100,
+        "createdAt": 1780376507000,
+        "updatedAt": 1780376507000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000108",
+        "dateKey": "2026-06-02",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000006",
+        "quantityGrams": 160,
+        "createdAt": 1780376508000,
+        "updatedAt": 1780376508000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000109",
+        "dateKey": "2026-06-02",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 80,
+        "createdAt": 1780376509000,
+        "updatedAt": 1780376509000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000110",
+        "dateKey": "2026-06-02",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000037",
+        "quantityGrams": 150,
+        "createdAt": 1780376510000,
+        "updatedAt": 1780376510000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000111",
+        "dateKey": "2026-06-02",
+        "meal": "breakfast",
+        "foodId": "98ec541c-ecb9-4f5e-a6ed-b0804261c724",
+        "quantityGrams": 90,
+        "createdAt": 1780376511000,
+        "updatedAt": 1780376511000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000112",
+        "dateKey": "2026-06-02",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 140,
+        "createdAt": 1780394512000,
+        "updatedAt": 1780394512000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000113",
+        "dateKey": "2026-06-02",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 260,
+        "createdAt": 1780394513000,
+        "updatedAt": 1780394513000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000114",
+        "dateKey": "2026-06-02",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1780394514000,
+        "updatedAt": 1780394514000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000115",
+        "dateKey": "2026-06-02",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 12,
+        "createdAt": 1780394515000,
+        "updatedAt": 1780394515000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000116",
+        "dateKey": "2026-06-02",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000008",
+        "quantityGrams": 180,
+        "createdAt": 1780419716000,
+        "updatedAt": 1780419716000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000117",
+        "dateKey": "2026-06-02",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 220,
+        "createdAt": 1780419717000,
+        "updatedAt": 1780419717000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000118",
+        "dateKey": "2026-06-02",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1780419718000,
+        "updatedAt": 1780419718000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000119",
+        "dateKey": "2026-06-02",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 15,
+        "createdAt": 1780419719000,
+        "updatedAt": 1780419719000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000120",
+        "dateKey": "2026-06-03",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000032",
+        "quantityGrams": 80,
+        "createdAt": 1780462920000,
+        "updatedAt": 1780462920000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000121",
+        "dateKey": "2026-06-03",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 35,
+        "createdAt": 1780462921000,
+        "updatedAt": 1780462921000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000122",
+        "dateKey": "2026-06-03",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 200,
+        "createdAt": 1780462922000,
+        "updatedAt": 1780462922000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000123",
+        "dateKey": "2026-06-03",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 180,
+        "createdAt": 1780480923000,
+        "updatedAt": 1780480923000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000124",
+        "dateKey": "2026-06-03",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 220,
+        "createdAt": 1780480924000,
+        "updatedAt": 1780480924000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000125",
+        "dateKey": "2026-06-03",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1780480925000,
+        "updatedAt": 1780480925000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000126",
+        "dateKey": "2026-06-03",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 20,
+        "createdAt": 1780480926000,
+        "updatedAt": 1780480926000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000127",
+        "dateKey": "2026-06-03",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 220,
+        "createdAt": 1780506127000,
+        "updatedAt": 1780506127000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000128",
+        "dateKey": "2026-06-03",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000034",
+        "quantityGrams": 150,
+        "createdAt": 1780506128000,
+        "updatedAt": 1780506128000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000129",
+        "dateKey": "2026-06-03",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1780506129000,
+        "updatedAt": 1780506129000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000130",
+        "dateKey": "2026-06-04",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1780549330000,
+        "updatedAt": 1780549330000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000131",
+        "dateKey": "2026-06-04",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1780567331000,
+        "updatedAt": 1780567331000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000132",
+        "dateKey": "2026-06-04",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1780592532000,
+        "updatedAt": 1780592532000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000133",
+        "dateKey": "2026-06-05",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 80,
+        "createdAt": 1780635733000,
+        "updatedAt": 1780635733000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000134",
+        "dateKey": "2026-06-05",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000004",
+        "quantityGrams": 120,
+        "createdAt": 1780635734000,
+        "updatedAt": 1780635734000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000135",
+        "dateKey": "2026-06-05",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000021",
+        "quantityGrams": 20,
+        "createdAt": 1780635735000,
+        "updatedAt": 1780635735000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000136",
+        "dateKey": "2026-06-05",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 120,
+        "createdAt": 1780635736000,
+        "updatedAt": 1780635736000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000137",
+        "dateKey": "2026-06-05",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 230,
+        "createdAt": 1780653737000,
+        "updatedAt": 1780653737000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000138",
+        "dateKey": "2026-06-05",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 240,
+        "createdAt": 1780653738000,
+        "updatedAt": 1780653738000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000139",
+        "dateKey": "2026-06-05",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 220,
+        "createdAt": 1780653739000,
+        "updatedAt": 1780653739000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000140",
+        "dateKey": "2026-06-05",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000034",
+        "quantityGrams": 80,
+        "createdAt": 1780653740000,
+        "updatedAt": 1780653740000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000141",
+        "dateKey": "2026-06-05",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000017",
+        "quantityGrams": 230,
+        "createdAt": 1780678941000,
+        "updatedAt": 1780678941000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000142",
+        "dateKey": "2026-06-05",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 180,
+        "createdAt": 1780678942000,
+        "updatedAt": 1780678942000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000143",
+        "dateKey": "2026-06-05",
+        "meal": "dinner",
+        "foodId": "2a3a09a5-c387-4efb-a084-a608a36f9890",
+        "quantityGrams": 160,
+        "createdAt": 1780678943000,
+        "updatedAt": 1780678943000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000144",
+        "dateKey": "2026-06-05",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 8,
+        "createdAt": 1780678944000,
+        "updatedAt": 1780678944000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000145",
+        "dateKey": "2026-06-06",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 60,
+        "createdAt": 1780722145000,
+        "updatedAt": 1780722145000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000146",
+        "dateKey": "2026-06-06",
+        "meal": "breakfast",
+        "foodId": "5dff771d-f926-42d9-95b7-c573d8ce776c",
+        "quantityGrams": 180,
+        "createdAt": 1780722146000,
+        "updatedAt": 1780722146000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000147",
+        "dateKey": "2026-06-06",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 35,
+        "createdAt": 1780722147000,
+        "updatedAt": 1780722147000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000148",
+        "dateKey": "2026-06-06",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000032",
+        "quantityGrams": 60,
+        "createdAt": 1780722148000,
+        "updatedAt": 1780722148000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000149",
+        "dateKey": "2026-06-06",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 200,
+        "createdAt": 1780740149000,
+        "updatedAt": 1780740149000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000150",
+        "dateKey": "2026-06-06",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 250,
+        "createdAt": 1780740150000,
+        "updatedAt": 1780740150000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000151",
+        "dateKey": "2026-06-06",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 30,
+        "createdAt": 1780740151000,
+        "updatedAt": 1780740151000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000152",
+        "dateKey": "2026-06-06",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 250,
+        "createdAt": 1780765352000,
+        "updatedAt": 1780765352000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000153",
+        "dateKey": "2026-06-06",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1780765353000,
+        "updatedAt": 1780765353000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000154",
+        "dateKey": "2026-06-06",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 60,
+        "createdAt": 1780765354000,
+        "updatedAt": 1780765354000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000155",
+        "dateKey": "2026-06-07",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 70,
+        "createdAt": 1780808555000,
+        "updatedAt": 1780808555000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000156",
+        "dateKey": "2026-06-07",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 220,
+        "createdAt": 1780808556000,
+        "updatedAt": 1780808556000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000157",
+        "dateKey": "2026-06-07",
+        "meal": "breakfast",
+        "foodId": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "quantityGrams": 160,
+        "createdAt": 1780808557000,
+        "updatedAt": 1780808557000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000158",
+        "dateKey": "2026-06-07",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 15,
+        "createdAt": 1780808558000,
+        "updatedAt": 1780808558000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000159",
+        "dateKey": "2026-06-07",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 180,
+        "createdAt": 1780826559000,
+        "updatedAt": 1780826559000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000160",
+        "dateKey": "2026-06-07",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 220,
+        "createdAt": 1780826560000,
+        "updatedAt": 1780826560000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000161",
+        "dateKey": "2026-06-07",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 180,
+        "createdAt": 1780826561000,
+        "updatedAt": 1780826561000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000162",
+        "dateKey": "2026-06-07",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1780826562000,
+        "updatedAt": 1780826562000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000163",
+        "dateKey": "2026-06-07",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 150,
+        "createdAt": 1780851763000,
+        "updatedAt": 1780851763000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000164",
+        "dateKey": "2026-06-07",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1780851764000,
+        "updatedAt": 1780851764000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000165",
+        "dateKey": "2026-06-07",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1780851765000,
+        "updatedAt": 1780851765000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000166",
+        "dateKey": "2026-06-07",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1780851766000,
+        "updatedAt": 1780851766000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000167",
+        "dateKey": "2026-06-07",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1780851767000,
+        "updatedAt": 1780851767000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000168",
+        "dateKey": "2026-06-08",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 120,
+        "createdAt": 1780894968000,
+        "updatedAt": 1780894968000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000169",
+        "dateKey": "2026-06-08",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000028",
+        "quantityGrams": 220,
+        "createdAt": 1780894969000,
+        "updatedAt": 1780894969000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000170",
+        "dateKey": "2026-06-08",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000030",
+        "quantityGrams": 450,
+        "createdAt": 1780912970000,
+        "updatedAt": 1780912970000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000171",
+        "dateKey": "2026-06-08",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1780912971000,
+        "updatedAt": 1780912971000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000172",
+        "dateKey": "2026-06-08",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000036",
+        "quantityGrams": 400,
+        "createdAt": 1780938172000,
+        "updatedAt": 1780938172000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000173",
+        "dateKey": "2026-06-08",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000033",
+        "quantityGrams": 160,
+        "createdAt": 1780938173000,
+        "updatedAt": 1780938173000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000174",
+        "dateKey": "2026-06-08",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 100,
+        "createdAt": 1780938174000,
+        "updatedAt": 1780938174000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000175",
+        "dateKey": "2026-06-09",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 100,
+        "createdAt": 1780981375000,
+        "updatedAt": 1780981375000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000176",
+        "dateKey": "2026-06-09",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000006",
+        "quantityGrams": 160,
+        "createdAt": 1780981376000,
+        "updatedAt": 1780981376000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000177",
+        "dateKey": "2026-06-09",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 80,
+        "createdAt": 1780981377000,
+        "updatedAt": 1780981377000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000178",
+        "dateKey": "2026-06-09",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000037",
+        "quantityGrams": 150,
+        "createdAt": 1780981378000,
+        "updatedAt": 1780981378000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000179",
+        "dateKey": "2026-06-09",
+        "meal": "breakfast",
+        "foodId": "98ec541c-ecb9-4f5e-a6ed-b0804261c724",
+        "quantityGrams": 90,
+        "createdAt": 1780981379000,
+        "updatedAt": 1780981379000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000180",
+        "dateKey": "2026-06-09",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 140,
+        "createdAt": 1780999380000,
+        "updatedAt": 1780999380000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000181",
+        "dateKey": "2026-06-09",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 260,
+        "createdAt": 1780999381000,
+        "updatedAt": 1780999381000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000182",
+        "dateKey": "2026-06-09",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1780999382000,
+        "updatedAt": 1780999382000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000183",
+        "dateKey": "2026-06-09",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 12,
+        "createdAt": 1780999383000,
+        "updatedAt": 1780999383000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000184",
+        "dateKey": "2026-06-09",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000008",
+        "quantityGrams": 180,
+        "createdAt": 1781024584000,
+        "updatedAt": 1781024584000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000185",
+        "dateKey": "2026-06-09",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 220,
+        "createdAt": 1781024585000,
+        "updatedAt": 1781024585000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000186",
+        "dateKey": "2026-06-09",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1781024586000,
+        "updatedAt": 1781024586000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000187",
+        "dateKey": "2026-06-09",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 15,
+        "createdAt": 1781024587000,
+        "updatedAt": 1781024587000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000188",
+        "dateKey": "2026-06-10",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000005",
+        "quantityGrams": 45,
+        "createdAt": 1781067788000,
+        "updatedAt": 1781067788000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000189",
+        "dateKey": "2026-06-10",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 250,
+        "createdAt": 1781067789000,
+        "updatedAt": 1781067789000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000190",
+        "dateKey": "2026-06-10",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 80,
+        "createdAt": 1781067790000,
+        "updatedAt": 1781067790000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000191",
+        "dateKey": "2026-06-10",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 250,
+        "createdAt": 1781085791000,
+        "updatedAt": 1781085791000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000192",
+        "dateKey": "2026-06-10",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 150,
+        "createdAt": 1781085792000,
+        "updatedAt": 1781085792000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000193",
+        "dateKey": "2026-06-10",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 150,
+        "createdAt": 1781085793000,
+        "updatedAt": 1781085793000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000194",
+        "dateKey": "2026-06-10",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 8,
+        "createdAt": 1781085794000,
+        "updatedAt": 1781085794000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000195",
+        "dateKey": "2026-06-10",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 180,
+        "createdAt": 1781110995000,
+        "updatedAt": 1781110995000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000196",
+        "dateKey": "2026-06-10",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 170,
+        "createdAt": 1781110996000,
+        "updatedAt": 1781110996000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000197",
+        "dateKey": "2026-06-10",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 200,
+        "createdAt": 1781110997000,
+        "updatedAt": 1781110997000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000198",
+        "dateKey": "2026-06-10",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 200,
+        "createdAt": 1781110998000,
+        "updatedAt": 1781110998000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000199",
+        "dateKey": "2026-06-10",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000031",
+        "quantityGrams": 60,
+        "createdAt": 1781110999000,
+        "updatedAt": 1781110999000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000200",
+        "dateKey": "2026-06-11",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 90,
+        "createdAt": 1781154200000,
+        "updatedAt": 1781154200000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000201",
+        "dateKey": "2026-06-11",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000004",
+        "quantityGrams": 150,
+        "createdAt": 1781154201000,
+        "updatedAt": 1781154201000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000202",
+        "dateKey": "2026-06-11",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 20,
+        "createdAt": 1781154202000,
+        "updatedAt": 1781154202000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000203",
+        "dateKey": "2026-06-11",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 150,
+        "createdAt": 1781154203000,
+        "updatedAt": 1781154203000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000204",
+        "dateKey": "2026-06-11",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 350,
+        "createdAt": 1781172204000,
+        "updatedAt": 1781172204000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000205",
+        "dateKey": "2026-06-11",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 80,
+        "createdAt": 1781172205000,
+        "updatedAt": 1781172205000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000206",
+        "dateKey": "2026-06-11",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000036",
+        "quantityGrams": 300,
+        "createdAt": 1781172206000,
+        "updatedAt": 1781172206000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000207",
+        "dateKey": "2026-06-11",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1781172207000,
+        "updatedAt": 1781172207000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000208",
+        "dateKey": "2026-06-11",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 300,
+        "createdAt": 1781197408000,
+        "updatedAt": 1781197408000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000209",
+        "dateKey": "2026-06-11",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000015",
+        "quantityGrams": 220,
+        "createdAt": 1781197409000,
+        "updatedAt": 1781197409000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000210",
+        "dateKey": "2026-06-11",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 200,
+        "createdAt": 1781197410000,
+        "updatedAt": 1781197410000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000211",
+        "dateKey": "2026-06-11",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1781197411000,
+        "updatedAt": 1781197411000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000212",
+        "dateKey": "2026-06-12",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 150,
+        "createdAt": 1781240612000,
+        "updatedAt": 1781240612000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000213",
+        "dateKey": "2026-06-12",
+        "meal": "breakfast",
+        "foodId": "91d58804-df00-47a4-9353-929f729570f5",
+        "quantityGrams": 120,
+        "createdAt": 1781240613000,
+        "updatedAt": 1781240613000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000214",
+        "dateKey": "2026-06-12",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000029",
+        "quantityGrams": 500,
+        "createdAt": 1781240614000,
+        "updatedAt": 1781240614000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000215",
+        "dateKey": "2026-06-12",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 100,
+        "createdAt": 1781258615000,
+        "updatedAt": 1781258615000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000216",
+        "dateKey": "2026-06-12",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 150,
+        "createdAt": 1781258616000,
+        "updatedAt": 1781258616000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000217",
+        "dateKey": "2026-06-12",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 20,
+        "createdAt": 1781258617000,
+        "updatedAt": 1781258617000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000218",
+        "dateKey": "2026-06-12",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000036",
+        "quantityGrams": 250,
+        "createdAt": 1781283818000,
+        "updatedAt": 1781283818000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000219",
+        "dateKey": "2026-06-12",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1781283819000,
+        "updatedAt": 1781283819000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000220",
+        "dateKey": "2026-06-12",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 100,
+        "createdAt": 1781283820000,
+        "updatedAt": 1781283820000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000221",
+        "dateKey": "2026-06-13",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 80,
+        "createdAt": 1781327021000,
+        "updatedAt": 1781327021000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000222",
+        "dateKey": "2026-06-13",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000004",
+        "quantityGrams": 120,
+        "createdAt": 1781327022000,
+        "updatedAt": 1781327022000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000223",
+        "dateKey": "2026-06-13",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000021",
+        "quantityGrams": 20,
+        "createdAt": 1781327023000,
+        "updatedAt": 1781327023000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000224",
+        "dateKey": "2026-06-13",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 120,
+        "createdAt": 1781327024000,
+        "updatedAt": 1781327024000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000225",
+        "dateKey": "2026-06-13",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 230,
+        "createdAt": 1781345025000,
+        "updatedAt": 1781345025000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000226",
+        "dateKey": "2026-06-13",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 240,
+        "createdAt": 1781345026000,
+        "updatedAt": 1781345026000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000227",
+        "dateKey": "2026-06-13",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 220,
+        "createdAt": 1781345027000,
+        "updatedAt": 1781345027000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000228",
+        "dateKey": "2026-06-13",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000034",
+        "quantityGrams": 80,
+        "createdAt": 1781345028000,
+        "updatedAt": 1781345028000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000229",
+        "dateKey": "2026-06-13",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000017",
+        "quantityGrams": 230,
+        "createdAt": 1781370229000,
+        "updatedAt": 1781370229000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000230",
+        "dateKey": "2026-06-13",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 180,
+        "createdAt": 1781370230000,
+        "updatedAt": 1781370230000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000231",
+        "dateKey": "2026-06-13",
+        "meal": "dinner",
+        "foodId": "2a3a09a5-c387-4efb-a084-a608a36f9890",
+        "quantityGrams": 160,
+        "createdAt": 1781370231000,
+        "updatedAt": 1781370231000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000232",
+        "dateKey": "2026-06-13",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 8,
+        "createdAt": 1781370232000,
+        "updatedAt": 1781370232000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000233",
+        "dateKey": "2026-06-14",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 90,
+        "createdAt": 1781413433000,
+        "updatedAt": 1781413433000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000234",
+        "dateKey": "2026-06-14",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000003",
+        "quantityGrams": 200,
+        "createdAt": 1781413434000,
+        "updatedAt": 1781413434000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000235",
+        "dateKey": "2026-06-14",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000021",
+        "quantityGrams": 25,
+        "createdAt": 1781413435000,
+        "updatedAt": 1781413435000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000236",
+        "dateKey": "2026-06-14",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000015",
+        "quantityGrams": 300,
+        "createdAt": 1781431436000,
+        "updatedAt": 1781431436000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000237",
+        "dateKey": "2026-06-14",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 250,
+        "createdAt": 1781431437000,
+        "updatedAt": 1781431437000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000238",
+        "dateKey": "2026-06-14",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1781431438000,
+        "updatedAt": 1781431438000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000239",
+        "dateKey": "2026-06-14",
+        "meal": "lunch",
+        "foodId": "128a7cc6-b90d-4ed0-9cd3-2be2f0aeb58d",
+        "quantityGrams": 160,
+        "createdAt": 1781431439000,
+        "updatedAt": 1781431439000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000240",
+        "dateKey": "2026-06-14",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000017",
+        "quantityGrams": 280,
+        "createdAt": 1781456640000,
+        "updatedAt": 1781456640000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000241",
+        "dateKey": "2026-06-14",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1781456641000,
+        "updatedAt": 1781456641000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000242",
+        "dateKey": "2026-06-14",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 200,
+        "createdAt": 1781456642000,
+        "updatedAt": 1781456642000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000243",
+        "dateKey": "2026-06-14",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1781456643000,
+        "updatedAt": 1781456643000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000244",
+        "dateKey": "2026-06-15",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 70,
+        "createdAt": 1781499844000,
+        "updatedAt": 1781499844000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000245",
+        "dateKey": "2026-06-15",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 220,
+        "createdAt": 1781499845000,
+        "updatedAt": 1781499845000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000246",
+        "dateKey": "2026-06-15",
+        "meal": "breakfast",
+        "foodId": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "quantityGrams": 160,
+        "createdAt": 1781499846000,
+        "updatedAt": 1781499846000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000247",
+        "dateKey": "2026-06-15",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 15,
+        "createdAt": 1781499847000,
+        "updatedAt": 1781499847000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000248",
+        "dateKey": "2026-06-15",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 180,
+        "createdAt": 1781517848000,
+        "updatedAt": 1781517848000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000249",
+        "dateKey": "2026-06-15",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 220,
+        "createdAt": 1781517849000,
+        "updatedAt": 1781517849000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000250",
+        "dateKey": "2026-06-15",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 180,
+        "createdAt": 1781517850000,
+        "updatedAt": 1781517850000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000251",
+        "dateKey": "2026-06-15",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1781517851000,
+        "updatedAt": 1781517851000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000252",
+        "dateKey": "2026-06-15",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 150,
+        "createdAt": 1781543052000,
+        "updatedAt": 1781543052000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000253",
+        "dateKey": "2026-06-15",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1781543053000,
+        "updatedAt": 1781543053000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000254",
+        "dateKey": "2026-06-15",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1781543054000,
+        "updatedAt": 1781543054000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000255",
+        "dateKey": "2026-06-15",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1781543055000,
+        "updatedAt": 1781543055000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000256",
+        "dateKey": "2026-06-15",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1781543056000,
+        "updatedAt": 1781543056000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000257",
+        "dateKey": "2026-06-16",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000032",
+        "quantityGrams": 80,
+        "createdAt": 1781586257000,
+        "updatedAt": 1781586257000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000258",
+        "dateKey": "2026-06-16",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 35,
+        "createdAt": 1781586258000,
+        "updatedAt": 1781586258000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000259",
+        "dateKey": "2026-06-16",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 200,
+        "createdAt": 1781586259000,
+        "updatedAt": 1781586259000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000260",
+        "dateKey": "2026-06-16",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 180,
+        "createdAt": 1781604260000,
+        "updatedAt": 1781604260000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000261",
+        "dateKey": "2026-06-16",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 220,
+        "createdAt": 1781604261000,
+        "updatedAt": 1781604261000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000262",
+        "dateKey": "2026-06-16",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1781604262000,
+        "updatedAt": 1781604262000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000263",
+        "dateKey": "2026-06-16",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 20,
+        "createdAt": 1781604263000,
+        "updatedAt": 1781604263000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000264",
+        "dateKey": "2026-06-16",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000016",
+        "quantityGrams": 220,
+        "createdAt": 1781629464000,
+        "updatedAt": 1781629464000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000265",
+        "dateKey": "2026-06-16",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000034",
+        "quantityGrams": 150,
+        "createdAt": 1781629465000,
+        "updatedAt": 1781629465000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000266",
+        "dateKey": "2026-06-16",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1781629466000,
+        "updatedAt": 1781629466000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000267",
+        "dateKey": "2026-06-17",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000027",
+        "quantityGrams": 100,
+        "createdAt": 1781672667000,
+        "updatedAt": 1781672667000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000268",
+        "dateKey": "2026-06-17",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000006",
+        "quantityGrams": 160,
+        "createdAt": 1781672668000,
+        "updatedAt": 1781672668000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000269",
+        "dateKey": "2026-06-17",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 80,
+        "createdAt": 1781672669000,
+        "updatedAt": 1781672669000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000270",
+        "dateKey": "2026-06-17",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000037",
+        "quantityGrams": 150,
+        "createdAt": 1781672670000,
+        "updatedAt": 1781672670000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000271",
+        "dateKey": "2026-06-17",
+        "meal": "breakfast",
+        "foodId": "98ec541c-ecb9-4f5e-a6ed-b0804261c724",
+        "quantityGrams": 90,
+        "createdAt": 1781672671000,
+        "updatedAt": 1781672671000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000272",
+        "dateKey": "2026-06-17",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000010",
+        "quantityGrams": 140,
+        "createdAt": 1781690672000,
+        "updatedAt": 1781690672000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000273",
+        "dateKey": "2026-06-17",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 260,
+        "createdAt": 1781690673000,
+        "updatedAt": 1781690673000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000274",
+        "dateKey": "2026-06-17",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 120,
+        "createdAt": 1781690674000,
+        "updatedAt": 1781690674000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000275",
+        "dateKey": "2026-06-17",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 12,
+        "createdAt": 1781690675000,
+        "updatedAt": 1781690675000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000276",
+        "dateKey": "2026-06-17",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000008",
+        "quantityGrams": 180,
+        "createdAt": 1781715876000,
+        "updatedAt": 1781715876000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000277",
+        "dateKey": "2026-06-17",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 220,
+        "createdAt": 1781715877000,
+        "updatedAt": 1781715877000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000278",
+        "dateKey": "2026-06-17",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 150,
+        "createdAt": 1781715878000,
+        "updatedAt": 1781715878000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000279",
+        "dateKey": "2026-06-17",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 15,
+        "createdAt": 1781715879000,
+        "updatedAt": 1781715879000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000280",
+        "dateKey": "2026-06-18",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1781759080000,
+        "updatedAt": 1781759080000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000281",
+        "dateKey": "2026-06-18",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1781777081000,
+        "updatedAt": 1781777081000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000282",
+        "dateKey": "2026-06-18",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000035",
+        "quantityGrams": 170,
+        "createdAt": 1781802282000,
+        "updatedAt": 1781802282000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000283",
+        "dateKey": "2026-06-19",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000032",
+        "quantityGrams": 120,
+        "createdAt": 1781845483000,
+        "updatedAt": 1781845483000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000284",
+        "dateKey": "2026-06-19",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 250,
+        "createdAt": 1781845484000,
+        "updatedAt": 1781845484000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000285",
+        "dateKey": "2026-06-19",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 35,
+        "createdAt": 1781845485000,
+        "updatedAt": 1781845485000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000286",
+        "dateKey": "2026-06-19",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000026",
+        "quantityGrams": 25,
+        "createdAt": 1781845486000,
+        "updatedAt": 1781845486000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000287",
+        "dateKey": "2026-06-19",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000030",
+        "quantityGrams": 350,
+        "createdAt": 1781863487000,
+        "updatedAt": 1781863487000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000288",
+        "dateKey": "2026-06-19",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 15,
+        "createdAt": 1781863488000,
+        "updatedAt": 1781863488000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000289",
+        "dateKey": "2026-06-19",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1781863489000,
+        "updatedAt": 1781863489000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000290",
+        "dateKey": "2026-06-19",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000013",
+        "quantityGrams": 350,
+        "createdAt": 1781888690000,
+        "updatedAt": 1781888690000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000291",
+        "dateKey": "2026-06-19",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 250,
+        "createdAt": 1781888691000,
+        "updatedAt": 1781888691000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000292",
+        "dateKey": "2026-06-19",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000025",
+        "quantityGrams": 50,
+        "createdAt": 1781888692000,
+        "updatedAt": 1781888692000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000293",
+        "dateKey": "2026-06-19",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000018",
+        "quantityGrams": 150,
+        "createdAt": 1781888693000,
+        "updatedAt": 1781888693000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000294",
+        "dateKey": "2026-06-20",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000001",
+        "quantityGrams": 70,
+        "createdAt": 1781931894000,
+        "updatedAt": 1781931894000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000295",
+        "dateKey": "2026-06-20",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000002",
+        "quantityGrams": 220,
+        "createdAt": 1781931895000,
+        "updatedAt": 1781931895000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000296",
+        "dateKey": "2026-06-20",
+        "meal": "breakfast",
+        "foodId": "19b02c22-7151-4f6f-a0e0-6bc1f407fb50",
+        "quantityGrams": 160,
+        "createdAt": 1781931896000,
+        "updatedAt": 1781931896000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000297",
+        "dateKey": "2026-06-20",
+        "meal": "breakfast",
+        "foodId": "10000000-0000-4000-8000-000000000020",
+        "quantityGrams": 15,
+        "createdAt": 1781931897000,
+        "updatedAt": 1781931897000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000298",
+        "dateKey": "2026-06-20",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000007",
+        "quantityGrams": 180,
+        "createdAt": 1781949898000,
+        "updatedAt": 1781949898000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000299",
+        "dateKey": "2026-06-20",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000011",
+        "quantityGrams": 220,
+        "createdAt": 1781949899000,
+        "updatedAt": 1781949899000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000300",
+        "dateKey": "2026-06-20",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000022",
+        "quantityGrams": 180,
+        "createdAt": 1781949900000,
+        "updatedAt": 1781949900000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000301",
+        "dateKey": "2026-06-20",
+        "meal": "lunch",
+        "foodId": "10000000-0000-4000-8000-000000000019",
+        "quantityGrams": 10,
+        "createdAt": 1781949901000,
+        "updatedAt": 1781949901000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000302",
+        "dateKey": "2026-06-20",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000009",
+        "quantityGrams": 150,
+        "createdAt": 1781975102000,
+        "updatedAt": 1781975102000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000303",
+        "dateKey": "2026-06-20",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000014",
+        "quantityGrams": 250,
+        "createdAt": 1781975103000,
+        "updatedAt": 1781975103000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000304",
+        "dateKey": "2026-06-20",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000023",
+        "quantityGrams": 150,
+        "createdAt": 1781975104000,
+        "updatedAt": 1781975104000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000305",
+        "dateKey": "2026-06-20",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000024",
+        "quantityGrams": 100,
+        "createdAt": 1781975105000,
+        "updatedAt": 1781975105000
+      },
+      {
+        "id": "30000000-0000-4000-8000-000000000306",
+        "dateKey": "2026-06-20",
+        "meal": "dinner",
+        "foodId": "10000000-0000-4000-8000-000000000012",
+        "quantityGrams": 150,
+        "createdAt": 1781975106000,
+        "updatedAt": 1781975106000
+      }
+    ],
+    "plans": [
+      {
+        "id": "20000000-0000-4000-8000-000000000001",
+        "name": "Seed balanced 2000 kcal",
+        "proteinTargetGrams": 150,
+        "carbsTargetGrams": 225,
+        "fatTargetGrams": 60,
+        "fiberTargetGrams": 30,
+        "sugarTargetGrams": 65,
+        "saltTargetGrams": 6,
+        "saturatedFatTargetGrams": 22,
+        "createdAt": 1779602400000
+      },
+      {
+        "id": "20000000-0000-4000-8000-000000000002",
+        "name": "Seed rest day lower appetite",
+        "proteinTargetGrams": 125,
+        "carbsTargetGrams": 190,
+        "fatTargetGrams": 65,
+        "fiberTargetGrams": 25,
+        "sugarTargetGrams": 55,
+        "saltTargetGrams": 6,
+        "saturatedFatTargetGrams": 20,
+        "createdAt": 1779602400000
+      },
+      {
+        "id": "20000000-0000-4000-8000-000000000003",
+        "name": "Seed endurance high carb",
+        "proteinTargetGrams": 140,
+        "carbsTargetGrams": 285,
+        "fatTargetGrams": 55,
+        "fiberTargetGrams": 35,
+        "sugarTargetGrams": 80,
+        "saltTargetGrams": 7,
+        "saturatedFatTargetGrams": 22,
+        "createdAt": 1779602400000
+      }
+    ]
+  }
+}

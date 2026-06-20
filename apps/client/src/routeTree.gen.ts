@@ -17,6 +17,7 @@ import { Route as FoodsNewRouteImport } from './routes/foods.new'
 import { Route as FoodsEditRouteImport } from './routes/foods.edit'
 import { Route as DaysDateKeyRouteImport } from './routes/days.$dateKey'
 import { Route as PlansPlanIdEditRouteImport } from './routes/plans.$planId.edit'
+import { Route as DaysDateKeyMealsMealAddRouteImport } from './routes/days.$dateKey_.meals.$meal.add'
 
 const InsightsRoute = InsightsRouteImport.update({
   id: '/insights',
@@ -58,6 +59,11 @@ const PlansPlanIdEditRoute = PlansPlanIdEditRouteImport.update({
   path: '/plans/$planId/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DaysDateKeyMealsMealAddRoute = DaysDateKeyMealsMealAddRouteImport.update({
+  id: '/days/$dateKey_/meals/$meal/add',
+  path: '/days/$dateKey/meals/$meal/add',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/plans/new': typeof PlansNewRoute
   '/insights/': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
+  '/days/$dateKey/meals/$meal/add': typeof DaysDateKeyMealsMealAddRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/plans/new': typeof PlansNewRoute
   '/insights': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
+  '/days/$dateKey/meals/$meal/add': typeof DaysDateKeyMealsMealAddRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/plans/new': typeof PlansNewRoute
   '/insights/': typeof InsightsIndexRoute
   '/plans/$planId/edit': typeof PlansPlanIdEditRoute
+  '/days/$dateKey_/meals/$meal/add': typeof DaysDateKeyMealsMealAddRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/plans/new'
     | '/insights/'
     | '/plans/$planId/edit'
+    | '/days/$dateKey/meals/$meal/add'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/plans/new'
     | '/insights'
     | '/plans/$planId/edit'
+    | '/days/$dateKey/meals/$meal/add'
   id:
     | '__root__'
     | '/'
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/plans/new'
     | '/insights/'
     | '/plans/$planId/edit'
+    | '/days/$dateKey_/meals/$meal/add'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   FoodsNewRoute: typeof FoodsNewRoute
   PlansNewRoute: typeof PlansNewRoute
   PlansPlanIdEditRoute: typeof PlansPlanIdEditRoute
+  DaysDateKeyMealsMealAddRoute: typeof DaysDateKeyMealsMealAddRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -189,6 +202,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlansPlanIdEditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/days/$dateKey_/meals/$meal/add': {
+      id: '/days/$dateKey_/meals/$meal/add'
+      path: '/days/$dateKey/meals/$meal/add'
+      fullPath: '/days/$dateKey/meals/$meal/add'
+      preLoaderRoute: typeof DaysDateKeyMealsMealAddRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -212,6 +232,7 @@ const rootRouteChildren: RootRouteChildren = {
   FoodsNewRoute: FoodsNewRoute,
   PlansNewRoute: PlansNewRoute,
   PlansPlanIdEditRoute: PlansPlanIdEditRoute,
+  DaysDateKeyMealsMealAddRoute: DaysDateKeyMealsMealAddRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -105,6 +105,7 @@ export function FoodNutrientOverview({
   brand,
   metadata,
   name,
+  namePrefix,
   nutrients,
   nutrientOrder = defaultFoodNutrientOverviewOrder,
   primaryLabel,
@@ -113,6 +114,7 @@ export function FoodNutrientOverview({
   readonly brand: string | undefined;
   readonly metadata?: ReactNode;
   readonly name: string;
+  readonly namePrefix?: ReactNode;
   readonly nutrients: FoodNutrientOverviewNutrients | undefined;
   readonly nutrientOrder?: readonly FoodNutrientOverviewNutrientName[];
   readonly primaryLabel?: string;
@@ -129,20 +131,28 @@ export function FoodNutrientOverview({
   return (
     <div className="grid w-full gap-3 text-left text-[#f5f5f7]">
       <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-        <span className="min-w-0 font-extrabold leading-tight wrap-anywhere">
+        <span className="min-w-0 text-sm font-bold leading-tight wrap-anywhere">
+          {namePrefix}
           {name}
         </span>
         <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
           {displayedPrimaryLabel}
         </span>
-        <span className="grid min-w-0 gap-1 text-sm leading-tight text-[#aaaab1]">
-          <span className="min-w-0 font-bold wrap-anywhere">
-            {brand ?? "No brand"}
-          </span>
+        <span className="grid min-w-0 gap-1 text-xs leading-tight text-[#aaaab1]">
+          {brand === undefined ? (
+            <span
+              aria-label="No brand"
+              className="min-w-0 text-[0.72rem] font-black leading-tight text-[#77777e]"
+            >
+              /
+            </span>
+          ) : (
+            <span className="min-w-0 font-normal wrap-anywhere">{brand}</span>
+          )}
           {metadata}
         </span>
         {secondaryLabel === undefined ? null : (
-          <span className="text-right text-sm font-medium leading-tight text-[#aaaab1]">
+          <span className="text-right text-xs font-medium leading-tight text-[#aaaab1]">
             {secondaryLabel}
           </span>
         )}

@@ -69,39 +69,33 @@ export function RangeSummary({
     divisor: dayCount,
     totals,
   });
-  const getAverageTargetAmount = ({
-    nutrientName,
-  }: {
-    readonly nutrientName: NutrientName;
-  }) => {
-    const targetAmounts = report.days.flatMap((day) => {
-      const amount = getPlanNutrientTargetAmount({
-        nutrientName,
-        plan: day.plan,
-      });
-
-      return amount === undefined ? [] : [amount];
-    });
-
-    if (targetAmounts.length !== dayCount) {
-      return null;
-    }
-
-    return (
-      targetAmounts.reduce((total, amount) => total + amount, 0) / dayCount
-    );
-  };
   const averageTargetTotals = {
-    carbsGrams: getAverageTargetAmount({ nutrientName: "carbsGrams" }),
-    energyKcal: getAverageTargetAmount({ nutrientName: "energyKcal" }),
-    fatGrams: getAverageTargetAmount({ nutrientName: "fatGrams" }),
-    fiberGrams: getAverageTargetAmount({ nutrientName: "fiberGrams" }),
-    proteinGrams: getAverageTargetAmount({ nutrientName: "proteinGrams" }),
-    saltGrams: getAverageTargetAmount({ nutrientName: "saltGrams" }),
-    saturatedFatGrams: getAverageTargetAmount({
-      nutrientName: "saturatedFatGrams",
+    carbsGrams: _getAverageTargetAmount({
+      nutrientName: "carbsGrams",
+      report,
     }),
-    sugarGrams: getAverageTargetAmount({ nutrientName: "sugarGrams" }),
+    energyKcal: _getAverageTargetAmount({
+      nutrientName: "energyKcal",
+      report,
+    }),
+    fatGrams: _getAverageTargetAmount({ nutrientName: "fatGrams", report }),
+    fiberGrams: _getAverageTargetAmount({
+      nutrientName: "fiberGrams",
+      report,
+    }),
+    proteinGrams: _getAverageTargetAmount({
+      nutrientName: "proteinGrams",
+      report,
+    }),
+    saltGrams: _getAverageTargetAmount({ nutrientName: "saltGrams", report }),
+    saturatedFatGrams: _getAverageTargetAmount({
+      nutrientName: "saturatedFatGrams",
+      report,
+    }),
+    sugarGrams: _getAverageTargetAmount({
+      nutrientName: "sugarGrams",
+      report,
+    }),
   } satisfies Record<NutrientName, number | null>;
   const summaryInsights = getNutritionReportInsights({
     limit: 6,
@@ -214,6 +208,30 @@ export function RangeSummary({
       </section>
     </NutritionInsightsLayout>
   );
+}
+
+function _getAverageTargetAmount({
+  nutrientName,
+  report,
+}: {
+  readonly nutrientName: NutrientName;
+  readonly report: NutritionReportRange;
+}) {
+  const dayCount = report.days.length;
+  const targetAmounts = report.days.flatMap((day) => {
+    const amount = getPlanNutrientTargetAmount({
+      nutrientName,
+      plan: day.plan,
+    });
+
+    return amount === undefined ? [] : [amount];
+  });
+
+  if (targetAmounts.length !== dayCount) {
+    return null;
+  }
+
+  return targetAmounts.reduce((total, amount) => total + amount, 0) / dayCount;
 }
 
 function SectionTitle({

@@ -17,6 +17,7 @@ import noNestedEffectArrayMethods from "../src/oxlint/rules/no-nested-effect-arr
 import noNestedLayerProvide from "../src/oxlint/rules/no-nested-layer-provide.ts";
 import noOptionalFunctionParameters from "../src/oxlint/rules/no-optional-function-parameters.ts";
 import noReactComponentEventHandlerProps from "../src/oxlint/rules/no-react-component-event-handler-props.ts";
+import noReactComponentInnerFunctions from "../src/oxlint/rules/no-react-component-inner-functions.ts";
 import noReactStateHooks from "../src/oxlint/rules/no-react-state-hooks.ts";
 import noServiceOption from "../src/oxlint/rules/no-service-option.ts";
 import noShadowedStandardArrayStatic from "../src/oxlint/rules/no-shadowed-standard-array-static.ts";
@@ -434,6 +435,67 @@ run(
     ],
   }
 );
+
+run("no-react-component-inner-functions", noReactComponentInnerFunctions, {
+  valid: [
+    {
+      code: "const _formatName = ({ value }: { value: string }) => value.trim();\nfunction ProfileCard({ user }: Props) { const name = _formatName({ value: user.name }); return <p>{name}</p>; }",
+      filename: "component.tsx",
+    },
+    {
+      code: "function ProfileCard({ users }: Props) { const activeUsers = users.filter((user) => user.active); return <List users={activeUsers} />; }",
+      filename: "component.tsx",
+    },
+    {
+      code: "function ProfileCard({ users }: Props) { const names = useMemo(() => users.map((user) => user.name), [users]); return <List names={names} />; }",
+      filename: "component.tsx",
+    },
+    {
+      code: "function ProfileCard() { const reset = () => actorRef.send({ type: 'Reset' }); return <button onClick={reset} />; }",
+      filename: "component.tsx",
+    },
+    {
+      code: "function Parser() { const parse = (value: string) => value.trim(); return parse(input); }",
+      filename: "parser.ts",
+    },
+    {
+      code: "const ProfileCard = memo(({ users }: Props) => { const activeUsers = users.filter((user) => user.active); return <List users={activeUsers} />; });",
+      filename: "component.tsx",
+    },
+  ],
+  invalid: [
+    {
+      code: "function ProfileCard({ user }: Props) { const formatName = (value: User) => value.name.trim(); return <p>{formatName(user)}</p>; }",
+      filename: "component.tsx",
+      errors: [/Move "formatName" out of the component/],
+    },
+    {
+      code: "function ProfileCard({ user }: Props) { function formatName(value: User) { return value.name.trim(); } return <p>{formatName(user)}</p>; }",
+      filename: "component.tsx",
+      errors: [/Move "formatName" out of the component/],
+    },
+    {
+      code: "function ProfileCard({ user }: Props) { const formatName = function (value: User) { return value.name.trim(); }; return <p>{formatName(user)}</p>; }",
+      filename: "component.tsx",
+      errors: [/Move "formatName" out of the component/],
+    },
+    {
+      code: "const ProfileCard = memo(({ user }: Props) => { const formatName = (value: User) => value.name.trim(); return <p>{formatName(user)}</p>; });",
+      filename: "component.tsx",
+      errors: [/Move "formatName" out of the component/],
+    },
+    {
+      code: "function ProfileCard() { const handleChange = useCallback((value: string) => { actorRef.send({ type: 'Changed', value }); }, []); return <input onChange={handleChange} />; }",
+      filename: "component.tsx",
+      errors: [/Move "handleChange" out of the component/],
+    },
+    {
+      code: "function ProfileCard() { const handleChange = React.useCallback((value: string) => { actorRef.send({ type: 'Changed', value }); }, []); return <input onChange={handleChange} />; }",
+      filename: "component.tsx",
+      errors: [/Move "handleChange" out of the component/],
+    },
+  ],
+});
 
 run("no-service-option", noServiceOption, {
   valid: ["Effect.service(Service);", "CustomEffect.serviceOption(Service);"],
