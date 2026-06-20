@@ -1,7 +1,14 @@
 import type { Plan } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
+import { useSelector } from "@xstate/react";
 import { ClipboardList, Flame, Plus, Save, X } from "lucide-react";
-import type { ReactNode } from "react";
+
+import {
+  BackupTransferControls,
+  type BackupTransferMode,
+} from "./backup-transfer-controls.tsx";
+import type { BackupTransferActorRef } from "../machines/backup-transfer-machine.ts";
+import type { MealPlanFormActorRef } from "../machines/meal-plan-form-machine.ts";
 
 type MealPlanFormAction = "create" | "edit";
 
@@ -102,28 +109,28 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
 
 export function MealPlanForm({
   action,
-  backupControls,
+  actor,
+  backupTransferActor = null,
+  backupTransferMode = "importOnly",
   dateKey,
-  disabled,
-  energyKcal,
-  hasFailed,
   initialPlan,
-  onInput,
-  onSubmit,
 }: {
   readonly action: MealPlanFormAction;
-  readonly backupControls: ReactNode | null;
+  readonly actor: MealPlanFormActorRef;
+  readonly backupTransferActor?: BackupTransferActorRef | null;
+  readonly backupTransferMode?: BackupTransferMode;
   readonly dateKey: string | undefined;
-  readonly disabled: boolean;
-  readonly energyKcal: number;
-  readonly hasFailed: boolean;
   readonly initialPlan: Plan | null;
-  readonly onInput: (formData: FormData) => void;
-  readonly onSubmit: (formData: FormData) => void;
 }) {
+  const snapshot = useSelector(actor, (state) => state);
+  const disabled =
+    snapshot.value === "Submitting" ||
+    snapshot.value === "Created" ||
+    snapshot.value === "Revised";
   const formattedEnergyKcal = new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 2,
-  }).format(energyKcal);
+  }).format(snapshot.context.energyKcal);
+  const hasFailed = snapshot.value === "Failure";
   const isCreating = action === "create";
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create plan" : "Edit plan";
@@ -159,11 +166,17 @@ export function MealPlanForm({
         <form
           className="grid gap-4 px-4 py-5"
           onInput={(event) => {
-            onInput(new FormData(event.currentTarget));
+            actor.send({
+              type: "changeTargets",
+              formData: new FormData(event.currentTarget),
+            });
           }}
           onSubmit={(event) => {
             event.preventDefault();
-            onSubmit(new FormData(event.currentTarget));
+            actor.send({
+              type: "submit",
+              formData: new FormData(event.currentTarget),
+            });
           }}
         >
           <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
@@ -249,9 +262,12 @@ export function MealPlanForm({
           </div>
         </form>
 
-        {backupControls === null ? null : (
+        {backupTransferActor === null ? null : (
           <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-            {backupControls}
+            <BackupTransferControls
+              actor={backupTransferActor}
+              mode={backupTransferMode}
+            />
           </div>
         )}
       </section>

@@ -5,9 +5,13 @@ import {
 } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect } from "effect";
-import { fromPromise, setup } from "xstate";
+import { assertEvent, fromPromise, setup, type ActorRefFrom } from "xstate";
 
-import { FoodForm } from "../lib/components/food-form.tsx";
+import {
+  FoodForm,
+  foodFormMachine,
+  type FoodFormSubmitEvent,
+} from "../lib/components/food-form.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
 import { Foods, type CreateFoodInput } from "../lib/services/foods.ts";
 import { dateKeyFromDate } from "../lib/utils.ts";
@@ -19,16 +23,21 @@ export const Route = createFileRoute("/foods/new")({
   component: Component,
 });
 
-const submitFoodMachine = setup({
+const createFoodMachine = setup({
   types: {
-    events: {} as {
-      readonly type: "submit";
-      readonly input: CreateFoodInput;
+    context: {} as {
+      readonly dateKey: string | undefined;
+      readonly foodFormActor: ActorRefFrom<typeof foodFormMachine>;
+      readonly navigate: UseNavigateResult<string>;
+    },
+    events: {} as FoodFormSubmitEvent,
+    input: {} as {
       readonly dateKey: string | undefined;
       readonly navigate: UseNavigateResult<string>;
     },
   },
   actors: {
+    foodForm: foodFormMachine,
     submitFood: fromPromise<
       void,
       {
@@ -62,6 +71,17 @@ const submitFoodMachine = setup({
     ),
   },
 }).createMachine({
+  context: ({ input, spawn }) => ({
+    dateKey: input.dateKey,
+    foodFormActor: spawn("foodForm", {
+      id: "foodForm",
+      input: {
+        initialFood: null,
+        syncQuickInputFromFields: true,
+      },
+    }),
+    navigate: input.navigate,
+  }),
   initial: "Idle",
   states: {
     Idle: {
@@ -74,11 +94,15 @@ const submitFoodMachine = setup({
     Submitting: {
       invoke: {
         src: "submitFood",
-        input: ({ event }) => ({
-          input: event.input,
-          dateKey: event.dateKey,
-          navigate: event.navigate,
-        }),
+        input: ({ context, event }) => {
+          assertEvent(event, "submit");
+
+          return {
+            input: event.input,
+            dateKey: context.dateKey,
+            navigate: context.navigate,
+          };
+        },
         onDone: {
           target: "Created",
         },
@@ -104,25 +128,22 @@ const submitFoodMachine = setup({
 function Component() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const [snapshot, send] = useMachine(submitFoodMachine);
+  const [snapshot] = useMachine(createFoodMachine, {
+    input: {
+      dateKey: search.dateKey,
+      navigate,
+    },
+  });
   const isSubmitting =
     snapshot.matches("Submitting") || snapshot.matches("Created");
 
   return (
     <FoodForm
       action="create"
+      actor={snapshot.context.foodFormActor}
       dateKey={search.dateKey}
       disabled={isSubmitting}
       hasFailed={snapshot.matches("Failure")}
-      initialFood={null}
-      onSubmit={(input) => {
-        send({
-          type: "submit",
-          input,
-          dateKey: search.dateKey,
-          navigate,
-        });
-      }}
     />
   );
 }

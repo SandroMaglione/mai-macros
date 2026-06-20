@@ -5,14 +5,19 @@ import {
   type FoodQuickInputParseResult,
 } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
-import { useMachine } from "@xstate/react";
+import { useSelector } from "@xstate/react";
 import { Array, Effect } from "effect";
 import { AlertTriangle, Apple, Plus, Save, X } from "lucide-react";
 import { type FocusEvent } from "react";
-import { assign, setup } from "xstate";
+import {
+  assign,
+  sendParent,
+  setup,
+  type ActorRefFrom,
+  type SnapshotFrom,
+} from "xstate";
 
 import type { CreateFoodInput } from "../services/foods.ts";
-import { createFoodInputFromFormData } from "../utils.ts";
 import {
   FoodNutrientOverview,
   foodQuickInputNutrientOverviewOrder,
@@ -66,6 +71,9 @@ type FoodFormMachineEvent =
       readonly name: keyof FoodFormValues;
       readonly type: "changeFormValue";
       readonly value: string;
+    }
+  | {
+      readonly type: "submit";
     };
 
 const foodFieldClassName =
@@ -75,7 +83,12 @@ const foodFieldLabelClassName =
 const secondaryActionClassName =
   "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black text-[#ff5a51] no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45 sm:w-fit";
 
-const foodFormMachine = setup({
+export type FoodFormSubmitEvent = {
+  readonly input: CreateFoodInput;
+  readonly type: "submit";
+};
+
+export const foodFormMachine = setup({
   types: {
     context: {} as FoodFormMachineContext,
     events: {} as FoodFormMachineEvent,
@@ -122,6 +135,16 @@ const foodFormMachine = setup({
     };
   },
   on: {
+    submit: {
+      actions: sendParent(({ context }) => {
+        return {
+          type: "submit",
+          input: _createFoodInputFromFormValues({
+            formValues: context.formValues,
+          }),
+        } satisfies FoodFormSubmitEvent;
+      }),
+    },
     changeFormValue: {
       actions: assign(({ context, event }) => {
         const formValues = {
@@ -234,6 +257,9 @@ const foodFormMachine = setup({
   },
 });
 
+export type FoodFormActorRef = ActorRefFrom<typeof foodFormMachine>;
+type FoodFormSnapshot = SnapshotFrom<typeof foodFormMachine>;
+
 const macroFields: readonly FoodNutrientField[] = [
   {
     accentClassName: "text-[#4c7dff]",
@@ -314,29 +340,22 @@ const nutrientFields: readonly FoodNutrientField[] = [
 
 export function FoodForm({
   action,
+  actor,
   dateKey,
   disabled,
   hasFailed,
-  initialFood,
-  onSubmit,
 }: {
   readonly action: FoodFormAction;
+  readonly actor: FoodFormActorRef;
   readonly dateKey: string | undefined;
   readonly disabled: boolean;
   readonly hasFailed: boolean;
-  readonly initialFood: Food | null;
-  readonly onSubmit: (input: CreateFoodInput) => void;
 }) {
   const isCreating = action === "create";
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
-  const [snapshot, send] = useMachine(foodFormMachine, {
-    input: {
-      initialFood,
-      syncQuickInputFromFields: isCreating,
-    },
-  });
+  const snapshot = useSelector(actor, (state): FoodFormSnapshot => state);
   const { formValues, numberWarnings, quickInput, quickInputParseResult } =
     snapshot.context;
 
@@ -368,38 +387,23 @@ export function FoodForm({
           onSubmit={(event) => {
             event.preventDefault();
 
-            onSubmit(
-              createFoodInputFromFormData({
-                formData: new FormData(event.currentTarget),
-              })
-            );
+            actor.send({ type: "submit" });
           }}
         >
           {isCreating ? (
             <FoodQuickInputTextField
+              actor={actor}
               disabled={disabled}
               input={quickInput}
-              onChangeInput={(input) => {
-                send({
-                  type: "changeQuickInput",
-                  input,
-                });
-              }}
             />
           ) : null}
 
           <FoodFormFields
+            actor={actor}
             autoFocusName={false}
             disabled={disabled}
-            initialFood={initialFood}
+            initialFood={null}
             values={formValues}
-            onChangeValue={({ name, value }) => {
-              send({
-                type: "changeFormValue",
-                name,
-                value,
-              });
-            }}
           />
 
           <FoodNumberWarnings warnings={numberWarnings} />
@@ -434,13 +438,13 @@ export function FoodForm({
 }
 
 function FoodQuickInputTextField({
+  actor,
   disabled,
   input,
-  onChangeInput,
 }: {
+  readonly actor: FoodFormActorRef;
   readonly disabled: boolean;
   readonly input: string;
-  readonly onChangeInput: (input: string) => void;
 }) {
   return (
     <label className={foodFieldLabelClassName}>
@@ -450,7 +454,10 @@ function FoodQuickInputTextField({
         className={`${foodFieldClassName} resize-none py-2.5 leading-relaxed`}
         disabled={disabled}
         onChange={(event) => {
-          onChangeInput(event.currentTarget.value);
+          actor.send({
+            type: "changeQuickInput",
+            input: event.currentTarget.value,
+          });
         }}
         placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
         rows={2}
@@ -584,19 +591,16 @@ function FoodNumberWarnings({
 }
 
 export function FoodFormFields({
+  actor,
   autoFocusName,
   disabled,
   initialFood,
-  onChangeValue,
   values,
 }: {
+  readonly actor?: FoodFormActorRef;
   readonly autoFocusName: boolean;
   readonly disabled: boolean;
   readonly initialFood: Food | null;
-  readonly onChangeValue?: (input: {
-    readonly name: keyof FoodFormValues;
-    readonly value: string;
-  }) => void;
   readonly values?: FoodFormValues;
 }) {
   return (
@@ -615,7 +619,8 @@ export function FoodFormFields({
               disabled={disabled}
               name="name"
               onChange={(event) => {
-                onChangeValue?.({
+                _sendFoodFormValueChange({
+                  actor,
                   name: "name",
                   value: event.currentTarget.value,
                 });
@@ -637,7 +642,8 @@ export function FoodFormFields({
               disabled={disabled}
               name="brand"
               onChange={(event) => {
-                onChangeValue?.({
+                _sendFoodFormValueChange({
+                  actor,
                   name: "brand",
                   value: event.currentTarget.value,
                 });
@@ -660,11 +666,11 @@ export function FoodFormFields({
         <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
           {macroFields.map((field) => (
             <FoodNutrientInput
+              actor={actor}
               disabled={disabled}
               field={field}
               initialFood={initialFood}
               key={field.name}
-              onChangeValue={onChangeValue}
               values={values}
             />
           ))}
@@ -679,11 +685,11 @@ export function FoodFormFields({
         <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
           {nutrientFields.map((field) => (
             <FoodNutrientInput
+              actor={actor}
               disabled={disabled}
               field={field}
               initialFood={initialFood}
               key={field.name}
-              onChangeValue={onChangeValue}
               values={values}
             />
           ))}
@@ -694,19 +700,16 @@ export function FoodFormFields({
 }
 
 function FoodNutrientInput({
+  actor,
   disabled,
   field,
   initialFood,
-  onChangeValue,
   values,
 }: {
+  readonly actor?: FoodFormActorRef;
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
   readonly initialFood: Food | null;
-  readonly onChangeValue?: (input: {
-    readonly name: keyof FoodFormValues;
-    readonly value: string;
-  }) => void;
   readonly values?: FoodFormValues;
 }) {
   const unitPaddingClassName = field.unit === "kcal" ? "pr-14" : "pr-9";
@@ -722,7 +725,8 @@ function FoodNutrientInput({
           min="0"
           name={field.name}
           onChange={(event) => {
-            onChangeValue?.({
+            _sendFoodFormValueChange({
+              actor,
               name: field.name,
               value: event.currentTarget.value,
             });
@@ -879,6 +883,61 @@ function _quickNutrientTag({
   const trimmedValue = value.trim();
 
   return trimmedValue === "" ? undefined : `${tag}${trimmedValue}`;
+}
+
+function _sendFoodFormValueChange({
+  actor,
+  name,
+  value,
+}: {
+  readonly actor: FoodFormActorRef | undefined;
+  readonly name: keyof FoodFormValues;
+  readonly value: string;
+}) {
+  if (actor === undefined) {
+    return;
+  }
+
+  actor.send({
+    type: "changeFormValue",
+    name,
+    value,
+  });
+}
+
+function _createFoodInputFromFormValues({
+  formValues,
+}: {
+  readonly formValues: FoodFormValues;
+}): CreateFoodInput {
+  const brand = formValues.brand.trim();
+  const fiberGramsPer100g = _optionalFormValue(formValues.fiberGramsPer100g);
+  const sugarGramsPer100g = _optionalFormValue(formValues.sugarGramsPer100g);
+  const saturatedFatGramsPer100g = _optionalFormValue(
+    formValues.saturatedFatGramsPer100g
+  );
+  const saltGramsPer100g = _optionalFormValue(formValues.saltGramsPer100g);
+
+  return {
+    name: formValues.name.trim(),
+    ...(brand === "" ? {} : { brand }),
+    energyKcalPer100g: formValues.energyKcalPer100g,
+    proteinGramsPer100g: formValues.proteinGramsPer100g,
+    carbsGramsPer100g: formValues.carbsGramsPer100g,
+    fatGramsPer100g: formValues.fatGramsPer100g,
+    ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
+    ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
+    ...(saturatedFatGramsPer100g === undefined
+      ? {}
+      : { saturatedFatGramsPer100g }),
+    ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
+  };
+}
+
+function _optionalFormValue(value: string) {
+  const trimmedValue = value.trim();
+
+  return trimmedValue === "" ? undefined : trimmedValue;
 }
 
 function _formNumber(value: string) {

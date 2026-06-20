@@ -1,6 +1,12 @@
-import type { Food, FoodCategory } from "@mai/nutrition";
-import { Array, Order } from "effect";
+import type { Food } from "@mai/nutrition";
+import { useSelector } from "@xstate/react";
+import { Array } from "effect";
 import { Search } from "lucide-react";
+
+import {
+  getFoodCategoryLabel,
+  type FoodSearchActorRef,
+} from "../machines/food-search-machine.ts";
 
 const darkFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
@@ -11,109 +17,29 @@ const foodMetadataTagToneClassNames = {
   source: "bg-[#1f1a0d] text-[#d9bd6f] ring-[#5a4720]",
 } satisfies Record<FoodMetadataTagTone, string>;
 
-const foodCategoryLabels = {
-  "bread-like": "Bread-like",
-  "dairy-egg": "Dairy & egg",
-  "fish-seafood": "Fish & seafood",
-  fruit: "Fruit",
-  grain: "Grain",
-  legume: "Legume",
-  meat: "Meat",
-  nut: "Nut",
-  "oil-fat": "Oil & fat",
-  "plant-protein": "Plant protein",
-  seed: "Seed",
-  sweetener: "Sweetener",
-  tuber: "Tuber",
-  vegetable: "Vegetable",
-} satisfies Record<FoodCategory, string>;
-
 type FoodMetadataTagTone = "category" | "source";
 
-export const foodUserOriginOrder = Order.mapInput(Order.Number, (food: Food) =>
-  food.origin === "user" ? 0 : 1
-);
-export const foodLowercaseNameOrder = Order.mapInput(
-  Order.String,
-  (food: Food) => food.name.toLocaleLowerCase()
-);
-const foodOriginThenNameOrder = Order.combineAll([
-  foodUserOriginOrder,
-  foodLowercaseNameOrder,
-]);
-
-export function getFoodCategoryLabel({
-  category,
-}: {
-  readonly category: FoodCategory;
-}) {
-  return foodCategoryLabels[category];
-}
-
-export function filterFoodsByQuery({
-  foods,
-  query,
-}: {
-  readonly foods: readonly Food[];
-  readonly query: string;
-}) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const queryTokens =
-    normalizedQuery === "" ? [] : normalizedQuery.split(/\s+/);
-
-  return Array.isReadonlyArrayNonEmpty(queryTokens)
-    ? foods.filter((food) => {
-        const searchableFood = [
-          food.name,
-          food.brand,
-          food.category,
-          food.category === undefined
-            ? undefined
-            : getFoodCategoryLabel({ category: food.category }),
-          food.origin === "app-default" ? "pre-installed default" : undefined,
-        ]
-          .filter((value): value is string => value !== undefined)
-          .join(" ")
-          .toLocaleLowerCase();
-
-        return queryTokens.every((queryToken) =>
-          searchableFood.includes(queryToken)
-        );
-      })
-    : foods;
-}
-
-export function sortFoodsByOriginAndName({
-  foods,
-}: {
-  readonly foods: readonly Food[];
-}) {
-  return Array.sort(foods, foodOriginThenNameOrder);
-}
-
 export function FoodSearchField({
+  actor,
   ariaControls,
   ariaLabel,
   autoFocus,
   disabled,
   id,
   label,
-  onChange,
-  onEnter,
   placeholder,
-  value,
 }: {
+  readonly actor: FoodSearchActorRef;
   readonly ariaControls: string;
   readonly ariaLabel: string;
   readonly autoFocus: boolean;
   readonly disabled: boolean;
   readonly id: string;
   readonly label: string;
-  readonly onChange: (query: string) => void;
-  readonly onEnter: () => void;
   readonly placeholder: string;
-  readonly value: string;
 }) {
+  const query = useSelector(actor, (snapshot) => snapshot.context.query);
+
   return (
     <label className={darkFieldLabelClassName} htmlFor={id}>
       {label}
@@ -133,7 +59,10 @@ export function FoodSearchField({
           disabled={disabled}
           id={id}
           onChange={(event) => {
-            onChange(event.currentTarget.value);
+            actor.send({
+              type: "changeQuery",
+              query: event.currentTarget.value,
+            });
           }}
           onKeyDown={(event) => {
             if (event.key !== "Enter") {
@@ -141,12 +70,14 @@ export function FoodSearchField({
             }
 
             event.preventDefault();
-            onEnter();
+            actor.send({
+              type: "selectFirstMatchingFood",
+            });
           }}
           placeholder={placeholder}
           role="combobox"
           type="search"
-          value={value}
+          value={query}
         />
       </span>
     </label>
@@ -154,26 +85,30 @@ export function FoodSearchField({
 }
 
 export function FoodSearchResults({
+  actor,
   emptyFoodsText,
   emptySearchText,
-  foods,
   getPrimaryLabel,
   getSecondaryLabel,
   id,
-  matchingFoods,
-  onSelectFood,
-  selectedFoodId,
 }: {
+  readonly actor: FoodSearchActorRef;
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
-  readonly foods: readonly Food[];
   readonly getPrimaryLabel: (food: Food) => string;
   readonly getSecondaryLabel: (food: Food) => string;
   readonly id: string;
-  readonly matchingFoods: readonly Food[];
-  readonly onSelectFood: (foodId: Food["id"]) => void;
-  readonly selectedFoodId: Food["id"] | null;
 }) {
+  const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
+  const matchingFoods = useSelector(
+    actor,
+    (snapshot) => snapshot.context.matchingFoods
+  );
+  const selectedFoodId = useSelector(
+    actor,
+    (snapshot) => snapshot.context.selectedFoodId
+  );
+
   return (
     <div
       className="min-h-0 overflow-y-auto overscroll-contain p-2"
@@ -191,7 +126,10 @@ export function FoodSearchResults({
             className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-[#f0f0f2] transition-colors hover:bg-[#202024] aria-selected:bg-[#2a1c1a]"
             key={food.id}
             onClick={() => {
-              onSelectFood(food.id);
+              actor.send({
+                type: "selectFood",
+                foodId: food.id,
+              });
             }}
             role="option"
             type="button"

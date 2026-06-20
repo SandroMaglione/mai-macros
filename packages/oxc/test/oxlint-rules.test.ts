@@ -16,6 +16,7 @@ import noMultipleXstateHooks from "../src/oxlint/rules/no-multiple-xstate-hooks.
 import noNestedEffectArrayMethods from "../src/oxlint/rules/no-nested-effect-array-methods.ts";
 import noNestedLayerProvide from "../src/oxlint/rules/no-nested-layer-provide.ts";
 import noOptionalFunctionParameters from "../src/oxlint/rules/no-optional-function-parameters.ts";
+import noReactComponentEventHandlerProps from "../src/oxlint/rules/no-react-component-event-handler-props.ts";
 import noReactStateHooks from "../src/oxlint/rules/no-react-state-hooks.ts";
 import noServiceOption from "../src/oxlint/rules/no-service-option.ts";
 import noShadowedStandardArrayStatic from "../src/oxlint/rules/no-shadowed-standard-array-static.ts";
@@ -375,6 +376,64 @@ run("no-react-state-hooks", noReactStateHooks, {
     },
   ],
 });
+
+run(
+  "no-react-component-event-handler-props",
+  noReactComponentEventHandlerProps,
+  {
+    valid: [
+      {
+        code: "const view = <form onSubmit={handleSubmit} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <input onChange={handleChange} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <SearchForm actorRef={actorRef} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <SearchForm onchange={handleChange} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <SearchForm {...props} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <motion.div onClick={handleClick} />;",
+        filename: "component.tsx",
+      },
+    ],
+    invalid: [
+      {
+        code: "const view = <SearchForm onSubmit={handleSubmit} />;",
+        filename: "component.tsx",
+        errors: [/Consider whether onSubmit is needed/],
+      },
+      {
+        code: "const view = <FoodPicker onChange={handleChange} onSelect={handleSelect} />;",
+        filename: "component.tsx",
+        errors: [
+          /Consider whether onChange is needed/,
+          /Consider whether onSelect is needed/,
+        ],
+      },
+      {
+        code: "const view = <Modal.Footer onConfirm={handleConfirm} />;",
+        filename: "component.tsx",
+        errors: [/Consider whether onConfirm is needed/],
+      },
+      {
+        code: "const view = <components.FoodPicker onSelect={handleSelect} />;",
+        filename: "component.tsx",
+        errors: [/Consider whether onSelect is needed/],
+      },
+    ],
+  }
+);
 
 run("no-service-option", noServiceOption, {
   valid: ["Effect.service(Service);", "CustomEffect.serviceOption(Service);"],

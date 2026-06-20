@@ -16,11 +16,15 @@ import {
 import { FoodFormFields } from "../lib/components/food-form.tsx";
 import { formatFoodNutrientNumber } from "../lib/components/food-nutrient-overview.tsx";
 import {
-  filterFoodsByQuery,
   FoodSearchField,
   FoodSearchResults,
-  sortFoodsByOriginAndName,
 } from "../lib/components/food-search.tsx";
+import {
+  foodSearchMachine,
+  sortFoodsByOriginAndName,
+  type FoodSearchEvent,
+  type FoodSearchSelectedEvent,
+} from "../lib/machines/food-search-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
 import { Foods, type ReviseFoodInput } from "../lib/services/foods.ts";
 import type { MealFoodUsage } from "../lib/services/meal-entries.ts";
@@ -83,17 +87,7 @@ type EditFoodDialogContext = {
 };
 
 type EditFoodsEvent =
-  | {
-      readonly type: "changeQuery";
-      readonly query: string;
-    }
-  | {
-      readonly type: "openFood";
-      readonly foodId: Food["id"];
-    }
-  | {
-      readonly type: "openFirstMatchingFood";
-    }
+  | FoodSearchSelectedEvent
   | {
       readonly type: "reviseFood";
       readonly input: ReviseFoodInput;
@@ -173,11 +167,9 @@ const editFoodsMachine = setup({
   types: {
     context: {} as {
       readonly editFoodDialogActor: ActorRefFrom<typeof editFoodDialogMachine>;
-      readonly foods: readonly Food[];
       readonly foodUsage: readonly MealFoodUsage[];
+      readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
       readonly invalidate: () => Promise<void>;
-      readonly matchingFoods: readonly Food[];
-      readonly query: string;
     },
     events: {} as EditFoodsEvent,
     input: {} as {
@@ -188,6 +180,7 @@ const editFoodsMachine = setup({
   },
   actors: {
     editFoodDialog: editFoodDialogMachine,
+    foodSearch: foodSearchMachine,
     reviseFood: fromPromise<
       ReviseFoodOutput,
       {
@@ -222,63 +215,30 @@ const editFoodsMachine = setup({
     editFoodDialogActor: spawn("editFoodDialog", {
       id: "editFoodDialog",
     }),
-    foods: input.foods,
     foodUsage: input.foodUsage,
+    foodSearchActor: spawn("foodSearch", {
+      id: "foodSearch",
+      input: {
+        foods: input.foods,
+      },
+    }),
     invalidate: input.invalidate,
-    matchingFoods: input.foods,
-    query: "",
   }),
   initial: "Idle",
   on: {
-    changeQuery: {
-      actions: assign(({ context, event }) => {
-        assertEvent(event, "changeQuery");
-        const matchingFoods = filterFoodsByQuery({
-          foods: context.foods,
-          query: event.query,
-        });
-
-        return {
-          matchingFoods,
-          query: event.query,
-        };
-      }),
-    },
-    openFirstMatchingFood: {
+    foodSearchSelected: {
       actions: sendTo(
         ({ context }) => context.editFoodDialogActor,
-        ({ context }) => {
-          const food = context.matchingFoods[0];
-
-          return food === undefined
+        ({ context, event }) =>
+          event.food === null
             ? {
                 type: "close",
               }
             : {
                 type: "open",
-                food,
+                food: event.food,
                 foodUsage: context.foodUsage,
-              };
-        }
-      ),
-    },
-    openFood: {
-      actions: sendTo(
-        ({ context }) => context.editFoodDialogActor,
-        ({ context, event }) => {
-          assertEvent(event, "openFood");
-          const food = context.foods.find((food) => food.id === event.foodId);
-
-          return food === undefined
-            ? {
-                type: "close",
               }
-            : {
-                type: "open",
-                food,
-                foodUsage: context.foodUsage,
-              };
-        }
       ),
     },
   },
@@ -317,35 +277,42 @@ const editFoodsMachine = setup({
           {
             target: "Idle",
             actions: [
-              assign(({ context, event }) => {
-                const output = event.output;
+              sendTo(
+                ({ context }) => context.foodSearchActor,
+                ({ context, event }) => {
+                  const output = event.output;
+                  const currentFoods =
+                    context.foodSearchActor.getSnapshot().context.foods;
 
-                if (output === "foodNotFound") {
-                  return {};
-                }
+                  if (output === "foodNotFound") {
+                    return {
+                      type: "changeFoods",
+                      foods: currentFoods,
+                    } satisfies FoodSearchEvent;
+                  }
 
-                const foodsWithRevision =
-                  output.food.id === output.previousFood.id
-                    ? context.foods.map((food) =>
-                        food.id === output.previousFood.id ? output.food : food
-                      )
-                    : context.foods.some((food) => food.id === output.food.id)
-                      ? context.foods.map((food) =>
-                          food.id === output.food.id ? output.food : food
+                  const foodsWithRevision =
+                    output.food.id === output.previousFood.id
+                      ? currentFoods.map((food) =>
+                          food.id === output.previousFood.id
+                            ? output.food
+                            : food
                         )
-                      : [...context.foods, output.food];
-                const foods = sortFoodsByOriginAndName({
-                  foods: foodsWithRevision,
-                });
+                      : currentFoods.some((food) => food.id === output.food.id)
+                        ? currentFoods.map((food) =>
+                            food.id === output.food.id ? output.food : food
+                          )
+                        : [...currentFoods, output.food];
+                  const foods = sortFoodsByOriginAndName({
+                    foods: foodsWithRevision,
+                  });
 
-                return {
-                  foods,
-                  matchingFoods: filterFoodsByQuery({
+                  return {
+                    type: "changeFoods",
                     foods,
-                    query: context.query,
-                  }),
-                };
-              }),
+                  } satisfies FoodSearchEvent;
+                }
+              ),
               sendTo(({ context }) => context.editFoodDialogActor, {
                 type: "submissionSucceeded",
               } satisfies EditFoodDialogEvent),
@@ -388,7 +355,7 @@ function Component() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
   const router = useRouter();
-  const [snapshot, send] = useMachine(editFoodsMachine, {
+  const [snapshot] = useMachine(editFoodsMachine, {
     input: {
       foods: data.foods,
       foodUsage: data.foodUsage,
@@ -419,32 +386,21 @@ function Component() {
 
         <div className="border-b border-[#29292d] bg-[#161618] p-4">
           <FoodSearchField
+            actor={snapshot.context.foodSearchActor}
             ariaControls="edit-food-results"
             ariaLabel="Edit food search"
             autoFocus={false}
             disabled={disabled}
             id="edit-food-search"
             label="Search"
-            onChange={(query) => {
-              send({
-                type: "changeQuery",
-                query,
-              });
-            }}
-            onEnter={() => {
-              send({
-                type: "openFirstMatchingFood",
-              });
-            }}
             placeholder="Search food or brand"
-            value={snapshot.context.query}
           />
         </div>
 
         <FoodSearchResults
+          actor={snapshot.context.foodSearchActor}
           emptyFoodsText="Create a food before editing it."
           emptySearchText="No foods found."
-          foods={snapshot.context.foods}
           getPrimaryLabel={(food) =>
             `${formatFoodNutrientNumber({ value: food.energyKcalPer100g })} kcal`
           }
@@ -457,14 +413,6 @@ function Component() {
               : "Used"
           }
           id="edit-food-results"
-          matchingFoods={snapshot.context.matchingFoods}
-          onSelectFood={(foodId) => {
-            send({
-              type: "openFood",
-              foodId,
-            });
-          }}
-          selectedFoodId={null}
         />
 
         <EditFoodDialog actor={snapshot.context.editFoodDialogActor} />
