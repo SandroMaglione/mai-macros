@@ -196,7 +196,7 @@ export function MealPlanForm({
             />
           </label>
 
-          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+          <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
             <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               Macros
             </legend>
@@ -231,7 +231,7 @@ export function MealPlanForm({
             </output>
           </fieldset>
 
-          <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+          <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
             <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
               Nutrient limits
             </legend>
@@ -249,7 +249,7 @@ export function MealPlanForm({
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+              className="btn-primary sm:w-fit"
               disabled={submitDisabled}
               type="submit"
             >

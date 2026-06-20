@@ -4,10 +4,12 @@ import process from "node:process";
 import ts from "typescript";
 
 import type { RuleDiagnostic, TypedRule } from "./rule.ts";
+import noXstateDerivedBooleanContext from "./rules/no-xstate-derived-boolean-context.ts";
 import preferEffectArrayMatch from "./rules/prefer-effect-array-match.ts";
 import preferTypedSchemaApis from "./rules/prefer-typed-schema-apis.ts";
 
 const _rules: ReadonlyArray<TypedRule> = [
+  noXstateDerivedBooleanContext,
   preferEffectArrayMatch,
   preferTypedSchemaApis,
 ];

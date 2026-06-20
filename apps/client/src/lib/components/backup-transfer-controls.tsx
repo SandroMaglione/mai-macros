@@ -14,11 +14,6 @@ const backupPanelClassName =
   "grid gap-3 rounded-lg border border-[#29292d] bg-[#161618] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]";
 const backupFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
-const backupPrimaryButtonClassName =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-3 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60";
-const backupSecondaryButtonClassName =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-3 text-sm font-black text-[#ff5a51] transition-colors hover:bg-[#2a1c1a] disabled:cursor-not-allowed disabled:opacity-60";
-
 export function BackupTransferControls({
   actor,
   mode,
@@ -96,7 +91,7 @@ export function BackupTransferControls({
       <div className={showExport ? "grid grid-cols-2 gap-2" : "grid gap-2"}>
         {showExport ? (
           <button
-            className={backupPrimaryButtonClassName}
+            className="btn-primary"
             disabled={disabled}
             onClick={() => {
               actor.send({ type: "export" });
@@ -117,11 +112,7 @@ export function BackupTransferControls({
           </button>
         ) : null}
         <button
-          className={
-            showExport
-              ? backupSecondaryButtonClassName
-              : backupPrimaryButtonClassName
-          }
+          className={showExport ? "btn-secondary-danger" : "btn-primary"}
           disabled={disabled}
           onClick={() => {
             inputRef.current?.click();

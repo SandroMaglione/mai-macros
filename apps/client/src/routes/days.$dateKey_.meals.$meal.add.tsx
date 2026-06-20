@@ -72,7 +72,6 @@ type AddMealFoodPageEvent =
     };
 
 type AddMealFoodPageContext = {
-  readonly canSubmit: boolean;
   readonly dateKey: DateKey;
   readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
   readonly foodUsage: readonly MealFoodUsage[];
@@ -198,7 +197,6 @@ const addMealFoodPageMachine = setup({
     );
 
     return {
-      canSubmit: false,
       dateKey: input.dateKey,
       foodSearchActor: spawn("foodSearch", {
         id: "addMealFoodPageFoodSearch",
@@ -253,7 +251,6 @@ const addMealFoodPageMachine = setup({
                 : recentQuantityGrams;
 
             return {
-              canSubmit: selectedFood !== null && quantityGrams.trim() !== "",
               quantityGrams,
               selectedFood,
             };
@@ -264,13 +261,10 @@ const addMealFoodPageMachine = setup({
     EnteringQuantity: {
       on: {
         changeQuantity: {
-          actions: assign(({ context, event }) => {
+          actions: assign(({ event }) => {
             assertEvent(event, "changeQuantity");
 
             return {
-              canSubmit:
-                context.selectedFood !== null &&
-                event.quantityGrams.trim() !== "",
               quantityGrams: event.quantityGrams,
             };
           }),
@@ -279,7 +273,6 @@ const addMealFoodPageMachine = setup({
           target: "SelectingFood",
           actions: [
             assign({
-              canSubmit: false,
               selectedFood: null,
             }),
             sendTo(({ context }) => context.foodSearchActor, {
@@ -288,7 +281,9 @@ const addMealFoodPageMachine = setup({
           ],
         },
         submit: {
-          guard: ({ context }) => context.canSubmit,
+          guard: ({ context }) =>
+            context.selectedFood !== null &&
+            context.quantityGrams.trim() !== "",
           target: "Submitting",
         },
       },
@@ -365,6 +360,7 @@ function Component() {
   const selectedFood = snapshot.context.selectedFood;
   const disabled =
     snapshot.matches("Submitting") || snapshot.matches("Submitted");
+  const submitEvent = { type: "submit" } satisfies AddMealFoodPageEvent;
   const mealLabel = mealLabels[meal];
   const selectedFoodUsage =
     selectedFood === null
@@ -470,13 +466,19 @@ function Component() {
             className="contents"
             onSubmit={(event) => {
               event.preventDefault();
-              send({ type: "submit" });
+
+              if (disabled || !snapshot.can(submitEvent)) {
+                return;
+              }
+
+              send(submitEvent);
             }}
           >
             <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
               <div className="grid gap-4">
                 <QuantityGramsField
                   actor={addMealFoodPageActor}
+                  autoFocus={true}
                   disabled={disabled}
                   mealLabel={mealLabel}
                   quantityGrams={quantityGrams}
@@ -491,17 +493,9 @@ function Component() {
               </div>
             </div>
 
-            <footer className="grid gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+            <footer className="grid grid-cols-2 gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
               <button
-                aria-label={`Add food to ${mealLabel}`}
-                className="inline-flex min-h-10 w-full items-center justify-center border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
-                disabled={disabled || !snapshot.context.canSubmit}
-                type="submit"
-              >
-                Add
-              </button>
-              <button
-                className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-secondary"
                 disabled={disabled}
                 onClick={() => {
                   send({
@@ -513,6 +507,14 @@ function Component() {
                 <Pencil aria-hidden="true" size={16} strokeWidth={3} />
                 Change food
               </button>
+              <button
+                aria-label={`Add food to ${mealLabel}`}
+                className="btn-primary"
+                disabled={disabled || !snapshot.can(submitEvent)}
+                type="submit"
+              >
+                Add
+              </button>
             </footer>
           </form>
         )}
@@ -523,11 +525,13 @@ function Component() {
 
 function QuantityGramsField({
   actor,
+  autoFocus,
   disabled,
   mealLabel,
   quantityGrams,
 }: {
   readonly actor: AddMealFoodPageActorRef;
+  readonly autoFocus: boolean;
   readonly disabled: boolean;
   readonly mealLabel: string;
   readonly quantityGrams: string;
@@ -538,6 +542,7 @@ function QuantityGramsField({
       <span className="relative">
         <input
           aria-label={`${mealLabel} quantity in grams`}
+          autoFocus={autoFocus}
           className={`${darkFieldClassName} pr-9`}
           disabled={disabled}
           min="0.1"

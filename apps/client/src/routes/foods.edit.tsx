@@ -362,7 +362,7 @@ function Component() {
             <footer className="grid gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
               <button
                 aria-label={submitLabel}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
+                className="btn-primary"
                 disabled={disabled}
                 type="submit"
               >
@@ -370,7 +370,7 @@ function Component() {
                 {submitLabel}
               </button>
               <button
-                className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-secondary"
                 disabled={disabled}
                 onClick={() => {
                   send({

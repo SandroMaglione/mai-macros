@@ -408,7 +408,7 @@ export function FoodForm({
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
+              className="btn-primary sm:w-fit"
               disabled={disabled}
               type="submit"
             >
@@ -472,7 +472,7 @@ function FoodQuickInputPreview({
 }) {
   if (parseResult.status === "empty") {
     return (
-      <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <div className="rounded-lg bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
         <p className="text-sm font-bold leading-relaxed text-[#aaaab1]">
           No food text yet.
         </p>
@@ -485,7 +485,7 @@ function FoodQuickInputPreview({
   const energyKcalPer100g = food.energyKcalPer100g;
 
   return (
-    <div className="rounded-[10px] bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+    <div className="rounded-lg bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
       <FoodNutrientOverview
         brand={food.brand}
         name={food.name ?? "Unnamed food"}
@@ -516,7 +516,7 @@ function FoodQuickInputIssues({
   }
 
   return (
-    <div className="rounded-[10px] border border-[#74322f] bg-[#201717] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+    <div className="rounded-lg border border-[#74322f] bg-[#201717] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
       {issues.map((issue) => (
         <FoodQuickInputIssue
           issue={issue}
@@ -553,7 +553,7 @@ function FoodNumberWarnings({
   return (
     <div
       aria-live="polite"
-      className="grid gap-2 rounded-[10px] border border-[#5a4720] bg-[#1f1a0d] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]"
+      className="grid gap-2 rounded-lg border border-[#5a4720] bg-[#1f1a0d] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]"
     >
       {warnings.map((warning) => (
         <div
@@ -590,7 +590,7 @@ export function FoodFormFields({
 }) {
   return (
     <>
-      <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
         <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
           Details
         </legend>
@@ -643,7 +643,7 @@ export function FoodFormFields({
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
         <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
           Calories and macros per 100g
         </legend>
@@ -662,7 +662,7 @@ export function FoodFormFields({
         </div>
       </fieldset>
 
-      <fieldset className="grid gap-3 rounded-[10px] border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+      <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
         <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
           Nutrient details per 100g
         </legend>
