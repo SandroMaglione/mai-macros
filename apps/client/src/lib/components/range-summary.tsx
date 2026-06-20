@@ -1,11 +1,18 @@
-import { addNutrientTotals, type NutrientTotals } from "@mai/nutrition";
+import {
+  addNutrientTotals,
+  divideNutrientTotals,
+  emptyNutrientTotals,
+  getPlanNutrientTargetAmount,
+  type NutrientName,
+  type NutrientTotals,
+} from "@mai/nutrition";
 import { Array } from "effect";
-import { ListChecks, Utensils } from "lucide-react";
-import type { ReactNode } from "react";
 
+import { getNutritionReportInsights } from "../nutrition-report-insights.ts";
 import type { NutritionReportRange } from "../services/nutrition-reports.ts";
 import {
   formatReportNutrient,
+  formatReportSignedNumber,
   NutritionInsightsLayout,
   reportNutrientLabels,
   reportNutrientToneClassNames,
@@ -18,12 +25,6 @@ export function RangeSummary({
   readonly report: NutritionReportRange;
 }) {
   const dayCount = report.days.length;
-  const loggedDays = report.days.filter((day) =>
-    Array.isReadonlyArrayNonEmpty(day.mealEntries)
-  );
-  const alignedDays = report.days.filter(
-    (day) => day.isInsideExpectedPlanRange
-  );
   const entries = report.days.flatMap((day) => day.entries);
   const foodContributors = Object.values(
     entries.reduce<Record<string, FoodContributor>>((contributors, entry) => {
@@ -32,7 +33,7 @@ export function RangeSummary({
         ({
           foodId: entry.food.id,
           name: entry.food.name,
-          totals: _emptyNutrientTotals(),
+          totals: emptyNutrientTotals(),
         } satisfies FoodContributor);
 
       return {
@@ -56,37 +57,116 @@ export function RangeSummary({
       };
     }, {})
   ).sort((left, right) => right.totals.energyKcal - left.totals.energyKcal);
-  const summaryLines = [
-    `${alignedDays.length}/${dayCount} days aligned with plan targets.`,
-    `${loggedDays.length}/${dayCount} days had logged meals.`,
-    `${report.activePlan.name} was active for this range.`,
-  ];
+  const totals = report.days.reduce<NutrientTotals>(
+    (currentTotals, day) =>
+      addNutrientTotals({
+        left: currentTotals,
+        right: day.totals,
+      }),
+    emptyNutrientTotals()
+  );
+  const averageTotals = divideNutrientTotals({
+    divisor: dayCount,
+    totals,
+  });
+  const getAverageTargetAmount = ({
+    nutrientName,
+  }: {
+    readonly nutrientName: NutrientName;
+  }) => {
+    const targetAmounts = report.days.flatMap((day) => {
+      const amount = getPlanNutrientTargetAmount({
+        nutrientName,
+        plan: day.plan,
+      });
+
+      return amount === undefined ? [] : [amount];
+    });
+
+    if (targetAmounts.length !== dayCount) {
+      return null;
+    }
+
+    return (
+      targetAmounts.reduce((total, amount) => total + amount, 0) / dayCount
+    );
+  };
+  const averageTargetTotals = {
+    carbsGrams: getAverageTargetAmount({ nutrientName: "carbsGrams" }),
+    energyKcal: getAverageTargetAmount({ nutrientName: "energyKcal" }),
+    fatGrams: getAverageTargetAmount({ nutrientName: "fatGrams" }),
+    fiberGrams: getAverageTargetAmount({ nutrientName: "fiberGrams" }),
+    proteinGrams: getAverageTargetAmount({ nutrientName: "proteinGrams" }),
+    saltGrams: getAverageTargetAmount({ nutrientName: "saltGrams" }),
+    saturatedFatGrams: getAverageTargetAmount({
+      nutrientName: "saturatedFatGrams",
+    }),
+    sugarGrams: getAverageTargetAmount({ nutrientName: "sugarGrams" }),
+  } satisfies Record<NutrientName, number | null>;
+  const summaryInsights = getNutritionReportInsights({
+    limit: 6,
+    report,
+  });
 
   return (
-    <NutritionInsightsLayout activeRoute="range" title="Nutrition insights">
+    <NutritionInsightsLayout title="Nutrition insights">
       <section className="grid gap-4">
-        <SectionHeading
-          icon={<ListChecks size={17} strokeWidth={3} />}
+        <SectionTitle
+          description="Patterns that are easy to miss day to day, ranked from food-specific signals to broader habits."
           title="Summary"
         />
-        <div className="grid gap-2.5">
-          {summaryLines.map((line) => (
-            <p
-              className="rounded-md border border-[#2d2d31] bg-[#161618] px-3 py-2 text-sm font-black leading-tight text-[#dedee3]"
-              key={line}
-            >
-              {line}
+        <div className="divide-y divide-[#29292d]">
+          {!Array.isReadonlyArrayNonEmpty(summaryInsights) ? (
+            <p className="py-2 text-sm leading-tight text-[#dedee3]">
+              Log more meals to surface weekly food and meal patterns.
             </p>
+          ) : (
+            summaryInsights.map((insight) => (
+              <p
+                className="py-2 text-sm leading-tight text-[#dedee3]"
+                key={insight.id}
+              >
+                {insight.parts.map((part, index) => (
+                  <span
+                    className={
+                      part.tone === "food"
+                        ? "rounded bg-[#ffbd35]/15 px-1 text-[#ffcf75] ring-1 ring-[#ffbd35]/20"
+                        : undefined
+                    }
+                    key={`${insight.id}-${index}`}
+                  >
+                    {part.text}
+                  </span>
+                ))}
+              </p>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="grid gap-4 border-t border-[#27272b] pt-7">
+        <SectionTitle
+          description="Average daily intake across the last 7 days, compared with daily targets when available."
+          title="7-day average"
+        />
+        <div className="grid grid-cols-2 gap-2.5">
+          {reportTrackedNutrients.map((nutrientName) => (
+            <NutrientBalanceTile
+              actual={averageTotals[nutrientName]}
+              key={nutrientName}
+              nutrientName={nutrientName}
+              target={averageTargetTotals[nutrientName]}
+            />
           ))}
         </div>
       </section>
 
       <section className="grid gap-4 border-t border-[#27272b] pt-7">
-        <SectionHeading
-          icon={<Utensils size={17} strokeWidth={3} />}
+        <SectionTitle
+          description="Top foods contributing to each nutrient across the same 7-day range."
           title="Foods"
         />
-        <div className="grid gap-4">
+        <div className="grid gap-5">
           {reportTrackedNutrients.map((nutrientName) => {
             const foods = foodContributors
               .filter((food) => food.totals[nutrientName] > 0)
@@ -97,27 +177,27 @@ export function RangeSummary({
               .slice(0, 3);
 
             return (
-              <article className="grid gap-2.5" key={nutrientName}>
+              <article className="grid gap-1.5" key={nutrientName}>
                 <h3
                   className={`text-sm font-black leading-tight ${reportNutrientToneClassNames[nutrientName]}`}
                 >
                   {reportNutrientLabels[nutrientName]}
                 </h3>
                 {!Array.isReadonlyArrayNonEmpty(foods) ? (
-                  <p className="rounded-md border border-[#2d2d31] bg-[#161618] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                  <p className="py-1.5 text-sm leading-tight text-[#aaaab1]">
                     No tracked foods.
                   </p>
                 ) : (
-                  <div className="grid gap-2">
+                  <div className="divide-y divide-[#29292d]">
                     {foods.map((food) => (
                       <div
-                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[#2d2d31] bg-[#161618] px-3 py-2"
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 py-1.5"
                         key={`${nutrientName}-${food.foodId}`}
                       >
-                        <span className="truncate text-sm font-black text-[#dedee3]">
+                        <span className="min-w-0 truncate text-sm leading-tight text-[#dedee3]">
                           {food.name}
                         </span>
-                        <span className="text-sm font-black text-[#aaaab1]">
+                        <span className="text-right text-sm leading-tight text-[#aaaab1]">
                           {formatReportNutrient({
                             nutrientName,
                             value: food.totals[nutrientName],
@@ -136,18 +216,55 @@ export function RangeSummary({
   );
 }
 
-function SectionHeading({
-  icon,
+function SectionTitle({
+  description,
   title,
 }: {
-  readonly icon: ReactNode;
+  readonly description: string;
   readonly title: string;
 }) {
   return (
-    <h2 className="inline-flex items-center gap-2 text-base font-black leading-tight text-[#f5f5f7]">
-      <span className="text-[#ff5a51]">{icon}</span>
-      {title}
-    </h2>
+    <header className="grid gap-1">
+      <h2 className="text-base font-black leading-tight text-[#f5f5f7]">
+        {title}
+      </h2>
+      <p className="max-w-xl text-sm leading-snug text-[#8f8f98]">
+        {description}
+      </p>
+    </header>
+  );
+}
+
+function NutrientBalanceTile({
+  actual,
+  nutrientName,
+  target,
+}: {
+  readonly actual: number;
+  readonly nutrientName: NutrientName;
+  readonly target: number | null;
+}) {
+  const unit = nutrientName === "energyKcal" ? "kcal" : "g";
+
+  return (
+    <article className="grid gap-2 rounded-md border border-[#2d2d31] bg-[#161618] p-3">
+      <h3
+        className={`truncate text-sm font-black leading-tight ${reportNutrientToneClassNames[nutrientName]}`}
+      >
+        {reportNutrientLabels[nutrientName]}
+      </h3>
+      <p className="text-2xl font-black leading-none text-[#f5f5f7]">
+        {formatReportNutrient({ nutrientName, value: actual })}
+      </p>
+      <p className="text-xs font-black leading-tight text-[#aaaab1]">
+        {target === null
+          ? "No target"
+          : formatReportSignedNumber({
+              unit,
+              value: actual - target,
+            })}
+      </p>
+    </article>
   );
 }
 
@@ -156,16 +273,3 @@ type FoodContributor = {
   readonly name: string;
   readonly totals: NutrientTotals;
 };
-
-function _emptyNutrientTotals(): NutrientTotals {
-  return {
-    carbsGrams: 0,
-    energyKcal: 0,
-    fatGrams: 0,
-    fiberGrams: 0,
-    proteinGrams: 0,
-    saltGrams: 0,
-    saturatedFatGrams: 0,
-    sugarGrams: 0,
-  };
-}

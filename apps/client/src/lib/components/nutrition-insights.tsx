@@ -1,10 +1,6 @@
-import type {
-  NutrientName,
-  NutrientTargetSemantics,
-  NutrientTargetStatus,
-} from "@mai/nutrition";
+import type { NutrientName } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
-import { Activity, ChevronLeft, ListChecks } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 export const reportPrimaryNutrients = [
@@ -58,27 +54,16 @@ export const reportNutrientToneClassNames = {
   sugarGrams: "text-[#ff7aa9]",
 } satisfies Record<NutrientName, string>;
 
-type InsightsRoute = "range" | "week";
-
-const navLinkClassName =
-  "inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1 text-[0.68rem] font-black leading-tight no-underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
-const activeNavLinkClassName =
-  "border-[#5a3b26] bg-[#2a1d14] text-[#ffbd35] hover:bg-[#322216]";
-const inactiveNavLinkClassName =
-  "border-transparent text-[#dfd2bd] hover:border-[#5a3b26] hover:bg-[#2a1d14]";
-
 export function NutritionInsightsLayout({
-  activeRoute,
   children,
   title,
 }: {
-  readonly activeRoute: InsightsRoute;
   readonly children: ReactNode;
   readonly title: string;
 }) {
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
-      <section className="mx-auto min-h-screen w-full max-w-[720px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
+      <section className="mx-auto min-h-screen w-full max-w-[720px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
         <header className="bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/20">
           <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-4">
             <Link
@@ -97,91 +82,9 @@ export function NutritionInsightsLayout({
         </header>
 
         <div className="grid gap-8 px-4 py-6">{children}</div>
-        <nav
-          aria-label="Nutrition insight views"
-          className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
-        >
-          <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-1.5 rounded-lg border border-[#3d332a] bg-[#15120f]/95 p-1.5 shadow-[0_-12px_32px_rgb(0_0_0/0.36)] backdrop-blur">
-            <Link
-              className={`${navLinkClassName} ${
-                activeRoute === "range"
-                  ? activeNavLinkClassName
-                  : inactiveNavLinkClassName
-              }`}
-              to="/insights"
-            >
-              <ListChecks aria-hidden="true" size={18} strokeWidth={3} />
-              Summary
-            </Link>
-            <Link
-              className={`${navLinkClassName} ${
-                activeRoute === "week"
-                  ? activeNavLinkClassName
-                  : inactiveNavLinkClassName
-              }`}
-              to="/insights/week"
-            >
-              <Activity aria-hidden="true" size={18} strokeWidth={3} />7 days
-            </Link>
-          </div>
-        </nav>
       </section>
     </main>
   );
-}
-
-export function TargetStatusPill({
-  status,
-}: {
-  readonly status: NutrientTargetStatus;
-}) {
-  const statusText = targetStatusText({ status });
-
-  return (
-    <span
-      className={`inline-flex min-h-7 items-center justify-center rounded-md border px-2 text-xs font-black ${targetStatusClassName(
-        { status }
-      )}`}
-    >
-      {statusText}
-    </span>
-  );
-}
-
-export function targetStatusText({
-  status,
-}: {
-  readonly status: NutrientTargetStatus;
-}) {
-  if (status.status === "inside") {
-    return "On plan";
-  }
-
-  if (status.semantics === "maximum") {
-    return "High";
-  }
-
-  if (status.semantics === "minimum") {
-    return "Low";
-  }
-
-  return status.status === "above" ? "High" : "Low";
-}
-
-export function targetStatusClassName({
-  status,
-}: {
-  readonly status: NutrientTargetStatus;
-}) {
-  if (status.status === "inside") {
-    return "border-[#1f5f38] bg-[#102417] text-[#74d99f]";
-  }
-
-  if (status.status === "above") {
-    return "border-[#74322f] bg-[#201717] text-[#ff5a51]";
-  }
-
-  return "border-[#51421c] bg-[#211d13] text-[#ffbd35]";
 }
 
 export function formatReportNumber({ value }: { readonly value: number }) {
@@ -217,18 +120,4 @@ export function formatReportNutrient({
   const formatted = formatReportNumber({ value });
 
   return unit === "kcal" ? `${formatted} kcal` : `${formatted}g`;
-}
-
-export function targetSemanticsLabel({
-  semantics,
-}: {
-  readonly semantics: NutrientTargetSemantics;
-}) {
-  const labelBySemantics = {
-    maximum: "Limit",
-    minimum: "Goal",
-    range: "Range",
-  } satisfies Record<NutrientTargetSemantics, string>;
-
-  return labelBySemantics[semantics];
 }
