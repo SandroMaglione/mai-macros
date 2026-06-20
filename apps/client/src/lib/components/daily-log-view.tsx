@@ -40,6 +40,7 @@ import {
   type BackupTransferActorRef,
   type BackupTransferImportedEvent,
 } from "../machines/backup-transfer-machine.ts";
+import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import {
@@ -133,9 +134,8 @@ const dailyNutrientNoTargetClassNames = {
   track: "bg-[#2b2b30]",
 };
 const actionColorClassName = "text-[#ff5a51]";
-const headerActionClassName =
-  "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
-const appHeaderActionClassName =
+const overTargetProgressBarClassName = "bg-[#ff5a51]";
+const actionSheetLinkClassName =
   "inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-md border border-[#3d332a] bg-[#211914] px-2 text-sm font-black text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
 const bottomActionClassName =
   "inline-flex h-12 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-1 text-center text-[0.68rem] font-black leading-tight text-[#dfd2bd] no-underline transition-colors hover:border-[#5a3b26] hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45 [&>svg]:shrink-0";
@@ -960,20 +960,8 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
-        <header className="bg-[#ff5a51] pb-[calc(env(safe-area-inset-top)+0.45rem)] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
-          <nav
-            className="grid h-14 grid-cols-[1fr_auto_1fr] items-center bg-[#ff5a51] px-4"
-            aria-label="Day navigation"
-          >
-            <Link
-              aria-label="Previous day"
-              className={`${headerActionClassName} justify-self-start`}
-              params={{ dateKey: previousDateKey }}
-              title="Previous day"
-              to="/days/$dateKey"
-            >
-              <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
-            </Link>
+        <AppHeader
+          center={
             <Link
               aria-label="Go to today"
               className="grid min-w-0 rounded-full px-6 py-1.5 text-center text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
@@ -989,17 +977,31 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
                 {displayedDate.label}
               </span>
             </Link>
+          }
+          leading={
+            <Link
+              aria-label="Previous day"
+              className={appHeaderActionClassName}
+              params={{ dateKey: previousDateKey }}
+              title="Previous day"
+              to="/days/$dateKey"
+            >
+              <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
+            </Link>
+          }
+          navigationLabel="Day navigation"
+          trailing={
             <Link
               aria-label="Next day"
-              className={`${headerActionClassName} justify-self-end`}
+              className={appHeaderActionClassName}
               params={{ dateKey: nextDateKey }}
               title="Next day"
               to="/days/$dateKey"
             >
               <ChevronRight aria-hidden="true" size={31} strokeWidth={2.6} />
             </Link>
-          </nav>
-        </header>
+          }
+        />
 
         <DailyProgress day={day} nutrients={dailyNutrients} />
 
@@ -1208,7 +1210,7 @@ function PlansActionSheet({
 
       <nav aria-label="Plan actions" className="grid grid-cols-2 gap-2">
         <Link
-          className={appHeaderActionClassName}
+          className={actionSheetLinkClassName}
           params={{ planId: plan.id }}
           search={{ dateKey: day.dailyLog.dateKey }}
           to="/plans/$planId/edit"
@@ -1217,7 +1219,7 @@ function PlansActionSheet({
           Edit plan
         </Link>
         <Link
-          className={appHeaderActionClassName}
+          className={actionSheetLinkClassName}
           search={{ dateKey: day.dailyLog.dateKey }}
           to="/plans/new"
         >
@@ -1234,7 +1236,7 @@ function FoodsActionSheet({ dateKey }: { readonly dateKey: DateKey }) {
     <ActionSheet eyebrow="Food library" title="Foods">
       <nav aria-label="Food actions" className="grid grid-cols-2 gap-2">
         <Link
-          className={appHeaderActionClassName}
+          className={actionSheetLinkClassName}
           search={{ dateKey }}
           to="/foods/new"
         >
@@ -1242,7 +1244,7 @@ function FoodsActionSheet({ dateKey }: { readonly dateKey: DateKey }) {
           Create food
         </Link>
         <Link
-          className={appHeaderActionClassName}
+          className={actionSheetLinkClassName}
           search={{ dateKey }}
           to="/foods/edit"
         >
@@ -1955,6 +1957,7 @@ function DailyNutrientProgressLine({
         });
   const isOverTarget =
     displayMode === "remaining" && target !== undefined && target - value < 0;
+  const isAboveTarget = target !== undefined && value > target;
 
   return (
     <div className="grid min-w-0 gap-1 text-center">
@@ -1975,7 +1978,9 @@ function DailyNutrientProgressLine({
         role="progressbar"
       >
         <span
-          className={`block h-full rounded-full transition-[inline-size] duration-200 ${toneClassNames.bar}`}
+          className={`block h-full rounded-full transition-[inline-size] duration-200 ${
+            isAboveTarget ? overTargetProgressBarClassName : toneClassNames.bar
+          }`}
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
@@ -2011,6 +2016,7 @@ function EnergyProgressMetric({
     value,
   });
   const isOverTarget = displayMode === "remaining" && remainingValue < 0;
+  const isAboveTarget = value > target;
 
   return (
     <div className="mt-3">
@@ -2027,7 +2033,9 @@ function EnergyProgressMetric({
         role="progressbar"
       >
         <span
-          className="block h-full rounded-full bg-[#4c7dff] transition-[inline-size] duration-200"
+          className={`block h-full rounded-full transition-[inline-size] duration-200 ${
+            isAboveTarget ? overTargetProgressBarClassName : "bg-[#4c7dff]"
+          }`}
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
@@ -2065,6 +2073,7 @@ function MacroProgressLine({
   const toneClassNames = macroToneClassNames[tone];
   const remainingValue = target - value;
   const isOverTarget = displayMode === "remaining" && remainingValue < 0;
+  const isAboveTarget = value > target;
   const valueText = _formatMacroDisplayValue({
     displayMode,
     target,
@@ -2092,7 +2101,9 @@ function MacroProgressLine({
         role="progressbar"
       >
         <span
-          className={`block h-full rounded-full transition-[inline-size] duration-200 ${toneClassNames.bar}`}
+          className={`block h-full rounded-full transition-[inline-size] duration-200 ${
+            isAboveTarget ? overTargetProgressBarClassName : toneClassNames.bar
+          }`}
           style={{ inlineSize: `${cappedProgressPercent}%` }}
         />
       </div>
@@ -2316,7 +2327,7 @@ function _formatMacroDisplayValue({
   });
 
   return remainingValue < 0
-    ? `${formattedValue} ${unit} over`
+    ? `-${formattedValue} ${unit}`
     : `${formattedValue} ${unit} left`;
 }
 

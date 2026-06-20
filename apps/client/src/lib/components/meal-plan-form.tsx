@@ -1,8 +1,9 @@
 import type { Plan } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { useSelector } from "@xstate/react";
-import { ClipboardList, Flame, Plus, Save, X } from "lucide-react";
+import { ChevronLeft, Flame, Plus, Save } from "lucide-react";
 
+import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import {
   BackupTransferControls,
   type BackupTransferMode,
@@ -11,6 +12,11 @@ import type { BackupTransferActorRef } from "../machines/backup-transfer-machine
 import type { MealPlanFormActorRef } from "../machines/meal-plan-form-machine.ts";
 
 type MealPlanFormAction = "create" | "edit";
+
+type MealPlanSubmitEvent = {
+  readonly type: "submit";
+  readonly formData: FormData;
+};
 
 type PlanTargetFieldName =
   | "proteinTargetGrams"
@@ -35,8 +41,6 @@ const planFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const planFieldLabelClassName =
   "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
-const secondaryActionClassName =
-  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#3d2827] bg-[#201717] px-4 text-sm font-black text-[#ff5a51] no-underline transition-colors hover:bg-[#2a1c1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45 sm:w-fit";
 
 const macroTargetFields: readonly PlanTargetField[] = [
   {
@@ -112,6 +116,7 @@ export function MealPlanForm({
   actor,
   backupTransferActor = null,
   backupTransferMode = "importOnly",
+  canNavigateBack = true,
   dateKey,
   initialPlan,
 }: {
@@ -119,14 +124,19 @@ export function MealPlanForm({
   readonly actor: MealPlanFormActorRef;
   readonly backupTransferActor?: BackupTransferActorRef | null;
   readonly backupTransferMode?: BackupTransferMode;
+  readonly canNavigateBack?: boolean;
   readonly dateKey: string | undefined;
   readonly initialPlan: Plan | null;
 }) {
   const snapshot = useSelector(actor, (state) => state);
-  const disabled =
+  const formDisabled =
     snapshot.value === "Submitting" ||
     snapshot.value === "Created" ||
     snapshot.value === "Revised";
+  const latestSubmitEvent = _mealPlanSubmitEvent({
+    formData: snapshot.context.latestFormData ?? new FormData(),
+  });
+  const submitDisabled = formDisabled || !snapshot.can(latestSubmitEvent);
   const formattedEnergyKcal = new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 2,
   }).format(snapshot.context.energyKcal);
@@ -143,25 +153,14 @@ export function MealPlanForm({
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-6">
-        <header className="sticky top-0 z-30 bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-lg shadow-black/25">
-          <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4">
-            <BackToDayIconLink dateKey={dateKey} />
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-                <ClipboardList aria-hidden="true" size={24} strokeWidth={2.5} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
-                  Meal plans
-                </p>
-                <h1 className="truncate text-2xl font-black leading-tight text-white">
-                  {title}
-                </h1>
-              </div>
-            </div>
-            <span aria-hidden="true" className="size-10" />
-          </div>
-        </header>
+        <AppHeader
+          leading={
+            canNavigateBack ? <BackToDayIconLink dateKey={dateKey} /> : null
+          }
+          shadow={true}
+          sticky={true}
+          title={title}
+        />
 
         <form
           className="grid gap-4 px-4 py-5"
@@ -173,25 +172,24 @@ export function MealPlanForm({
           }}
           onSubmit={(event) => {
             event.preventDefault();
-            actor.send({
-              type: "submit",
+            const submitEvent = _mealPlanSubmitEvent({
               formData: new FormData(event.currentTarget),
             });
+
+            if (formDisabled || !snapshot.can(submitEvent)) {
+              return;
+            }
+
+            actor.send(submitEvent);
           }}
         >
-          <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
-            {isCreating
-              ? "Creating a plan makes it the active meal plan."
-              : "Saving replaces this plan if it has no recorded meals. If logs already use it, Mai preserves those logs and creates a revised plan for the selected day."}
-          </p>
-
           <label className={planFieldLabelClassName}>
             Name
             <input
               autoComplete="off"
               className={planFieldClassName}
               defaultValue={initialPlan?.name}
-              disabled={disabled}
+              disabled={formDisabled}
               name="name"
               placeholder="Training day"
               required
@@ -205,7 +203,7 @@ export function MealPlanForm({
             <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-3">
               {macroTargetFields.map((field) => (
                 <PlanTargetInput
-                  disabled={disabled}
+                  disabled={formDisabled}
                   field={field}
                   initialPlan={initialPlan}
                   key={field.name}
@@ -240,7 +238,7 @@ export function MealPlanForm({
             <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
               {nutrientTargetFields.map((field) => (
                 <PlanTargetInput
-                  disabled={disabled}
+                  disabled={formDisabled}
                   field={field}
                   initialPlan={initialPlan}
                   key={field.name}
@@ -252,13 +250,12 @@ export function MealPlanForm({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-4 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60 sm:w-fit"
-              disabled={disabled}
+              disabled={submitDisabled}
               type="submit"
             >
               <SubmitIcon aria-hidden="true" size={18} strokeWidth={3} />
               {submitText}
             </button>
-            <BackToDayLink dateKey={dateKey} />
           </div>
         </form>
 
@@ -308,26 +305,15 @@ function PlanTargetInput({
   );
 }
 
-function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
-  if (dateKey === undefined) {
-    return (
-      <Link className={secondaryActionClassName} to="/">
-        <X aria-hidden="true" size={17} strokeWidth={3} />
-        Cancel
-      </Link>
-    );
-  }
-
-  return (
-    <Link
-      className={secondaryActionClassName}
-      params={{ dateKey }}
-      to="/days/$dateKey"
-    >
-      <X aria-hidden="true" size={17} strokeWidth={3} />
-      Cancel
-    </Link>
-  );
+function _mealPlanSubmitEvent({
+  formData,
+}: {
+  readonly formData: FormData;
+}): MealPlanSubmitEvent {
+  return {
+    type: "submit",
+    formData,
+  };
 }
 
 function BackToDayIconLink({
@@ -335,13 +321,15 @@ function BackToDayIconLink({
 }: {
   readonly dateKey: string | undefined;
 }) {
-  const className =
-    "inline-flex size-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white no-underline transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
-
   if (dateKey === undefined) {
     return (
-      <Link aria-label="Back to today" className={className} to="/">
-        <X aria-hidden="true" size={18} strokeWidth={3} />
+      <Link
+        aria-label="Back to today"
+        className={appHeaderActionClassName}
+        title="Back to today"
+        to="/"
+      >
+        <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
       </Link>
     );
   }
@@ -349,11 +337,12 @@ function BackToDayIconLink({
   return (
     <Link
       aria-label="Back to day"
-      className={className}
+      className={appHeaderActionClassName}
       params={{ dateKey }}
+      title={`Back to ${dateKey}`}
       to="/days/$dateKey"
     >
-      <X aria-hidden="true" size={18} strokeWidth={3} />
+      <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
     </Link>
   );
 }

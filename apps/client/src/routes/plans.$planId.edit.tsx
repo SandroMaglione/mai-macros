@@ -45,6 +45,7 @@ function Component() {
     input: {
       dateKey: search.dateKey,
       energyKcal: calculatePlanEnergyKcal({ plan }),
+      initialPlan: plan,
       navigate,
       planId: plan.id,
     },

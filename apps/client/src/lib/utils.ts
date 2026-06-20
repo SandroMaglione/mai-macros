@@ -2,12 +2,42 @@ import {
   calculateMacronutrientEnergyKcal,
   type DateKey,
   type FoodQuickInput,
+  type Plan,
 } from "@mai/nutrition";
-import { Array, DateTime, Iterable, Option } from "effect";
+import { Array, DateTime, Iterable, Option, Schema } from "effect";
 
 import type { CreateMealEntryInput } from "./services/meal-entries.ts";
 import type { CreateFoodInput } from "./services/foods.ts";
 import type { CreateMealPlanInput } from "./services/meal-plans.ts";
+
+const _FormNonNegativeNumber = Schema.NumberFromString.check(
+  Schema.isFinite(),
+  Schema.isGreaterThanOrEqualTo(0)
+);
+
+type MealPlanRequiredNumberFieldName =
+  | "proteinTargetGrams"
+  | "carbsTargetGrams"
+  | "fatTargetGrams";
+
+type MealPlanOptionalNumberFieldName =
+  | "fiberTargetGrams"
+  | "sugarTargetGrams"
+  | "saltTargetGrams"
+  | "saturatedFatTargetGrams";
+
+const mealPlanRequiredNumberFieldNames = [
+  "proteinTargetGrams",
+  "carbsTargetGrams",
+  "fatTargetGrams",
+] as const satisfies readonly MealPlanRequiredNumberFieldName[];
+
+const mealPlanOptionalNumberFieldNames = [
+  "fiberTargetGrams",
+  "sugarTargetGrams",
+  "saltTargetGrams",
+  "saturatedFatTargetGrams",
+] as const satisfies readonly MealPlanOptionalNumberFieldName[];
 
 export const dateKeyFromDate = ({ date }: { readonly date: Date }) => {
   return DateTime.formatIsoDate(_localDateTimeFromDate({ date }));
@@ -176,6 +206,62 @@ export const createMealPlanInputFromFormData = ({
   };
 };
 
+export const mealPlanFormHasChangesFromPlan = ({
+  formData,
+  plan,
+}: {
+  readonly formData: FormData;
+  readonly plan: Plan;
+}) => {
+  const input = createMealPlanInputFromFormData({ formData });
+
+  if (input.name === "") {
+    return false;
+  }
+
+  let hasChanges = input.name !== plan.name;
+
+  for (const fieldName of mealPlanRequiredNumberFieldNames) {
+    const fieldValue = _parseFormNonNegativeNumber({
+      value: input[fieldName],
+    });
+
+    if (fieldValue === undefined) {
+      return false;
+    }
+
+    if (fieldValue !== plan[fieldName]) {
+      hasChanges = true;
+    }
+  }
+
+  for (const fieldName of mealPlanOptionalNumberFieldNames) {
+    const inputValue = input[fieldName];
+
+    if (inputValue === undefined) {
+      if (plan[fieldName] !== undefined) {
+        hasChanges = true;
+      }
+
+      continue;
+    }
+
+    const fieldValue = _parseFormNonNegativeNumber({
+      value: inputValue,
+    });
+
+    if (fieldValue === undefined) {
+      return false;
+    }
+
+    if (fieldValue !== plan[fieldName]) {
+      hasChanges = true;
+    }
+  }
+
+  return hasChanges;
+};
+
 export const calculateMealPlanEnergyKcalFromFormData = ({
   formData,
 }: {
@@ -329,9 +415,16 @@ const _formNonNegativeNumber = ({
     return 0;
   }
 
-  const parsedValue = Number(value);
+  return _parseFormNonNegativeNumber({ value }) ?? 0;
+};
 
-  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+const _parseFormNonNegativeNumber = ({ value }: { readonly value: string }) => {
+  return Schema.decodeOption(_FormNonNegativeNumber)(value).pipe(
+    Option.match({
+      onNone: () => undefined,
+      onSome: (parsedValue) => parsedValue,
+    })
+  );
 };
 
 const _numberInputValue = ({ value }: { readonly value: number }) => `${value}`;

@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
+
 export const reportPrimaryNutrients = [
   "energyKcal",
   "proteinGrams",
@@ -64,22 +66,20 @@ export function NutritionInsightsLayout({
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[720px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
-        <header className="bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/20">
-          <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-4">
+        <AppHeader
+          leading={
             <Link
               aria-label="Back to today"
-              className="inline-flex size-12 items-center justify-center justify-self-start rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              className={appHeaderActionClassName}
               title="Back to today"
               to="/"
             >
               <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
             </Link>
-            <h1 className="min-w-0 truncate text-center text-xl font-black leading-tight text-white">
-              {title}
-            </h1>
-            <span aria-hidden="true" />
-          </div>
-        </header>
+          }
+          shadow={true}
+          title={title}
+        />
 
         <div className="grid gap-8 px-4 py-6">{children}</div>
       </section>

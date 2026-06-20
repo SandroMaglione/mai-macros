@@ -1,18 +1,21 @@
 import type { Food } from "@mai/nutrition";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useMachine, useSelector } from "@xstate/react";
+import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
-import { ChevronLeft, Save, X } from "lucide-react";
+import { ChevronLeft, Pencil, Save } from "lucide-react";
 import {
   assertEvent,
   assign,
   fromPromise,
-  sendParent,
   sendTo,
   setup,
   type ActorRefFrom,
 } from "xstate";
 
+import {
+  AppHeader,
+  appHeaderActionClassName,
+} from "../lib/components/app-header.tsx";
 import { FoodFormFields } from "../lib/components/food-form.tsx";
 import { formatFoodNutrientNumber } from "../lib/components/food-nutrient-overview.tsx";
 import {
@@ -30,9 +33,6 @@ import { Foods, type ReviseFoodInput } from "../lib/services/foods.ts";
 import type { MealFoodUsage } from "../lib/services/meal-entries.ts";
 import { MealEntries } from "../lib/services/meal-entries.ts";
 import { createFoodInputFromFormData } from "../lib/utils.ts";
-
-const headerActionClassName =
-  "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
 
 export const Route = createFileRoute("/foods/edit")({
   validateSearch: (search) => ({
@@ -64,115 +64,23 @@ type ReviseFoodOutput =
       readonly previousFood: Food;
     };
 
-type EditFoodDialogEvent =
-  | {
-      readonly type: "open";
-      readonly food: Food;
-      readonly foodUsage: readonly MealFoodUsage[];
-    }
-  | {
-      readonly type: "close";
-    }
-  | {
-      readonly type: "submit";
-      readonly formData: FormData;
-    }
-  | {
-      readonly type: "submissionSucceeded";
-    }
-  | {
-      readonly type: "submissionFailed";
-    };
-
-type EditFoodDialogContext = {
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly selectedFood: Food | null;
-};
-
 type EditFoodsEvent =
   | FoodSearchSelectedEvent
+  | {
+      readonly type: "clearSelectedFood";
+    }
   | {
       readonly type: "reviseFood";
       readonly input: ReviseFoodInput;
     };
 
-const editFoodDialogClosedContext = {
-  foodUsage: [],
-  selectedFood: null,
-} satisfies EditFoodDialogContext;
-
-const editFoodDialogMachine = setup({
-  types: {
-    context: {} as EditFoodDialogContext,
-    events: {} as EditFoodDialogEvent,
-  },
-}).createMachine({
-  context: editFoodDialogClosedContext,
-  initial: "Closed",
-  on: {
-    close: {
-      target: ".Closed",
-      actions: assign(editFoodDialogClosedContext),
-    },
-    open: {
-      target: ".Open",
-      actions: assign(({ event }) => {
-        assertEvent(event, "open");
-
-        return {
-          foodUsage: event.foodUsage,
-          selectedFood: event.food,
-        };
-      }),
-    },
-  },
-  states: {
-    Closed: {},
-    Open: {
-      on: {
-        submit: {
-          target: "Submitting",
-          actions: sendParent(({ context, event }) => {
-            assertEvent(event, "submit");
-
-            if (context.selectedFood === null) {
-              throw new Error("Edit food dialog cannot submit without a food.");
-            }
-
-            return {
-              type: "reviseFood",
-              input: {
-                ...createFoodInputFromFormData({
-                  formData: event.formData,
-                }),
-                foodId: context.selectedFood.id,
-              },
-            } satisfies EditFoodsEvent;
-          }),
-        },
-      },
-    },
-    Submitting: {
-      on: {
-        submissionFailed: {
-          target: "Open",
-        },
-        submissionSucceeded: {
-          target: "Closed",
-          actions: assign(editFoodDialogClosedContext),
-        },
-      },
-    },
-  },
-});
-
 const editFoodsMachine = setup({
   types: {
     context: {} as {
-      readonly editFoodDialogActor: ActorRefFrom<typeof editFoodDialogMachine>;
       readonly foodUsage: readonly MealFoodUsage[];
       readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
       readonly invalidate: () => Promise<void>;
+      readonly selectedFood: Food | null;
     },
     events: {} as EditFoodsEvent,
     input: {} as {
@@ -182,7 +90,6 @@ const editFoodsMachine = setup({
     },
   },
   actors: {
-    editFoodDialog: editFoodDialogMachine,
     foodSearch: foodSearchMachine,
     reviseFood: fromPromise<
       ReviseFoodOutput,
@@ -215,9 +122,6 @@ const editFoodsMachine = setup({
   },
 }).createMachine({
   context: ({ input, spawn }) => ({
-    editFoodDialogActor: spawn("editFoodDialog", {
-      id: "editFoodDialog",
-    }),
     foodUsage: input.foodUsage,
     foodSearchActor: spawn("foodSearch", {
       id: "foodSearch",
@@ -226,23 +130,24 @@ const editFoodsMachine = setup({
       },
     }),
     invalidate: input.invalidate,
+    selectedFood: null,
   }),
   initial: "Idle",
   on: {
+    clearSelectedFood: {
+      actions: [
+        assign({
+          selectedFood: null,
+        }),
+        sendTo(({ context }) => context.foodSearchActor, {
+          type: "clearSelectedFood",
+        } satisfies FoodSearchEvent),
+      ],
+    },
     foodSearchSelected: {
-      actions: sendTo(
-        ({ context }) => context.editFoodDialogActor,
-        ({ context, event }) =>
-          event.food === null
-            ? {
-                type: "close",
-              }
-            : {
-                type: "open",
-                food: event.food,
-                foodUsage: context.foodUsage,
-              }
-      ),
+      actions: assign(({ event }) => ({
+        selectedFood: event.food,
+      })),
     },
   },
   states: {
@@ -267,14 +172,17 @@ const editFoodsMachine = setup({
         onDone: [
           {
             guard: ({ event }) => event.output === "foodNotFound",
-            target: "FoodNotFound",
+            target: "Idle",
             actions: [
               () => {
                 globalThis.alert("Could not find that food.");
               },
-              sendTo(({ context }) => context.editFoodDialogActor, {
-                type: "submissionSucceeded",
-              } satisfies EditFoodDialogEvent),
+              assign({
+                selectedFood: null,
+              }),
+              sendTo(({ context }) => context.foodSearchActor, {
+                type: "clearSelectedFood",
+              } satisfies FoodSearchEvent),
             ],
           },
           {
@@ -284,13 +192,16 @@ const editFoodsMachine = setup({
                 ({ context }) => context.foodSearchActor,
                 ({ context, event }) => {
                   const output = event.output;
-                  const currentFoods =
-                    context.foodSearchActor.getSnapshot().context.foods;
+                  const foodSearchSnapshot =
+                    context.foodSearchActor.getSnapshot();
+                  const currentFoods = foodSearchSnapshot.context.foods;
 
                   if (output === "foodNotFound") {
                     return {
-                      type: "changeFoods",
+                      type: "reset",
                       foods: currentFoods,
+                      query: foodSearchSnapshot.context.query,
+                      selectedFoodId: null,
                     } satisfies FoodSearchEvent;
                   }
 
@@ -311,27 +222,24 @@ const editFoodsMachine = setup({
                   });
 
                   return {
-                    type: "changeFoods",
+                    type: "reset",
                     foods,
+                    query: foodSearchSnapshot.context.query,
+                    selectedFoodId: null,
                   } satisfies FoodSearchEvent;
                 }
               ),
-              sendTo(({ context }) => context.editFoodDialogActor, {
-                type: "submissionSucceeded",
-              } satisfies EditFoodDialogEvent),
+              assign({
+                selectedFood: null,
+              }),
             ],
           },
         ],
         onError: {
           target: "Failure",
-          actions: [
-            () => {
-              globalThis.alert("Could not update the food.");
-            },
-            sendTo(({ context }) => context.editFoodDialogActor, {
-              type: "submissionFailed",
-            } satisfies EditFoodDialogEvent),
-          ],
+          actions: () => {
+            globalThis.alert("Could not update the food.");
+          },
         },
       },
     },
@@ -342,23 +250,14 @@ const editFoodsMachine = setup({
         },
       },
     },
-    FoodNotFound: {
-      on: {
-        reviseFood: {
-          target: "RevisingFood",
-        },
-      },
-    },
   },
 });
-
-type EditFoodDialogActorRef = ActorRefFrom<typeof editFoodDialogMachine>;
 
 function Component() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
   const router = useRouter();
-  const [snapshot] = useMachine(editFoodsMachine, {
+  const [snapshot, send] = useMachine(editFoodsMachine, {
     input: {
       foods: data.foods,
       foodUsage: data.foodUsage,
@@ -366,22 +265,37 @@ function Component() {
     },
   });
   const disabled = snapshot.matches("RevisingFood");
+  const { foodUsage, selectedFood } = snapshot.context;
+  const foodHasEntries =
+    selectedFood === null
+      ? false
+      : _findFoodUsage({
+          foodId: selectedFood.id,
+          foodUsage,
+        }) !== undefined;
+  const willCreateRevision =
+    selectedFood === null
+      ? false
+      : foodHasEntries || selectedFood.origin === "app-default";
+  const revisionMessage =
+    selectedFood === null
+      ? ""
+      : willCreateRevision
+        ? selectedFood.origin === "app-default"
+          ? "Saving creates your copy. The pre-installed food stays unchanged."
+          : "Saving creates a revised copy. Existing logs keep the original food."
+        : "Saving replaces this unused food.";
+  const submitLabel = willCreateRevision ? "Save revised copy" : "Save food";
 
   return (
     <main className="h-dvh overflow-hidden bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
-      <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)] bg-[#090909]">
-        <header className="bg-[#ff5a51] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/25">
-          <div className="grid h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-            <BackToDayLink dateKey={search.dateKey} />
-            <div className="min-w-0 text-center text-white">
-              <h1 className="truncate text-2xl font-black leading-tight">
-                Edit foods
-              </h1>
-            </div>
-            <span aria-hidden="true" className="size-12" />
-          </div>
-
-          <div className="mt-3">
+      <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] bg-[#090909]">
+        <AppHeader
+          leading={<BackToDayLink dateKey={search.dateKey} />}
+          shadow={true}
+          title={selectedFood === null ? "Edit foods" : "Edit food"}
+        >
+          {selectedFood === null ? (
             <FoodSearchField
               actor={snapshot.context.foodSearchActor}
               ariaControls="edit-food-results"
@@ -393,137 +307,86 @@ function Component() {
               placeholder="Search food or brand"
               showLabel={false}
             />
-          </div>
-        </header>
+          ) : null}
+        </AppHeader>
 
-        <FoodSearchResults
-          actor={snapshot.context.foodSearchActor}
-          emptyFoodsText="Create a food before editing it."
-          emptySearchText="No foods found."
-          getPrimaryLabel={(food) =>
-            `${formatFoodNutrientNumber({ value: food.energyKcalPer100g })} kcal`
-          }
-          getSecondaryLabel={(food) =>
-            _findFoodUsage({
-              foodId: food.id,
-              foodUsage: snapshot.context.foodUsage,
-            }) === undefined
-              ? "Unused"
-              : "Used"
-          }
-          id="edit-food-results"
-          shape="square"
-        />
+        {selectedFood === null ? (
+          <FoodSearchResults
+            actor={snapshot.context.foodSearchActor}
+            emptyFoodsText="Create a food before editing it."
+            emptySearchText="No foods found."
+            getPrimaryLabel={(food) =>
+              `${formatFoodNutrientNumber({ value: food.energyKcalPer100g })} kcal`
+            }
+            getSecondaryLabel={(food) =>
+              _findFoodUsage({
+                foodId: food.id,
+                foodUsage,
+              }) === undefined
+                ? "Unused"
+                : "Used"
+            }
+            id="edit-food-results"
+            shape="square"
+          />
+        ) : (
+          <form
+            className="contents"
+            key={selectedFood.id}
+            onSubmit={(event) => {
+              event.preventDefault();
+              send({
+                type: "reviseFood",
+                input: {
+                  ...createFoodInputFromFormData({
+                    formData: new FormData(event.currentTarget),
+                  }),
+                  foodId: selectedFood.id,
+                },
+              });
+            }}
+          >
+            <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+              <div className="grid gap-4">
+                <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+                  {revisionMessage}
+                </p>
+                <FoodFormFields
+                  autoFocusName={false}
+                  disabled={disabled}
+                  initialFood={selectedFood}
+                />
+              </div>
+            </div>
 
-        <EditFoodDialog actor={snapshot.context.editFoodDialogActor} />
+            <footer className="grid gap-2 border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+              <button
+                aria-label={submitLabel}
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
+                disabled={disabled}
+                type="submit"
+              >
+                <Save aria-hidden="true" size={16} strokeWidth={3} />
+                {submitLabel}
+              </button>
+              <button
+                className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border border-[#343438] bg-[#202024] px-3 text-sm font-black text-[#dedee3] transition-colors hover:bg-[#29292d] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={disabled}
+                onClick={() => {
+                  send({
+                    type: "clearSelectedFood",
+                  });
+                }}
+                type="button"
+              >
+                <Pencil aria-hidden="true" size={16} strokeWidth={3} />
+                Change food
+              </button>
+            </footer>
+          </form>
+        )}
       </section>
     </main>
-  );
-}
-
-function EditFoodDialog({ actor }: { readonly actor: EditFoodDialogActorRef }) {
-  const snapshot = useSelector(actor, (state) => state);
-  const { foodUsage, selectedFood } = snapshot.context;
-
-  if (selectedFood === null) {
-    return null;
-  }
-
-  const disabled = snapshot.matches("Submitting");
-  const foodHasEntries =
-    _findFoodUsage({
-      foodId: selectedFood.id,
-      foodUsage,
-    }) !== undefined;
-  const willCreateRevision =
-    foodHasEntries || selectedFood.origin === "app-default";
-  const revisionMessage = willCreateRevision
-    ? selectedFood.origin === "app-default"
-      ? "Saving creates your copy. The pre-installed food stays unchanged."
-      : "Saving creates a revised copy. Existing logs keep the original food."
-    : "Saving replaces this unused food.";
-  const submitLabel = willCreateRevision ? "Save revised copy" : "Save food";
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end bg-black/75 px-3 py-3 backdrop-blur-sm sm:items-center sm:justify-center sm:py-4"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          actor.send({ type: "close" });
-        }
-      }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          actor.send({ type: "close" });
-        }
-      }}
-    >
-      <section
-        aria-labelledby="edit-food-dialog-title"
-        aria-modal="true"
-        className="mx-auto grid max-h-[calc(100dvh-0.75rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)]"
-        role="dialog"
-      >
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
-              {foodHasEntries ? "Used food" : "Unused food"}
-            </p>
-            <h2
-              className="truncate text-xl font-black leading-tight text-[#efeff2]"
-              id="edit-food-dialog-title"
-            >
-              Edit food
-            </h2>
-          </div>
-          <button
-            aria-label="Close edit food"
-            className="inline-flex size-10 items-center justify-center rounded-md border border-[#343438] bg-[#202024] text-[#dedee3] transition-colors hover:bg-[#29292d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/45"
-            onClick={() => {
-              actor.send({ type: "close" });
-            }}
-            type="button"
-          >
-            <X aria-hidden="true" size={19} strokeWidth={3} />
-          </button>
-        </header>
-
-        <form
-          className="contents"
-          key={selectedFood.id}
-          onSubmit={(event) => {
-            event.preventDefault();
-            actor.send({
-              type: "submit",
-              formData: new FormData(event.currentTarget),
-            });
-          }}
-        >
-          <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
-            <p className="mb-4 rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
-              {revisionMessage}
-            </p>
-            <FoodFormFields
-              autoFocusName={false}
-              disabled={disabled}
-              initialFood={selectedFood}
-            />
-          </div>
-
-          <footer className="grid border-t border-[#29292d] bg-[#161618] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <button
-              aria-label={submitLabel}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[#ff5a51] bg-[#ff5a51] px-5 text-sm font-black text-white transition-colors hover:bg-[#ff6a61] disabled:cursor-not-allowed disabled:border-[#74322f] disabled:bg-[#74322f] disabled:opacity-60"
-              disabled={disabled}
-              type="submit"
-            >
-              <Save aria-hidden="true" size={16} strokeWidth={3} />
-              {submitLabel}
-            </button>
-          </footer>
-        </form>
-      </section>
-    </div>
   );
 }
 
@@ -532,7 +395,7 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
     return (
       <Link
         aria-label="Back to today"
-        className={headerActionClassName}
+        className={appHeaderActionClassName}
         title="Back to today"
         to="/"
       >
@@ -544,7 +407,7 @@ function BackToDayLink({ dateKey }: { readonly dateKey: string | undefined }) {
   return (
     <Link
       aria-label="Back to day"
-      className={headerActionClassName}
+      className={appHeaderActionClassName}
       params={{ dateKey }}
       title={`Back to ${dateKey}`}
       to="/days/$dateKey"

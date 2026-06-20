@@ -19,6 +19,7 @@ import {
   calculateMealPlanEnergyKcalFromFormData,
   createMealPlanInputFromFormData,
   dateKeyFromDate,
+  mealPlanFormHasChangesFromPlan,
 } from "../utils.ts";
 
 export const submitMealPlanMachine = setup({
@@ -27,6 +28,7 @@ export const submitMealPlanMachine = setup({
       readonly backupTransferActor: ActorRefFrom<typeof backupTransferMachine>;
       readonly dateKey: string | undefined;
       readonly energyKcal: number;
+      readonly latestFormData: FormData | null;
       readonly navigate: UseNavigateResult<string>;
     },
     events: {} as
@@ -91,6 +93,7 @@ export const submitMealPlanMachine = setup({
     }),
     dateKey: input.dateKey,
     energyKcal: 0,
+    latestFormData: null,
     navigate: input.navigate,
   }),
   initial: "Idle",
@@ -109,14 +112,15 @@ export const submitMealPlanMachine = setup({
       },
     },
     changeTargets: {
-      actions: assign({
-        energyKcal: ({ event }) => {
-          assertEvent(event, "changeTargets");
+      actions: assign(({ event }) => {
+        assertEvent(event, "changeTargets");
 
-          return calculateMealPlanEnergyKcalFromFormData({
+        return {
+          energyKcal: calculateMealPlanEnergyKcalFromFormData({
             formData: event.formData,
-          });
-        },
+          }),
+          latestFormData: event.formData,
+        };
       }),
     },
   },
@@ -169,6 +173,8 @@ export const reviseMealPlanMachine = setup({
     context: {} as {
       readonly dateKey: string | undefined;
       readonly energyKcal: number;
+      readonly initialPlan: Plan;
+      readonly latestFormData: FormData | null;
       readonly navigate: UseNavigateResult<string>;
       readonly planId: Plan["id"];
     },
@@ -184,6 +190,7 @@ export const reviseMealPlanMachine = setup({
     input: {} as {
       readonly dateKey: string | undefined;
       readonly energyKcal: number;
+      readonly initialPlan: Plan;
       readonly navigate: UseNavigateResult<string>;
       readonly planId: Plan["id"];
     },
@@ -233,24 +240,37 @@ export const reviseMealPlanMachine = setup({
       )
     ),
   },
+  guards: {
+    hasPlanChanges: ({ context, event }) => {
+      assertEvent(event, "submit");
+
+      return mealPlanFormHasChangesFromPlan({
+        formData: event.formData,
+        plan: context.initialPlan,
+      });
+    },
+  },
 }).createMachine({
   context: ({ input }) => ({
     dateKey: input.dateKey,
     energyKcal: input.energyKcal,
+    initialPlan: input.initialPlan,
+    latestFormData: null,
     navigate: input.navigate,
     planId: input.planId,
   }),
   initial: "Idle",
   on: {
     changeTargets: {
-      actions: assign({
-        energyKcal: ({ event }) => {
-          assertEvent(event, "changeTargets");
+      actions: assign(({ event }) => {
+        assertEvent(event, "changeTargets");
 
-          return calculateMealPlanEnergyKcalFromFormData({
+        return {
+          energyKcal: calculateMealPlanEnergyKcalFromFormData({
             formData: event.formData,
-          });
-        },
+          }),
+          latestFormData: event.formData,
+        };
       }),
     },
   },
@@ -258,6 +278,7 @@ export const reviseMealPlanMachine = setup({
     Idle: {
       on: {
         submit: {
+          guard: "hasPlanChanges",
           target: "Submitting",
         },
       },
@@ -291,6 +312,7 @@ export const reviseMealPlanMachine = setup({
     Failure: {
       on: {
         submit: {
+          guard: "hasPlanChanges",
           target: "Submitting",
         },
       },

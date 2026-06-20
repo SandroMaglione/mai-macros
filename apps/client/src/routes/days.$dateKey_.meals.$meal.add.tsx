@@ -31,6 +31,10 @@ import {
   FoodSearchResults,
 } from "../lib/components/food-search.tsx";
 import {
+  AppHeader,
+  appHeaderActionClassName,
+} from "../lib/components/app-header.tsx";
+import {
   foodLowercaseNameOrder,
   foodSearchMachine,
   foodUserOriginOrder,
@@ -88,8 +92,6 @@ const mealLabels = {
   lunch: "Lunch",
 } satisfies Record<Meal, string>;
 
-const headerActionClassName =
-  "inline-flex size-12 items-center justify-center rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
 const darkFieldClassName =
   "min-h-10 w-full border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
 const darkFieldLabelClassName =
@@ -394,41 +396,35 @@ function Component() {
   return (
     <main className="h-dvh overflow-hidden bg-[#090909] text-[#e9e9ed] selection:bg-[#7a2c2a] selection:text-white scheme-dark">
       <section className="mx-auto grid h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] bg-[#090909]">
-        <header className="bg-[#ff5a51] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/25">
-          <div className="grid h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+        <AppHeader
+          leading={
             <Link
               aria-label={`Back to ${dateKey}`}
-              className={headerActionClassName}
+              className={appHeaderActionClassName}
               params={{ dateKey }}
               title={`Back to ${dateKey}`}
               to="/days/$dateKey"
             >
               <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
             </Link>
-            <div className="min-w-0 text-center text-white">
-              <h1 className="truncate text-2xl font-black leading-tight">
-                {mealLabel}
-              </h1>
-            </div>
-            <span aria-hidden="true" className="size-12" />
-          </div>
-
+          }
+          shadow={true}
+          title={mealLabel}
+        >
           {selectedFood === null ? (
-            <div className="mt-3">
-              <FoodSearchField
-                actor={foodSearchActor}
-                ariaControls="add-food-page-results"
-                ariaLabel={`${mealLabel} food search`}
-                autoFocus={true}
-                disabled={disabled}
-                id="add-food-page-search"
-                label="Search"
-                placeholder="Search food or brand"
-                showLabel={false}
-              />
-            </div>
+            <FoodSearchField
+              actor={foodSearchActor}
+              ariaControls="add-food-page-results"
+              ariaLabel={`${mealLabel} food search`}
+              autoFocus={true}
+              disabled={disabled}
+              id="add-food-page-search"
+              label="Search"
+              placeholder="Search food or brand"
+              showLabel={false}
+            />
           ) : null}
-        </header>
+        </AppHeader>
 
         {selectedFood === null ? (
           <FoodSearchResults
