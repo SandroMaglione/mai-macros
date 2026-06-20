@@ -1,0 +1,24 @@
+{
+  "name": "@mai/sqlite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./react-native": "./src/layers/react-native.ts",
+    "./test": "./src/layers/test.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@effect/sql-sqlite-react-native": "4.0.0-beta.78",
+    "@mai/nutrition": "workspace:^",
+    "effect": "4.0.0-beta.84"
+  },
+  "devDependencies": {
+    "@effect/sql-sqlite-node": "4.0.0-beta.78",
+    "vitest": "^4.0.8"
+  }
+}

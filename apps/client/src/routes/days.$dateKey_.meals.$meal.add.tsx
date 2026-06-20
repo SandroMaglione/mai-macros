@@ -42,13 +42,13 @@ import {
   type FoodSearchSelectedEvent,
 } from "../lib/machines/food-search-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { DailyLogs } from "../lib/services/daily-logs.ts";
-import { Foods } from "../lib/services/foods.ts";
+import { DailyLogs } from "@mai/nutrition/services/daily-logs";
+import { Foods } from "@mai/nutrition/services/foods";
 import {
   MealEntries,
   type CreateMealEntryInput,
   type MealFoodUsage,
-} from "../lib/services/meal-entries.ts";
+} from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 type AddMealFoodPageData = {

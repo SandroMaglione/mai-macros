@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { MealPlanForm } from "../lib/components/meal-plan-form.tsx";
 import { reviseMealPlanMachine } from "../lib/machines/meal-plan-form-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { MealPlans } from "../lib/services/meal-plans.ts";
+import { MealPlans } from "@mai/nutrition/services/meal-plans";
 
 export const Route = createFileRoute("/plans/$planId/edit")({
   validateSearch: (search) => ({

@@ -3,6 +3,7 @@ import { afterEach, assert, describe, it } from "vitest";
 
 import {
   ActiveMealPlanSelection,
+  BackupIntegrityError,
   Backups,
   CurrentDatabaseVersion,
   DailyLog,
@@ -12,11 +13,11 @@ import {
   Food,
   MaiBackupJson,
   MaiBackupV1,
-  MaiDatabase,
   Meal,
   MealEntry,
   Plan,
-} from "../src/index.ts";
+} from "@mai/nutrition";
+import { IndexedDbNutritionStoreLayer, MaiDatabase } from "../src/index.ts";
 import {
   deleteFakeDatabase,
   layerFakeIndexedDb,
@@ -26,7 +27,11 @@ const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
 );
 
-const backupsLayer = Backups.layer.pipe(Layer.provideMerge(databaseLayer));
+const backupsLayer = Backups.layer.pipe(
+  Layer.provideMerge(
+    IndexedDbNutritionStoreLayer.pipe(Layer.provideMerge(databaseLayer))
+  )
+);
 
 const BackupJsonString = Schema.fromJsonString(Schema.Unknown);
 
@@ -445,8 +450,8 @@ describe("Backups", () => {
 
     const result = await Effect.runPromise(program);
 
-    if (result.failure._tag !== "BackupIntegrityError") {
-      assert.fail(`Expected BackupIntegrityError, got ${result.failure._tag}`);
+    if (!(result.failure instanceof BackupIntegrityError)) {
+      assert.fail("Expected BackupIntegrityError");
     }
 
     assert.equal(result.failure.reason, "meal-entry-food-missing");

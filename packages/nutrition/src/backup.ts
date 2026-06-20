@@ -12,12 +12,9 @@ import {
   NonNegativeNumber,
   Plan,
 } from "./domain.ts";
-import {
-  CurrentDatabaseVersion,
-  DatabaseName,
-  MaiDatabase,
-} from "./database.ts";
 import { DefaultFoods } from "./default-foods.ts";
+import { CurrentDatabaseVersion, DatabaseName } from "./metadata.ts";
+import { NutritionStore } from "./store.ts";
 
 export const MaiBackupFormat = Schema.Literal("mai.backup");
 
@@ -454,67 +451,11 @@ export const validateBackup = Effect.fn("validateBackup")(function* ({
 
 export class Backups extends Context.Service<Backups>()("Backups", {
   make: Effect.gen(function* () {
-    const api = yield* MaiDatabase.getQueryBuilder;
-
-    const tables = [
-      "activeMealPlanSelections",
-      "dailyLogs",
-      "foods",
-      "mealEntries",
-      "plans",
-    ] as const;
-
-    const readStores = Effect.gen(function* () {
-      return yield* api.withTransaction({
-        mode: "readonly",
-        tables,
-      })(
-        Effect.gen(function* () {
-          const activeMealPlanSelections = yield* api
-            .from("activeMealPlanSelections")
-            .select();
-          const dailyLogs = yield* api.from("dailyLogs").select();
-          const foods = yield* api.from("foods").select();
-          const mealEntries = yield* api.from("mealEntries").select();
-          const plans = yield* api.from("plans").select();
-
-          return {
-            activeMealPlanSelections,
-            dailyLogs,
-            foods,
-            mealEntries,
-            plans,
-          };
-        })
-      );
-    });
-
-    const replaceStores = ({ stores }: { readonly stores: MaiBackupStores }) =>
-      api.withTransaction({
-        mode: "readwrite",
-        tables,
-      })(
-        Effect.gen(function* () {
-          yield* api.from("activeMealPlanSelections").clear;
-          yield* api.from("dailyLogs").clear;
-          yield* api.from("foods").clear;
-          yield* api.from("mealEntries").clear;
-          yield* api.from("plans").clear;
-          yield* api
-            .from("activeMealPlanSelections")
-            .upsertAll(Array.from(stores.activeMealPlanSelections));
-          yield* api.from("dailyLogs").upsertAll(Array.from(stores.dailyLogs));
-          yield* api.from("foods").upsertAll(Array.from(stores.foods));
-          yield* api
-            .from("mealEntries")
-            .upsertAll(Array.from(stores.mealEntries));
-          yield* api.from("plans").upsertAll(Array.from(stores.plans));
-        })
-      );
+    const store = yield* NutritionStore;
 
     return {
       exportToJson: Effect.fn("Backups.exportToJson")(function* () {
-        const stores = new MaiBackupStores(yield* readStores);
+        const stores = new MaiBackupStores(yield* store.readStores);
         const encodedStores =
           yield* Schema.encodeEffect(MaiBackupStores)(stores);
         const rawBackup = {
@@ -563,7 +504,7 @@ export class Backups extends Context.Service<Backups>()("Backups", {
         const backup = yield* migrateBackupToCurrent({ backup: importBackup });
 
         yield* validateBackup({ backup });
-        yield* replaceStores({ stores: backup.stores });
+        yield* store.replaceStores(backup.stores);
 
         return new ImportedBackup({
           backup,

@@ -55,15 +55,18 @@ import {
   type FoodSearchEvent,
   type FoodSearchSelectedEvent,
 } from "../machines/food-search-machine.ts";
-import type { ChangeDayPlanInput, OpenedDay } from "../services/daily-logs.ts";
-import { DailyLogs } from "../services/daily-logs.ts";
+import { DailyLogs } from "@mai/nutrition/services/daily-logs";
+import type {
+  ChangeDayPlanInput,
+  OpenedDay,
+} from "@mai/nutrition/services/daily-logs";
 import type {
   CreateMealEntryInput,
   DeleteMealEntryInput,
   MealFoodUsage,
   ReviseMealEntryInput,
-} from "../services/meal-entries.ts";
-import { MealEntries } from "../services/meal-entries.ts";
+} from "@mai/nutrition/services/meal-entries";
+import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate, shiftDateKey } from "../utils.ts";
 
 export type DailyLogViewData = {

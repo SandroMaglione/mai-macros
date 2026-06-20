@@ -7,9 +7,9 @@ import {
   type DailyLogViewData,
 } from "../lib/components/daily-log-view.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { DailyLogs } from "../lib/services/daily-logs.ts";
-import { Foods } from "../lib/services/foods.ts";
-import { MealEntries } from "../lib/services/meal-entries.ts";
+import { DailyLogs } from "@mai/nutrition/services/daily-logs";
+import { Foods } from "@mai/nutrition/services/foods";
+import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 type RouteLoaderResult = Data.TaggedEnum<{

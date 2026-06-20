@@ -1,11 +1,11 @@
-import type { ActiveMealPlanSelectionId, Plan } from "@mai/nutrition";
 import {
   ActiveMealPlanSelection,
   DailyLog,
   DateKey,
-  MaiDatabase,
   PlanId,
-} from "@mai/nutrition";
+  type ActiveMealPlanSelectionId,
+  type Plan,
+} from "../domain.ts";
 import {
   Array,
   Context,
@@ -17,6 +17,7 @@ import {
   Schema,
 } from "effect";
 
+import { NutritionStore } from "../store.ts";
 import { PlanNotFound } from "./meal-plans.ts";
 
 const _OpenDayInput = Schema.Struct({
@@ -50,7 +51,7 @@ export class NoMealPlans extends Data.TaggedError("NoMealPlans")<{
 
 export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
   make: Effect.gen(function* () {
-    const api = yield* MaiDatabase.getQueryBuilder;
+    const store = yield* NutritionStore;
 
     return {
       open: Effect.fn("DailyLogs.open")(function* ({
@@ -59,7 +60,7 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
         readonly input: OpenDayInput;
       }) {
         const decodedInput = yield* Schema.decodeEffect(_OpenDayInput)(input);
-        const plans = yield* api.from("plans").select();
+        const plans = yield* store.listPlans;
 
         if (!Array.isReadonlyArrayNonEmpty(plans)) {
           return yield* new NoMealPlans({
@@ -67,10 +68,9 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
           });
         }
 
-        const dailyLogs = yield* api
-          .from("dailyLogs")
-          .select()
-          .equals(decodedInput.dateKey);
+        const dailyLogs = yield* store.findDailyLogByDateKey(
+          decodedInput.dateKey
+        );
         const existingDailyLog = Array.head(dailyLogs);
 
         const openedDay = existingDailyLog.pipe(
@@ -93,10 +93,9 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
           return openedDay;
         }
 
-        const selections = yield* api
-          .from("activeMealPlanSelections")
-          .select()
-          .equals("active-meal-plan" satisfies ActiveMealPlanSelectionId);
+        const selections = yield* store.findActiveMealPlanSelectionById(
+          "active-meal-plan" satisfies ActiveMealPlanSelectionId
+        );
 
         const activePlan = yield* Array.head(selections).pipe(
           Option.flatMap((selection) =>
@@ -141,10 +140,8 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
                   })
                 );
 
-                yield* api
-                  .from("activeMealPlanSelections")
-                  .upsert(activeSelection);
-                yield* api.from("dailyLogs").upsert(dailyLog);
+                yield* store.upsertActiveMealPlanSelection(activeSelection);
+                yield* store.upsertDailyLog(dailyLog);
 
                 return new OpenedDay({
                   dailyLog,
@@ -166,10 +163,7 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
         const decodedInput =
           yield* Schema.decodeEffect(_ChangeDayPlanInput)(input);
 
-        const plans = yield* api
-          .from("plans")
-          .select()
-          .equals(decodedInput.planId);
+        const plans = yield* store.findPlanById(decodedInput.planId);
 
         return yield* Array.head(plans).pipe(
           Option.match({
@@ -179,11 +173,10 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
               }),
             onSome: (selectedPlan) =>
               Effect.gen(function* () {
-                const allPlans = yield* api.from("plans").select();
-                const dailyLogs = yield* api
-                  .from("dailyLogs")
-                  .select()
-                  .equals(decodedInput.dateKey);
+                const allPlans = yield* store.listPlans;
+                const dailyLogs = yield* store.findDailyLogByDateKey(
+                  decodedInput.dateKey
+                );
                 const existingDailyLog = Array.head(dailyLogs);
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
                 const dailyLog = yield* existingDailyLog.pipe(
@@ -208,7 +201,7 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
                   })
                 );
 
-                yield* api.from("dailyLogs").upsert(dailyLog);
+                yield* store.upsertDailyLog(dailyLog);
 
                 return new ChangedDayPlan({
                   dailyLog,

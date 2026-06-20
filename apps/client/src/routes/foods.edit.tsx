@@ -29,9 +29,9 @@ import {
   type FoodSearchSelectedEvent,
 } from "../lib/machines/food-search-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { Foods, type ReviseFoodInput } from "../lib/services/foods.ts";
-import type { MealFoodUsage } from "../lib/services/meal-entries.ts";
-import { MealEntries } from "../lib/services/meal-entries.ts";
+import { Foods, type ReviseFoodInput } from "@mai/nutrition/services/foods";
+import { MealEntries } from "@mai/nutrition/services/meal-entries";
+import type { MealFoodUsage } from "@mai/nutrition/services/meal-entries";
 import { createFoodInputFromFormData } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/foods/edit")({

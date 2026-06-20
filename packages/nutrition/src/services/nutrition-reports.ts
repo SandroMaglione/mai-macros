@@ -1,20 +1,4 @@
 import {
-  calculateEntriesNutrientTotals,
-  calculateEntryNutrients,
-  DateKey,
-  evaluatePlanNutrientTargets,
-  isInsideExpectedPlanRange,
-  MaiDatabase,
-  type ActiveMealPlanSelectionId,
-  type DailyLog,
-  type Food,
-  type MealEntry,
-  type NutrientCoverage,
-  type NutrientTargetStatus,
-  type NutrientTotals,
-  type Plan,
-} from "@mai/nutrition";
-import {
   Array,
   Context,
   Data,
@@ -26,7 +10,24 @@ import {
   Schema,
 } from "effect";
 
-import { dateKeysInRange } from "../utils.ts";
+import {
+  type ActiveMealPlanSelectionId,
+  DateKey,
+  type DailyLog,
+  type Food,
+  type MealEntry,
+  type Plan,
+} from "../domain.ts";
+import {
+  calculateEntriesNutrientTotals,
+  type NutrientCoverage,
+  type NutrientTargetStatus,
+  type NutrientTotals,
+  evaluatePlanNutrientTargets,
+  isInsideExpectedPlanRange,
+} from "../reporting.ts";
+import { NutritionStore } from "../store.ts";
+import { calculateEntryNutrients, dateKeysInRange } from "../utils.ts";
 
 const _GetNutritionReportRangeInput = Schema.Struct({
   endDateKey: DateKey,
@@ -76,7 +77,7 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
   "NutritionReports",
   {
     make: Effect.gen(function* () {
-      const api = yield* MaiDatabase.getQueryBuilder;
+      const store = yield* NutritionStore;
 
       return {
         getRange: Effect.fn("NutritionReports.getRange")(function* ({
@@ -103,8 +104,8 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
             (dateKey) => Schema.decodeEffect(DateKey)(dateKey)
           );
           const dateKeySet = HashSet.fromIterable(dateKeys);
-          const foods = yield* api.from("foods").select();
-          const plans = yield* api.from("plans").select();
+          const foods = yield* store.listFoods;
+          const plans = yield* store.listPlans;
 
           if (!Array.isReadonlyArrayNonEmpty(plans)) {
             return yield* new NoNutritionReportPlans();
@@ -116,12 +117,11 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
           const plansById = HashMap.fromIterable(
             plans.map((plan): readonly [Plan["id"], Plan] => [plan.id, plan])
           );
-          const dailyLogs = yield* api.from("dailyLogs").select();
-          const mealEntries = yield* api.from("mealEntries").select();
-          const selections = yield* api
-            .from("activeMealPlanSelections")
-            .select()
-            .equals("active-meal-plan" satisfies ActiveMealPlanSelectionId);
+          const dailyLogs = yield* store.listDailyLogs;
+          const mealEntries = yield* store.listMealEntries;
+          const selections = yield* store.findActiveMealPlanSelectionById(
+            "active-meal-plan" satisfies ActiveMealPlanSelectionId
+          );
 
           const activePlan = yield* Array.head(selections).pipe(
             Option.flatMap((selection) =>

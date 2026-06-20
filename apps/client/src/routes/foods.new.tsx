@@ -13,7 +13,7 @@ import {
   type FoodFormSubmitEvent,
 } from "../lib/components/food-form.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { Foods, type CreateFoodInput } from "../lib/services/foods.ts";
+import { Foods, type CreateFoodInput } from "@mai/nutrition/services/foods";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/foods/new")({

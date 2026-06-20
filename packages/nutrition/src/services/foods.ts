@@ -1,4 +1,3 @@
-import { Food, FoodId, MaiDatabase } from "@mai/nutrition";
 import {
   Array,
   Context,
@@ -10,6 +9,9 @@ import {
   Option,
   Schema,
 } from "effect";
+
+import { Food, FoodId } from "../domain.ts";
+import { NutritionStore } from "../store.ts";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isFinite(),
@@ -61,12 +63,12 @@ export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
 
 export class Foods extends Context.Service<Foods>()("Foods", {
   make: Effect.gen(function* () {
-    const api = yield* MaiDatabase.getQueryBuilder;
+    const store = yield* NutritionStore;
     const crypto = yield* Crypto.Crypto;
 
     return {
       list: Effect.fn("Foods.list")(function* () {
-        return yield* api.from("foods").select();
+        return yield* store.listFoods;
       }),
 
       get: Effect.fn("Foods.get")(function* ({
@@ -75,10 +77,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
         readonly input: GetFoodInput;
       }) {
         const decodedInput = yield* Schema.decodeEffect(_GetFoodInput)(input);
-        const foods = yield* api
-          .from("foods")
-          .select()
-          .equals(decodedInput.foodId);
+        const foods = yield* store.findFoodById(decodedInput.foodId);
 
         return yield* Array.head(foods).pipe(
           Option.match({
@@ -113,7 +112,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           updatedAt: now,
         });
 
-        yield* api.from("foods").insert(food);
+        yield* store.insertFood(food);
 
         return new CreatedFood({
           food,
@@ -127,10 +126,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
       }) {
         const decodedInput =
           yield* Schema.decodeEffect(_ReviseFoodInput)(input);
-        const previousFoods = yield* api
-          .from("foods")
-          .select()
-          .equals(decodedInput.foodId);
+        const previousFoods = yield* store.findFoodById(decodedInput.foodId);
 
         return yield* Array.head(previousFoods).pipe(
           Option.match({
@@ -141,10 +137,9 @@ export class Foods extends Context.Service<Foods>()("Foods", {
             onSome: (previousFood) =>
               Effect.gen(function* () {
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
-                const mealEntryCount = yield* api
-                  .from("mealEntries")
-                  .count("byFood")
-                  .equals(previousFood.id);
+                const mealEntryCount = yield* store.countMealEntriesByFood(
+                  previousFood.id
+                );
                 const hasMealEntries = mealEntryCount > 0;
                 const encodedPreviousFood =
                   yield* Schema.encodeEffect(Food)(previousFood);
@@ -178,9 +173,9 @@ export class Foods extends Context.Service<Foods>()("Foods", {
                 });
 
                 if (shouldCreateRevision) {
-                  yield* api.from("foods").insert(food);
+                  yield* store.insertFood(food);
                 } else {
-                  yield* api.from("foods").upsert(food);
+                  yield* store.upsertFood(food);
                 }
 
                 return new RevisedFood({

@@ -9,7 +9,7 @@ import {
 import { Array } from "effect";
 
 import { getNutritionReportInsights } from "../nutrition-report-insights.ts";
-import type { NutritionReportRange } from "../services/nutrition-reports.ts";
+import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
 import {
   formatReportNutrient,
   formatReportSignedNumber,

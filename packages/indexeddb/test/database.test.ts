@@ -18,7 +18,6 @@ import {
   FoodCategory,
   FoodId,
   FoodOrigin,
-  MaiDatabase,
   Meal,
   MealEntry,
   MealEntryId,
@@ -27,7 +26,8 @@ import {
   Plan,
   PlanId,
   QuantityGrams,
-} from "../src/index.ts";
+} from "@mai/nutrition";
+import { MaiDatabase } from "../src/index.ts";
 import {
   deleteFakeDatabase,
   layerFakeIndexedDb,

@@ -1,4 +1,12 @@
-import type { EntryNutrients, Food, Plan, QuantityGrams } from "./domain.ts";
+import { Array, DateTime, Iterable, Option } from "effect";
+
+import type {
+  DateKey,
+  EntryNutrients,
+  Food,
+  Plan,
+  QuantityGrams,
+} from "./domain.ts";
 
 export const calculateMacronutrientEnergyKcal = ({
   proteinGrams,
@@ -49,3 +57,39 @@ export const calculateEntryNutrients = ({
       : { saltGrams: food.saltGramsPer100g * multiplier }),
   };
 };
+
+export const dateKeysInRange = ({
+  endDateKey,
+  startDateKey,
+}: {
+  readonly endDateKey: DateKey | string;
+  readonly startDateKey: DateKey | string;
+}) => {
+  const startDate = _localDateTimeFromDateKey({ dateKey: startDateKey });
+  const endDate = _localDateTimeFromDateKey({ dateKey: endDateKey });
+
+  if (DateTime.isGreaterThan(startDate, endDate)) {
+    return [];
+  }
+
+  const dates = Iterable.takeWhile(
+    Iterable.makeBy<DateTime.DateTime>((days) =>
+      DateTime.add(startDate, { days })
+    ),
+    (date) => DateTime.isLessThanOrEqualTo(date, endDate)
+  );
+
+  return Array.fromIterable(
+    Iterable.map(dates, (date) => DateTime.formatIsoDate(date))
+  );
+};
+
+const _localDateTimeFromDateKey = ({
+  dateKey,
+}: {
+  readonly dateKey: DateKey | string;
+}) =>
+  DateTime.makeZoned(dateKey, {
+    adjustForTimeZone: true,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }).pipe(Option.getOrThrow);

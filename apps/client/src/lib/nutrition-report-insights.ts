@@ -7,7 +7,7 @@ import {
   type NutrientTotals,
 } from "@mai/nutrition";
 
-import type { NutritionReportRange } from "./services/nutrition-reports.ts";
+import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
 
 export type NutritionReportInsightKind =
   | "diet-concentration"

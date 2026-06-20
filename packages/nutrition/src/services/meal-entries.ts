@@ -1,11 +1,4 @@
-import {
-  DateKey,
-  FoodId,
-  MaiDatabase,
-  Meal,
-  MealEntry,
-  MealEntryId,
-} from "@mai/nutrition";
+import { DateKey, FoodId, Meal, MealEntry, MealEntryId } from "../domain.ts";
 import {
   Array,
   Context,
@@ -17,6 +10,8 @@ import {
   Option,
   Schema,
 } from "effect";
+
+import { NutritionStore } from "../store.ts";
 
 const _FormPositiveNumber = Schema.NumberFromString.check(
   Schema.isFinite(),
@@ -90,7 +85,7 @@ export class RevisedMealEntry extends Data.TaggedClass("RevisedMealEntry")<{
 
 export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
   make: Effect.gen(function* () {
-    const api = yield* MaiDatabase.getQueryBuilder;
+    const store = yield* NutritionStore;
     const crypto = yield* Crypto.Crypto;
 
     return {
@@ -103,14 +98,11 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
           _ListMealEntriesForDayInput
         )(input);
 
-        return yield* api
-          .from("mealEntries")
-          .select("byDate")
-          .equals(decodedInput.dateKey);
+        return yield* store.findMealEntriesByDate(decodedInput.dateKey);
       }),
 
       listFoodUsage: Effect.fn("MealEntries.listFoodUsage")(function* () {
-        const mealEntries = yield* api.from("mealEntries").select();
+        const mealEntries = yield* store.listMealEntries;
 
         return mealEntries.reduce<readonly MealFoodUsage[]>(
           (foodUsage, mealEntry) => {
@@ -189,10 +181,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
           _CreateMealEntryInputSchema
         )(input);
 
-        const foods = yield* api
-          .from("foods")
-          .select()
-          .equals(decodedInput.foodId);
+        const foods = yield* store.findFoodById(decodedInput.foodId);
 
         return yield* Array.head(foods).pipe(
           Option.match({
@@ -213,7 +202,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   updatedAt: now,
                 });
 
-                yield* api.from("mealEntries").insert(mealEntry);
+                yield* store.insertMealEntry(mealEntry);
 
                 return new CreatedMealEntry({
                   mealEntry,
@@ -231,10 +220,9 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
         const decodedInput = yield* Schema.decodeEffect(_ReviseMealEntryInput)(
           input
         );
-        const mealEntries = yield* api
-          .from("mealEntries")
-          .select()
-          .equals(decodedInput.mealEntryId);
+        const mealEntries = yield* store.findMealEntryById(
+          decodedInput.mealEntryId
+        );
 
         return yield* Array.head(mealEntries).pipe(
           Option.match({
@@ -252,7 +240,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
                 });
 
-                yield* api.from("mealEntries").upsert(mealEntry);
+                yield* store.upsertMealEntry(mealEntry);
 
                 return new RevisedMealEntry({
                   mealEntry,
@@ -271,10 +259,9 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
         const decodedInput = yield* Schema.decodeEffect(_DeleteMealEntryInput)(
           input
         );
-        const mealEntries = yield* api
-          .from("mealEntries")
-          .select()
-          .equals(decodedInput.mealEntryId);
+        const mealEntries = yield* store.findMealEntryById(
+          decodedInput.mealEntryId
+        );
 
         return yield* Array.head(mealEntries).pipe(
           Option.match({
@@ -284,10 +271,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               }),
             onSome: (mealEntry) =>
               Effect.gen(function* () {
-                yield* api
-                  .from("mealEntries")
-                  .delete()
-                  .equals(decodedInput.mealEntryId);
+                yield* store.deleteMealEntry(decodedInput.mealEntryId);
 
                 return new DeletedMealEntry({
                   mealEntry,

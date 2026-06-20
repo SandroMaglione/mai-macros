@@ -4,7 +4,7 @@ import { DateTime, Effect, Schema } from "effect";
 
 import { RangeSummary } from "../lib/components/range-summary.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { NutritionReports } from "../lib/services/nutrition-reports.ts";
+import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
 import { dateKeyFromDate, shiftDateKey } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/insights/")({

@@ -14,7 +14,7 @@ import {
   type BackupTransferImportedEvent,
 } from "./backup-transfer-machine.ts";
 import { RuntimeClient } from "../runtime-client.ts";
-import { MealPlans } from "../services/meal-plans.ts";
+import { MealPlans } from "@mai/nutrition/services/meal-plans";
 import {
   calculateMealPlanEnergyKcalFromFormData,
   createMealPlanInputFromFormData,

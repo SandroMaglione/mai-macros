@@ -17,7 +17,7 @@ import {
   type SnapshotFrom,
 } from "xstate";
 
-import type { CreateFoodInput } from "../services/foods.ts";
+import type { CreateFoodInput } from "@mai/nutrition/services/foods";
 import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import {
   FoodNutrientOverview,

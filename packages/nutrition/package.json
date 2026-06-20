@@ -4,18 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./services/daily-logs": "./src/services/daily-logs.ts",
+    "./services/foods": "./src/services/foods.ts",
+    "./services/meal-entries": "./src/services/meal-entries.ts",
+    "./services/meal-plans": "./src/services/meal-plans.ts",
+    "./services/nutrition-reports": "./src/services/nutrition-reports.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@effect/platform-browser": "4.0.0-beta.84",
     "effect": "4.0.0-beta.84"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.5",
     "vitest": "^4.0.8"
   }
 }

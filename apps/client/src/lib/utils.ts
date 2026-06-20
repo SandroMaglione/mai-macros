@@ -6,9 +6,9 @@ import {
 } from "@mai/nutrition";
 import { Array, DateTime, Iterable, Option, Schema } from "effect";
 
-import type { CreateMealEntryInput } from "./services/meal-entries.ts";
-import type { CreateFoodInput } from "./services/foods.ts";
-import type { CreateMealPlanInput } from "./services/meal-plans.ts";
+import type { CreateFoodInput } from "@mai/nutrition/services/foods";
+import type { CreateMealEntryInput } from "@mai/nutrition/services/meal-entries";
+import type { CreateMealPlanInput } from "@mai/nutrition/services/meal-plans";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isFinite(),

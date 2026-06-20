@@ -1,12 +1,4 @@
 import {
-  ActiveMealPlanSelection,
-  DailyLog,
-  DateKey,
-  MaiDatabase,
-  Plan,
-  PlanId,
-} from "@mai/nutrition";
-import {
   Array,
   Context,
   Crypto,
@@ -17,6 +9,15 @@ import {
   Option,
   Schema,
 } from "effect";
+
+import {
+  ActiveMealPlanSelection,
+  DailyLog,
+  DateKey,
+  Plan,
+  PlanId,
+} from "../domain.ts";
+import { NutritionStore } from "../store.ts";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isFinite(),
@@ -86,12 +87,12 @@ export class PlanNameAlreadyExists extends Data.TaggedError(
 
 export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
   make: Effect.gen(function* () {
-    const api = yield* MaiDatabase.getQueryBuilder;
+    const store = yield* NutritionStore;
     const crypto = yield* Crypto.Crypto;
 
     return {
       list: Effect.fn("MealPlans.list")(function* () {
-        return yield* api.from("plans").select();
+        return yield* store.listPlans;
       }),
 
       get: Effect.fn("MealPlans.get")(function* ({
@@ -101,10 +102,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
       }) {
         const decodedInput =
           yield* Schema.decodeEffect(_GetMealPlanInput)(input);
-        const plans = yield* api
-          .from("plans")
-          .select()
-          .equals(decodedInput.planId);
+        const plans = yield* store.findPlanById(decodedInput.planId);
 
         return yield* Array.head(plans).pipe(
           Option.match({
@@ -124,10 +122,9 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
       }) {
         const decodedInput =
           yield* Schema.decodeEffect(_CreateMealPlanInput)(input);
-        const existingPlansWithName = yield* api
-          .from("plans")
-          .select("byName")
-          .equals(decodedInput.name);
+        const existingPlansWithName = yield* store.findPlansByName(
+          decodedInput.name
+        );
 
         if (Array.isReadonlyArrayNonEmpty(existingPlansWithName)) {
           return yield* new PlanNameAlreadyExists({
@@ -165,8 +162,8 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
           updatedAt: now,
         });
 
-        yield* api.from("plans").insert(plan);
-        yield* api.from("activeMealPlanSelections").upsert(selection);
+        yield* store.insertPlan(plan);
+        yield* store.upsertActiveMealPlanSelection(selection);
 
         return new CreatedMealPlan({
           plan,
@@ -180,10 +177,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
       }) {
         const decodedInput =
           yield* Schema.decodeEffect(_ReviseMealPlanInput)(input);
-        const previousPlans = yield* api
-          .from("plans")
-          .select()
-          .equals(decodedInput.planId);
+        const previousPlans = yield* store.findPlanById(decodedInput.planId);
 
         return yield* Array.head(previousPlans).pipe(
           Option.match({
@@ -194,25 +188,19 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
             onSome: (previousPlan) =>
               Effect.gen(function* () {
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
-                const dailyLogsForPlan = yield* api
-                  .from("dailyLogs")
-                  .select("byPlan")
-                  .equals(previousPlan.id);
+                const dailyLogsForPlan = yield* store.findDailyLogsByPlan(
+                  previousPlan.id
+                );
                 const mealEntryCounts = yield* Effect.forEach(
                   dailyLogsForPlan,
-                  (dailyLog) =>
-                    api
-                      .from("mealEntries")
-                      .count("byDate")
-                      .equals(dailyLog.dateKey)
+                  (dailyLog) => store.countMealEntriesByDate(dailyLog.dateKey)
                 );
                 const hasRecordedMeals = mealEntryCounts.some(
                   (count) => count > 0
                 );
-                const existingPlansWithName = yield* api
-                  .from("plans")
-                  .select("byName")
-                  .equals(decodedInput.name);
+                const existingPlansWithName = yield* store.findPlansByName(
+                  decodedInput.name
+                );
                 const hasNameConflict = existingPlansWithName.some((plan) =>
                   hasRecordedMeals ? true : plan.id !== previousPlan.id
                 );
@@ -266,10 +254,9 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                   planId: plan.id,
                   updatedAt: now,
                 });
-                const dailyLogs = yield* api
-                  .from("dailyLogs")
-                  .select()
-                  .equals(decodedInput.dateKey);
+                const dailyLogs = yield* store.findDailyLogByDateKey(
+                  decodedInput.dateKey
+                );
                 const existingDailyLog = Array.head(dailyLogs);
                 const dailyLog = yield* existingDailyLog.pipe(
                   Option.match({
@@ -294,13 +281,13 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                 );
 
                 if (hasRecordedMeals) {
-                  yield* api.from("plans").insert(plan);
+                  yield* store.insertPlan(plan);
                 } else {
-                  yield* api.from("plans").upsert(plan);
+                  yield* store.upsertPlans([plan]);
                 }
 
-                yield* api.from("activeMealPlanSelections").upsert(selection);
-                yield* api.from("dailyLogs").upsert(dailyLog);
+                yield* store.upsertActiveMealPlanSelection(selection);
+                yield* store.upsertDailyLog(dailyLog);
 
                 return new RevisedMealPlan({
                   dailyLog,
@@ -321,10 +308,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
           _SetActiveMealPlanInput
         )(input);
 
-        const plans = yield* api
-          .from("plans")
-          .select()
-          .equals(decodedInput.planId);
+        const plans = yield* store.findPlanById(decodedInput.planId);
 
         return yield* Array.head(plans).pipe(
           Option.match({
@@ -342,7 +326,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                   updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
                 });
 
-                yield* api.from("activeMealPlanSelections").upsert(selection);
+                yield* store.upsertActiveMealPlanSelection(selection);
 
                 return new SetActiveMealPlan({
                   plan,
