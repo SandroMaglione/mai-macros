@@ -114,19 +114,6 @@ export function RollingPlanBalance({
     divisor: dayCount,
     totals: targetTotals,
   });
-  const recurringMisses = reportPrimaryNutrients
-    .map((nutrientName) => ({
-      misses: report.days.filter((day) =>
-        day.targetStatuses.some(
-          (status) =>
-            status.nutrientName === nutrientName && status.status !== "inside"
-        )
-      ).length,
-      nutrientName,
-    }))
-    .filter((summary) => summary.misses > 0)
-    .sort((left, right) => right.misses - left.misses);
-
   return (
     <NutritionInsightsLayout activeRoute="week" title="7-day balance">
       <section className="grid gap-4 border-b border-[#27272b] pb-6">
@@ -204,33 +191,6 @@ export function RollingPlanBalance({
             </article>
           ))}
         </div>
-      </section>
-
-      <section className="grid gap-4 border-t border-[#27272b] pt-7">
-        <SectionTitle title="Recurring misses" />
-        {!Array.isReadonlyArrayNonEmpty(recurringMisses) ? (
-          <p className="rounded-md border border-[#1f5f38] bg-[#102417] px-3 py-2 text-sm font-black text-[#74d99f]">
-            Core targets held all week.
-          </p>
-        ) : (
-          <div className="grid gap-2.5">
-            {recurringMisses.map((summary) => (
-              <div
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[#2d2d31] bg-[#161618] px-3 py-2"
-                key={summary.nutrientName}
-              >
-                <span
-                  className={`truncate text-sm font-black ${reportNutrientToneClassNames[summary.nutrientName]}`}
-                >
-                  {reportNutrientLabels[summary.nutrientName]}
-                </span>
-                <span className="text-sm font-black text-[#dedee3]">
-                  {summary.misses}/{dayCount} days
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
     </NutritionInsightsLayout>
   );

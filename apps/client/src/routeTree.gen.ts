@@ -14,7 +14,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as InsightsIndexRouteImport } from './routes/insights.index'
 import { Route as PlansNewRouteImport } from './routes/plans.new'
 import { Route as InsightsWeekRouteImport } from './routes/insights.week'
-import { Route as InsightsCalendarRouteImport } from './routes/insights.calendar'
 import { Route as FoodsNewRouteImport } from './routes/foods.new'
 import { Route as FoodsEditRouteImport } from './routes/foods.edit'
 import { Route as DaysDateKeyRouteImport } from './routes/days.$dateKey'
@@ -45,11 +44,6 @@ const InsightsWeekRoute = InsightsWeekRouteImport.update({
   path: '/week',
   getParentRoute: () => InsightsRoute,
 } as any)
-const InsightsCalendarRoute = InsightsCalendarRouteImport.update({
-  id: '/calendar',
-  path: '/calendar',
-  getParentRoute: () => InsightsRoute,
-} as any)
 const FoodsNewRoute = FoodsNewRouteImport.update({
   id: '/foods/new',
   path: '/foods/new',
@@ -77,7 +71,6 @@ export interface FileRoutesByFullPath {
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
-  '/insights/calendar': typeof InsightsCalendarRoute
   '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
   '/insights/': typeof InsightsIndexRoute
@@ -88,7 +81,6 @@ export interface FileRoutesByTo {
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
-  '/insights/calendar': typeof InsightsCalendarRoute
   '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
   '/insights': typeof InsightsIndexRoute
@@ -101,7 +93,6 @@ export interface FileRoutesById {
   '/days/$dateKey': typeof DaysDateKeyRoute
   '/foods/edit': typeof FoodsEditRoute
   '/foods/new': typeof FoodsNewRoute
-  '/insights/calendar': typeof InsightsCalendarRoute
   '/insights/week': typeof InsightsWeekRoute
   '/plans/new': typeof PlansNewRoute
   '/insights/': typeof InsightsIndexRoute
@@ -115,7 +106,6 @@ export interface FileRouteTypes {
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
-    | '/insights/calendar'
     | '/insights/week'
     | '/plans/new'
     | '/insights/'
@@ -126,7 +116,6 @@ export interface FileRouteTypes {
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
-    | '/insights/calendar'
     | '/insights/week'
     | '/plans/new'
     | '/insights'
@@ -138,7 +127,6 @@ export interface FileRouteTypes {
     | '/days/$dateKey'
     | '/foods/edit'
     | '/foods/new'
-    | '/insights/calendar'
     | '/insights/week'
     | '/plans/new'
     | '/insights/'
@@ -192,13 +180,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InsightsWeekRouteImport
       parentRoute: typeof InsightsRoute
     }
-    '/insights/calendar': {
-      id: '/insights/calendar'
-      path: '/calendar'
-      fullPath: '/insights/calendar'
-      preLoaderRoute: typeof InsightsCalendarRouteImport
-      parentRoute: typeof InsightsRoute
-    }
     '/foods/new': {
       id: '/foods/new'
       path: '/foods/new'
@@ -231,13 +212,11 @@ declare module '@tanstack/react-router' {
 }
 
 interface InsightsRouteChildren {
-  InsightsCalendarRoute: typeof InsightsCalendarRoute
   InsightsWeekRoute: typeof InsightsWeekRoute
   InsightsIndexRoute: typeof InsightsIndexRoute
 }
 
 const InsightsRouteChildren: InsightsRouteChildren = {
-  InsightsCalendarRoute: InsightsCalendarRoute,
   InsightsWeekRoute: InsightsWeekRoute,
   InsightsIndexRoute: InsightsIndexRoute,
 }

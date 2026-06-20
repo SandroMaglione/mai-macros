@@ -55,7 +55,7 @@ import type {
   ReviseMealEntryInput,
 } from "../services/meal-entries.ts";
 import { MealEntries } from "../services/meal-entries.ts";
-import { shiftDateKey } from "../utils.ts";
+import { dateKeyFromDate, shiftDateKey } from "../utils.ts";
 
 export type DailyLogViewData = {
   readonly day: OpenedDay;
@@ -130,7 +130,7 @@ const headerActionClassName =
 const appHeaderActionClassName =
   "inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-md border border-[#3d332a] bg-[#211914] px-2 text-sm font-black text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
 const bottomActionClassName =
-  "inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-1 text-[0.68rem] font-black leading-tight text-[#dfd2bd] no-underline transition-colors hover:border-[#5a3b26] hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
+  "inline-flex h-12 w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border border-transparent px-1 text-center text-[0.68rem] font-black leading-tight text-[#dfd2bd] no-underline transition-colors hover:border-[#5a3b26] hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45 [&>svg]:shrink-0";
 const sheetIconActionClassName =
   "inline-flex size-10 items-center justify-center rounded-md border border-[#3d332a] bg-[#211914] text-[#dfd2bd] no-underline transition-colors hover:bg-[#2a1d14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
 const darkFieldClassName =
@@ -388,12 +388,17 @@ const addMealFoodDialogMachine = setup({
                     foodId: selectedFood.id,
                     foodUsage: context.foodUsage,
                   });
-            const quantityGrams =
+            const previousQuantityGrams = context.quantityGrams.trim();
+            const recentQuantityGrams =
               foodUsage === undefined
                 ? ""
                 : _formatQuantityGramsInputValue({
                     quantityGrams: foodUsage.latestQuantityGrams,
                   });
+            const quantityGrams =
+              previousQuantityGrams === ""
+                ? recentQuantityGrams
+                : context.quantityGrams;
 
             return {
               canSubmit: selectedFood !== null && quantityGrams.trim() !== "",
@@ -413,7 +418,8 @@ const addMealFoodDialogMachine = setup({
                     foodId: firstMatchingFood.id,
                     foodUsage: context.foodUsage,
                   });
-            const quantityGrams =
+            const previousQuantityGrams = context.quantityGrams.trim();
+            const recentQuantityGrams =
               firstMatchingFood === undefined
                 ? context.quantityGrams
                 : foodUsage === undefined
@@ -421,6 +427,10 @@ const addMealFoodDialogMachine = setup({
                   : _formatQuantityGramsInputValue({
                       quantityGrams: foodUsage.latestQuantityGrams,
                     });
+            const quantityGrams =
+              firstMatchingFood === undefined || previousQuantityGrams !== ""
+                ? context.quantityGrams
+                : recentQuantityGrams;
 
             return {
               canSubmit: selectedFood !== null && quantityGrams.trim() !== "",
@@ -432,7 +442,6 @@ const addMealFoodDialogMachine = setup({
         clearSelectedFood: {
           actions: assign({
             canSubmit: false,
-            quantityGrams: "",
             selectedFood: null,
           }),
         },
@@ -904,19 +913,44 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
     foods,
     mealEntries,
   });
-  const displayedDate = new Date(`${day.dailyLog.dateKey}T00:00:00`);
-  const displayedDateWeekday = new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-  }).format(displayedDate);
-  const displayedDateDay = new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    month: "short",
-  }).format(displayedDate);
+  const todayDateKey = dateKeyFromDate({ date: new Date() });
+  const displayedDateRelativeLabel =
+    day.dailyLog.dateKey === todayDateKey
+      ? "Today"
+      : day.dailyLog.dateKey ===
+          shiftDateKey({
+            dateKey: todayDateKey,
+            days: -1,
+          })
+        ? "Yesterday"
+        : day.dailyLog.dateKey ===
+            shiftDateKey({
+              dateKey: todayDateKey,
+              days: 1,
+            })
+          ? "Tomorrow"
+          : null;
+  const displayedDateValue = new Date(`${day.dailyLog.dateKey}T00:00:00`);
+  const displayedDate =
+    displayedDateRelativeLabel === null
+      ? {
+          eyebrow: new Intl.DateTimeFormat("en-US", {
+            weekday: "short",
+          }).format(displayedDateValue),
+          label: new Intl.DateTimeFormat("en-US", {
+            day: "numeric",
+            month: "short",
+          }).format(displayedDateValue),
+        }
+      : {
+          eyebrow: null,
+          label: displayedDateRelativeLabel,
+        };
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[520px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
-        <header className="bg-[#090909] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
+        <header className="bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.45rem)]">
           <nav
             className="grid h-14 grid-cols-[1fr_auto_1fr] items-center bg-[#ff5a51] px-4"
             aria-label="Day navigation"
@@ -932,15 +966,17 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
             </Link>
             <Link
               aria-label="Go to today"
-              className="grid rounded-full px-6 py-1.5 text-center text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              className="grid min-w-0 rounded-full px-6 py-1.5 text-center text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
               title={`Go to today from ${day.dailyLog.dateKey}`}
               to="/"
             >
-              <span className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
-                {displayedDateWeekday}
-              </span>
+              {displayedDate.eyebrow === null ? null : (
+                <span className="text-xs font-black uppercase leading-none tracking-normal text-white/75">
+                  {displayedDate.eyebrow}
+                </span>
+              )}
               <span className="text-xl font-black leading-tight">
-                {displayedDateDay}
+                {displayedDate.label}
               </span>
             </Link>
             <Link
@@ -1020,7 +1056,7 @@ function BottomActionNav({
           <Activity aria-hidden="true" size={18} strokeWidth={3} />
           Stats
         </Link>
-        <details>
+        <details className="min-w-0">
           <summary
             aria-label="Work with plans"
             className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
@@ -1034,7 +1070,7 @@ function BottomActionNav({
             onChangePlan={onChangePlan}
           />
         </details>
-        <details>
+        <details className="min-w-0">
           <summary
             aria-label="Work with foods"
             className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
@@ -1044,7 +1080,7 @@ function BottomActionNav({
           </summary>
           <FoodsActionSheet dateKey={day.dailyLog.dateKey} />
         </details>
-        <details>
+        <details className="min-w-0">
           <summary
             aria-label="Work with backup"
             className={`${bottomActionClassName} list-none [&::-webkit-details-marker]:hidden`}
@@ -1328,7 +1364,6 @@ function AddMealFoodDialog({
     mealOptions.find((mealOption) => mealOption.value === meal)?.label ??
     "Meal";
   const isEditingMealEntry = mode === "revise" && mealEntry !== null;
-  const hasSelectedFood = selectedFood !== null;
   const selectedFoodUsage =
     selectedFood === null
       ? undefined
@@ -1395,10 +1430,23 @@ function AddMealFoodDialog({
           value: foodHistory.latestQuantityGrams,
         })} g`;
   };
+  const quantityField = (
+    <QuantityGramsField
+      disabled={disabled || (isEditingMealEntry && selectedFood === null)}
+      mealLabel={mealLabel}
+      quantityGrams={quantityGrams}
+      onChange={(nextQuantityGrams) => {
+        actor.send({
+          type: "changeQuantity",
+          quantityGrams: nextQuantityGrams,
+        });
+      }}
+    />
+  );
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end bg-black/75 px-3 py-3 backdrop-blur-sm sm:items-center sm:justify-center sm:py-4"
+      className="fixed inset-0 z-50 flex items-end bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-4"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           actor.send({ type: "close" });
@@ -1413,7 +1461,7 @@ function AddMealFoodDialog({
       <section
         aria-labelledby="add-food-dialog-title"
         aria-modal="true"
-        className="mx-auto grid max-h-[calc(100dvh-0.75rem)] min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)]"
+        className="mx-auto grid max-h-dvh min-h-0 w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-t-lg border-x border-t border-[#343438] bg-[#161618] text-[#e9e9ed] shadow-2xl shadow-black/60 sm:max-h-[calc(100dvh-2rem)] sm:rounded-lg sm:border"
         role="dialog"
       >
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#29292d] px-3 py-2.5">
@@ -1452,29 +1500,33 @@ function AddMealFoodDialog({
         >
           {isEditingMealEntry ? (
             <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
-              {selectedFood === null ? (
-                <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
-                  Could not find this food.
-                </p>
-              ) : (
-                <div className="grid gap-4">
-                  <FoodNutrientOverview
-                    brand={selectedFood.brand}
-                    metadata={<FoodMetadataTags food={selectedFood} />}
-                    name={selectedFood.name}
-                    nutrients={selectedFoodNutrients}
-                    secondaryLabel={selectedFoodQuantityLabel}
-                  />
-                  <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
-                    Saving updates this logged amount. The food definition stays
-                    unchanged.
+              <div className="grid gap-4">
+                {quantityField}
+                {selectedFood === null ? (
+                  <p className="rounded-md bg-[#111113] px-3 py-2 text-sm font-bold text-[#aaaab1]">
+                    Could not find this food.
                   </p>
-                </div>
-              )}
+                ) : (
+                  <>
+                    <FoodNutrientOverview
+                      brand={selectedFood.brand}
+                      metadata={<FoodMetadataTags food={selectedFood} />}
+                      name={selectedFood.name}
+                      nutrients={selectedFoodNutrients}
+                      secondaryLabel={selectedFoodQuantityLabel}
+                    />
+                    <p className="rounded-md border border-[#343438] bg-[#111113] p-3 text-sm font-bold leading-snug text-[#aaaab1]">
+                      Saving updates this logged amount. The food definition
+                      stays unchanged.
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
           ) : selectedFood !== null ? (
             <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
               <div className="grid gap-4">
+                {quantityField}
                 <FoodNutrientOverview
                   brand={selectedFood.brand}
                   metadata={<FoodMetadataTags food={selectedFood} />}
@@ -1498,7 +1550,10 @@ function AddMealFoodDialog({
               </div>
             </div>
           ) : (
-            <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+            <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
+              <div className="border-b border-[#29292d] bg-[#161618] p-4">
+                {quantityField}
+              </div>
               <div className="border-b border-[#29292d] bg-[#161618] p-4">
                 <FoodSearchField
                   ariaControls="add-food-results"
@@ -1542,34 +1597,6 @@ function AddMealFoodDialog({
             </div>
           )}
 
-          <div className="grid gap-4 border-t border-[#29292d] bg-[#161618] p-4">
-            <label className={darkFieldLabelClassName}>
-              Grams
-              <span className="relative">
-                <input
-                  aria-label={`${mealLabel} quantity in grams`}
-                  className={`${darkFieldClassName} pr-9`}
-                  disabled={disabled || !hasSelectedFood}
-                  min="0.1"
-                  onChange={(event) => {
-                    actor.send({
-                      type: "changeQuantity",
-                      quantityGrams: event.currentTarget.value,
-                    });
-                  }}
-                  placeholder="150"
-                  required
-                  step="0.01"
-                  type="number"
-                  value={quantityGrams}
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
-                  g
-                </span>
-              </span>
-            </label>
-          </div>
-
           <footer
             className={
               isEditingMealEntry
@@ -1605,6 +1632,43 @@ function AddMealFoodDialog({
         </form>
       </section>
     </div>
+  );
+}
+
+function QuantityGramsField({
+  disabled,
+  mealLabel,
+  onChange,
+  quantityGrams,
+}: {
+  readonly disabled: boolean;
+  readonly mealLabel: string;
+  readonly onChange: (quantityGrams: string) => void;
+  readonly quantityGrams: string;
+}) {
+  return (
+    <label className={darkFieldLabelClassName}>
+      Grams
+      <span className="relative">
+        <input
+          aria-label={`${mealLabel} quantity in grams`}
+          className={`${darkFieldClassName} pr-9`}
+          disabled={disabled}
+          min="0.1"
+          onChange={(event) => {
+            onChange(event.currentTarget.value);
+          }}
+          placeholder="150"
+          required
+          step="0.01"
+          type="number"
+          value={quantityGrams}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#aaaab1]">
+          g
+        </span>
+      </span>
+    </label>
   );
 }
 

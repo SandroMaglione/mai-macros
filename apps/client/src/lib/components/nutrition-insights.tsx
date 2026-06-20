@@ -4,7 +4,7 @@ import type {
   NutrientTargetStatus,
 } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
-import { Activity, CalendarDays, ChevronLeft, ListChecks } from "lucide-react";
+import { Activity, ChevronLeft, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
 
 export const reportPrimaryNutrients = [
@@ -12,13 +12,6 @@ export const reportPrimaryNutrients = [
   "proteinGrams",
   "carbsGrams",
   "fatGrams",
-] as const satisfies readonly NutrientName[];
-
-export const reportSecondaryNutrients = [
-  "fiberGrams",
-  "sugarGrams",
-  "saturatedFatGrams",
-  "saltGrams",
 ] as const satisfies readonly NutrientName[];
 
 export const reportTrackedNutrients = [
@@ -65,18 +58,7 @@ export const reportNutrientToneClassNames = {
   sugarGrams: "text-[#ff7aa9]",
 } satisfies Record<NutrientName, string>;
 
-export const reportNutrientDotClassNames = {
-  carbsGrams: "bg-[#ff4f8b]",
-  energyKcal: "bg-[#4c7dff]",
-  fatGrams: "bg-[#ffbd35]",
-  fiberGrams: "bg-[#74d99f]",
-  proteinGrams: "bg-[#79a0ff]",
-  saltGrams: "bg-[#aaaab1]",
-  saturatedFatGrams: "bg-[#ffbd35]",
-  sugarGrams: "bg-[#ff7aa9]",
-} satisfies Record<NutrientName, string>;
-
-type InsightsRoute = "calendar" | "range" | "week";
+type InsightsRoute = "range" | "week";
 
 const navLinkClassName =
   "inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1 text-[0.68rem] font-black leading-tight no-underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffbd35]/45";
@@ -97,20 +79,20 @@ export function NutritionInsightsLayout({
   return (
     <main className="min-h-screen bg-[#090909] text-[#e9e9ed]">
       <section className="mx-auto min-h-screen w-full max-w-[720px] bg-[#090909] pb-[calc(env(safe-area-inset-bottom)+5.75rem)]">
-        <header className="bg-[#ff5a51] px-4 pt-[calc(env(safe-area-inset-top)+0.55rem)] pb-2 shadow-lg shadow-black/20">
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+        <header className="bg-[#ff5a51] pt-[calc(env(safe-area-inset-top)+0.45rem)] shadow-lg shadow-black/20">
+          <div className="grid h-14 grid-cols-[1fr_auto_1fr] items-center px-4">
             <Link
               aria-label="Back to today"
-              className="inline-flex size-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white no-underline transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              className="inline-flex size-12 items-center justify-center justify-self-start rounded-full text-white no-underline transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              title="Back to today"
               to="/"
             >
-              <ChevronLeft aria-hidden="true" size={18} strokeWidth={3} />
+              <ChevronLeft aria-hidden="true" size={31} strokeWidth={2.6} />
             </Link>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-black leading-tight text-white">
-                {title}
-              </h1>
-            </div>
+            <h1 className="min-w-0 truncate text-center text-xl font-black leading-tight text-white">
+              {title}
+            </h1>
+            <span aria-hidden="true" />
           </div>
         </header>
 
@@ -119,7 +101,7 @@ export function NutritionInsightsLayout({
           aria-label="Nutrition insight views"
           className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
         >
-          <div className="mx-auto grid w-full max-w-[520px] grid-cols-3 gap-1.5 rounded-lg border border-[#3d332a] bg-[#15120f]/95 p-1.5 shadow-[0_-12px_32px_rgb(0_0_0/0.36)] backdrop-blur">
+          <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-1.5 rounded-lg border border-[#3d332a] bg-[#15120f]/95 p-1.5 shadow-[0_-12px_32px_rgb(0_0_0/0.36)] backdrop-blur">
             <Link
               className={`${navLinkClassName} ${
                 activeRoute === "range"
@@ -140,17 +122,6 @@ export function NutritionInsightsLayout({
               to="/insights/week"
             >
               <Activity aria-hidden="true" size={18} strokeWidth={3} />7 days
-            </Link>
-            <Link
-              className={`${navLinkClassName} ${
-                activeRoute === "calendar"
-                  ? activeNavLinkClassName
-                  : inactiveNavLinkClassName
-              }`}
-              to="/insights/calendar"
-            >
-              <CalendarDays aria-hidden="true" size={18} strokeWidth={3} />
-              Month
             </Link>
           </div>
         </nav>
