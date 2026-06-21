@@ -237,7 +237,6 @@ export default function NewFoodScreen() {
     <FoodForm
       action="create"
       actor={snapshot.context.foodFormActor}
-      dateKey={dateKey}
       disabled={isSubmitting}
       errorMessage={snapshot.context.notice ?? undefined}
       hasFailed={snapshot.matches("Failure")}

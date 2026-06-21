@@ -639,6 +639,7 @@ export function DailyLogView({
             />
           }
           shadow
+          style={styles.dayHeader}
           trailing={
             <HeaderIconButton
               accessibilityLabel="Next day"
@@ -1274,13 +1275,24 @@ function MealEntryRow({
             : _formatMacroValue({ value: nutrients.energyKcal })}
         </Text>
         <Text numberOfLines={1} style={styles.entryMacros}>
-          {nutrients === undefined
-            ? "C - P - F -"
-            : `C ${_formatMacroValue({
-                value: nutrients.carbsGrams,
-              })} P ${_formatMacroValue({
-                value: nutrients.proteinGrams,
-              })} F ${_formatMacroValue({ value: nutrients.fatGrams })}`}
+          {nutrients === undefined ? (
+            "C: - P: - F: -"
+          ) : (
+            <>
+              <Text style={styles.entryMacroLabel}>C: </Text>
+              <Text style={styles.entryCarbs}>
+                {_formatMacroValue({ value: nutrients.carbsGrams })}
+              </Text>
+              <Text style={styles.entryMacroLabel}> P: </Text>
+              <Text style={styles.entryProtein}>
+                {_formatMacroValue({ value: nutrients.proteinGrams })}
+              </Text>
+              <Text style={styles.entryMacroLabel}> F: </Text>
+              <Text style={styles.entryFat}>
+                {_formatMacroValue({ value: nutrients.fatGrams })}
+              </Text>
+            </>
+          )}
         </Text>
       </View>
     </Pressable>
@@ -1392,6 +1404,7 @@ function PlansSheet({
           icon={Pencil}
           label="Edit plan"
           onPress={() => {
+            onClose();
             router.push({
               pathname: "/plans/[planId]/edit",
               params: {
@@ -1405,6 +1418,7 @@ function PlansSheet({
           icon={Plus}
           label="New plan"
           onPress={() => {
+            onClose();
             router.push({
               pathname: "/plans/new",
               params: {
@@ -1434,6 +1448,7 @@ function FoodsSheet({
           icon={Plus}
           label="Create food"
           onPress={() => {
+            onClose();
             router.push({
               pathname: "/foods/new",
               params: {
@@ -1446,6 +1461,7 @@ function FoodsSheet({
           icon={Pencil}
           label="Edit foods"
           onPress={() => {
+            onClose();
             router.push({
               pathname: "/foods/edit",
               params: {
@@ -1473,6 +1489,7 @@ function BackupSheet({
           icon={Download}
           label="Open backup"
           onPress={() => {
+            onClose();
             router.push("/backup" as RelativePathString);
           }}
         />
@@ -1827,13 +1844,16 @@ const styles = StyleSheet.create({
   headerPressed: {
     opacity: 0.82,
   },
+  dayHeader: {
+    marginBottom: 0,
+  },
   dailyProgress: {
     gap: spacing.md,
     marginHorizontal: -spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: "#222226",
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
     backgroundColor: color.sheet,
   },
@@ -1990,7 +2010,7 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.sm,
   },
   entryNumbers: {
-    maxWidth: 132,
+    maxWidth: 188,
     alignItems: "flex-end",
     gap: spacing.xs,
   },
@@ -2005,6 +2025,18 @@ const styles = StyleSheet.create({
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
+  },
+  entryMacroLabel: {
+    color: color.textMuted,
+  },
+  entryCarbs: {
+    color: color.nutritionCarbs,
+  },
+  entryProtein: {
+    color: color.nutritionEnergy,
+  },
+  entryFat: {
+    color: color.nutritionFat,
   },
   mealTotalColumns: {
     flexDirection: "row",
@@ -2039,9 +2071,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     alignItems: "center",
-    gap: 2,
+    gap: spacing.xs,
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   mealNutrientValue: {
     fontSize: type.size.sm,
@@ -2054,7 +2086,7 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.xs,
   },
   addFoodButton: {
-    minHeight: 48,
+    minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2062,6 +2094,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: color.sheetBorder,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   addFoodIcon: {
     marginTop: 1,

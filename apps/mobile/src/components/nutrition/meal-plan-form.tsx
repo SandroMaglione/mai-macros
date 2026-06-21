@@ -152,7 +152,6 @@ const mealPlanFormMachine = setup({
 export function MealPlanForm({
   action,
   canNavigateBack = true,
-  dateKey,
   errorMessage,
   initialPlan,
   isSubmitting,
@@ -161,7 +160,6 @@ export function MealPlanForm({
 }: {
   readonly action: MealPlanFormAction;
   readonly canNavigateBack?: boolean;
-  readonly dateKey: string | undefined;
   readonly errorMessage?: string;
   readonly initialPlan: Plan | null;
   readonly isSubmitting: boolean;
@@ -197,7 +195,6 @@ export function MealPlanForm({
             />
           ) : undefined
         }
-        eyebrow={dateKey === undefined ? "Today" : dateKey}
         title={title}
       />
 

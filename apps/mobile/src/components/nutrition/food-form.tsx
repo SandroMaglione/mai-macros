@@ -9,7 +9,6 @@ import {
   SectionCard,
   TextArea,
 } from "@/components/ui";
-import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, type } from "@/theme/tokens";
 import type {
   FoodFormActorRef,
@@ -27,7 +26,11 @@ import { Array as EffectArray } from "effect";
 import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 
-import { FoodNutrientOverview } from "./food-nutrient-overview";
+import {
+  FoodNutrientOverview,
+  formatFoodNutrientNumber,
+  type FoodNutrientOverviewNutrients,
+} from "./food-nutrient-overview";
 
 export { foodFormMachine, type FoodFormSubmitEvent } from "@mai/machines/foods";
 
@@ -114,7 +117,6 @@ const nutrientFields: readonly FoodNutrientField[] = [
 
 export function FoodForm({
   action,
-  dateKey,
   disabled,
   errorMessage,
   hasFailed,
@@ -123,7 +125,6 @@ export function FoodForm({
 }: {
   readonly action: FoodFormAction;
   readonly actor: FoodFormActorRef;
-  readonly dateKey: string | undefined;
   readonly disabled: boolean;
   readonly errorMessage?: string;
   readonly hasFailed: boolean;
@@ -154,7 +155,6 @@ export function FoodForm({
             variant="ghost"
           />
         }
-        eyebrow={dateKey === undefined ? "Today" : dateKey}
         title={title}
       />
 
@@ -172,6 +172,8 @@ export function FoodForm({
         ) : null}
 
         <FoodFormFields actor={actor} disabled={disabled} values={formValues} />
+
+        <FoodFormOverview values={formValues} />
 
         <FoodNumberWarnings warnings={numberWarnings} />
 
@@ -370,75 +372,17 @@ function FoodQuickInputFeedback({
 }: {
   readonly parseResult: FoodQuickInputParseResult;
 }) {
-  return (
-    <View style={styles.feedback}>
-      <FoodQuickInputPreview parseResult={parseResult} />
-      <FoodQuickInputIssues issues={parseResult.issues} />
-    </View>
-  );
+  return <FoodQuickInputIssues issues={parseResult.issues} />;
 }
 
-function FoodQuickInputPreview({
-  parseResult,
-}: {
-  readonly parseResult: FoodQuickInputParseResult;
-}) {
-  if (parseResult.status === "empty") {
-    return (
-      <SectionCard style={styles.card} title="Preview">
-        <Text style={styles.mutedText}>No food text yet.</Text>
-      </SectionCard>
-    );
-  }
-
-  if (parseResult.status !== "complete") {
-    const partialFood = parseResult.partial;
-
-    return (
-      <SectionCard style={styles.card} title="Preview">
-        <View style={styles.partialPreview}>
-          <Text numberOfLines={2} style={styles.previewTitle}>
-            {partialFood.name ?? "Unnamed food"}
-          </Text>
-          <Text numberOfLines={1} style={styles.previewSubtitle}>
-            {partialFood.brand ?? "No brand"}
-          </Text>
-          <Text style={styles.mutedText}>
-            Add the missing required fields to complete the preview.
-          </Text>
-        </View>
-      </SectionCard>
-    );
-  }
-
-  const food = parseResult.food;
-
+function FoodFormOverview({ values }: { readonly values: FoodFormValues }) {
   return (
     <FoodNutrientOverview
-      brand={food.brand}
-      name={food.name}
-      nutrients={{
-        energyKcal: food.energyKcalPer100g,
-        proteinGrams: food.proteinGramsPer100g,
-        carbsGrams: food.carbsGramsPer100g,
-        fatGrams: food.fatGramsPer100g,
-        ...(food.fiberGramsPer100g === undefined
-          ? {}
-          : { fiberGrams: food.fiberGramsPer100g }),
-        ...(food.sugarGramsPer100g === undefined
-          ? {}
-          : { sugarGrams: food.sugarGramsPer100g }),
-        ...(food.saturatedFatGramsPer100g === undefined
-          ? {}
-          : { saturatedFatGrams: food.saturatedFatGramsPer100g }),
-        ...(food.saltGramsPer100g === undefined
-          ? {}
-          : { saltGrams: food.saltGramsPer100g }),
-      }}
-      secondaryLabel={`${formatNumber({
-        maximumFractionDigits: 2,
-        value: food.energyKcalPer100g,
-      })} kcal per 100g`}
+      brand={_optionalTrimmedText(values.brand)}
+      name={_optionalTrimmedText(values.name) ?? "Unnamed food"}
+      nutrients={foodNutrientOverviewFromFormValues({ values })}
+      primaryLabel={foodNutrientOverviewPrimaryLabel({ values })}
+      secondaryLabel="per 100g"
     />
   );
 }
@@ -481,6 +425,55 @@ function _sendFoodFormValueChange({
   });
 }
 
+export function foodNutrientOverviewFromFormValues({
+  values,
+}: {
+  readonly values: FoodFormValues;
+}): FoodNutrientOverviewNutrients {
+  return {
+    carbsGrams: _nonNegativeFormNumber(values.carbsGramsPer100g),
+    energyKcal: _nonNegativeFormNumber(values.energyKcalPer100g),
+    fatGrams: _nonNegativeFormNumber(values.fatGramsPer100g),
+    fiberGrams: _nonNegativeFormNumber(values.fiberGramsPer100g),
+    proteinGrams: _nonNegativeFormNumber(values.proteinGramsPer100g),
+    saltGrams: _nonNegativeFormNumber(values.saltGramsPer100g),
+    saturatedFatGrams: _nonNegativeFormNumber(values.saturatedFatGramsPer100g),
+    sugarGrams: _nonNegativeFormNumber(values.sugarGramsPer100g),
+  };
+}
+
+export function foodNutrientOverviewPrimaryLabel({
+  values,
+}: {
+  readonly values: FoodFormValues;
+}) {
+  const energyKcal = _nonNegativeFormNumber(values.energyKcalPer100g);
+
+  return energyKcal === undefined
+    ? "Partial"
+    : `${formatFoodNutrientNumber({ value: energyKcal })} kcal`;
+}
+
+function _nonNegativeFormNumber(value: string) {
+  const trimmedValue = value.trim();
+
+  if (trimmedValue === "") {
+    return undefined;
+  }
+
+  const parsedValue = Number(trimmedValue.replace(",", "."));
+
+  return Number.isFinite(parsedValue) && parsedValue >= 0
+    ? parsedValue
+    : undefined;
+}
+
+function _optionalTrimmedText(value: string) {
+  const trimmedValue = value.trim();
+
+  return trimmedValue === "" ? undefined : trimmedValue;
+}
+
 const styles = StyleSheet.create({
   content: {
     gap: spacing.lg,
@@ -513,29 +506,5 @@ const styles = StyleSheet.create({
   },
   noticeStack: {
     gap: spacing.sm,
-  },
-  feedback: {
-    gap: spacing.md,
-  },
-  mutedText: {
-    color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
-  },
-  partialPreview: {
-    gap: spacing.xs,
-  },
-  previewTitle: {
-    color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
-  },
-  previewSubtitle: {
-    color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
   },
 });

@@ -1,17 +1,18 @@
 import {
+  AppHeader,
   AppScreen,
   BottomActionBar,
   Button,
   IconButton,
   LoadingView,
-  MaiHeader,
   Notice,
   NumberField,
 } from "@/components/ui";
 import {
   FoodDefaultOriginDot,
   FoodNutrientOverview,
-  FoodSearch,
+  FoodSearchField,
+  FoodSearchResults,
 } from "@/components/nutrition";
 import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
@@ -490,8 +491,9 @@ function ReadyAddMealFoodRoute({
         contentStyle={styles.content}
         safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
       >
-        <MaiHeader
-          action={
+        <AppHeader
+          embedded
+          leading={
             <IconButton
               accessibilityLabel={`Back to ${dateKey}`}
               icon={ChevronLeft}
@@ -501,16 +503,25 @@ function ReadyAddMealFoodRoute({
               variant="ghost"
             />
           }
-          eyebrow={dateKey}
+          shadow
+          style={selectedFood === null ? styles.searchHeader : undefined}
           title={mealLabel}
-        />
+        >
+          {selectedFood === null ? (
+            <FoodSearchField
+              actor={foodSearchActor}
+              autoFocus
+              disabled={disabled}
+            />
+          ) : null}
+        </AppHeader>
 
         {notice === null ? null : (
           <Notice message={notice} tone="danger" style={styles.notice} />
         )}
 
         {selectedFood === null ? (
-          <FoodSearch
+          <FoodSearchResults
             actor={foodSearchActor}
             disabled={disabled}
             emptyFoodsText="Create a food before logging this meal."
@@ -595,17 +606,10 @@ function QuantityEntry({
   return (
     <View style={styles.quantityLayout}>
       <View style={styles.quantityBody}>
-        <FoodNutrientOverview
-          brand={selectedFood.brand}
-          name={selectedFood.name}
-          namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
-          nutrients={selectedFoodNutrients}
-          secondaryLabel={selectedFoodQuantityLabel}
-        />
         <NumberField
           accessibilityLabel={`${mealLabel} quantity in grams`}
           editable={!disabled}
-          label="Quantity"
+          label="Grams"
           onChangeText={(value) => {
             actor.send({
               quantityGrams: value,
@@ -615,6 +619,13 @@ function QuantityEntry({
           placeholder="150"
           rightElement={<Text style={styles.unitLabel}>g</Text>}
           value={quantityGrams}
+        />
+        <FoodNutrientOverview
+          brand={selectedFood.brand}
+          name={selectedFood.name}
+          namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
+          nutrients={selectedFoodNutrients}
+          secondaryLabel={selectedFoodQuantityLabel}
         />
       </View>
       <BottomActionBar>
@@ -742,6 +753,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: 0,
+  },
+  searchHeader: {
+    marginBottom: 0,
   },
   notice: {
     marginBottom: spacing.md,

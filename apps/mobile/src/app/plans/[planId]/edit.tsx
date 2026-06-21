@@ -290,7 +290,6 @@ export default function EditPlanScreen() {
   return (
     <MealPlanForm
       action="edit"
-      dateKey={snapshot.context.dateKey}
       errorMessage={snapshot.context.errorMessage}
       initialPlan={snapshot.context.plan}
       isSubmitting={snapshot.matches("Submitting")}

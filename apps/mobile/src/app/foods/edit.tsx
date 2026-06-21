@@ -1,5 +1,12 @@
-import { FoodSearch } from "@/components/nutrition";
 import {
+  FoodNutrientOverview,
+  FoodSearchField,
+  FoodSearchResults,
+  foodNutrientOverviewFromFormValues,
+  foodNutrientOverviewPrimaryLabel,
+} from "@/components/nutrition";
+import {
+  AppHeader,
   AppScreen,
   BottomActionBar,
   Button,
@@ -11,7 +18,6 @@ import {
   NumberField,
   SectionCard,
 } from "@/components/ui";
-import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, type } from "@/theme/tokens";
@@ -542,11 +548,17 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
         contentStyle={styles.content}
         safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
       >
-        <MaiHeader
-          action={<BackButton dateKey={dateKey} />}
-          eyebrow={dateKey ?? todayDateKey()}
+        <AppHeader
+          embedded
+          leading={<BackButton dateKey={dateKey} />}
+          shadow
+          style={selectedFood === null ? styles.searchHeader : undefined}
           title={selectedFood === null ? "Edit foods" : "Edit food"}
-        />
+        >
+          {selectedFood === null ? (
+            <FoodSearchField actor={foodSearchActor} disabled={disabled} />
+          ) : null}
+        </AppHeader>
 
         {notice === null ? null : (
           <Notice
@@ -558,7 +570,7 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
 
         {selectedFood === null ? (
           <View style={styles.searchBody}>
-            <FoodSearch
+            <FoodSearchResults
               actor={foodSearchActor}
               disabled={disabled}
               emptyFoodsText="Create a food before editing it."
@@ -628,6 +640,17 @@ function FoodEditForm({
           disabled={disabled}
           selectedFood={selectedFood}
           values={formValues}
+        />
+        <FoodNutrientOverview
+          brand={_optionalTrimmedText(formValues.brand)}
+          name={_optionalTrimmedText(formValues.name) ?? selectedFood.name}
+          nutrients={foodNutrientOverviewFromFormValues({
+            values: formValues,
+          })}
+          primaryLabel={foodNutrientOverviewPrimaryLabel({
+            values: formValues,
+          })}
+          secondaryLabel="per 100g"
         />
         <FoodNumberWarnings warnings={numberWarnings} />
       </ScrollView>
@@ -912,6 +935,12 @@ function _findFoodUsage({
   return foodUsage.find((usage) => usage.foodId === foodId);
 }
 
+function _optionalTrimmedText(value: string) {
+  const trimmedValue = value.trim();
+
+  return trimmedValue === "" ? undefined : trimmedValue;
+}
+
 export function firstParam(param: string | string[] | undefined) {
   return Array.isArray(param) ? param[0] : param;
 }
@@ -942,6 +971,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: 0,
   },
+  searchHeader: {
+    marginBottom: 0,
+  },
   notice: {
     marginBottom: spacing.md,
   },
@@ -952,7 +984,6 @@ const styles = StyleSheet.create({
   },
   searchBody: {
     flex: 1,
-    paddingTop: spacing.md,
   },
   formLayout: {
     flex: 1,

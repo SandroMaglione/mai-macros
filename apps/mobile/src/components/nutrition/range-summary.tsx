@@ -11,8 +11,7 @@ import { Array as EffectArray } from "effect";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { SectionCard } from "@/components/ui";
-import { formatDateTitle, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, type } from "@/theme/tokens";
 
 import {
@@ -41,12 +40,6 @@ const trackedNutrients = [
   "saltGrams",
 ] as const satisfies readonly NutrientName[];
 
-const macroNutrients = [
-  "proteinGrams",
-  "carbsGrams",
-  "fatGrams",
-] as const satisfies readonly NutrientName[];
-
 const nutrientLabels = {
   carbsGrams: "Carbs",
   energyKcal: "Calories",
@@ -72,7 +65,6 @@ const nutrientColors = {
 export function RangeSummary({ report }: RangeSummaryProps) {
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
-  const loggedMealCount = entries.length;
   const totals = report.days.reduce<NutrientTotals>(
     (currentTotals, day) =>
       addNutrientTotals({
@@ -144,59 +136,14 @@ export function RangeSummary({ report }: RangeSummaryProps) {
     limit: 5,
     report,
   });
-  const inRangeDays = report.days.filter(
-    (day) => day.isInsideExpectedPlanRange
-  ).length;
 
   return (
     <View style={styles.root}>
       <SummaryInsights insights={insights} />
 
-      <SectionCard style={styles.overviewPanel}>
-        <View style={styles.overviewContent}>
-          <Text style={styles.dateRange}>
-            {formatDateTitle({ dateKey: report.startDateKey })} -{" "}
-            {formatDateTitle({ dateKey: report.endDateKey })}
-          </Text>
-          <View style={styles.overviewGrid}>
-            <OverviewMetric
-              label="Avg calories"
-              tone={color.nutritionEnergy}
-              value={_formatNutrient({
-                nutrientName: "energyKcal",
-                value: averageTotals.energyKcal,
-              })}
-            />
-            <OverviewMetric
-              label="Logged meals"
-              tone={color.primary}
-              value={formatNumber({
-                maximumFractionDigits: 0,
-                value: loggedMealCount,
-              })}
-            />
-            <OverviewMetric
-              label="In range"
-              tone={color.successText}
-              value={`${inRangeDays}/${dayCount}`}
-            />
-          </View>
-
-          <View style={styles.macroRow}>
-            {macroNutrients.map((nutrientName) => (
-              <MacroPill
-                key={nutrientName}
-                nutrientName={nutrientName}
-                value={averageTotals[nutrientName]}
-              />
-            ))}
-          </View>
-        </View>
-      </SectionCard>
-
       <View style={styles.section}>
         <SectionTitle
-          subtitle="Average daily intake compared with daily targets when available."
+          subtitle="Average daily intake across the last 7 days, compared with daily targets when available."
           title="7-day average"
         />
         <View style={styles.nutrientGrid}>
@@ -279,53 +226,6 @@ function SummaryInsights({
   );
 }
 
-function OverviewMetric({
-  label,
-  tone,
-  value,
-}: {
-  readonly label: string;
-  readonly tone: string;
-  readonly value: string;
-}) {
-  return (
-    <View style={styles.overviewMetric}>
-      <View style={[styles.metricAccent, { backgroundColor: tone }]} />
-      <Text adjustsFontSizeToFit numberOfLines={1} style={styles.metricValue}>
-        {value}
-      </Text>
-      <Text numberOfLines={1} style={styles.metricLabel}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function MacroPill({
-  nutrientName,
-  value,
-}: {
-  readonly nutrientName: NutrientName;
-  readonly value: number;
-}) {
-  return (
-    <View style={styles.macroPill}>
-      <View
-        style={[
-          styles.macroDot,
-          { backgroundColor: nutrientColors[nutrientName] },
-        ]}
-      />
-      <Text numberOfLines={1} style={styles.macroLabel}>
-        {nutrientLabels[nutrientName]}
-      </Text>
-      <Text numberOfLines={1} style={styles.macroValue}>
-        {_formatNutrient({ nutrientName, value })}
-      </Text>
-    </View>
-  );
-}
-
 function NutrientBalanceCard({
   actual,
   nutrientName,
@@ -336,43 +236,29 @@ function NutrientBalanceCard({
   readonly target: number | null;
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
-  const progress = target === null || target <= 0 ? 0 : actual / target;
 
   return (
     <View style={styles.nutrientCard}>
-      <View style={styles.nutrientCardHeader}>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.nutrientCardTitle,
-            { color: nutrientColors[nutrientName] },
-          ]}
-        >
-          {nutrientLabels[nutrientName]}
-        </Text>
-        <Text numberOfLines={1} style={styles.nutrientDelta}>
-          {target === null
-            ? "No target"
-            : formatSignedNumber({
-                unit,
-                value: actual - target,
-              })}
-        </Text>
-      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.nutrientCardTitle,
+          { color: nutrientColors[nutrientName] },
+        ]}
+      >
+        {nutrientLabels[nutrientName]}
+      </Text>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.nutrientValue}>
         {_formatNutrient({ nutrientName, value: actual })}
       </Text>
-      <View style={styles.nutrientTrack}>
-        <View
-          style={[
-            styles.nutrientFill,
-            {
-              backgroundColor: nutrientColors[nutrientName],
-              width: `${Math.min(progress, 1) * 100}%`,
-            },
-          ]}
-        />
-      </View>
+      <Text numberOfLines={1} style={styles.nutrientDelta}>
+        {target === null
+          ? "No target"
+          : formatSignedNumber({
+              unit,
+              value: actual - target,
+            })}
+      </Text>
     </View>
   );
 }
@@ -480,93 +366,24 @@ export function formatSignedNumber({
   readonly unit: string;
   readonly value: number;
 }) {
-  const sign = value > 0 ? "+" : "";
+  const formatted = formatNumber({
+    maximumFractionDigits: Math.abs(value) > 0 && Math.abs(value) < 10 ? 1 : 0,
+    value: Math.abs(value),
+  });
 
-  return `${sign}${formatNumber({ value })}${unit}`;
+  if (value === 0) {
+    return `0 ${unit}`;
+  }
+
+  return `${value > 0 ? "+" : "-"}${formatted} ${unit}`;
 }
 
 const styles = StyleSheet.create({
   root: {
     gap: spacing.xxxl,
   },
-  dateRange: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-    textTransform: "uppercase",
-  },
-  overviewPanel: {
-    borderColor: color.sheetBorder,
-    backgroundColor: color.sheet,
-  },
-  overviewContent: {
-    gap: spacing.md,
-  },
-  overviewGrid: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  overviewMetric: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  metricAccent: {
-    height: 3,
-    width: 34,
-    borderRadius: radius.pill,
-  },
-  metricValue: {
-    color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
-  },
-  metricLabel: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
-  },
-  macroRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  macroPill: {
-    minWidth: 96,
-    flexGrow: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.sm,
-    backgroundColor: color.bg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  macroDot: {
-    height: 8,
-    width: 8,
-    borderRadius: radius.pill,
-  },
-  macroLabel: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
-  },
-  macroValue: {
-    marginLeft: "auto",
-    color: color.text,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-  },
   section: {
-    gap: spacing.md,
+    gap: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: color.sheetBorder,
     paddingTop: spacing.xxl,
@@ -580,15 +397,15 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     color: color.text,
-    fontSize: type.size.md,
+    fontSize: type.size.xl,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    lineHeight: type.lineHeight.xl,
   },
   sectionSubtitle: {
     color: color.textSubtle,
-    fontSize: type.size.sm,
+    fontSize: type.size.md,
     fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    lineHeight: type.lineHeight.lg,
   },
   insightList: {
     borderTopWidth: 1,
@@ -624,47 +441,30 @@ const styles = StyleSheet.create({
     minWidth: 150,
     flexBasis: "48%",
     flexGrow: 1,
-    gap: spacing.sm,
+    gap: spacing.md,
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.sm,
     backgroundColor: color.sheet,
-    padding: spacing.md,
-  },
-  nutrientCardHeader: {
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+    padding: spacing.lg,
   },
   nutrientCardTitle: {
     minWidth: 0,
-    flex: 1,
-    fontSize: type.size.sm,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.lg,
   },
   nutrientDelta: {
     color: color.textMuted,
-    fontSize: type.size.xs,
+    fontSize: type.size.md,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: type.lineHeight.md,
   },
   nutrientValue: {
     color: color.text,
-    fontSize: type.size.xl,
+    fontSize: type.size.xxl,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
-  },
-  nutrientTrack: {
-    height: 5,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-    backgroundColor: color.progressTrack,
-  },
-  nutrientFill: {
-    height: "100%",
-    borderRadius: radius.pill,
+    lineHeight: type.lineHeight.xxl,
   },
   foodGroups: {
     gap: spacing.lg,

@@ -1,11 +1,7 @@
-import { SearchField } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, type } from "@/theme/tokens";
 import type { Food } from "@mai/nutrition";
-import {
-  getFoodCategoryLabel,
-  type FoodSearchActorRef,
-} from "@mai/machines/foods";
+import { type FoodSearchActorRef } from "@mai/machines/foods";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
 import { Search } from "lucide-react-native";
@@ -14,6 +10,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type ListRenderItem,
 } from "react-native";
@@ -37,6 +34,85 @@ export function FoodSearch({
   getSecondaryLabel,
   placeholder = "Search food or brand",
 }: FoodSearchProps) {
+  return (
+    <View style={styles.root}>
+      <FoodSearchField
+        actor={actor}
+        disabled={disabled}
+        placeholder={placeholder}
+      />
+      <FoodSearchResults
+        actor={actor}
+        disabled={disabled}
+        emptyFoodsText={emptyFoodsText}
+        emptySearchText={emptySearchText}
+        getPrimaryLabel={getPrimaryLabel}
+        getSecondaryLabel={getSecondaryLabel}
+      />
+    </View>
+  );
+}
+
+export function FoodSearchField({
+  actor,
+  autoFocus = false,
+  disabled,
+  placeholder = "Search food or brand",
+}: {
+  readonly actor: FoodSearchActorRef;
+  readonly autoFocus?: boolean;
+  readonly disabled: boolean;
+  readonly placeholder?: string;
+}) {
+  const query = useSelector(actor, (snapshot) => snapshot.context.query);
+
+  return (
+    <View style={styles.searchShell}>
+      <Search color={color.textSubtle} size={20} strokeWidth={3} />
+      <TextInput
+        accessibilityLabel="Food search"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus={autoFocus}
+        editable={!disabled}
+        inputMode="search"
+        onChangeText={(value) => {
+          actor.send({
+            query: value,
+            type: "changeQuery",
+          });
+        }}
+        onSubmitEditing={() => {
+          actor.send({
+            type: "selectFirstMatchingFood",
+          });
+        }}
+        placeholder={placeholder}
+        placeholderTextColor={color.textSubtle}
+        returnKeyType="search"
+        selectionColor={color.primary}
+        style={styles.searchInput}
+        value={query}
+      />
+    </View>
+  );
+}
+
+export function FoodSearchResults({
+  actor,
+  disabled,
+  emptyFoodsText,
+  emptySearchText,
+  getPrimaryLabel,
+  getSecondaryLabel,
+}: {
+  readonly actor: FoodSearchActorRef;
+  readonly disabled: boolean;
+  readonly emptyFoodsText: string;
+  readonly emptySearchText: string;
+  readonly getPrimaryLabel?: (food: Food) => string;
+  readonly getSecondaryLabel?: (food: Food) => string;
+}) {
   const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
   const matchingFoods = useSelector(
     actor,
@@ -53,47 +129,25 @@ export function FoodSearch({
       : emptySearchText;
 
   return (
-    <View style={styles.root}>
-      <SearchField
-        accessibilityLabel="Food search"
-        editable={!disabled}
-        onChangeText={(value) => {
-          actor.send({
-            query: value,
-            type: "changeQuery",
-          });
-        }}
-        onSubmitEditing={() => {
-          actor.send({
-            type: "selectFirstMatchingFood",
-          });
-        }}
-        placeholder={placeholder}
-        rightElement={
-          <Search color={color.textSubtle} size={18} strokeWidth={2.6} />
-        }
-        value={query}
-      />
-      <FlatList
-        data={matchingFoods}
-        keyboardShouldPersistTaps="handled"
-        keyExtractor={(food) => food.id}
-        ListEmptyComponent={<FoodSearchEmpty text={emptyText} />}
-        renderItem={createFoodSearchRenderItem({
-          actor,
-          disabled,
-          getPrimaryLabel,
-          getSecondaryLabel,
-          selectedFoodId,
-        })}
-        style={styles.list}
-        contentContainerStyle={
-          !EffectArray.isReadonlyArrayNonEmpty(matchingFoods)
-            ? styles.emptyContent
-            : styles.listContent
-        }
-      />
-    </View>
+    <FlatList
+      data={matchingFoods}
+      keyboardShouldPersistTaps="handled"
+      keyExtractor={(food) => food.id}
+      ListEmptyComponent={<FoodSearchEmpty text={emptyText} />}
+      renderItem={createFoodSearchRenderItem({
+        actor,
+        disabled,
+        getPrimaryLabel,
+        getSecondaryLabel,
+        selectedFoodId,
+      })}
+      style={styles.list}
+      contentContainerStyle={
+        !EffectArray.isReadonlyArrayNonEmpty(matchingFoods)
+          ? styles.emptyContent
+          : styles.listContent
+      }
+    />
   );
 }
 
@@ -130,7 +184,7 @@ export function createFoodSearchRenderItem({
 export function FoodDefaultOriginDot({ food }: { readonly food: Food }) {
   return food.origin === "app-default" ? (
     <View
-      accessibilityLabel="Default food"
+      accessibilityLabel="Pre-installed food"
       style={styles.defaultDot}
       testID="food-default-origin-dot"
     />
@@ -152,12 +206,7 @@ function FoodSearchResult({
   readonly secondaryLabel?: string;
   readonly selected: boolean;
 }) {
-  const metadata = [
-    food.brand,
-    food.category === undefined
-      ? undefined
-      : getFoodCategoryLabel({ category: food.category }),
-  ].filter((value): value is string => value !== undefined);
+  const brandLabel = food.brand ?? "/";
   const per100gLabel = `${formatNumber({
     maximumFractionDigits: 0,
     value: food.energyKcalPer100g,
@@ -183,9 +232,7 @@ function FoodSearchResult({
           </Text>
         </View>
         <Text numberOfLines={1} style={styles.resultSummary}>
-          {!EffectArray.isReadonlyArrayNonEmpty(metadata)
-            ? per100gLabel
-            : metadata.join(" • ")}
+          {brandLabel}
         </Text>
       </View>
       <View style={styles.resultMetrics}>
@@ -213,13 +260,30 @@ function FoodSearchEmpty({ text }: { readonly text: string }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    gap: spacing.lg,
+  },
+  searchShell: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: color.field,
+  },
+  searchInput: {
+    minWidth: 0,
+    flex: 1,
+    color: color.text,
+    fontSize: type.size.md,
+    fontWeight: type.weight.black,
+    lineHeight: type.lineHeight.md,
   },
   list: {
     flex: 1,
   },
   listContent: {
-    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xl,
   },
   emptyContent: {
@@ -229,11 +293,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.md,
     padding: spacing.xl,
-    backgroundColor: color.sheet,
   },
   emptyText: {
     color: color.textMuted,
@@ -246,16 +306,12 @@ const styles = StyleSheet.create({
     minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
+    gap: spacing.md,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    backgroundColor: color.sheet,
   },
   resultSelected: {
-    borderColor: color.primary,
     backgroundColor: color.dangerBg,
   },
   resultPressed: {
@@ -276,11 +332,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   defaultDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     flexShrink: 0,
     borderRadius: radius.pill,
-    backgroundColor: color.primary,
+    backgroundColor: "#d9bd6f",
   },
   resultTitle: {
     minWidth: 0,
@@ -292,30 +348,30 @@ const styles = StyleSheet.create({
   },
   resultSummary: {
     color: color.textMuted,
-    fontSize: type.size.sm,
+    fontSize: type.size.md,
     fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.md,
   },
   resultMetrics: {
-    width: 96,
+    width: 112,
     flexShrink: 0,
     alignItems: "flex-end",
     gap: spacing.xs,
   },
   primaryMetric: {
-    maxWidth: 96,
-    color: color.text,
+    maxWidth: 112,
+    color: color.nutritionEnergy,
     textAlign: "right",
-    fontSize: type.size.sm,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.lg,
   },
   secondaryMetric: {
-    maxWidth: 96,
-    color: color.textSubtle,
+    maxWidth: 112,
+    color: color.textMuted,
     textAlign: "right",
-    fontSize: type.size.xs,
+    fontSize: type.size.md,
     fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: type.lineHeight.md,
   },
 });

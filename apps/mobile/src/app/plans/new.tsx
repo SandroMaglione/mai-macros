@@ -210,7 +210,6 @@ export default function NewPlanScreen() {
     <MealPlanForm
       action="create"
       canNavigateBack={snapshot.context.hasExistingPlan}
-      dateKey={snapshot.context.dateKey}
       errorMessage={snapshot.context.errorMessage}
       initialPlan={null}
       isSubmitting={snapshot.matches("Submitting")}
