@@ -10,7 +10,7 @@ import {
   type MaiBackupEncoded,
   MaiBackupJson,
   validateBackup,
-} from "../packages/nutrition/src/index.ts";
+} from "../src/index.ts";
 
 type BackupStores = MaiBackupEncoded["stores"];
 type BackupFood = BackupStores["foods"][number];
@@ -51,23 +51,17 @@ type Summary = {
 };
 
 const outputDefaultPath = fileURLToPath(
-  new URL("../nutrition-seed-backup.json", import.meta.url)
+  new URL("../../../nutrition-seed-backup.json", import.meta.url)
 );
 
-const args: Record<string, string> = Object.fromEntries(
-  process.argv
-    .slice(2)
-    .filter((arg) => arg.startsWith("--"))
-    .map((arg) => {
-      const [key, value = "true"] = arg.slice(2).split("=");
-
-      return [key, value];
-    })
-);
+const args = parseCliArgs({ values: process.argv.slice(2) });
+const commandCwd = process.env.INIT_CWD ?? process.cwd();
 
 const dayCount = 28;
 const outputPath =
-  args.output === undefined ? outputDefaultPath : resolve(args.output);
+  args.output === undefined
+    ? outputDefaultPath
+    : resolve(commandCwd, args.output);
 const todayDateKey =
   args.today === undefined ? dateKeyFromDate(new Date()) : args.today;
 
@@ -1337,4 +1331,45 @@ function requiredItem<T>({
   }
 
   return value;
+}
+
+function parseCliArgs({
+  values,
+}: {
+  readonly values: readonly string[];
+}): Record<string, string> {
+  const entries: [string, string][] = [];
+
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+
+    if (value === undefined || !value.startsWith("--")) {
+      continue;
+    }
+
+    const raw = value.slice(2);
+
+    if (raw.length === 0) {
+      continue;
+    }
+
+    const equalsIndex = raw.indexOf("=");
+
+    if (equalsIndex >= 0) {
+      entries.push([raw.slice(0, equalsIndex), raw.slice(equalsIndex + 1)]);
+      continue;
+    }
+
+    const nextValue = values[index + 1];
+
+    if (nextValue !== undefined && !nextValue.startsWith("--")) {
+      entries.push([raw, nextValue]);
+      index += 1;
+      continue;
+    }
+
+    entries.push([raw, "true"]);
+  }
+
+  return Object.fromEntries(entries);
 }

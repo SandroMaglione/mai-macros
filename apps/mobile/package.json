@@ -1,0 +1,48 @@
+{
+  "name": "@mai/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "doctor": "pnpm dlx expo-doctor@latest",
+    "check": "expo install --check",
+    "dev": "expo start",
+    "dev:ios": "expo start --ios",
+    "dev:android": "expo start --android",
+    "start": "expo start",
+    "ios": "pnpm run dev:ios",
+    "android": "pnpm run dev:android",
+    "typecheck": "tsgo --noEmit",
+    "format": "oxfmt",
+    "lint": "NODE_OPTIONS='--experimental-strip-types' oxlint --quiet",
+    "verify": "pnpm run format && pnpm run typecheck && pnpm run lint",
+    "prebuild": "expo prebuild",
+    "prebuild:clean": "expo prebuild --clean",
+    "run:ios": "expo run:ios",
+    "run:android": "expo run:android"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "56.0.15",
+    "expo": "56.0.12",
+    "expo-constants": "56.0.18",
+    "expo-linking": "56.0.14",
+    "expo-router": "56.2.11",
+    "expo-splash-screen": "56.0.10",
+    "expo-status-bar": "56.0.4",
+    "expo-system-ui": "56.0.5",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-gesture-handler": "~2.31.1",
+    "react-native-reanimated": "4.3.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "4.25.2",
+    "react-native-web": "0.21.2",
+    "react-native-worklets": "0.8.3"
+  },
+  "devDependencies": {
+    "@react-native/metro-config": "0.85.3",
+    "@types/react": "19.2.17",
+    "tsx": "4.22.4"
+  }
+}

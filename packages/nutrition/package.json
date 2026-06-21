@@ -12,6 +12,7 @@
     "./services/nutrition-reports": "./src/services/nutrition-reports.ts"
   },
   "scripts": {
+    "seed": "NODE_OPTIONS='--experimental-strip-types' node scripts/generate-nutrition-seed-backup.ts",
     "test": "vitest run",
     "typecheck": "tsgo --noEmit"
   },
@@ -19,6 +20,7 @@
     "effect": "4.0.0-beta.84"
   },
   "devDependencies": {
+    "@types/node": "latest",
     "vitest": "^4.0.8"
   }
 }
