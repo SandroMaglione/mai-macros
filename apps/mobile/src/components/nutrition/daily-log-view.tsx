@@ -597,6 +597,7 @@ export function DailyLogView({
     <View style={styles.screen}>
       <AppScreen
         contentStyle={styles.content}
+        safeAreaEdges={["top"]}
         scroll
         scrollProps={{
           contentInsetAdjustmentBehavior: "never",
@@ -678,7 +679,7 @@ export function DailyLogView({
         </View>
       </AppScreen>
 
-      <BottomActionBar variant="floating">
+      <BottomActionBar variant="tab">
         <BottomAction
           icon={Activity}
           label="Stats"
@@ -1328,7 +1329,7 @@ function BottomAction({
         pressed ? styles.pressed : null,
       ]}
     >
-      <Icon color={color.actionSheetText} size={17} strokeWidth={3} />
+      <Icon color={color.actionSheetText} size={20} strokeWidth={2.8} />
       <Text numberOfLines={1} style={styles.bottomLabel}>
         {label}
       </Text>
@@ -1786,7 +1787,7 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 0,
-    paddingBottom: 104,
+    paddingBottom: spacing.xl,
   },
   centeredContent: {
     justifyContent: "center",
@@ -1847,9 +1848,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   dailyMetricLabel: {
-    fontSize: type.size.xs,
+    fontSize: type.size.sm,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: type.lineHeight.sm,
   },
   dailyMetricTrack: {
     width: "100%",
@@ -1862,9 +1863,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   dailyMetricValue: {
-    fontSize: 14,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: 18,
+    lineHeight: type.lineHeight.lg,
   },
   energyProgress: {
     gap: spacing.xs,
@@ -1882,9 +1883,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   energyProgressValue: {
-    fontSize: type.size.xs,
+    fontSize: type.size.md,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: type.lineHeight.md,
   },
   dailyNutrientGrid: {
     flexDirection: "row",
@@ -1897,13 +1898,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dailyNutrientLabel: {
-    fontSize: 10,
+    fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: 13,
+    lineHeight: type.lineHeight.xs,
   },
   dailyNutrientTrack: {
     width: "100%",
-    height: 4,
+    height: 5,
     overflow: "hidden",
     borderRadius: radius.pill,
   },
@@ -1912,9 +1913,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   dailyNutrientValue: {
-    fontSize: 10,
+    fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: 13,
+    lineHeight: type.lineHeight.xs,
   },
   meals: {
     gap: spacing.xxl,
@@ -1938,9 +1939,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.md,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    lineHeight: type.lineHeight.lg,
   },
   macroStripe: {
     height: 4,
@@ -1978,15 +1979,15 @@ const styles = StyleSheet.create({
   },
   entryName: {
     color: color.text,
-    fontSize: type.size.sm,
+    fontSize: type.size.md,
     fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.md,
   },
   entryDetail: {
     color: color.textMuted,
-    fontSize: type.size.xs,
+    fontSize: type.size.sm,
     fontWeight: type.weight.medium,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: type.lineHeight.sm,
   },
   entryNumbers: {
     maxWidth: 132,
@@ -1995,15 +1996,15 @@ const styles = StyleSheet.create({
   },
   entryKcal: {
     color: color.nutritionEnergy,
-    fontSize: type.size.sm,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.lg,
   },
   entryMacros: {
     color: color.textMuted,
-    fontSize: 11,
+    fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: 14,
+    lineHeight: type.lineHeight.xs,
   },
   mealTotalColumns: {
     flexDirection: "row",
@@ -2019,14 +2020,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   mealTotalValue: {
-    fontSize: 14,
+    fontSize: type.size.lg,
     fontWeight: type.weight.black,
-    lineHeight: 18,
+    lineHeight: type.lineHeight.lg,
   },
   mealTotalLabel: {
-    fontSize: 10,
+    fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: 13,
+    lineHeight: type.lineHeight.xs,
   },
   mealNutrientColumns: {
     flexDirection: "row",
@@ -2043,14 +2044,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   mealNutrientValue: {
-    fontSize: type.size.xs,
+    fontSize: type.size.sm,
     fontWeight: type.weight.black,
-    lineHeight: 15,
+    lineHeight: type.lineHeight.sm,
   },
   mealNutrientLabel: {
-    fontSize: 10,
+    fontSize: type.size.xs,
     fontWeight: type.weight.semibold,
-    lineHeight: 13,
+    lineHeight: type.lineHeight.xs,
   },
   addFoodButton: {
     minHeight: 48,
@@ -2067,28 +2068,26 @@ const styles = StyleSheet.create({
   },
   addFoodText: {
     color: color.primary,
-    fontSize: type.size.sm,
+    fontSize: type.size.md,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    lineHeight: type.lineHeight.md,
   },
   bottomAction: {
-    minHeight: 48,
+    minHeight: 52,
     minWidth: 0,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    borderWidth: 1,
-    borderColor: "transparent",
     borderRadius: radius.sm,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
   bottomLabel: {
     color: color.actionSheetText,
-    fontSize: 11,
+    fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: 12,
+    lineHeight: type.lineHeight.xs,
   },
   sheetList: {
     gap: spacing.sm,

@@ -1,5 +1,6 @@
 import { FoodSearch } from "@/components/nutrition";
 import {
+  AppScreen,
   BottomActionBar,
   Button,
   Field,
@@ -451,7 +452,11 @@ export default function EditFoodsRoute() {
   });
 
   if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
-    return <LoadingView message="Loading foods" />;
+    return (
+      <AppScreen contentStyle={styles.centered}>
+        <LoadingView message="Loading foods" />
+      </AppScreen>
+    );
   }
 
   if (snapshot.matches("Failed")) {
@@ -460,7 +465,7 @@ export default function EditFoodsRoute() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.screen}
       >
-        <View style={styles.content}>
+        <AppScreen contentStyle={styles.content}>
           <MaiHeader
             action={<BackButton dateKey={undefined} />}
             title="Edit foods"
@@ -486,13 +491,15 @@ export default function EditFoodsRoute() {
               Try again
             </Button>
           </View>
-        </View>
+        </AppScreen>
       </KeyboardAvoidingView>
     );
   }
 
   return snapshot.context.data === null ? (
-    <LoadingView message="Loading foods" />
+    <AppScreen contentStyle={styles.centered}>
+      <LoadingView message="Loading foods" />
+    </AppScreen>
   ) : (
     <ReadyEditFoodsRoute data={snapshot.context.data} />
   );
@@ -531,7 +538,10 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.screen}
     >
-      <View style={styles.content}>
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
+      >
         <MaiHeader
           action={<BackButton dateKey={dateKey} />}
           eyebrow={dateKey ?? todayDateKey()}
@@ -578,7 +588,7 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
             submitLabel={submitLabel}
           />
         )}
-      </View>
+      </AppScreen>
     </KeyboardAvoidingView>
   );
 }
@@ -930,6 +940,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    paddingBottom: 0,
   },
   notice: {
     marginBottom: spacing.md,

@@ -1,4 +1,5 @@
 import {
+  AppScreen,
   BottomActionBar,
   Button,
   IconButton,
@@ -400,12 +401,16 @@ export default function AddMealFoodRoute() {
   });
 
   if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
-    return <LoadingView message="Loading meal" />;
+    return (
+      <AppScreen contentStyle={styles.centered}>
+        <LoadingView message="Loading meal" />
+      </AppScreen>
+    );
   }
 
   if (snapshot.matches("Failed")) {
     return (
-      <View style={styles.centered}>
+      <AppScreen contentStyle={styles.centered}>
         <Notice
           message={snapshot.context.message ?? "Could not load this meal."}
           tone="danger"
@@ -418,12 +423,14 @@ export default function AddMealFoodRoute() {
         >
           Go home
         </Button>
-      </View>
+      </AppScreen>
     );
   }
 
   return snapshot.context.data === null ? (
-    <LoadingView message="Loading meal" />
+    <AppScreen contentStyle={styles.centered}>
+      <LoadingView message="Loading meal" />
+    </AppScreen>
   ) : (
     <ReadyAddMealFoodRoute data={snapshot.context.data} />
   );
@@ -479,7 +486,10 @@ function ReadyAddMealFoodRoute({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.screen}
     >
-      <View style={styles.content}>
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
+      >
         <MaiHeader
           action={
             <IconButton
@@ -556,7 +566,7 @@ function ReadyAddMealFoodRoute({
             submitDisabled={disabled || !snapshot.can(submitEvent)}
           />
         )}
-      </View>
+      </AppScreen>
     </KeyboardAvoidingView>
   );
 }
@@ -585,10 +595,17 @@ function QuantityEntry({
   return (
     <View style={styles.quantityLayout}>
       <View style={styles.quantityBody}>
+        <FoodNutrientOverview
+          brand={selectedFood.brand}
+          name={selectedFood.name}
+          namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
+          nutrients={selectedFoodNutrients}
+          secondaryLabel={selectedFoodQuantityLabel}
+        />
         <NumberField
           accessibilityLabel={`${mealLabel} quantity in grams`}
           editable={!disabled}
-          label="Grams"
+          label="Quantity"
           onChangeText={(value) => {
             actor.send({
               quantityGrams: value,
@@ -598,13 +615,6 @@ function QuantityEntry({
           placeholder="150"
           rightElement={<Text style={styles.unitLabel}>g</Text>}
           value={quantityGrams}
-        />
-        <FoodNutrientOverview
-          brand={selectedFood.brand}
-          name={selectedFood.name}
-          namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
-          nutrients={selectedFoodNutrients}
-          secondaryLabel={selectedFoodQuantityLabel}
         />
       </View>
       <BottomActionBar>
@@ -731,6 +741,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    paddingBottom: 0,
   },
   notice: {
     marginBottom: spacing.md,

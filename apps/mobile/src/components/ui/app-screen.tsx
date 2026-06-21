@@ -8,11 +8,12 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, type Edges } from "react-native-safe-area-context";
 
 type AppScreenProps = {
   readonly children: ReactNode;
   readonly contentStyle?: StyleProp<ViewStyle>;
+  readonly safeAreaEdges?: Edges;
   readonly scroll?: boolean;
   readonly scrollProps?: Omit<ScrollViewProps, "children" | "style">;
   readonly style?: StyleProp<ViewStyle>;
@@ -21,12 +22,13 @@ type AppScreenProps = {
 export function AppScreen({
   children,
   contentStyle,
+  safeAreaEdges = ["top", "bottom"],
   scroll = false,
   scrollProps,
   style,
 }: AppScreenProps) {
   return (
-    <SafeAreaView edges={["top", "bottom"]} style={[styles.safe, style]}>
+    <SafeAreaView edges={safeAreaEdges} style={[styles.safe, style]}>
       {scroll ? (
         <ScrollView
           alwaysBounceVertical={false}

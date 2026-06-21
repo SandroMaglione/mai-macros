@@ -350,7 +350,7 @@ function NutrientBalanceCard({
         >
           {nutrientLabels[nutrientName]}
         </Text>
-        <Text style={styles.nutrientDelta}>
+        <Text numberOfLines={1} style={styles.nutrientDelta}>
           {target === null
             ? "No target"
             : formatSignedNumber({
@@ -608,7 +608,6 @@ const styles = StyleSheet.create({
   insightFoodText: {
     color: color.warningText,
     fontWeight: type.weight.black,
-    backgroundColor: color.warningBg,
   },
   emptyText: {
     color: color.textMuted,
@@ -658,10 +657,14 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.xl,
   },
   nutrientTrack: {
-    display: "none",
+    height: 5,
+    overflow: "hidden",
+    borderRadius: radius.pill,
+    backgroundColor: color.progressTrack,
   },
   nutrientFill: {
-    display: "none",
+    height: "100%",
+    borderRadius: radius.pill,
   },
   foodGroups: {
     gap: spacing.lg,

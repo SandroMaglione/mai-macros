@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type BottomActionBarVariant = "footer" | "floating";
+type BottomActionBarVariant = "footer" | "floating" | "tab";
 
 type BottomActionBarProps = {
   readonly children: ReactNode;
@@ -18,18 +18,33 @@ export function BottomActionBar({
 }: BottomActionBarProps) {
   const insets = useSafeAreaInsets();
   const isFloating = variant === "floating";
+  const isTab = variant === "tab";
 
   return (
     <View
       style={[
-        isFloating ? styles.floatingRoot : styles.footerRoot,
+        isFloating
+          ? styles.floatingRoot
+          : isTab
+            ? styles.tabRoot
+            : styles.footerRoot,
         {
-          paddingBottom: insets.bottom + (isFloating ? spacing.md : spacing.lg),
+          paddingBottom:
+            insets.bottom +
+            (isFloating ? spacing.md : isTab ? spacing.xs : spacing.lg),
         },
         style,
       ]}
     >
-      <View style={isFloating ? styles.floatingInner : styles.footerInner}>
+      <View
+        style={
+          isFloating
+            ? styles.floatingInner
+            : isTab
+              ? styles.tabInner
+              : styles.footerInner
+        }
+      >
         {children}
       </View>
     </View>
@@ -68,5 +83,20 @@ const styles = StyleSheet.create({
     padding: 6,
     backgroundColor: color.bottomNav,
     ...shadow.bottomNav,
+  },
+  tabRoot: {
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.xs,
+    backgroundColor: color.bottomNav,
+    ...shadow.bottomNav,
+  },
+  tabInner: {
+    width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
   },
 });
