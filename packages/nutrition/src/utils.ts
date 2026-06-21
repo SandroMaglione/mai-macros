@@ -1,5 +1,3 @@
-import { Array, DateTime, Iterable, Option } from "effect";
-
 import type {
   DateKey,
   EntryNutrients,
@@ -65,31 +63,54 @@ export const dateKeysInRange = ({
   readonly endDateKey: DateKey | string;
   readonly startDateKey: DateKey | string;
 }) => {
-  const startDate = _localDateTimeFromDateKey({ dateKey: startDateKey });
-  const endDate = _localDateTimeFromDateKey({ dateKey: endDateKey });
+  const dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const parseDateKey = ({
+    dateKey,
+  }: {
+    readonly dateKey: DateKey | string;
+  }) => {
+    const match = dateKeyPattern.exec(dateKey);
 
-  if (DateTime.isGreaterThan(startDate, endDate)) {
+    if (match === null) {
+      throw new RangeError(`Invalid date key: ${dateKey}`);
+    }
+
+    const [, yearString, monthString, dayString] = match;
+    const year = Number(yearString);
+    const month = Number(monthString);
+    const day = Number(dayString);
+    const date = new Date(year, month - 1, day, 12);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      throw new RangeError(`Invalid date key: ${dateKey}`);
+    }
+
+    return date;
+  };
+  const formatDateKey = ({ date }: { readonly date: Date }) =>
+    [
+      date.getFullYear().toString().padStart(4, "0"),
+      (date.getMonth() + 1).toString().padStart(2, "0"),
+      date.getDate().toString().padStart(2, "0"),
+    ].join("-");
+  const startDate = parseDateKey({ dateKey: startDateKey });
+  const endDate = parseDateKey({ dateKey: endDateKey });
+
+  if (startDate > endDate) {
     return [];
   }
 
-  const dates = Iterable.takeWhile(
-    Iterable.makeBy<DateTime.DateTime>((days) =>
-      DateTime.add(startDate, { days })
-    ),
-    (date) => DateTime.isLessThanOrEqualTo(date, endDate)
-  );
+  const dateKeys: string[] = [];
+  const cursor = new Date(startDate);
 
-  return Array.fromIterable(
-    Iterable.map(dates, (date) => DateTime.formatIsoDate(date))
-  );
+  while (cursor <= endDate) {
+    dateKeys.push(formatDateKey({ date: cursor }));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dateKeys;
 };
-
-const _localDateTimeFromDateKey = ({
-  dateKey,
-}: {
-  readonly dateKey: DateKey | string;
-}) =>
-  DateTime.makeZoned(dateKey, {
-    adjustForTimeZone: true,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  }).pipe(Option.getOrThrow);

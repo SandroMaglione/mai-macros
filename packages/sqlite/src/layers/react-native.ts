@@ -1,4 +1,4 @@
-import { SqliteClient } from "@effect/sql-sqlite-react-native";
+import * as SqliteClient from "@effect/sql-sqlite-react-native/SqliteClient";
 import { Layer } from "effect";
 
 import { runSqliteMigrations } from "../migrations/index.ts";

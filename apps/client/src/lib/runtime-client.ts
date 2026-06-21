@@ -4,7 +4,10 @@ import { BrowserNutritionStoreLayer } from "@mai/indexeddb";
 import { Backups } from "@mai/nutrition";
 import { Layer, ManagedRuntime } from "effect";
 
-import { BackupExportMetadataStore } from "./services/backup-export-metadata.ts";
+import {
+  BackupExportMetadataStore,
+  BrowserBackupDeliveryClientLayer,
+} from "./services/backup-export-metadata.ts";
 import { DailyLogs } from "@mai/nutrition/services/daily-logs";
 import { Foods } from "@mai/nutrition/services/foods";
 import { MealEntries } from "@mai/nutrition/services/meal-entries";
@@ -18,7 +21,8 @@ const ClientLayer = Layer.mergeAll(
   Foods.layer,
   MealEntries.layer,
   NutritionReports.layer,
-  BackupExportMetadataStore.layer
+  BackupExportMetadataStore.layer,
+  BrowserBackupDeliveryClientLayer
 ).pipe(
   Layer.provide(
     Layer.mergeAll(

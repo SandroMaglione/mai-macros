@@ -12,6 +12,7 @@ import {
   calculateEntryNutrients,
   calculateMacronutrientEnergyKcal,
   calculatePlanEnergyKcal,
+  dateKeysInRange,
 } from "../src/utils.ts";
 
 const foodInput: typeof Food.Encoded = {
@@ -92,6 +93,44 @@ describe("nutrition utils", () => {
     assert.equal(result.validatedNutrients.proteinGrams, 15);
     assert.equal(result.validatedNutrients.carbsGrams, 5.4);
     assert.closeTo(result.validatedNutrients.fatGrams, 0.6, 0.000_001);
+  });
+
+  it("lists date keys in a closed range", () => {
+    const dateKeys = dateKeysInRange({
+      endDateKey: "2026-06-21",
+      startDateKey: "2026-06-19",
+    });
+
+    assert.deepEqual(dateKeys, ["2026-06-19", "2026-06-20", "2026-06-21"]);
+  });
+
+  it("handles month boundaries and leap days in date key ranges", () => {
+    const dateKeys = dateKeysInRange({
+      endDateKey: "2024-03-01",
+      startDateKey: "2024-02-28",
+    });
+
+    assert.deepEqual(dateKeys, ["2024-02-28", "2024-02-29", "2024-03-01"]);
+  });
+
+  it("returns no date keys for reversed ranges", () => {
+    const dateKeys = dateKeysInRange({
+      endDateKey: "2026-06-19",
+      startDateKey: "2026-06-21",
+    });
+
+    assert.deepEqual(dateKeys, []);
+  });
+
+  it("rejects invalid calendar date keys", () => {
+    assert.throws(
+      () =>
+        dateKeysInRange({
+          endDateKey: "2026-02-29",
+          startDateKey: "2026-02-28",
+        }),
+      RangeError
+    );
   });
 
   it("keeps missing secondary entry nutrients optional", async () => {

@@ -11,6 +11,7 @@
   "dependencies": {
     "@effect/platform-browser": "4.0.0-beta.84",
     "@mai/indexeddb": "workspace:^",
+    "@mai/machines": "workspace:^",
     "@mai/nutrition": "workspace:^",
     "@tanstack/react-router": "^1.170.16",
     "@xstate/react": "^6.1.0",

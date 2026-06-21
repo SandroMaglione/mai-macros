@@ -404,18 +404,34 @@ run(
         filename: "component.tsx",
       },
       {
-        code: "const view = <motion.div onClick={handleClick} />;",
+        code: "import { Pressable } from 'react-native';\nconst view = <Pressable onPress={handlePress} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "import { Image } from 'expo-image';\nconst view = <Image onLoad={handleLoad} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "import { Button } from '@some/ui-kit';\nconst view = <Button onPress={handlePress} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "import * as Native from 'react-native';\nconst view = <Native.Pressable onPress={handlePress} />;",
+        filename: "component.tsx",
+      },
+      {
+        code: "const view = <UnknownComponent onSubmit={handleSubmit} />;",
         filename: "component.tsx",
       },
     ],
     invalid: [
       {
-        code: "const view = <SearchForm onSubmit={handleSubmit} />;",
+        code: "function SearchForm() { return null; }\nconst view = <SearchForm onSubmit={handleSubmit} />;",
         filename: "component.tsx",
         errors: [/Consider whether onSubmit is needed/],
       },
       {
-        code: "const view = <FoodPicker onChange={handleChange} onSelect={handleSelect} />;",
+        code: "const FoodPicker = () => null;\nconst view = <FoodPicker onChange={handleChange} onSelect={handleSelect} />;",
         filename: "component.tsx",
         errors: [
           /Consider whether onChange is needed/,
@@ -423,14 +439,25 @@ run(
         ],
       },
       {
-        code: "const view = <Modal.Footer onConfirm={handleConfirm} />;",
+        code: "import { Modal } from './modal';\nconst view = <Modal.Footer onConfirm={handleConfirm} />;",
         filename: "component.tsx",
         errors: [/Consider whether onConfirm is needed/],
       },
       {
-        code: "const view = <components.FoodPicker onSelect={handleSelect} />;",
+        code: "import * as components from './components';\nconst view = <components.FoodPicker onSelect={handleSelect} />;",
         filename: "component.tsx",
         errors: [/Consider whether onSelect is needed/],
+      },
+      {
+        code: "import { SearchForm as LocalSearchForm } from './search-form';\nconst view = <LocalSearchForm onSubmit={handleSubmit} />;",
+        filename: "component.tsx",
+        errors: [/Consider whether onSubmit is needed/],
+      },
+      {
+        code: "import { SearchForm } from '@/components/search-form';\nconst view = <SearchForm onSubmit={handleSubmit} />;",
+        filename: "component.tsx",
+        options: [{ localImportPrefixes: [".", "@/"] }],
+        errors: [/Consider whether onSubmit is needed/],
       },
     ],
   }

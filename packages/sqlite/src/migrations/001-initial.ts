@@ -1,6 +1,6 @@
 import { DefaultFoods, Food } from "@mai/nutrition";
 import { Effect, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

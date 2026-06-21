@@ -32,7 +32,10 @@
     "mai/no-nested-effect-array-methods": "error",
     "mai/no-nested-layer-provide": "warn",
     "mai/no-optional-function-parameters": "error",
-    "mai/no-react-component-event-handler-props": "warn",
+    "mai/no-react-component-event-handler-props": [
+      "warn",
+      { "localImportPrefixes": [".", "@/"] }
+    ],
     "mai/no-react-component-inner-functions": "error",
     "mai/no-react-state-hooks": "error",
     "mai/no-service-option": "error",

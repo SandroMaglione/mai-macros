@@ -1,0 +1,24 @@
+{
+  "name": "@mai/machines",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/main.ts",
+    "./runtime": "./src/runtime.ts",
+    "./foods": "./src/foods/main.ts",
+    "./meal-plans": "./src/meal-plans/main.ts",
+    "./backups": "./src/backups/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@mai/nutrition": "workspace:^",
+    "effect": "4.0.0-beta.84",
+    "xstate": "^5.32.1"
+  },
+  "devDependencies": {
+    "@types/node": "latest"
+  }
+}

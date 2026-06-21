@@ -81,7 +81,10 @@ export function BackupTransferControls({
 
           actor.send({
             type: "importFile",
-            file,
+            source: {
+              fileName: file.name,
+              text: () => file.text(),
+            },
           });
         }}
         ref={inputRef}

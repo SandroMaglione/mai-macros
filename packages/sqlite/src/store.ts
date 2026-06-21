@@ -20,7 +20,8 @@ import {
   type NutritionStores,
 } from "@mai/nutrition";
 import { Effect, Layer, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 const EmptyRequest = Schema.Struct({});
 

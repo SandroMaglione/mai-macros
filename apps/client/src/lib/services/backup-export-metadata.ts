@@ -1,62 +1,103 @@
-import { Context, Effect, Layer, Option, Schema } from "effect";
-import * as KeyValueStore from "effect/unstable/persistence/KeyValueStore";
+import {
+  BackupDeliveryClient,
+  BackupShareAborted,
+  BackupShareFailed,
+} from "@mai/machines/backups";
+import { Effect, Layer } from "effect";
 
-const backupExportMetadataStorageKey = "latestSuccessfulExport";
+export { BackupExportMetadataStore } from "@mai/machines/backups";
 
-const BackupTransferCounts = Schema.Struct({
-  activeMealPlanSelections: Schema.Number,
-  dailyLogs: Schema.Number,
-  foods: Schema.Number,
-  mealEntries: Schema.Number,
-  plans: Schema.Number,
-});
+export type {
+  BackupExportMetadata,
+  BackupTransferCounts,
+} from "@mai/machines/backups";
 
-export type BackupTransferCounts = typeof BackupTransferCounts.Type;
+const ErrorMessageFromUnknown = ({ error }: { readonly error: unknown }) =>
+  error instanceof Error ? error.message : "Unexpected browser error.";
 
-export const BackupExportMetadata = Schema.Struct({
-  counts: BackupTransferCounts,
-  earliestDateKey: Schema.optional(Schema.String),
-  exportedAtIso: Schema.String,
-  fileName: Schema.String,
-  latestDateKey: Schema.optional(Schema.String),
-});
+const BrowserCanShareBackupFile = ({
+  file,
+}: {
+  readonly file: File;
+}): boolean =>
+  typeof navigator.share === "function" &&
+  typeof navigator.canShare === "function" &&
+  navigator.canShare({ files: [file] });
 
-export type BackupExportMetadata = typeof BackupExportMetadata.Type;
+const DownloadBackup = ({
+  blob,
+  fileName,
+}: {
+  readonly blob: Blob;
+  readonly fileName: string;
+}) =>
+  Effect.sync(() => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
 
-export class BackupExportMetadataStore extends Context.Service<BackupExportMetadataStore>()(
-  "BackupExportMetadataStore",
-  {
-    make: Effect.gen(function* () {
-      const keyValueStore = yield* KeyValueStore.KeyValueStore;
-      const schemaStore = KeyValueStore.toSchemaStore(
-        KeyValueStore.prefix(keyValueStore, "mai.backup."),
-        BackupExportMetadata
+    link.href = url;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  });
+
+const ShareBackupFile = ({ file }: { readonly file: File }) =>
+  Effect.tryPromise({
+    try: () =>
+      navigator.share({
+        files: [file],
+        title: file.name,
+      }),
+    catch: (error) =>
+      error instanceof DOMException && error.name === "AbortError"
+        ? new BackupShareAborted()
+        : new BackupShareFailed({
+            message: ErrorMessageFromUnknown({ error }),
+          }),
+  });
+
+const DeliverBackup = ({
+  fileName,
+  json,
+}: {
+  readonly fileName: string;
+  readonly json: string;
+}) =>
+  Effect.gen(function* () {
+    const blob = new Blob([json], {
+      type: "application/json",
+    });
+    const file =
+      typeof File === "function"
+        ? new File([blob], fileName, {
+            type: "application/json",
+          })
+        : null;
+
+    if (file !== null && BrowserCanShareBackupFile({ file })) {
+      return yield* ShareBackupFile({ file }).pipe(
+        Effect.as("shared" as const),
+        Effect.catchTag("BackupShareFailed", () =>
+          DownloadBackup({ blob, fileName }).pipe(
+            Effect.as("downloaded" as const)
+          )
+        )
       );
+    }
 
-      return {
-        getLatest: Effect.fn("BackupExportMetadataStore.getLatest")(
-          function* () {
-            return yield* schemaStore.get(backupExportMetadataStorageKey).pipe(
-              Effect.catchTags({
-                KeyValueStoreError: () => Effect.succeed(Option.none()),
-                SchemaError: () => Effect.succeed(Option.none()),
-              })
-            );
-          }
-        ),
-        setLatest: Effect.fn("BackupExportMetadataStore.setLatest")(function* ({
-          metadata,
-        }: {
-          readonly metadata: BackupExportMetadata;
-        }) {
-          return yield* schemaStore.set(
-            backupExportMetadataStorageKey,
-            metadata
-          );
-        }),
-      };
-    }),
-  }
-) {
-  static readonly layer = Layer.effect(this)(this.make);
-}
+    return yield* DownloadBackup({ blob, fileName }).pipe(
+      Effect.as("downloaded" as const)
+    );
+  });
+
+export const BrowserBackupDeliveryClientLayer = Layer.succeed(
+  BackupDeliveryClient,
+  BackupDeliveryClient.of({
+    deliver: DeliverBackup,
+  })
+);
