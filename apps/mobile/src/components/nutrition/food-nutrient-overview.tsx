@@ -104,6 +104,8 @@ export function FoodNutrientOverview({
   primaryLabel,
   secondaryLabel,
 }: FoodNutrientOverviewProps) {
+  const displayedBrand =
+    brand === undefined || brand.trim() === "" ? "/" : brand;
   const displayedPrimaryLabel =
     primaryLabel ??
     (nutrients?.energyKcal === undefined
@@ -120,11 +122,9 @@ export function FoodNutrientOverview({
               {name}
             </Text>
           </View>
-          {brand === undefined ? null : (
-            <Text numberOfLines={1} style={styles.subtitle}>
-              {brand}
-            </Text>
-          )}
+          <Text numberOfLines={1} style={styles.subtitle}>
+            {displayedBrand}
+          </Text>
         </View>
         <View style={styles.headerNumbers}>
           <Text numberOfLines={1} style={styles.primaryLabel}>

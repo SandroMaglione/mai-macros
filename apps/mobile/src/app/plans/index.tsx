@@ -9,11 +9,11 @@ import {
   PagerTabs,
 } from "@/components/ui";
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
+import { MealPlanSummaryCard } from "@/components/nutrition";
 import { todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
-import { calculatePlanEnergyKcal, DateKey, type Plan } from "@mai/nutrition";
+import { color, spacing } from "@/theme/tokens";
+import { DateKey, type Plan } from "@mai/nutrition";
 import { DailyLogs, type OpenedDay } from "@mai/nutrition/services/daily-logs";
 import {
   MealPlans,
@@ -23,7 +23,7 @@ import { useMachine } from "@xstate/react";
 import { Effect, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronLeft, Pencil } from "lucide-react-native";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 type PlansDay = Pick<OpenedDay, "dailyLog" | "plans" | "selectedPlan">;
@@ -594,9 +594,9 @@ function PlanSelectTab({
         const isSelected = plan.id === selectedPlanId;
 
         return (
-          <PlanRow
+          <MealPlanSummaryCard
             disabled={disabled || isSelected}
-            isSelected={isSelected}
+            isActive={isSelected}
             key={plan.id}
             onPress={() => {
               onChangePlan(plan);
@@ -635,9 +635,9 @@ function PlanEditTab({
         style={styles.tabScroll}
       >
         {plans.map((plan) => (
-          <PlanRow
+          <MealPlanSummaryCard
             disabled={disabled}
-            isSelected={plan.id === selectedPlanId}
+            isActive={plan.id === selectedPlanId}
             key={plan.id}
             onPress={() => {
               onSelectEditPlan(plan);
@@ -671,52 +671,6 @@ function PlanEditTab({
         }}
       />
     </View>
-  );
-}
-
-function PlanRow({
-  disabled,
-  isSelected,
-  onPress,
-  plan,
-}: {
-  readonly disabled: boolean;
-  readonly isSelected: boolean;
-  readonly onPress: () => void;
-  readonly plan: Plan;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.planRow,
-        isSelected ? styles.planRowSelected : null,
-        pressed ? styles.pressed : null,
-      ]}
-    >
-      <View style={styles.planCopy}>
-        <Text numberOfLines={1} style={styles.planName}>
-          {plan.name}
-        </Text>
-        <Text numberOfLines={1} style={styles.planMacroLine}>
-          {_formatPlanNumber({
-            value: calculatePlanEnergyKcal({ plan }),
-          })}{" "}
-          kcal | C{" "}
-          {_formatPlanNumber({
-            value: plan.carbsTargetGrams,
-          })}
-          g | P{" "}
-          {_formatPlanNumber({
-            value: plan.proteinTargetGrams,
-          })}
-          g | F {_formatPlanNumber({ value: plan.fatTargetGrams })}g
-        </Text>
-      </View>
-      {isSelected ? <Text style={styles.activeBadge}>Active</Text> : null}
-    </Pressable>
   );
 }
 
@@ -832,13 +786,6 @@ export function savePlan({ input }: { readonly input: SavePlanInput }) {
   );
 }
 
-function _formatPlanNumber({ value }: { readonly value: number }) {
-  return formatNumber({
-    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
-    value,
-  });
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -865,48 +812,6 @@ const styles = StyleSheet.create({
   tabScrollContent: {
     gap: spacing.md,
     paddingBottom: spacing.xxl,
-  },
-  planRow: {
-    minHeight: 72,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    backgroundColor: color.surface,
-    ...shadow.card,
-  },
-  planRowSelected: {
-    borderColor: color.primary,
-    backgroundColor: color.primarySoft,
-  },
-  pressed: {
-    opacity: 0.84,
-  },
-  planCopy: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  planName: {
-    color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
-  },
-  planMacroLine: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
-  },
-  activeBadge: {
-    color: color.primary,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
   },
   editTab: {
     flex: 1,

@@ -420,6 +420,7 @@ function ReadyEditMealEntryScreen({
         <View style={styles.body}>
           <NumberField
             accessibilityLabel={`${mealLabel} quantity in grams`}
+            autoFocus
             editable={!disabled}
             label="Grams"
             onChangeText={(quantityGrams) => {
@@ -430,6 +431,7 @@ function ReadyEditMealEntryScreen({
             }}
             placeholder="150"
             rightElement={<Text style={styles.unitLabel}>g</Text>}
+            selectTextOnFocus
             value={snapshot.context.quantityGrams}
           />
 
