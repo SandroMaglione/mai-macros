@@ -190,6 +190,7 @@ export default function InsightsScreen() {
       scrollProps={{
         showsVerticalScrollIndicator: false,
       }}
+      topSafeAreaColor={color.primary}
     >
       <InsightsHeader
         onBackToToday={() => {
@@ -324,6 +325,7 @@ export function loadDefaultRange(): Effect.Effect<
 const styles = StyleSheet.create({
   content: {
     paddingBottom: spacing.xxxl,
+    backgroundColor: color.bg,
   },
   headerAction: {
     width: 44,

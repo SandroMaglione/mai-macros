@@ -337,6 +337,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
         scrollProps={{
           contentInsetAdjustmentBehavior: "never",
         }}
+        style={styles.headerSafeArea}
       >
         <AppHeader
           center={
@@ -1197,6 +1198,10 @@ const styles = StyleSheet.create({
   content: {
     gap: 0,
     paddingBottom: spacing.xl,
+    backgroundColor: color.bg,
+  },
+  headerSafeArea: {
+    backgroundColor: color.primary,
   },
   centeredContent: {
     justifyContent: "center",

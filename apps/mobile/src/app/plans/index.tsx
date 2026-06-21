@@ -1,25 +1,28 @@
 import {
   AppHeader,
   AppScreen,
-  BottomActionBar,
   Button,
   IconButton,
   LoadingOverlay,
   LoadingView,
   Notice,
   PagerTabs,
-  SectionCard,
 } from "@/components/ui";
+import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
 import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, type } from "@/theme/tokens";
 import { calculatePlanEnergyKcal, DateKey, type Plan } from "@mai/nutrition";
 import { DailyLogs, type OpenedDay } from "@mai/nutrition/services/daily-logs";
+import {
+  MealPlans,
+  type CreateMealPlanInput,
+} from "@mai/nutrition/services/meal-plans";
 import { useMachine } from "@xstate/react";
 import { Effect, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronLeft, Pencil, Plus } from "lucide-react-native";
+import { ChevronLeft, Pencil } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
@@ -43,7 +46,32 @@ type PlansRouteLoadResult =
       readonly data: PlansRouteData;
     };
 
-type PlansTabIndex = 0 | 1;
+type PlansTabIndex = 0 | 1 | 2;
+
+type SavePlanInput =
+  | {
+      readonly action: "create";
+      readonly dateKey: DateKey;
+      readonly input: CreateMealPlanInput;
+    }
+  | {
+      readonly action: "revise";
+      readonly dateKey: DateKey;
+      readonly input: CreateMealPlanInput;
+      readonly planId: Plan["id"];
+    };
+
+type SavePlanResult =
+  | {
+      readonly _tag: "Saved";
+      readonly day: PlansDay;
+      readonly editingPlan: Plan;
+      readonly notice: string;
+    }
+  | {
+      readonly _tag: "Failed";
+      readonly notice: string;
+    };
 
 type PlansRouteEvent =
   | {
@@ -53,6 +81,22 @@ type PlansRouteEvent =
   | {
       readonly plan: Plan;
       readonly type: "changePlan";
+    }
+  | {
+      readonly input: CreateMealPlanInput;
+      readonly type: "createPlan";
+    }
+  | {
+      readonly input: CreateMealPlanInput;
+      readonly plan: Plan;
+      readonly type: "revisePlan";
+    }
+  | {
+      readonly plan: Plan;
+      readonly type: "selectEditPlan";
+    }
+  | {
+      readonly type: "clearEditPlan";
     };
 
 const plansRouteMachine = setup({
@@ -61,6 +105,7 @@ const plansRouteMachine = setup({
       readonly activeTab: PlansTabIndex;
       readonly data: PlansRouteData | null;
       readonly dateKeyParam: string | undefined;
+      readonly editingPlan: Plan | null;
       readonly notice: string | null;
       readonly redirectDateKey: DateKey | null;
     },
@@ -98,12 +143,16 @@ const plansRouteMachine = setup({
           })
         )
     ),
+    savePlan: fromPromise<SavePlanResult, SavePlanInput>(({ input }) =>
+      RuntimeClient.runPromise(savePlan({ input }))
+    ),
   },
 }).createMachine({
   context: ({ input }) => ({
     activeTab: 0,
     data: null,
     dateKeyParam: input.dateKeyParam,
+    editingPlan: null,
     notice: null,
     redirectDateKey: null,
   }),
@@ -150,12 +199,40 @@ const plansRouteMachine = setup({
             notice: null,
           }),
         },
+        clearEditPlan: {
+          actions: assign({
+            editingPlan: null,
+            notice: null,
+          }),
+        },
+        createPlan: {
+          target: "SavingPlan",
+          actions: assign({
+            notice: null,
+          }),
+        },
+        revisePlan: {
+          target: "SavingPlan",
+          actions: assign({
+            notice: null,
+          }),
+        },
         selectTab: {
           actions: assign(({ event }) => {
             assertEvent(event, "selectTab");
 
             return {
               activeTab: event.index,
+            };
+          }),
+        },
+        selectEditPlan: {
+          actions: assign(({ event }) => {
+            assertEvent(event, "selectEditPlan");
+
+            return {
+              editingPlan: event.plan,
+              notice: null,
             };
           }),
         },
@@ -198,6 +275,65 @@ const plansRouteMachine = setup({
           target: "Ready",
           actions: assign({
             notice: "Could not change plan. Please try again.",
+          }),
+        },
+      },
+    },
+    SavingPlan: {
+      invoke: {
+        src: "savePlan",
+        input: ({ context, event }) => {
+          if (context.data === null) {
+            throw new Error("Cannot save plans before the route loads.");
+          }
+
+          if (event.type === "createPlan") {
+            return {
+              action: "create",
+              dateKey: context.data.dateKey,
+              input: event.input,
+            };
+          }
+
+          assertEvent(event, "revisePlan");
+
+          return {
+            action: "revise",
+            dateKey: context.data.dateKey,
+            input: event.input,
+            planId: event.plan.id,
+          };
+        },
+        onDone: {
+          target: "Ready",
+          actions: assign(({ context, event }) => {
+            if (event.output._tag === "Failed") {
+              return {
+                notice: event.output.notice,
+              };
+            }
+
+            if (context.data === null) {
+              return {
+                editingPlan: event.output.editingPlan,
+                notice: event.output.notice,
+              };
+            }
+
+            return {
+              data: {
+                ...context.data,
+                day: event.output.day,
+              },
+              editingPlan: event.output.editingPlan,
+              notice: event.output.notice,
+            };
+          }),
+        },
+        onError: {
+          target: "Ready",
+          actions: assign({
+            notice: "Could not save plan. Please try again.",
           }),
         },
       },
@@ -256,7 +392,10 @@ export default function PlansScreen() {
     <ReadyPlansScreen
       activeTab={snapshot.context.activeTab}
       data={snapshot.context.data}
-      disabled={snapshot.matches("ChangingPlan")}
+      disabled={
+        snapshot.matches("ChangingPlan") || snapshot.matches("SavingPlan")
+      }
+      editingPlan={snapshot.context.editingPlan}
       notice={snapshot.context.notice}
       onChangePlan={(plan) => {
         send({
@@ -264,9 +403,33 @@ export default function PlansScreen() {
           type: "changePlan",
         });
       }}
+      onClearEditPlan={() => {
+        send({
+          type: "clearEditPlan",
+        });
+      }}
+      onCreatePlan={(input) => {
+        send({
+          input,
+          type: "createPlan",
+        });
+      }}
+      onRevisePlan={(plan, input) => {
+        send({
+          input,
+          plan,
+          type: "revisePlan",
+        });
+      }}
+      onSelectEditPlan={(plan) => {
+        send({
+          plan,
+          type: "selectEditPlan",
+        });
+      }}
       onSelectTab={(index) => {
         send({
-          index: index === 0 ? 0 : 1,
+          index: index === 0 ? 0 : index === 1 ? 1 : 2,
           type: "selectTab",
         });
       }}
@@ -278,22 +441,52 @@ function ReadyPlansScreen({
   activeTab,
   data,
   disabled,
+  editingPlan,
   notice,
   onChangePlan,
+  onClearEditPlan,
+  onCreatePlan,
+  onRevisePlan,
+  onSelectEditPlan,
   onSelectTab,
 }: {
   readonly activeTab: PlansTabIndex;
   readonly data: PlansRouteData;
   readonly disabled: boolean;
+  readonly editingPlan: Plan | null;
   readonly notice: string | null;
   readonly onChangePlan: (plan: Plan) => void;
+  readonly onClearEditPlan: () => void;
+  readonly onCreatePlan: (input: CreateMealPlanInput) => void;
+  readonly onRevisePlan: (plan: Plan, input: CreateMealPlanInput) => void;
+  readonly onSelectEditPlan: (plan: Plan) => void;
   readonly onSelectTab: (index: number) => void;
 }) {
   const selectedPlan = data.day.selectedPlan;
+  const tabs = [
+    {
+      accessibilityLabel: "Select active plan",
+      key: "select",
+      label: "Select",
+    },
+    {
+      accessibilityLabel: "Create plan",
+      key: "create",
+      label: "Create",
+    },
+    {
+      accessibilityLabel: "Edit plans",
+      key: "edit",
+      label: "Edit",
+    },
+  ] as const;
 
   return (
     <View style={styles.screen}>
-      <AppScreen contentStyle={styles.content} safeAreaEdges={["top"]}>
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={["top", "bottom"]}
+      >
         <AppHeader
           embedded
           leading={
@@ -320,16 +513,17 @@ function ReadyPlansScreen({
           <Notice
             message={notice}
             style={styles.notice}
-            tone={notice === "Plan changed." ? "success" : "danger"}
+            tone={notice.startsWith("Plan ") ? "success" : "danger"}
           />
         )}
 
         <PagerTabs
           activeIndex={activeTab}
           onActiveIndexChange={onSelectTab}
+          tabBarPosition="bottom"
           tabs={[
             {
-              accessibilityLabel: "Select active plan",
+              ...tabs[0],
               content: (
                 <PlanSelectTab
                   disabled={disabled}
@@ -338,55 +532,42 @@ function ReadyPlansScreen({
                   selectedPlanId={selectedPlan.id}
                 />
               ),
-              key: "select",
-              label: "Select",
             },
             {
-              accessibilityLabel: "Manage plans",
-              content: <PlanManageTab plan={selectedPlan} />,
-              key: "manage",
-              label: "Manage",
+              ...tabs[1],
+              content: (
+                <MealPlanForm
+                  action="create"
+                  canNavigateBack={false}
+                  initialPlan={null}
+                  isSubmitting={disabled}
+                  layout="embedded"
+                  onBack={() => {
+                    onSelectTab(0);
+                  }}
+                  onSubmit={onCreatePlan}
+                />
+              ),
+            },
+            {
+              ...tabs[2],
+              content: (
+                <PlanEditTab
+                  disabled={disabled}
+                  editingPlan={editingPlan}
+                  onClearEditPlan={onClearEditPlan}
+                  onRevisePlan={onRevisePlan}
+                  onSelectEditPlan={onSelectEditPlan}
+                  plans={data.day.plans}
+                  selectedPlanId={selectedPlan.id}
+                />
+              ),
             },
           ]}
         />
       </AppScreen>
 
-      <BottomActionBar>
-        <Button
-          disabled={disabled}
-          icon={Pencil}
-          onPress={() => {
-            router.push({
-              pathname: "/plans/[planId]/edit",
-              params: {
-                dateKey: data.dateKey,
-                planId: selectedPlan.id,
-              },
-            });
-          }}
-          style={styles.footerButton}
-          variant="secondary"
-        >
-          Edit plan
-        </Button>
-        <Button
-          disabled={disabled}
-          icon={Plus}
-          onPress={() => {
-            router.push({
-              pathname: "/plans/new",
-              params: {
-                dateKey: data.dateKey,
-              },
-            });
-          }}
-          style={styles.footerButton}
-        >
-          New plan
-        </Button>
-      </BottomActionBar>
-
-      <LoadingOverlay message="Changing plan" visible={disabled} />
+      <LoadingOverlay message="Saving plan" visible={disabled} />
     </View>
   );
 }
@@ -428,17 +609,68 @@ function PlanSelectTab({
   );
 }
 
-function PlanManageTab({ plan }: { readonly plan: Plan }) {
+function PlanEditTab({
+  disabled,
+  editingPlan,
+  onClearEditPlan,
+  onRevisePlan,
+  onSelectEditPlan,
+  plans,
+  selectedPlanId,
+}: {
+  readonly disabled: boolean;
+  readonly editingPlan: Plan | null;
+  readonly onClearEditPlan: () => void;
+  readonly onRevisePlan: (plan: Plan, input: CreateMealPlanInput) => void;
+  readonly onSelectEditPlan: (plan: Plan) => void;
+  readonly plans: readonly Plan[];
+  readonly selectedPlanId: Plan["id"];
+}) {
+  if (editingPlan === null) {
+    return (
+      <ScrollView
+        alwaysBounceVertical={false}
+        contentContainerStyle={styles.tabScrollContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.tabScroll}
+      >
+        {plans.map((plan) => (
+          <PlanRow
+            disabled={disabled}
+            isSelected={plan.id === selectedPlanId}
+            key={plan.id}
+            onPress={() => {
+              onSelectEditPlan(plan);
+            }}
+            plan={plan}
+          />
+        ))}
+      </ScrollView>
+    );
+  }
+
   return (
-    <ScrollView
-      alwaysBounceVertical={false}
-      contentContainerStyle={styles.tabScrollContent}
-      style={styles.tabScroll}
-    >
-      <SectionCard style={styles.card} subtitle="Active" title={plan.name}>
-        <PlanMetrics plan={plan} />
-      </SectionCard>
-    </ScrollView>
+    <View style={styles.editTab}>
+      <Button
+        disabled={disabled}
+        icon={Pencil}
+        onPress={onClearEditPlan}
+        variant="secondary"
+      >
+        Change plan
+      </Button>
+      <MealPlanForm
+        action="edit"
+        initialPlan={editingPlan}
+        isSubmitting={disabled}
+        key={editingPlan.id}
+        layout="embedded"
+        onBack={onClearEditPlan}
+        onSubmit={(input) => {
+          onRevisePlan(editingPlan, input);
+        }}
+      />
+    </View>
   );
 }
 
@@ -488,69 +720,13 @@ function PlanRow({
   );
 }
 
-function PlanMetrics({ plan }: { readonly plan: Plan }) {
-  return (
-    <View style={styles.metricGrid}>
-      <PlanMetric
-        colorValue={color.nutritionEnergy}
-        label="Calories"
-        value={`${_formatPlanNumber({
-          value: calculatePlanEnergyKcal({ plan }),
-        })} kcal`}
-      />
-      <PlanMetric
-        colorValue={color.nutritionCarbs}
-        label="Carbs"
-        value={`${_formatPlanNumber({ value: plan.carbsTargetGrams })} g`}
-      />
-      <PlanMetric
-        colorValue={color.nutritionProtein}
-        label="Protein"
-        value={`${_formatPlanNumber({ value: plan.proteinTargetGrams })} g`}
-      />
-      <PlanMetric
-        colorValue={color.nutritionFat}
-        label="Fat"
-        value={`${_formatPlanNumber({ value: plan.fatTargetGrams })} g`}
-      />
-    </View>
-  );
-}
-
-function PlanMetric({
-  colorValue,
-  label,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <View style={styles.metric}>
-      <Text
-        numberOfLines={1}
-        style={[styles.metricValue, { color: colorValue }]}
-      >
-        {value}
-      </Text>
-      <Text
-        numberOfLines={1}
-        style={[styles.metricLabel, { color: colorValue }]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 export function loadPlansRouteData({
   dateKeyParam,
 }: {
   readonly dateKeyParam: string | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeUnknownEffect(DateKey)(
+    const dateKey = yield* Schema.decodeEffect(DateKey)(
       dateKeyParam ?? todayDateKey()
     );
     const dailyLogs = yield* DailyLogs;
@@ -577,6 +753,80 @@ export function loadPlansRouteData({
     Effect.catchTag("SchemaError", () =>
       Effect.succeed({
         _tag: "InvalidRoute" as const,
+      })
+    )
+  );
+}
+
+export function savePlan({ input }: { readonly input: SavePlanInput }) {
+  return Effect.gen(function* () {
+    const dailyLogs = yield* DailyLogs;
+    const mealPlans = yield* MealPlans;
+
+    if (input.action === "create") {
+      const created = yield* mealPlans.create({
+        input: input.input,
+      });
+      const day = yield* dailyLogs.changePlan({
+        input: {
+          dateKey: input.dateKey,
+          planId: created.plan.id,
+        },
+      });
+
+      return {
+        _tag: "Saved" as const,
+        day,
+        editingPlan: created.plan,
+        notice: "Plan created.",
+      };
+    }
+
+    yield* mealPlans.revise({
+      input: {
+        ...input.input,
+        dateKey: input.dateKey,
+        planId: input.planId,
+      },
+    });
+
+    const day = yield* dailyLogs.open({
+      input: {
+        dateKey: input.dateKey,
+      },
+    });
+
+    return {
+      _tag: "Saved" as const,
+      day,
+      editingPlan: day.selectedPlan,
+      notice: "Plan saved.",
+    };
+  }).pipe(
+    Effect.catchTag("PlanNameAlreadyExists", () =>
+      Effect.succeed({
+        _tag: "Failed" as const,
+        notice:
+          "A plan with this name already exists. Choose a different name and try again.",
+      })
+    ),
+    Effect.catchTag("SchemaError", () =>
+      Effect.succeed({
+        _tag: "Failed" as const,
+        notice:
+          "Check that the name is filled and every target is a non-negative number.",
+      })
+    ),
+    Effect.catchTag("PlanNotFound", () =>
+      Effect.succeed({
+        _tag: "Failed" as const,
+        notice: "This plan is no longer available.",
+      })
+    ),
+    Effect.catch(() =>
+      Effect.succeed({
+        _tag: "Failed" as const,
+        notice: "Could not save plan. Please try again.",
       })
     )
   );
@@ -658,34 +908,8 @@ const styles = StyleSheet.create({
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
   },
-  card: {
-    backgroundColor: color.surface,
-  },
-  metricGrid: {
-    gap: spacing.sm,
-  },
-  metric: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  editTab: {
+    flex: 1,
     gap: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: color.sheetBorder,
-    paddingBottom: spacing.sm,
-  },
-  metricValue: {
-    minWidth: 0,
-    flex: 1,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
-  },
-  metricLabel: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-  },
-  footerButton: {
-    flex: 1,
   },
 });

@@ -1,23 +1,26 @@
-import {
-  AppHeader,
-  AppScreen,
-  BottomActionBar,
-  Button,
-  IconButton,
-  PagerTabs,
-  SectionCard,
-} from "@/components/ui";
-import { color, spacing, type } from "@/theme/tokens";
-import { DateKey as DateKeySchema } from "@mai/nutrition";
+import { AppHeader, AppScreen, IconButton, PagerTabs } from "@/components/ui";
+import { color, spacing } from "@/theme/tokens";
+import { DateKey as DateKeySchema, type DateKey } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Option, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
-import type { LucideIcon } from "lucide-react-native";
-import { ChevronLeft, Pencil, Plus } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { ChevronLeft } from "lucide-react-native";
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { assertEvent, assign, setup } from "xstate";
 
+import { EditFoodsPanelLoader } from "./edit";
+import { CreateFoodPanel } from "./new";
+
 type FoodsTabIndex = 0 | 1;
+
+type FoodsDateKeyDecodeResult =
+  | {
+      readonly _tag: "Valid";
+      readonly dateKey: DateKey | undefined;
+    }
+  | {
+      readonly _tag: "Invalid";
+    };
 
 const foodsHubMachine = setup({
   types: {
@@ -53,127 +56,129 @@ export default function FoodsScreen() {
   const dateKeyParam = globalThis.Array.isArray(params.dateKey)
     ? params.dateKey[0]
     : params.dateKey;
-  const dateKey =
+  const dateKeyResult: FoodsDateKeyDecodeResult =
     dateKeyParam === undefined
-      ? undefined
+      ? {
+          _tag: "Valid",
+          dateKey: undefined,
+        }
       : Schema.decodeOption(DateKeySchema)(dateKeyParam).pipe(
-          Option.getOrUndefined
+          Option.match({
+            onNone: () => ({
+              _tag: "Invalid" as const,
+            }),
+            onSome: (dateKey) => ({
+              _tag: "Valid" as const,
+              dateKey,
+            }),
+          })
         );
+  const dateKey =
+    dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
+  const panelDateKeyParam =
+    dateKeyResult._tag === "Valid" ? dateKeyParam : undefined;
   const [snapshot, send] = useMachine(foodsHubMachine);
   const activeTab = snapshot.context.activeTab;
-  const isCreateTab = activeTab === 0;
+  const tabs = [
+    {
+      accessibilityLabel: "Create food",
+      key: "create",
+      label: "Create",
+    },
+    {
+      accessibilityLabel: "Edit foods",
+      key: "edit",
+      label: "Edit",
+    },
+  ] as const;
 
   return (
-    <View style={styles.screen}>
-      <AppScreen contentStyle={styles.content} safeAreaEdges={["top"]}>
-        <AppHeader
-          embedded
-          leading={
-            <IconButton
-              accessibilityLabel="Back to day"
-              icon={ChevronLeft}
-              onPress={() => {
-                if (dateKey === undefined) {
-                  router.replace("/");
-                  return;
-                }
-
-                router.replace({
-                  pathname: "/days/[dateKey]",
-                  params: {
-                    dateKey,
-                  },
-                });
-              }}
-              variant="ghost"
-            />
-          }
-          shadow
-          title="Foods"
-        />
-
-        <PagerTabs
-          activeIndex={activeTab}
-          onActiveIndexChange={(index) => {
-            send({
-              index: index === 0 ? 0 : 1,
-              type: "selectTab",
-            });
-          }}
-          tabs={[
-            {
-              accessibilityLabel: "Create food",
-              content: (
-                <FoodHubPanel
-                  icon={Plus}
-                  label="Create food"
-                  subtitle="New library item"
-                />
-              ),
-              key: "create",
-              label: "Create",
-            },
-            {
-              accessibilityLabel: "Edit foods",
-              content: (
-                <FoodHubPanel
-                  icon={Pencil}
-                  label="Edit foods"
-                  subtitle="Food library"
-                />
-              ),
-              key: "edit",
-              label: "Edit",
-            },
-          ]}
-        />
-      </AppScreen>
-
-      <BottomActionBar>
-        <Button
-          icon={isCreateTab ? Plus : Pencil}
-          onPress={() => {
-            router.push({
-              pathname: isCreateTab ? "/foods/new" : "/foods/edit",
-              params: dateKey === undefined ? {} : { dateKey },
-            });
-          }}
-          style={styles.footerButton}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.screen}
+    >
+      <View style={styles.screen}>
+        <AppScreen
+          contentStyle={styles.content}
+          safeAreaEdges={["top", "bottom"]}
         >
-          {isCreateTab ? "Create food" : "Edit foods"}
-        </Button>
-      </BottomActionBar>
-    </View>
-  );
-}
+          <AppHeader
+            embedded
+            leading={
+              <IconButton
+                accessibilityLabel="Back to day"
+                icon={ChevronLeft}
+                onPress={() => {
+                  if (dateKey === undefined) {
+                    router.replace("/");
+                    return;
+                  }
 
-function FoodHubPanel({
-  icon: Icon,
-  label,
-  subtitle,
-}: {
-  readonly icon: LucideIcon;
-  readonly label: string;
-  readonly subtitle: string;
-}) {
-  return (
-    <View style={styles.panelWrap}>
-      <SectionCard style={styles.panel}>
-        <View style={styles.panelBody}>
-          <View style={styles.panelIcon}>
-            <Icon color={color.primary} size={26} strokeWidth={3} />
-          </View>
-          <View style={styles.panelCopy}>
-            <Text numberOfLines={1} style={styles.panelTitle}>
-              {label}
-            </Text>
-            <Text numberOfLines={1} style={styles.panelSubtitle}>
-              {subtitle}
-            </Text>
-          </View>
-        </View>
-      </SectionCard>
-    </View>
+                  router.replace({
+                    pathname: "/days/[dateKey]",
+                    params: {
+                      dateKey,
+                    },
+                  });
+                }}
+                variant="ghost"
+              />
+            }
+            shadow
+            title="Foods"
+          />
+
+          <PagerTabs
+            activeIndex={activeTab}
+            onActiveIndexChange={(index) => {
+              send({
+                index: index === 0 ? 0 : 1,
+                type: "selectTab",
+              });
+            }}
+            tabBarPosition="bottom"
+            tabs={[
+              {
+                ...tabs[0],
+                content: (
+                  <CreateFoodPanel
+                    dateKey={dateKey}
+                    initialNotice={
+                      dateKeyResult._tag === "Invalid"
+                        ? "The target date was not valid. Saving will return to today."
+                        : null
+                    }
+                    mode="embedded"
+                    onBack={() => {
+                      if (dateKey === undefined) {
+                        router.replace("/");
+                        return;
+                      }
+
+                      router.replace({
+                        pathname: "/days/[dateKey]",
+                        params: {
+                          dateKey,
+                        },
+                      });
+                    }}
+                  />
+                ),
+              },
+              {
+                ...tabs[1],
+                content: (
+                  <EditFoodsPanelLoader
+                    dateKeyParam={panelDateKeyParam}
+                    layout="embedded"
+                  />
+                ),
+              },
+            ]}
+          />
+        </AppScreen>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -188,46 +193,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: 0,
-  },
-  panelWrap: {
-    flex: 1,
-    justifyContent: "center",
-    paddingBottom: spacing.xxl,
-  },
-  panel: {
-    backgroundColor: color.surface,
-  },
-  panelBody: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  panelIcon: {
-    width: 52,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 26,
-    backgroundColor: color.primarySoft,
-  },
-  panelCopy: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  panelTitle: {
-    color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
-  },
-  panelSubtitle: {
-    color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
-  },
-  footerButton: {
-    flex: 1,
   },
 });

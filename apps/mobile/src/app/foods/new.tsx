@@ -43,6 +43,8 @@ type SubmitResult =
       readonly _tag: "SchemaError";
     };
 
+type CreateFoodRouteMode = "screen" | "embedded";
+
 const SearchParams = Schema.Struct({
   dateKey: Schema.optional(DateKeySchema),
 });
@@ -52,6 +54,7 @@ const createFoodRouteMachine = setup({
     context: {} as {
       readonly dateKey: DateKey | undefined;
       readonly foodFormActor: ActorRefFrom<typeof foodFormMachine>;
+      readonly mode: CreateFoodRouteMode;
       readonly notice: string | null;
     },
     events: {} as
@@ -62,6 +65,7 @@ const createFoodRouteMachine = setup({
     input: {} as {
       readonly dateKey: DateKey | undefined;
       readonly initialNotice: string | null;
+      readonly mode: CreateFoodRouteMode;
     },
   },
   actors: {
@@ -103,6 +107,7 @@ const createFoodRouteMachine = setup({
         syncQuickInputFromFields: true,
       },
     }),
+    mode: input.mode,
     notice: input.initialNotice,
   }),
   initial: "Idle",
@@ -160,7 +165,21 @@ const createFoodRouteMachine = setup({
                   : (`/days/${targetDateKey}` as Href)
               );
             },
+            guard: ({ context }) => context.mode === "screen",
             target: "Created",
+          },
+          {
+            actions: [
+              assign({
+                notice: "Food created.",
+              }),
+              ({ context }) => {
+                context.foodFormActor.send({
+                  type: "reset",
+                });
+              },
+            ],
+            target: "Idle",
           },
         ],
         onError: {
@@ -221,13 +240,40 @@ export default function NewFoodScreen() {
     [dateKeyParam]
   ) satisfies SearchDecodeResult;
   const dateKey = search._tag === "Valid" ? search.dateKey : undefined;
+  return (
+    <CreateFoodPanel
+      dateKey={dateKey}
+      initialNotice={
+        search._tag === "Invalid"
+          ? "The target date was not valid. Saving will return to today."
+          : null
+      }
+      mode="screen"
+      onBack={() => {
+        expoRouter.replace(
+          dateKey === undefined ? "/" : (`/days/${dateKey}` as Href)
+        );
+      }}
+    />
+  );
+}
+
+export function CreateFoodPanel({
+  dateKey,
+  initialNotice,
+  mode,
+  onBack,
+}: {
+  readonly dateKey: DateKey | undefined;
+  readonly initialNotice: string | null;
+  readonly mode: CreateFoodRouteMode;
+  readonly onBack: () => void;
+}) {
   const [snapshot] = useMachine(createFoodRouteMachine, {
     input: {
       dateKey,
-      initialNotice:
-        search._tag === "Invalid"
-          ? "The target date was not valid. Saving will return to today."
-          : null,
+      initialNotice,
+      mode,
     },
   });
   const isSubmitting =
@@ -240,11 +286,8 @@ export default function NewFoodScreen() {
       disabled={isSubmitting}
       errorMessage={snapshot.context.notice ?? undefined}
       hasFailed={snapshot.matches("Failure")}
-      onBack={() => {
-        expoRouter.replace(
-          dateKey === undefined ? "/" : (`/days/${dateKey}` as Href)
-        );
-      }}
+      layout={mode}
+      onBack={onBack}
     />
   );
 }

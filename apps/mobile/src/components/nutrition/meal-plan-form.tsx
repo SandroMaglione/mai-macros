@@ -16,10 +16,11 @@ import {
 } from "@/components/ui";
 import { useMachine } from "@xstate/react";
 import { ChevronLeft, Plus, Save } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { assign, setup } from "xstate";
 
 type MealPlanFormAction = "create" | "edit";
+type MealPlanFormLayout = "screen" | "embedded";
 
 type PlanTargetFieldName =
   | "proteinTargetGrams"
@@ -156,6 +157,7 @@ export function MealPlanForm({
   errorMessage,
   initialPlan,
   isSubmitting,
+  layout = "screen",
   onBack,
   onSubmit,
 }: {
@@ -164,6 +166,7 @@ export function MealPlanForm({
   readonly errorMessage?: string;
   readonly initialPlan: Plan | null;
   readonly isSubmitting: boolean;
+  readonly layout?: MealPlanFormLayout;
   readonly onBack: () => void;
   readonly onSubmit: (input: CreateMealPlanInput) => void;
 }) {
@@ -176,6 +179,102 @@ export function MealPlanForm({
   const submitText = isCreating ? "Create plan" : "Save revised plan";
   const SubmitIcon = isCreating ? Plus : Save;
   const energyKcal = calculateMealPlanEnergyKcalFromValues({ values });
+  const form = (
+    <View style={styles.form}>
+      {errorMessage === undefined ? null : (
+        <Notice message={errorMessage} title="Plan not saved" tone="danger" />
+      )}
+
+      <Field
+        autoCapitalize="words"
+        autoCorrect={false}
+        editable={!isSubmitting}
+        label="Name"
+        onChangeText={(value) =>
+          send({ type: "changeField", name: "name", value })
+        }
+        placeholder="Training day"
+        returnKeyType="next"
+        value={values.name}
+      />
+
+      <SectionCard style={styles.card} title="Macros">
+        <View style={styles.macroGrid}>
+          {macroTargetFields.map((field) => (
+            <PlanTargetInput
+              field={field}
+              isSubmitting={isSubmitting}
+              key={field.name}
+              onChangeText={(value) =>
+                send({ type: "changeField", name: field.name, value })
+              }
+              value={values[field.name]}
+            />
+          ))}
+        </View>
+
+        <View style={styles.energyPanel}>
+          <Text style={styles.energyLabel}>Calories</Text>
+          <View style={styles.energyValueGroup}>
+            <Text
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={styles.energyValue}
+            >
+              {formatNumber({
+                maximumFractionDigits: 2,
+                value: energyKcal,
+              })}
+            </Text>
+            <Text style={styles.energyUnit}>kcal</Text>
+          </View>
+        </View>
+      </SectionCard>
+
+      <SectionCard style={styles.card} title="Nutrient limits">
+        <View style={styles.nutrientGrid}>
+          {nutrientTargetFields.map((field) => (
+            <PlanTargetInput
+              field={field}
+              isSubmitting={isSubmitting}
+              key={field.name}
+              onChangeText={(value) =>
+                send({ type: "changeField", name: field.name, value })
+              }
+              value={values[field.name]}
+            />
+          ))}
+        </View>
+      </SectionCard>
+    </View>
+  );
+  const submitButton = (
+    <Button
+      disabled={isSubmitting}
+      icon={SubmitIcon}
+      loading={isSubmitting}
+      onPress={() => {
+        onSubmit(createMealPlanInputFromValues({ values }));
+      }}
+      style={styles.footerButton}
+    >
+      {submitText}
+    </Button>
+  );
+
+  if (layout === "embedded") {
+    return (
+      <ScrollView
+        alwaysBounceVertical={false}
+        contentContainerStyle={styles.embeddedContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.embeddedScroll}
+      >
+        {form}
+        <View style={styles.inlineSubmit}>{submitButton}</View>
+      </ScrollView>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -201,92 +300,10 @@ export function MealPlanForm({
           title={title}
         />
 
-        <View style={styles.form}>
-          {errorMessage === undefined ? null : (
-            <Notice
-              message={errorMessage}
-              title="Plan not saved"
-              tone="danger"
-            />
-          )}
-
-          <Field
-            autoCapitalize="words"
-            autoCorrect={false}
-            editable={!isSubmitting}
-            label="Name"
-            onChangeText={(value) =>
-              send({ type: "changeField", name: "name", value })
-            }
-            placeholder="Training day"
-            returnKeyType="next"
-            value={values.name}
-          />
-
-          <SectionCard style={styles.card} title="Macros">
-            <View style={styles.macroGrid}>
-              {macroTargetFields.map((field) => (
-                <PlanTargetInput
-                  field={field}
-                  isSubmitting={isSubmitting}
-                  key={field.name}
-                  onChangeText={(value) =>
-                    send({ type: "changeField", name: field.name, value })
-                  }
-                  value={values[field.name]}
-                />
-              ))}
-            </View>
-
-            <View style={styles.energyPanel}>
-              <Text style={styles.energyLabel}>Calories</Text>
-              <View style={styles.energyValueGroup}>
-                <Text
-                  adjustsFontSizeToFit
-                  numberOfLines={1}
-                  style={styles.energyValue}
-                >
-                  {formatNumber({
-                    maximumFractionDigits: 2,
-                    value: energyKcal,
-                  })}
-                </Text>
-                <Text style={styles.energyUnit}>kcal</Text>
-              </View>
-            </View>
-          </SectionCard>
-
-          <SectionCard style={styles.card} title="Nutrient limits">
-            <View style={styles.nutrientGrid}>
-              {nutrientTargetFields.map((field) => (
-                <PlanTargetInput
-                  field={field}
-                  isSubmitting={isSubmitting}
-                  key={field.name}
-                  onChangeText={(value) =>
-                    send({ type: "changeField", name: field.name, value })
-                  }
-                  value={values[field.name]}
-                />
-              ))}
-            </View>
-          </SectionCard>
-        </View>
+        {form}
       </AppScreen>
 
-      <BottomActionBar>
-        <Button
-          disabled={isSubmitting}
-          icon={SubmitIcon}
-          loading={isSubmitting}
-          onPress={() => {
-            onSubmit(createMealPlanInputFromValues({ values }));
-          }}
-          style={styles.footerButton}
-        >
-          {submitText}
-        </Button>
-      </BottomActionBar>
+      <BottomActionBar>{submitButton}</BottomActionBar>
     </View>
   );
 }
@@ -383,6 +400,16 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: spacing.lg,
+  },
+  embeddedScroll: {
+    flex: 1,
+  },
+  embeddedContent: {
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  inlineSubmit: {
+    flexDirection: "row",
   },
   card: {
     borderRadius: radius.md,

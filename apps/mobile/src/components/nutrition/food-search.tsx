@@ -283,7 +283,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xl,
   },
   emptyContent: {
@@ -306,9 +305,8 @@ const styles = StyleSheet.create({
     minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: spacing.sm,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
   resultSelected: {

@@ -67,6 +67,8 @@ type EditFoodsRouteData = {
   readonly foodUsage: readonly MealFoodUsage[];
 };
 
+type EditFoodsLayout = "screen" | "embedded";
+
 type EditFoodsRouteLoadResult =
   | {
       readonly _tag: "InvalidRoute";
@@ -451,6 +453,17 @@ export default function EditFoodsRoute() {
     readonly dateKey?: string | string[];
   }>();
   const dateKeyParam = firstParam(params.dateKey);
+
+  return <EditFoodsPanelLoader dateKeyParam={dateKeyParam} layout="screen" />;
+}
+
+export function EditFoodsPanelLoader({
+  dateKeyParam,
+  layout,
+}: {
+  readonly dateKeyParam: string | undefined;
+  readonly layout: EditFoodsLayout;
+}) {
   const [snapshot, send] = useMachine(editFoodsRouteLoaderMachine, {
     input: {
       dateKeyParam,
@@ -458,7 +471,15 @@ export default function EditFoodsRoute() {
   });
 
   if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
-    return (
+    const loading = (
+      <View style={styles.centered}>
+        <LoadingView message="Loading foods" />
+      </View>
+    );
+
+    return layout === "embedded" ? (
+      loading
+    ) : (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading foods" />
       </AppScreen>
@@ -466,7 +487,33 @@ export default function EditFoodsRoute() {
   }
 
   if (snapshot.matches("Failed")) {
-    return (
+    const failure = (
+      <View style={styles.centered}>
+        <Notice
+          message={
+            snapshot.context.message ??
+            "Could not load foods. Please try again."
+          }
+          title="Food library unavailable"
+          tone="danger"
+        />
+        <Button
+          icon={RotateCcw}
+          onPress={() => {
+            send({
+              type: "retry",
+            });
+          }}
+          variant="secondary"
+        >
+          Try again
+        </Button>
+      </View>
+    );
+
+    return layout === "embedded" ? (
+      failure
+    ) : (
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.screen}
@@ -476,42 +523,34 @@ export default function EditFoodsRoute() {
             action={<BackButton dateKey={undefined} />}
             title="Edit foods"
           />
-          <View style={styles.centered}>
-            <Notice
-              message={
-                snapshot.context.message ??
-                "Could not load foods. Please try again."
-              }
-              title="Food library unavailable"
-              tone="danger"
-            />
-            <Button
-              icon={RotateCcw}
-              onPress={() => {
-                send({
-                  type: "retry",
-                });
-              }}
-              variant="secondary"
-            >
-              Try again
-            </Button>
-          </View>
+          {failure}
         </AppScreen>
       </KeyboardAvoidingView>
     );
   }
 
   return snapshot.context.data === null ? (
-    <AppScreen contentStyle={styles.centered}>
-      <LoadingView message="Loading foods" />
-    </AppScreen>
+    layout === "embedded" ? (
+      <View style={styles.centered}>
+        <LoadingView message="Loading foods" />
+      </View>
+    ) : (
+      <AppScreen contentStyle={styles.centered}>
+        <LoadingView message="Loading foods" />
+      </AppScreen>
+    )
   ) : (
-    <ReadyEditFoodsRoute data={snapshot.context.data} />
+    <ReadyEditFoodsRoute data={snapshot.context.data} layout={layout} />
   );
 }
 
-function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
+function ReadyEditFoodsRoute({
+  data,
+  layout,
+}: {
+  readonly data: EditFoodsRouteData;
+  readonly layout: EditFoodsLayout;
+}) {
   const [snapshot, , actor] = useMachine(editFoodsRouteMachine, {
     input: data,
   });
@@ -538,16 +577,9 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
     (selectedFood.origin === "app-default" || selectedFoodUsage !== undefined)
       ? "Save revised copy"
       : "Save food";
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.screen}
-    >
-      <AppScreen
-        contentStyle={styles.content}
-        safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
-      >
+  const content = (
+    <>
+      {layout === "screen" ? (
         <AppHeader
           embedded
           leading={<BackButton dateKey={dateKey} />}
@@ -559,47 +591,70 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
             <FoodSearchField actor={foodSearchActor} disabled={disabled} />
           ) : null}
         </AppHeader>
+      ) : selectedFood === null ? (
+        <View style={styles.embeddedSearchHeader}>
+          <FoodSearchField actor={foodSearchActor} disabled={disabled} />
+        </View>
+      ) : null}
 
-        {notice === null ? null : (
-          <Notice
-            message={notice}
-            tone={notice === "Food saved." ? "success" : "danger"}
-            style={styles.notice}
-          />
-        )}
+      {notice === null ? null : (
+        <Notice
+          message={notice}
+          tone={notice === "Food saved." ? "success" : "danger"}
+          style={styles.notice}
+        />
+      )}
 
-        {selectedFood === null ? (
-          <View style={styles.searchBody}>
-            <FoodSearchResults
-              actor={foodSearchActor}
-              disabled={disabled}
-              emptyFoodsText="Create a food before editing it."
-              emptySearchText="No foods found."
-              getPrimaryLabel={(food) =>
-                `${formatNumber({
-                  maximumFractionDigits: 0,
-                  value: food.energyKcalPer100g,
-                })} kcal`
-              }
-              getSecondaryLabel={(food) =>
-                _findFoodUsage({
-                  foodId: food.id,
-                  foodUsage,
-                }) === undefined
-                  ? "Unused"
-                  : "Used"
-              }
-            />
-          </View>
-        ) : (
-          <FoodEditForm
-            actor={actor}
+      {selectedFood === null ? (
+        <View style={styles.searchBody}>
+          <FoodSearchResults
+            actor={foodSearchActor}
             disabled={disabled}
-            revisionMessage={revisionMessage}
-            selectedFood={selectedFood}
-            submitLabel={submitLabel}
+            emptyFoodsText="Create a food before editing it."
+            emptySearchText="No foods found."
+            getPrimaryLabel={(food) =>
+              `${formatNumber({
+                maximumFractionDigits: 0,
+                value: food.energyKcalPer100g,
+              })} kcal`
+            }
+            getSecondaryLabel={(food) =>
+              _findFoodUsage({
+                foodId: food.id,
+                foodUsage,
+              }) === undefined
+                ? "Unused"
+                : "Used"
+            }
           />
-        )}
+        </View>
+      ) : (
+        <FoodEditForm
+          actor={actor}
+          disabled={disabled}
+          layout={layout}
+          revisionMessage={revisionMessage}
+          selectedFood={selectedFood}
+          submitLabel={submitLabel}
+        />
+      )}
+    </>
+  );
+
+  if (layout === "embedded") {
+    return <View style={styles.embeddedRoot}>{content}</View>;
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.screen}
+    >
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
+      >
+        {content}
       </AppScreen>
     </KeyboardAvoidingView>
   );
@@ -608,12 +663,14 @@ function ReadyEditFoodsRoute({ data }: { readonly data: EditFoodsRouteData }) {
 function FoodEditForm({
   actor,
   disabled,
+  layout,
   revisionMessage,
   selectedFood,
   submitLabel,
 }: {
   readonly actor: EditFoodsRouteActorRef;
   readonly disabled: boolean;
+  readonly layout: EditFoodsLayout;
   readonly revisionMessage: string;
   readonly selectedFood: Food;
   readonly submitLabel: string;
@@ -625,9 +682,47 @@ function FoodEditForm({
     },
   });
   const { formValues, numberWarnings } = snapshot.context;
+  const changeFoodButton = (
+    <Button
+      disabled={disabled}
+      icon={Pencil}
+      onPress={() => {
+        actor.send({
+          type: "clearSelectedFood",
+        });
+      }}
+      style={styles.footerButton}
+      variant="secondary"
+    >
+      Change food
+    </Button>
+  );
+  const saveFoodButton = (
+    <Button
+      disabled={disabled}
+      icon={Save}
+      loading={disabled}
+      onPress={() => {
+        actor.send({
+          type: "reviseFood",
+          input: {
+            ...createFoodInputFromFormValues({ formValues }),
+            foodId: selectedFood.id,
+          },
+        });
+      }}
+      style={styles.footerButton}
+    >
+      {submitLabel}
+    </Button>
+  );
 
   return (
     <View style={styles.formLayout}>
+      {layout === "embedded" ? (
+        <View style={styles.stickyAction}>{changeFoodButton}</View>
+      ) : null}
+
       <ScrollView
         alwaysBounceVertical={false}
         contentContainerStyle={styles.formContent}
@@ -653,40 +748,17 @@ function FoodEditForm({
           secondaryLabel="per 100g"
         />
         <FoodNumberWarnings warnings={numberWarnings} />
+        {layout === "embedded" ? (
+          <View style={styles.inlineActions}>{saveFoodButton}</View>
+        ) : null}
       </ScrollView>
 
-      <BottomActionBar>
-        <Button
-          disabled={disabled}
-          icon={Pencil}
-          onPress={() => {
-            actor.send({
-              type: "clearSelectedFood",
-            });
-          }}
-          style={styles.footerButton}
-          variant="secondary"
-        >
-          Change food
-        </Button>
-        <Button
-          disabled={disabled}
-          icon={Save}
-          loading={disabled}
-          onPress={() => {
-            actor.send({
-              type: "reviseFood",
-              input: {
-                ...createFoodInputFromFormValues({ formValues }),
-                foodId: selectedFood.id,
-              },
-            });
-          }}
-          style={styles.footerButton}
-        >
-          {submitLabel}
-        </Button>
-      </BottomActionBar>
+      {layout === "screen" ? (
+        <BottomActionBar>
+          {changeFoodButton}
+          {saveFoodButton}
+        </BottomActionBar>
+      ) : null}
     </View>
   );
 }
@@ -974,6 +1046,12 @@ const styles = StyleSheet.create({
   searchHeader: {
     marginBottom: 0,
   },
+  embeddedRoot: {
+    flex: 1,
+  },
+  embeddedSearchHeader: {
+    marginBottom: spacing.md,
+  },
   notice: {
     marginBottom: spacing.md,
   },
@@ -1000,6 +1078,15 @@ const styles = StyleSheet.create({
   },
   formSections: {
     gap: spacing.lg,
+  },
+  inlineActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  stickyAction: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   card: {
     borderRadius: radius.md,

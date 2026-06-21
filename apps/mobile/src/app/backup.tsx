@@ -1,11 +1,10 @@
 import {
+  AppHeader,
   AppScreen,
-  BottomActionBar,
   Button,
   Field,
   IconButton,
   LoadingOverlay,
-  MaiHeader,
   Notice,
   PagerTabs,
   SectionCard,
@@ -242,7 +241,6 @@ export default function BackupScreen() {
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
   const disabled = isExporting || isImporting;
-  const isExportTab = snapshot.context.activeTab === 0;
   const {
     activeTab,
     backupName,
@@ -251,12 +249,29 @@ export default function BackupScreen() {
     exportedJson,
     importJson,
   } = snapshot.context;
+  const tabs = [
+    {
+      accessibilityLabel: "Export backup",
+      key: "export",
+      label: "Export",
+    },
+    {
+      accessibilityLabel: "Import backup",
+      key: "import",
+      label: "Import",
+    },
+  ] as const;
 
   return (
     <View style={styles.screen}>
-      <AppScreen contentStyle={styles.content} safeAreaEdges={["top"]}>
-        <MaiHeader
-          action={
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={["top", "bottom"]}
+      >
+        <AppHeader
+          embedded
+          eyebrow="Database"
+          leading={
             <IconButton
               accessibilityLabel="Back"
               icon={ChevronLeft}
@@ -266,7 +281,7 @@ export default function BackupScreen() {
               variant="ghost"
             />
           }
-          eyebrow="Database"
+          shadow
           title="Backup"
         />
 
@@ -289,9 +304,10 @@ export default function BackupScreen() {
               type: "selectTab",
             });
           }}
+          tabBarPosition="bottom"
           tabs={[
             {
-              accessibilityLabel: "Export backup",
+              ...tabs[0],
               content: (
                 <ExportBackupTab
                   backupName={backupName}
@@ -304,13 +320,16 @@ export default function BackupScreen() {
                       type: "changeBackupName",
                     });
                   }}
+                  onExport={() => {
+                    send({
+                      type: "export",
+                    });
+                  }}
                 />
               ),
-              key: "export",
-              label: "Export",
             },
             {
-              accessibilityLabel: "Import backup",
+              ...tabs[1],
               content: (
                 <ImportBackupTab
                   disabled={disabled}
@@ -321,31 +340,17 @@ export default function BackupScreen() {
                       type: "changeImportJson",
                     });
                   }}
+                  onImport={() => {
+                    send({
+                      type: "import",
+                    });
+                  }}
                 />
               ),
-              key: "import",
-              label: "Import",
             },
           ]}
         />
       </AppScreen>
-
-      <BottomActionBar>
-        <Button
-          disabled={disabled || (!isExportTab && importJson.trim() === "")}
-          icon={isExportTab ? Download : Upload}
-          loading={disabled}
-          onPress={() => {
-            send({
-              type: isExportTab ? "export" : "import",
-            });
-          }}
-          style={styles.footerButton}
-          variant={isExportTab ? "primary" : "danger"}
-        >
-          {isExportTab ? "Export JSON" : "Import JSON"}
-        </Button>
-      </BottomActionBar>
 
       <LoadingOverlay
         message={isImporting ? "Importing backup" : "Exporting backup"}
@@ -361,12 +366,14 @@ function ExportBackupTab({
   exportedFileName,
   exportedJson,
   onChangeBackupName,
+  onExport,
 }: {
   readonly backupName: string;
   readonly disabled: boolean;
   readonly exportedFileName: string | null;
   readonly exportedJson: string;
   readonly onChangeBackupName: (value: string) => void;
+  readonly onExport: () => void;
 }) {
   return (
     <ScrollView
@@ -394,6 +401,14 @@ function ExportBackupTab({
               value={exportedJson}
             />
           )}
+          <Button
+            disabled={disabled}
+            icon={Download}
+            loading={disabled}
+            onPress={onExport}
+          >
+            Export JSON
+          </Button>
         </View>
       </SectionCard>
     </ScrollView>
@@ -404,10 +419,12 @@ function ImportBackupTab({
   disabled,
   importJson,
   onChangeImportJson,
+  onImport,
 }: {
   readonly disabled: boolean;
   readonly importJson: string;
   readonly onChangeImportJson: (json: string) => void;
+  readonly onImport: () => void;
 }) {
   return (
     <ScrollView
@@ -428,6 +445,15 @@ function ImportBackupTab({
             placeholder='{"format":"mai.backup"...}'
             value={importJson}
           />
+          <Button
+            disabled={disabled || importJson.trim() === ""}
+            icon={Upload}
+            loading={disabled}
+            onPress={onImport}
+            variant="danger"
+          >
+            Import JSON
+          </Button>
         </View>
       </SectionCard>
     </ScrollView>
@@ -537,8 +563,5 @@ const styles = StyleSheet.create({
     fontSize: type.size.sm,
     fontWeight: type.weight.semibold,
     lineHeight: type.lineHeight.sm,
-  },
-  footerButton: {
-    flex: 1,
   },
 });

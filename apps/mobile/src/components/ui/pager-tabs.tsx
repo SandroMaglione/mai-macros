@@ -11,52 +11,103 @@ export type PagerTab = {
   readonly label: string;
 };
 
+type PagerTabBarVariant = "surface" | "header";
+type PagerTabBarPosition = "top" | "bottom";
+
+export function PagerTabBar({
+  activeIndex,
+  onActiveIndexChange,
+  onTabPress,
+  tabs,
+  variant = "surface",
+}: {
+  readonly activeIndex: number;
+  readonly onActiveIndexChange: (index: number) => void;
+  readonly onTabPress?: (index: number) => void;
+  readonly tabs: readonly Pick<
+    PagerTab,
+    "accessibilityLabel" | "key" | "label"
+  >[];
+  readonly variant?: PagerTabBarVariant;
+}) {
+  const isHeader = variant === "header";
+
+  return (
+    <View style={[styles.tabs, isHeader ? styles.headerTabs : null]}>
+      {tabs.map((tab, index) => {
+        const isActive = index === activeIndex;
+
+        return (
+          <Pressable
+            accessibilityLabel={tab.accessibilityLabel}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
+            key={tab.key}
+            onPress={() => {
+              onTabPress?.(index);
+              onActiveIndexChange(index);
+            }}
+            style={({ pressed }) => [
+              styles.tab,
+              isActive
+                ? isHeader
+                  ? styles.headerTabActive
+                  : styles.tabActive
+                : null,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.tabText,
+                isActive
+                  ? isHeader
+                    ? styles.headerTabTextActive
+                    : styles.tabTextActive
+                  : isHeader
+                    ? styles.headerTabTextInactive
+                    : styles.tabTextInactive,
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function PagerTabs({
   activeIndex,
   onActiveIndexChange,
+  tabBarPosition = "top",
+  tabBarVariant = "surface",
   tabs,
 }: {
   readonly activeIndex: number;
   readonly onActiveIndexChange: (index: number) => void;
+  readonly tabBarPosition?: PagerTabBarPosition;
+  readonly tabBarVariant?: PagerTabBarVariant;
   readonly tabs: readonly PagerTab[];
 }) {
   const pagerRef = useRef<PagerView>(null);
+  const tabBar = (
+    <PagerTabBar
+      activeIndex={activeIndex}
+      onActiveIndexChange={onActiveIndexChange}
+      onTabPress={(index) => {
+        pagerRef.current?.setPage(index);
+      }}
+      tabs={tabs}
+      variant={tabBarVariant}
+    />
+  );
 
   return (
     <View style={styles.root}>
-      <View style={styles.tabs}>
-        {tabs.map((tab, index) => {
-          const isActive = index === activeIndex;
-
-          return (
-            <Pressable
-              accessibilityLabel={tab.accessibilityLabel}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              key={tab.key}
-              onPress={() => {
-                pagerRef.current?.setPage(index);
-                onActiveIndexChange(index);
-              }}
-              style={({ pressed }) => [
-                styles.tab,
-                isActive ? styles.tabActive : null,
-                pressed ? styles.pressed : null,
-              ]}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.tabText,
-                  isActive ? styles.tabTextActive : styles.tabTextInactive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {tabBarPosition === "top" ? tabBar : null}
 
       <PagerView
         initialPage={activeIndex}
@@ -72,6 +123,8 @@ export function PagerTabs({
           </View>
         ))}
       </PagerView>
+
+      {tabBarPosition === "bottom" ? tabBar : null}
     </View>
   );
 }
@@ -91,6 +144,12 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     ...shadow.card,
   },
+  headerTabs: {
+    borderColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   tab: {
     minHeight: 42,
     minWidth: 0,
@@ -102,6 +161,9 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: color.primary,
+  },
+  headerTabActive: {
+    backgroundColor: color.white,
   },
   pressed: {
     opacity: 0.86,
@@ -116,6 +178,12 @@ const styles = StyleSheet.create({
   },
   tabTextInactive: {
     color: color.textMuted,
+  },
+  headerTabTextActive: {
+    color: color.primary,
+  },
+  headerTabTextInactive: {
+    color: color.white,
   },
   pager: {
     flex: 1,

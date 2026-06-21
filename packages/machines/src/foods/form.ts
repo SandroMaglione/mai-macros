@@ -52,6 +52,9 @@ type FoodFormMachineEvent =
       readonly value: string;
     }
   | {
+      readonly type: "reset";
+    }
+  | {
       readonly type: "submit";
     };
 
@@ -70,43 +73,16 @@ export const foodFormMachine = setup({
     },
   },
 }).createMachine({
-  context: ({ input }) => {
-    const food = input.initialFood;
-    const formValues = {
-      name: food?.name ?? "",
-      brand: food?.brand ?? "",
-      energyKcalPer100g: food === null ? "" : `${food.energyKcalPer100g}`,
-      proteinGramsPer100g: food === null ? "" : `${food.proteinGramsPer100g}`,
-      carbsGramsPer100g: food === null ? "" : `${food.carbsGramsPer100g}`,
-      fatGramsPer100g: food === null ? "" : `${food.fatGramsPer100g}`,
-      fiberGramsPer100g:
-        food?.fiberGramsPer100g === undefined
-          ? ""
-          : `${food.fiberGramsPer100g}`,
-      sugarGramsPer100g:
-        food?.sugarGramsPer100g === undefined
-          ? ""
-          : `${food.sugarGramsPer100g}`,
-      saturatedFatGramsPer100g:
-        food?.saturatedFatGramsPer100g === undefined
-          ? ""
-          : `${food.saturatedFatGramsPer100g}`,
-      saltGramsPer100g:
-        food?.saltGramsPer100g === undefined ? "" : `${food.saltGramsPer100g}`,
-    } satisfies FoodFormValues;
-    const quickInput = "";
-
-    return {
-      formValues,
-      numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
-      quickInput,
-      quickInputParseResult: Effect.runSync(
-        parseFoodQuickInput({ input: quickInput })
-      ),
-      syncQuickInputFromFields: input.syncQuickInputFromFields,
-    };
-  },
+  context: ({ input }) => _foodFormContextFromInput(input),
   on: {
+    reset: {
+      actions: assign(({ context }) =>
+        _foodFormContextFromInput({
+          initialFood: null,
+          syncQuickInputFromFields: context.syncQuickInputFromFields,
+        })
+      ),
+    },
     submit: {
       actions: sendParent(({ context }) => {
         return {
@@ -231,6 +207,45 @@ export const foodFormMachine = setup({
 
 export type FoodFormActorRef = ActorRefFrom<typeof foodFormMachine>;
 export type FoodFormSnapshot = SnapshotFrom<typeof foodFormMachine>;
+
+function _foodFormContextFromInput({
+  initialFood,
+  syncQuickInputFromFields,
+}: {
+  readonly initialFood: Food | null;
+  readonly syncQuickInputFromFields: boolean;
+}): FoodFormMachineContext {
+  const food = initialFood;
+  const formValues = {
+    name: food?.name ?? "",
+    brand: food?.brand ?? "",
+    energyKcalPer100g: food === null ? "" : `${food.energyKcalPer100g}`,
+    proteinGramsPer100g: food === null ? "" : `${food.proteinGramsPer100g}`,
+    carbsGramsPer100g: food === null ? "" : `${food.carbsGramsPer100g}`,
+    fatGramsPer100g: food === null ? "" : `${food.fatGramsPer100g}`,
+    fiberGramsPer100g:
+      food?.fiberGramsPer100g === undefined ? "" : `${food.fiberGramsPer100g}`,
+    sugarGramsPer100g:
+      food?.sugarGramsPer100g === undefined ? "" : `${food.sugarGramsPer100g}`,
+    saturatedFatGramsPer100g:
+      food?.saturatedFatGramsPer100g === undefined
+        ? ""
+        : `${food.saturatedFatGramsPer100g}`,
+    saltGramsPer100g:
+      food?.saltGramsPer100g === undefined ? "" : `${food.saltGramsPer100g}`,
+  } satisfies FoodFormValues;
+  const quickInput = "";
+
+  return {
+    formValues,
+    numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+    quickInput,
+    quickInputParseResult: Effect.runSync(
+      parseFoodQuickInput({ input: quickInput })
+    ),
+    syncQuickInputFromFields,
+  };
+}
 
 export function foodNumberWarningsFromFormValues({
   formValues,

@@ -25,7 +25,7 @@ import type {
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
 import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   FoodNutrientOverview,
@@ -36,6 +36,7 @@ import {
 export { foodFormMachine, type FoodFormSubmitEvent } from "@mai/machines/foods";
 
 type FoodFormAction = "create" | "edit";
+type FoodFormLayout = "screen" | "embedded";
 
 type FoodNutrientField = {
   readonly accentColor: string;
@@ -122,6 +123,7 @@ export function FoodForm({
   errorMessage,
   hasFailed,
   actor,
+  layout = "screen",
   onBack,
 }: {
   readonly action: FoodFormAction;
@@ -129,6 +131,7 @@ export function FoodForm({
   readonly disabled: boolean;
   readonly errorMessage?: string;
   readonly hasFailed: boolean;
+  readonly layout?: FoodFormLayout;
   readonly onBack: () => void;
 }) {
   const snapshot = useSelector(actor, (state): FoodFormSnapshot => state);
@@ -138,6 +141,67 @@ export function FoodForm({
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
   const SubmitIcon = hasFailed ? RotateCcw : isCreating ? Plus : Save;
+  const form = (
+    <View style={styles.form}>
+      {errorMessage === undefined ? null : (
+        <Notice message={errorMessage} title="Food not saved" tone="danger" />
+      )}
+
+      {isCreating ? (
+        <FoodQuickInputTextField
+          actor={actor}
+          disabled={disabled}
+          input={quickInput}
+        />
+      ) : null}
+
+      <FoodFormFields actor={actor} disabled={disabled} values={formValues} />
+
+      <FoodFormOverview values={formValues} />
+
+      <FoodNumberWarnings warnings={numberWarnings} />
+
+      {isCreating ? (
+        <FoodQuickInputFeedback parseResult={quickInputParseResult} />
+      ) : null}
+
+      {isCreating ? null : (
+        <Notice
+          message="Saving replaces this food when it is unused. Existing logs stay on the original food and future logs use the revised copy."
+          tone="neutral"
+        />
+      )}
+    </View>
+  );
+  const submitButton = (
+    <Button
+      disabled={disabled}
+      icon={SubmitIcon}
+      loading={disabled}
+      onPress={() => {
+        actor.send({
+          type: "submit",
+        });
+      }}
+      style={styles.footerButton}
+    >
+      {submitText}
+    </Button>
+  );
+
+  if (layout === "embedded") {
+    return (
+      <ScrollView
+        alwaysBounceVertical={false}
+        contentContainerStyle={styles.embeddedContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.embeddedScroll}
+      >
+        {form}
+        <View style={styles.inlineSubmit}>{submitButton}</View>
+      </ScrollView>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -161,61 +225,10 @@ export function FoodForm({
           title={title}
         />
 
-        <View style={styles.form}>
-          {errorMessage === undefined ? null : (
-            <Notice
-              message={errorMessage}
-              title="Food not saved"
-              tone="danger"
-            />
-          )}
-
-          {isCreating ? (
-            <FoodQuickInputTextField
-              actor={actor}
-              disabled={disabled}
-              input={quickInput}
-            />
-          ) : null}
-
-          <FoodFormFields
-            actor={actor}
-            disabled={disabled}
-            values={formValues}
-          />
-
-          <FoodFormOverview values={formValues} />
-
-          <FoodNumberWarnings warnings={numberWarnings} />
-
-          {isCreating ? (
-            <FoodQuickInputFeedback parseResult={quickInputParseResult} />
-          ) : null}
-
-          {isCreating ? null : (
-            <Notice
-              message="Saving replaces this food when it is unused. Existing logs stay on the original food and future logs use the revised copy."
-              tone="neutral"
-            />
-          )}
-        </View>
+        {form}
       </AppScreen>
 
-      <BottomActionBar>
-        <Button
-          disabled={disabled}
-          icon={SubmitIcon}
-          loading={disabled}
-          onPress={() => {
-            actor.send({
-              type: "submit",
-            });
-          }}
-          style={styles.footerButton}
-        >
-          {submitText}
-        </Button>
-      </BottomActionBar>
+      <BottomActionBar>{submitButton}</BottomActionBar>
     </View>
   );
 }
@@ -500,6 +513,16 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: spacing.lg,
+  },
+  embeddedScroll: {
+    flex: 1,
+  },
+  embeddedContent: {
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  inlineSubmit: {
+    flexDirection: "row",
   },
   card: {
     borderRadius: radius.md,
