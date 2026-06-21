@@ -8,6 +8,7 @@ import {
 } from "@mai/machines/foods";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
+import { Search } from "lucide-react-native";
 import {
   FlatList,
   Pressable,
@@ -68,6 +69,9 @@ export function FoodSearch({
           });
         }}
         placeholder={placeholder}
+        rightElement={
+          <Search color={color.textSubtle} size={18} strokeWidth={2.6} />
+        }
         value={query}
       />
       <FlatList
@@ -209,13 +213,13 @@ function FoodSearchEmpty({ text }: { readonly text: string }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   list: {
     flex: 1,
   },
   listContent: {
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingBottom: spacing.xl,
   },
   emptyContent: {
@@ -229,7 +233,7 @@ const styles = StyleSheet.create({
     borderColor: color.sheetBorder,
     borderRadius: radius.md,
     padding: spacing.xl,
-    backgroundColor: color.surface,
+    backgroundColor: color.sheet,
   },
   emptyText: {
     color: color.textMuted,
@@ -239,20 +243,20 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.sm,
   },
   result: {
-    minHeight: 72,
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: spacing.sm,
     borderWidth: 1,
     borderColor: color.sheetBorder,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    backgroundColor: color.surface,
+    backgroundColor: color.sheet,
   },
   resultSelected: {
     borderColor: color.primary,
-    backgroundColor: color.primarySoft,
+    backgroundColor: color.dangerBg,
   },
   resultPressed: {
     opacity: 0.86,

@@ -3,11 +3,18 @@ import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect, Schema } from "effect";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { ChevronLeft } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
 import { RangeSummary } from "@/components/nutrition/range-summary";
-import { AppScreen, Button, LoadingView, Notice } from "@/components/ui";
+import {
+  AppScreen,
+  Button,
+  LoadingView,
+  MaiHeader,
+  Notice,
+} from "@/components/ui";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, type } from "@/theme/tokens";
@@ -184,8 +191,38 @@ export default function InsightsScreen() {
         showsVerticalScrollIndicator: false,
       }}
     >
+      <InsightsHeader
+        onBackToToday={() => {
+          router.replace("/");
+        }}
+      />
       <RangeSummary report={state.report} />
     </AppScreen>
+  );
+}
+
+function InsightsHeader({
+  onBackToToday,
+}: {
+  readonly onBackToToday: () => void;
+}) {
+  return (
+    <MaiHeader
+      action={
+        <Pressable
+          accessibilityLabel="Back to today"
+          accessibilityRole="button"
+          onPress={onBackToToday}
+          style={({ pressed }) => [
+            styles.headerAction,
+            pressed ? styles.headerActionPressed : null,
+          ]}
+        >
+          <ChevronLeft color={color.white} size={31} strokeWidth={2.6} />
+        </Pressable>
+      }
+      title="Nutrition insights"
+    />
   );
 }
 
@@ -287,6 +324,16 @@ export function loadDefaultRange(): Effect.Effect<
 const styles = StyleSheet.create({
   content: {
     paddingBottom: spacing.xxxl,
+  },
+  headerAction: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+  },
+  headerActionPressed: {
+    opacity: 0.82,
   },
   centered: {
     flex: 1,

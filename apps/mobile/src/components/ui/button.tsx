@@ -1,4 +1,5 @@
 import { color, radius, spacing, type } from "@/theme/tokens";
+import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 type ButtonProps = Omit<PressableProps, "children" | "style"> & {
   readonly children: ReactNode;
+  readonly icon?: LucideIcon;
   readonly loading?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly variant?: ButtonVariant;
@@ -23,6 +25,7 @@ type ButtonProps = Omit<PressableProps, "children" | "style"> & {
 export function Button({
   children,
   disabled,
+  icon: Icon,
   loading = false,
   style,
   variant = "primary",
@@ -47,6 +50,9 @@ export function Button({
         {loading ? (
           <ActivityIndicator color={textColor[variant]} size="small" />
         ) : null}
+        {Icon === undefined || loading ? null : (
+          <Icon color={textColor[variant]} size={17} strokeWidth={3} />
+        )}
         <Text
           numberOfLines={1}
           adjustsFontSizeToFit

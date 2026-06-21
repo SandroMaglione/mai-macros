@@ -36,6 +36,7 @@ import {
 import { useMachine, useSelector } from "@xstate/react";
 import { Array as EffectArray, Effect, Schema } from "effect";
 import { type Href, router, useLocalSearchParams } from "expo-router";
+import { ChevronLeft, Pencil, RotateCcw, Save } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -474,6 +475,7 @@ export default function EditFoodsRoute() {
               tone="danger"
             />
             <Button
+              icon={RotateCcw}
               onPress={() => {
                 send({
                   type: "retry",
@@ -623,6 +625,7 @@ function FoodEditForm({
       <BottomActionBar>
         <Button
           disabled={disabled}
+          icon={Pencil}
           onPress={() => {
             actor.send({
               type: "clearSelectedFood",
@@ -635,6 +638,7 @@ function FoodEditForm({
         </Button>
         <Button
           disabled={disabled}
+          icon={Save}
           loading={disabled}
           onPress={() => {
             actor.send({
@@ -812,7 +816,7 @@ function BackButton({ dateKey }: { readonly dateKey: DateKey | undefined }) {
       accessibilityLabel={
         dateKey === undefined ? "Back to home" : "Back to day"
       }
-      glyph="‹"
+      icon={ChevronLeft}
       onPress={() => {
         router.replace(backHrefForDateKey({ dateKey }));
       }}

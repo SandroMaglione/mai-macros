@@ -14,6 +14,7 @@ import {
   SectionCard,
 } from "@/components/ui";
 import { useMachine } from "@xstate/react";
+import { ChevronLeft, Plus, Save } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { assign, setup } from "xstate";
 
@@ -174,6 +175,7 @@ export function MealPlanForm({
   const isCreating = action === "create";
   const title = isCreating ? "Create plan" : "Edit plan";
   const submitText = isCreating ? "Create plan" : "Save revised plan";
+  const SubmitIcon = isCreating ? Plus : Save;
   const energyKcal = calculateMealPlanEnergyKcalFromValues({ values });
 
   return (
@@ -189,7 +191,7 @@ export function MealPlanForm({
           canNavigateBack ? (
             <IconButton
               accessibilityLabel="Back"
-              glyph="‹"
+              icon={ChevronLeft}
               onPress={onBack}
               variant="ghost"
             />
@@ -268,6 +270,7 @@ export function MealPlanForm({
 
         <Button
           disabled={isSubmitting}
+          icon={SubmitIcon}
           loading={isSubmitting}
           onPress={() => {
             onSubmit(createMealPlanInputFromValues({ values }));

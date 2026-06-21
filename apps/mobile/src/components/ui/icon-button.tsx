@@ -1,8 +1,8 @@
-import { color, radius, type } from "@/theme/tokens";
+import { color, radius } from "@/theme/tokens";
+import type { LucideIcon } from "lucide-react-native";
 import {
   Pressable,
   StyleSheet,
-  Text,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
@@ -12,15 +12,19 @@ type IconButtonVariant = "primary" | "secondary" | "ghost";
 
 type IconButtonProps = Omit<PressableProps, "children" | "style"> & {
   readonly accessibilityLabel: string;
-  readonly glyph: string;
+  readonly icon: LucideIcon;
+  readonly iconSize?: number;
   readonly style?: StyleProp<ViewStyle>;
+  readonly strokeWidth?: number;
   readonly variant?: IconButtonVariant;
 };
 
 export function IconButton({
   disabled,
-  glyph,
+  icon: Icon,
+  iconSize = 22,
   style,
+  strokeWidth = 2.8,
   variant = "secondary",
   ...pressableProps
 }: IconButtonProps) {
@@ -37,19 +41,17 @@ export function IconButton({
         style,
       ]}
     >
-      <Text
-        adjustsFontSizeToFit
-        numberOfLines={1}
-        style={[styles.glyph, { color: textColor[variant] }]}
-      >
-        {glyph}
-      </Text>
+      <Icon
+        color={textColor[variant]}
+        size={iconSize}
+        strokeWidth={strokeWidth}
+      />
     </Pressable>
   );
 }
 
 const textColor: Record<IconButtonVariant, string> = {
-  ghost: color.textMuted,
+  ghost: color.white,
   primary: color.white,
   secondary: color.text,
 };
@@ -60,15 +62,8 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-  },
-  glyph: {
-    maxWidth: 24,
-    textAlign: "center",
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
   },
   pressed: {
     opacity: 0.86,

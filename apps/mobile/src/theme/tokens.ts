@@ -1,6 +1,6 @@
 export const color = {
   bg: "#090909",
-  surface: "#161618",
+  surface: "#1b1b1e",
   surfaceRaised: "#202024",
   field: "#111113",
   fieldBorder: "#37373b",
@@ -20,6 +20,12 @@ export const color = {
   nutritionSalt: "#aaaab1",
   sheet: "#161618",
   sheetBorder: "#29292d",
+  actionSheet: "#16120f",
+  actionSheetBorder: "#3d332a",
+  actionSheetPressed: "#2a1d14",
+  actionSheetText: "#dfd2bd",
+  actionSheetTextMuted: "#b7a997",
+  bottomNav: "#15120f",
   progressTrack: "#29292d",
   progressFill: "#ff5a51",
   successBg: "#132017",
@@ -90,6 +96,13 @@ export const type = {
 } as const;
 
 export const shadow = {
+  header: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 12,
+  },
   sheet: {
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: -8 },
@@ -99,10 +112,17 @@ export const shadow = {
   },
   card: {
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.26,
+    shadowRadius: 28,
     elevation: 8,
+  },
+  bottomNav: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.36,
+    shadowRadius: 32,
+    elevation: 18,
   },
 } as const;
 

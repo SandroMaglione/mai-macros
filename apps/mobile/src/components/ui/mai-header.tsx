@@ -1,6 +1,98 @@
-import { color, spacing, type } from "@/theme/tokens";
+import { color, shadow, spacing, type } from "@/theme/tokens";
 import type { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+type AppHeaderProps = {
+  readonly children?: ReactNode;
+  readonly center?: ReactNode;
+  readonly embedded?: boolean;
+  readonly eyebrow?: string;
+  readonly leading?: ReactNode;
+  readonly safeAreaTop?: boolean;
+  readonly shadow?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly subtitle?: string;
+  readonly title?: string;
+  readonly trailing?: ReactNode;
+};
+
+export function AppHeader({
+  children,
+  center,
+  embedded = false,
+  eyebrow,
+  leading,
+  safeAreaTop = true,
+  shadow: hasShadow = false,
+  style,
+  subtitle,
+  title,
+  trailing,
+}: AppHeaderProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.root,
+        embedded
+          ? [
+              styles.embedded,
+              {
+                marginTop: -spacing.lg - (safeAreaTop ? insets.top : 0),
+              },
+            ]
+          : null,
+        {
+          paddingTop:
+            (safeAreaTop ? insets.top : 0) + Math.round(spacing.sm * 0.9),
+        },
+        hasShadow ? shadow.header : null,
+        style,
+      ]}
+    >
+      <View style={styles.row}>
+        <View style={[styles.slot, styles.leading]}>{leading}</View>
+        <View style={styles.center}>
+          {center ?? (
+            <View style={styles.titleGroup}>
+              {eyebrow === undefined ? null : (
+                <Text numberOfLines={1} style={styles.eyebrow}>
+                  {eyebrow}
+                </Text>
+              )}
+              {title === undefined ? null : (
+                <Text
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                  style={styles.title}
+                >
+                  {title}
+                </Text>
+              )}
+              {subtitle === undefined ? null : (
+                <Text numberOfLines={1} style={styles.subtitle}>
+                  {subtitle}
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+        <View style={[styles.slot, styles.trailing]}>{trailing}</View>
+      </View>
+      {children === undefined || children === null ? null : (
+        <View style={styles.children}>{children}</View>
+      )}
+    </View>
+  );
+}
 
 type MaiHeaderProps = {
   readonly action?: ReactNode;
@@ -16,62 +108,78 @@ export function MaiHeader({
   title,
 }: MaiHeaderProps) {
   return (
-    <View style={styles.root}>
-      <View style={styles.copy}>
-        {eyebrow === undefined ? null : (
-          <Text numberOfLines={1} style={styles.eyebrow}>
-            {eyebrow}
-          </Text>
-        )}
-        <Text numberOfLines={2} style={styles.title}>
-          {title}
-        </Text>
-        {subtitle === undefined ? null : (
-          <Text numberOfLines={2} style={styles.subtitle}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {action === undefined ? null : (
-        <View style={styles.action}>{action}</View>
-      )}
-    </View>
+    <AppHeader
+      embedded
+      eyebrow={eyebrow}
+      leading={action}
+      shadow={true}
+      subtitle={subtitle}
+      title={title}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    minHeight: 64,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: Math.round(spacing.sm * 0.9),
+    backgroundColor: color.primary,
+  },
+  embedded: {
+    marginHorizontal: -spacing.lg,
+    marginBottom: spacing.md,
+  },
+  row: {
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
   },
-  copy: {
+  slot: {
     minWidth: 0,
     flex: 1,
-    gap: spacing.xs,
+  },
+  leading: {
+    alignItems: "flex-start",
+  },
+  trailing: {
+    alignItems: "flex-end",
+  },
+  center: {
+    minWidth: 0,
+    flexShrink: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleGroup: {
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   eyebrow: {
-    color: color.textSubtle,
+    color: "rgba(255,255,255,0.75)",
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
     textTransform: "uppercase",
   },
   title: {
-    color: color.text,
+    maxWidth: 220,
+    color: color.white,
+    textAlign: "center",
     fontSize: type.size.xl,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xl,
   },
   subtitle: {
-    color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    maxWidth: 220,
+    color: "rgba(255,255,255,0.82)",
+    textAlign: "center",
+    fontSize: type.size.xs,
+    fontWeight: type.weight.black,
+    lineHeight: type.lineHeight.xs,
   },
-  action: {
-    flexShrink: 0,
+  children: {
+    marginTop: spacing.md,
   },
 });

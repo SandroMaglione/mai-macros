@@ -15,6 +15,7 @@ import { Backups, type MaiBackup } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect } from "effect";
 import { router } from "expo-router";
+import { ChevronLeft, Download, Upload } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
@@ -239,7 +240,7 @@ export default function BackupScreen() {
           action={
             <IconButton
               accessibilityLabel="Back"
-              glyph="‹"
+              icon={ChevronLeft}
               onPress={() => {
                 router.back();
               }}
@@ -278,6 +279,7 @@ export default function BackupScreen() {
               value={backupName}
             />
             <Button
+              icon={Download}
               loading={isExporting}
               onPress={() => {
                 send({
@@ -317,6 +319,7 @@ export default function BackupScreen() {
             />
             <Button
               disabled={snapshot.context.importJson.trim() === ""}
+              icon={Upload}
               loading={isImporting}
               onPress={() => {
                 send({

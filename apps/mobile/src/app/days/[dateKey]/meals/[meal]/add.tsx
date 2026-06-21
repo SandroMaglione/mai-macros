@@ -40,6 +40,7 @@ import {
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Option, Order, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
+import { ChevronLeft, Pencil, Plus } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -483,7 +484,7 @@ function ReadyAddMealFoodRoute({
           action={
             <IconButton
               accessibilityLabel={`Back to ${dateKey}`}
-              glyph="‹"
+              icon={ChevronLeft}
               onPress={() => {
                 _replacePath(`/days/${dateKey}`);
               }}
@@ -609,6 +610,7 @@ function QuantityEntry({
       <BottomActionBar>
         <Button
           disabled={disabled}
+          icon={Pencil}
           onPress={() => {
             actor.send({
               type: "clearSelectedFood",
@@ -622,6 +624,7 @@ function QuantityEntry({
         <Button
           accessibilityLabel={`Add food to ${mealLabel}`}
           disabled={submitDisabled}
+          icon={Plus}
           loading={disabled}
           onPress={() => {
             actor.send({

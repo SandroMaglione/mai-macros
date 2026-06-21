@@ -1,15 +1,15 @@
 import {
+  AppHeader,
   AppModalSheet,
   AppScreen,
   BottomActionBar,
   Button,
-  IconButton,
   LoadingOverlay,
   LoadingView,
   Notice,
 } from "@/components/ui";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
-import { formatDateTitle, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, type } from "@/theme/tokens";
 import {
@@ -32,6 +32,18 @@ import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { useMachine } from "@xstate/react";
 import { router, type RelativePathString } from "expo-router";
 import { Array as EffectArray, Effect, Schema } from "effect";
+import type { LucideIcon } from "lucide-react-native";
+import {
+  Activity,
+  Apple,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react-native";
 import {
   Alert,
   Pressable,
@@ -134,18 +146,21 @@ const macroProgress = [
     key: "carbsGrams",
     label: "Carbs",
     targetKey: "carbsTargetGrams",
+    trackColor: "#4a2031",
   },
   {
     color: color.nutritionProtein,
     key: "proteinGrams",
     label: "Protein",
     targetKey: "proteinTargetGrams",
+    trackColor: "#233059",
   },
   {
     color: color.nutritionFat,
     key: "fatGrams",
     label: "Fat",
     targetKey: "fatTargetGrams",
+    trackColor: "#443719",
   },
 ] as const;
 
@@ -544,6 +559,39 @@ export function DailyLogView({
     dateKey: data.day.dailyLog.dateKey,
     days: 1,
   });
+  const currentDateKey = todayDateKey();
+  const displayedDateRelativeLabel =
+    data.day.dailyLog.dateKey === currentDateKey
+      ? "Today"
+      : data.day.dailyLog.dateKey ===
+          shiftDateKey({
+            dateKey: currentDateKey,
+            days: -1,
+          })
+        ? "Yesterday"
+        : data.day.dailyLog.dateKey ===
+            shiftDateKey({
+              dateKey: currentDateKey,
+              days: 1,
+            })
+          ? "Tomorrow"
+          : null;
+  const displayedDateValue = new Date(`${data.day.dailyLog.dateKey}T00:00:00`);
+  const displayedDate =
+    displayedDateRelativeLabel === null
+      ? {
+          eyebrow: new Intl.DateTimeFormat("en-US", {
+            weekday: "short",
+          }).format(displayedDateValue),
+          label: new Intl.DateTimeFormat("en-US", {
+            day: "numeric",
+            month: "short",
+          }).format(displayedDateValue),
+        }
+      : {
+          eyebrow: null,
+          label: displayedDateRelativeLabel,
+        };
 
   return (
     <View style={styles.screen}>
@@ -554,44 +602,57 @@ export function DailyLogView({
           contentInsetAdjustmentBehavior: "never",
         }}
       >
-        <View style={styles.header}>
-          <IconButton
-            accessibilityLabel="Previous day"
-            glyph="<"
-            onPress={() => {
-              router.push({
-                pathname: "/days/[dateKey]",
-                params: {
-                  dateKey: previousDateKey,
-                },
-              });
-            }}
-          />
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              router.push("/");
-            }}
-            style={styles.dateButton}
-          >
-            <Text style={styles.dateEyebrow}>Daily log</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.date}>
-              {formatDateTitle({ dateKey: data.day.dailyLog.dateKey })}
-            </Text>
-          </Pressable>
-          <IconButton
-            accessibilityLabel="Next day"
-            glyph=">"
-            onPress={() => {
-              router.push({
-                pathname: "/days/[dateKey]",
-                params: {
-                  dateKey: nextDateKey,
-                },
-              });
-            }}
-          />
-        </View>
+        <AppHeader
+          center={
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                router.push("/");
+              }}
+              style={({ pressed }) => [
+                styles.dateButton,
+                pressed ? styles.headerPressed : null,
+              ]}
+            >
+              {displayedDate.eyebrow === null ? null : (
+                <Text style={styles.dateEyebrow}>{displayedDate.eyebrow}</Text>
+              )}
+              <Text adjustsFontSizeToFit numberOfLines={1} style={styles.date}>
+                {displayedDate.label}
+              </Text>
+            </Pressable>
+          }
+          embedded
+          leading={
+            <HeaderIconButton
+              accessibilityLabel="Previous day"
+              icon={ChevronLeft}
+              onPress={() => {
+                router.push({
+                  pathname: "/days/[dateKey]",
+                  params: {
+                    dateKey: previousDateKey,
+                  },
+                });
+              }}
+            />
+          }
+          shadow
+          trailing={
+            <HeaderIconButton
+              accessibilityLabel="Next day"
+              icon={ChevronRight}
+              onPress={() => {
+                router.push({
+                  pathname: "/days/[dateKey]",
+                  params: {
+                    dateKey: nextDateKey,
+                  },
+                });
+              }}
+            />
+          }
+        />
 
         <DailyProgress day={data.day} nutrients={nutrients} />
 
@@ -617,16 +678,16 @@ export function DailyLogView({
         </View>
       </AppScreen>
 
-      <BottomActionBar>
+      <BottomActionBar variant="floating">
         <BottomAction
-          glyph="S"
+          icon={Activity}
           label="Stats"
           onPress={() => {
             router.push("/insights");
           }}
         />
         <BottomAction
-          glyph="P"
+          icon={ClipboardList}
           label="Plans"
           onPress={() => {
             actor.send({
@@ -636,7 +697,7 @@ export function DailyLogView({
           }}
         />
         <BottomAction
-          glyph="F"
+          icon={Apple}
           label="Foods"
           onPress={() => {
             actor.send({
@@ -646,7 +707,7 @@ export function DailyLogView({
           }}
         />
         <BottomAction
-          glyph="B"
+          icon={Download}
           label="Backup"
           onPress={() => {
             actor.send({
@@ -737,63 +798,53 @@ function DailyProgress({
   const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
 
   return (
-    <View style={styles.progressPanel}>
-      <View style={styles.planHeader}>
-        <View style={styles.planCopy}>
-          <Text style={styles.panelEyebrow}>Active plan</Text>
-          <Text numberOfLines={1} style={styles.panelTitle}>
-            {plan.name}
-          </Text>
-        </View>
-        <View style={styles.energyBadge}>
-          <Text style={styles.energyValue}>
-            {_formatMacroValue({ value: nutrients.energyKcal })}
-          </Text>
-          <Text style={styles.energyUnit}>kcal</Text>
-        </View>
-      </View>
-
-      <NutrientProgress
-        colorValue={color.nutritionEnergy}
-        label="Energy"
-        target={targetEnergyKcal}
-        unit="kcal"
-        value={nutrients.energyKcal}
-      />
-
+    <View style={styles.dailyProgress}>
       <View style={styles.macroGrid}>
         {macroProgress.map((macro) => (
-          <NutrientProgress
+          <DailyProgressMetric
             colorValue={macro.color}
-            compact
             key={macro.key}
             label={macro.label}
             target={plan[macro.targetKey]}
+            trackColor={macro.trackColor}
             unit="g"
             value={nutrients[macro.key]}
           />
         ))}
       </View>
 
-      <View style={styles.secondaryNutrients}>
-        <SecondaryNutrient
+      <DailyEnergyProgress
+        target={targetEnergyKcal}
+        value={nutrients.energyKcal}
+      />
+
+      <View style={styles.dailyNutrientGrid}>
+        <DailyNutrientMetric
+          colorValue={color.nutritionCarbs}
           label="Fiber"
           target={plan.fiberTargetGrams}
+          trackColor="#4a2031"
           value={nutrients.fiberGrams}
         />
-        <SecondaryNutrient
+        <DailyNutrientMetric
+          colorValue={color.nutritionCarbs}
           label="Sugar"
           target={plan.sugarTargetGrams}
+          trackColor="#4a2031"
           value={nutrients.sugarGrams}
         />
-        <SecondaryNutrient
+        <DailyNutrientMetric
+          colorValue={color.nutritionFat}
           label="Sat fat"
           target={plan.saturatedFatTargetGrams}
+          trackColor="#443719"
           value={nutrients.saturatedFatGrams}
         />
-        <SecondaryNutrient
+        <DailyNutrientMetric
+          colorValue={color.nutritionSalt}
           label="Salt"
           target={plan.saltTargetGrams}
+          trackColor="#303034"
           value={nutrients.saltGrams}
         />
       </View>
@@ -801,78 +852,142 @@ function DailyProgress({
   );
 }
 
-function NutrientProgress({
+function DailyProgressMetric({
   colorValue,
-  compact = false,
   label,
   target,
+  trackColor,
   unit,
   value,
 }: {
   readonly colorValue: string;
-  readonly compact?: boolean;
   readonly label: string;
   readonly target: number;
+  readonly trackColor: string;
   readonly unit: "g" | "kcal";
   readonly value: number;
 }) {
   const progress = target <= 0 ? (value > 0 ? 1 : 0) : value / target;
   const clampedProgress = Math.max(0, Math.min(1, progress));
   const isAboveTarget = value > target;
+  const contentColor = isAboveTarget ? color.primary : colorValue;
 
   return (
-    <View style={compact ? styles.compactProgress : styles.progressBlock}>
-      <View style={styles.progressLabelRow}>
-        <Text style={styles.progressLabel}>{label}</Text>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.progressValue,
-            { color: isAboveTarget ? color.primary : colorValue },
-          ]}
-        >
-          {_formatMacroValue({ value })} /{" "}
-          {_formatMacroValue({ value: target })} {unit}
-        </Text>
-      </View>
-      <View style={styles.progressTrack}>
+    <View style={styles.dailyMetric}>
+      <Text
+        numberOfLines={1}
+        style={[styles.dailyMetricLabel, { color: contentColor }]}
+      >
+        {label}
+      </Text>
+      <View style={[styles.dailyMetricTrack, { backgroundColor: trackColor }]}>
         <View
           style={[
-            styles.progressFill,
+            styles.dailyMetricFill,
             {
-              backgroundColor: isAboveTarget ? color.primary : colorValue,
+              backgroundColor: contentColor,
               width: `${clampedProgress * 100}%`,
             },
           ]}
         />
       </View>
+      <Text
+        numberOfLines={1}
+        style={[styles.dailyMetricValue, { color: contentColor }]}
+      >
+        {_formatMacroValue({ value })} / {_formatMacroValue({ value: target })}{" "}
+        {unit}
+      </Text>
     </View>
   );
 }
 
-function SecondaryNutrient({
-  label,
+function DailyEnergyProgress({
   target,
   value,
 }: {
-  readonly label: string;
-  readonly target: number | undefined;
+  readonly target: number;
   readonly value: number;
 }) {
-  const valueLabel =
-    target === undefined
-      ? `${_formatMacroValue({ value })}g`
-      : `${_formatMacroValue({ value })}/${_formatMacroValue({
-          value: target,
-        })}g`;
+  const progress = target <= 0 ? (value > 0 ? 1 : 0) : value / target;
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const isAboveTarget = value > target;
+  const contentColor = isAboveTarget ? color.primary : color.nutritionEnergy;
 
   return (
-    <View style={styles.secondaryNutrient}>
-      <Text numberOfLines={1} style={styles.secondaryLabel}>
+    <View style={styles.energyProgress}>
+      <View style={styles.energyTrack}>
+        <View
+          style={[
+            styles.energyFill,
+            {
+              backgroundColor: contentColor,
+              width: `${clampedProgress * 100}%`,
+            },
+          ]}
+        />
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[styles.energyProgressValue, { color: contentColor }]}
+      >
+        {_formatMacroValue({ value })} / {_formatMacroValue({ value: target })}{" "}
+        kcal
+      </Text>
+    </View>
+  );
+}
+
+function DailyNutrientMetric({
+  colorValue,
+  label,
+  target,
+  trackColor,
+  value,
+}: {
+  readonly colorValue: string;
+  readonly label: string;
+  readonly target: number | undefined;
+  readonly trackColor: string;
+  readonly value: number;
+}) {
+  const hasTarget = target !== undefined;
+  const progress =
+    target === undefined || target <= 0 ? (value > 0 ? 1 : 0) : value / target;
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const isAboveTarget = target !== undefined && value > target;
+  const contentColor = isAboveTarget ? color.primary : colorValue;
+
+  return (
+    <View style={styles.dailyNutrient}>
+      <Text
+        numberOfLines={1}
+        style={[styles.dailyNutrientLabel, { color: contentColor }]}
+      >
         {label}
       </Text>
-      <Text numberOfLines={1} style={styles.secondaryValue}>
-        {valueLabel}
+      <View
+        style={[styles.dailyNutrientTrack, { backgroundColor: trackColor }]}
+      >
+        <View
+          style={[
+            styles.dailyNutrientFill,
+            {
+              backgroundColor: contentColor,
+              width: `${clampedProgress * 100}%`,
+            },
+          ]}
+        />
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[styles.dailyNutrientValue, { color: contentColor }]}
+      >
+        {hasTarget
+          ? `${_formatMacroValue({ value })}g / ${_formatMacroValue({
+              value: target,
+            })}g`
+          : `${_formatMacroValue({ value })}g`}
       </Text>
     </View>
   );
@@ -899,18 +1014,13 @@ function MealSection({
     <View style={styles.mealCard}>
       <View style={styles.mealHeader}>
         <Text style={styles.mealTitle}>{mealLabel}</Text>
-        <Text style={styles.mealKcal}>
-          {_formatMacroValue({ value: nutrients.energyKcal })} kcal
-        </Text>
       </View>
 
       <MealMacroStripe nutrients={nutrients} />
 
-      <View style={styles.mealEntries}>
-        {!EffectArray.isReadonlyArrayNonEmpty(mealEntries) ? (
-          <Text style={styles.emptyMeal}>No entries yet</Text>
-        ) : (
-          mealEntries.map((mealEntry) => {
+      {EffectArray.isReadonlyArrayNonEmpty(mealEntries) ? (
+        <View style={styles.mealEntries}>
+          {mealEntries.map((mealEntry) => {
             const food = _findFoodById({
               foodId: mealEntry.foodId,
               foods,
@@ -929,21 +1039,12 @@ function MealSection({
                 }}
               />
             );
-          })
-        )}
-      </View>
+          })}
+        </View>
+      ) : null}
 
-      <View style={styles.mealTotals}>
-        <Text style={styles.mealTotalText}>
-          C {_formatMacroValue({ value: nutrients.carbsGrams })}g
-        </Text>
-        <Text style={styles.mealTotalText}>
-          P {_formatMacroValue({ value: nutrients.proteinGrams })}g
-        </Text>
-        <Text style={styles.mealTotalText}>
-          F {_formatMacroValue({ value: nutrients.fatGrams })}g
-        </Text>
-      </View>
+      <MealTotalColumns nutrients={nutrients} />
+      <MealNutrientColumns nutrients={nutrients} />
 
       <Pressable
         accessibilityRole="button"
@@ -958,8 +1059,125 @@ function MealSection({
         }}
         style={styles.addFoodButton}
       >
-        <Text style={styles.addFoodText}>+ Add food</Text>
+        <Plus
+          color={color.primary}
+          size={16}
+          strokeWidth={3}
+          style={styles.addFoodIcon}
+        />
+        <Text style={styles.addFoodText}>Add food</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function MealTotalColumns({
+  nutrients,
+}: {
+  readonly nutrients: NutrientTotals;
+}) {
+  return (
+    <View style={styles.mealTotalColumns}>
+      <MealTotalColumn
+        colorValue={color.nutritionCarbs}
+        label="Carbs"
+        value={_formatMacroValue({ value: nutrients.carbsGrams })}
+      />
+      <MealTotalColumn
+        colorValue={color.nutritionProtein}
+        label="Protein"
+        value={_formatMacroValue({ value: nutrients.proteinGrams })}
+      />
+      <MealTotalColumn
+        colorValue={color.nutritionFat}
+        label="Fat"
+        value={_formatMacroValue({ value: nutrients.fatGrams })}
+      />
+      <MealTotalColumn
+        colorValue={color.nutritionEnergy}
+        label="Calories"
+        value={_formatMacroValue({ value: nutrients.energyKcal })}
+      />
+    </View>
+  );
+}
+
+function MealTotalColumn({
+  colorValue,
+  label,
+  value,
+}: {
+  readonly colorValue: string;
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <View style={styles.mealTotalColumn}>
+      <Text
+        numberOfLines={1}
+        style={[styles.mealTotalValue, { color: colorValue }]}
+      >
+        {value}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.mealTotalLabel, { color: colorValue }]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function MealNutrientColumns({
+  nutrients,
+}: {
+  readonly nutrients: NutrientTotals;
+}) {
+  return (
+    <View style={styles.mealNutrientColumns}>
+      <MealNutrientColumn
+        colorValue={color.nutritionCarbs}
+        label="Fiber"
+        value={`${_formatMacroValue({ value: nutrients.fiberGrams })}g`}
+      />
+      <MealNutrientColumn
+        colorValue={color.nutritionSalt}
+        label="Salt"
+        value={`${_formatMacroValue({ value: nutrients.saltGrams })}g`}
+      />
+      <MealNutrientColumn
+        colorValue={color.nutritionFat}
+        label="Sat fat"
+        value={`${_formatMacroValue({ value: nutrients.saturatedFatGrams })}g`}
+      />
+    </View>
+  );
+}
+
+function MealNutrientColumn({
+  colorValue,
+  label,
+  value,
+}: {
+  readonly colorValue: string;
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <View style={styles.mealNutrientColumn}>
+      <Text
+        numberOfLines={1}
+        style={[styles.mealNutrientValue, { color: colorValue }]}
+      >
+        {value}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.mealNutrientLabel, { color: colorValue }]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -1068,12 +1286,36 @@ function MealEntryRow({
   );
 }
 
+function HeaderIconButton({
+  accessibilityLabel,
+  icon: Icon,
+  onPress,
+}: {
+  readonly accessibilityLabel: string;
+  readonly icon: LucideIcon;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.headerIconButton,
+        pressed ? styles.headerPressed : null,
+      ]}
+    >
+      <Icon color={color.white} size={22} strokeWidth={3} />
+    </Pressable>
+  );
+}
+
 function BottomAction({
-  glyph,
+  icon: Icon,
   label,
   onPress,
 }: {
-  readonly glyph: string;
+  readonly icon: LucideIcon;
   readonly label: string;
   readonly onPress: () => void;
 }) {
@@ -1086,7 +1328,7 @@ function BottomAction({
         pressed ? styles.pressed : null,
       ]}
     >
-      <Text style={styles.bottomGlyph}>{glyph}</Text>
+      <Icon color={color.actionSheetText} size={17} strokeWidth={3} />
       <Text numberOfLines={1} style={styles.bottomLabel}>
         {label}
       </Text>
@@ -1145,7 +1387,9 @@ function PlansSheet({
         })}
       </View>
       <View style={styles.sheetActions}>
-        <Button
+        <SheetAction
+          icon={Pencil}
+          label="Edit plan"
           onPress={() => {
             router.push({
               pathname: "/plans/[planId]/edit",
@@ -1155,12 +1399,10 @@ function PlansSheet({
               },
             });
           }}
-          style={styles.sheetAction}
-          variant="secondary"
-        >
-          Edit
-        </Button>
-        <Button
+        />
+        <SheetAction
+          icon={Plus}
+          label="New plan"
           onPress={() => {
             router.push({
               pathname: "/plans/new",
@@ -1169,10 +1411,7 @@ function PlansSheet({
               },
             });
           }}
-          style={styles.sheetAction}
-        >
-          New
-        </Button>
+        />
       </View>
     </AppModalSheet>
   );
@@ -1190,7 +1429,9 @@ function FoodsSheet({
   return (
     <AppModalSheet onClose={onClose} title="Foods" visible={visible}>
       <View style={styles.sheetActions}>
-        <Button
+        <SheetAction
+          icon={Plus}
+          label="Create food"
           onPress={() => {
             router.push({
               pathname: "/foods/new",
@@ -1199,11 +1440,10 @@ function FoodsSheet({
               },
             });
           }}
-          style={styles.sheetAction}
-        >
-          Create
-        </Button>
-        <Button
+        />
+        <SheetAction
+          icon={Pencil}
+          label="Edit foods"
           onPress={() => {
             router.push({
               pathname: "/foods/edit",
@@ -1212,11 +1452,7 @@ function FoodsSheet({
               },
             });
           }}
-          style={styles.sheetAction}
-          variant="secondary"
-        >
-          Edit
-        </Button>
+        />
       </View>
     </AppModalSheet>
   );
@@ -1231,14 +1467,15 @@ function BackupSheet({
 }) {
   return (
     <AppModalSheet onClose={onClose} title="Backup" visible={visible}>
-      <Button
-        onPress={() => {
-          router.push("/backup" as RelativePathString);
-        }}
-        variant="secondary"
-      >
-        Open backup
-      </Button>
+      <View style={styles.sheetActions}>
+        <SheetAction
+          icon={Download}
+          label="Open backup"
+          onPress={() => {
+            router.push("/backup" as RelativePathString);
+          }}
+        />
+      </View>
     </AppModalSheet>
   );
 }
@@ -1288,7 +1525,10 @@ function MealEntrySheet({
             </View>
           </View>
           <View style={styles.sheetActions}>
-            <Button
+            <SheetAction
+              danger
+              icon={Trash2}
+              label="Delete"
               onPress={() => {
                 Alert.alert(
                   "Delete entry",
@@ -1310,26 +1550,52 @@ function MealEntrySheet({
                   ]
                 );
               }}
-              style={styles.sheetAction}
-              variant="danger"
-            >
-              Delete
-            </Button>
-            <Button
+            />
+            <SheetAction
+              icon={Pencil}
+              label="Save"
               onPress={() => {
                 onRevise({
                   mealEntry: selectedMealEntry.mealEntry,
                   quantityGrams,
                 });
               }}
-              style={styles.sheetAction}
-            >
-              Save
-            </Button>
+            />
           </View>
         </View>
       )}
     </AppModalSheet>
+  );
+}
+
+function SheetAction({
+  danger = false,
+  icon: Icon,
+  label,
+  onPress,
+}: {
+  readonly danger?: boolean;
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly onPress: () => void;
+}) {
+  const contentColor = danger ? color.dangerText : color.actionSheetText;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.sheetAction,
+        pressed ? styles.sheetActionPressed : null,
+        danger ? styles.sheetActionDanger : null,
+      ]}
+    >
+      <Icon color={contentColor} size={16} strokeWidth={3} />
+      <Text style={[styles.sheetActionLabel, { color: contentColor }]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1519,8 +1785,8 @@ const styles = StyleSheet.create({
     backgroundColor: color.bg,
   },
   content: {
-    gap: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    gap: 0,
+    paddingBottom: 104,
   },
   centeredContent: {
     justifyContent: "center",
@@ -1528,156 +1794,135 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: spacing.lg,
   },
-  header: {
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
   dateButton: {
     minWidth: 0,
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xs,
   },
   dateEyebrow: {
-    color: color.textSubtle,
+    color: "rgba(255,255,255,0.72)",
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
     textTransform: "uppercase",
   },
   date: {
-    color: color.text,
+    color: color.white,
     fontSize: type.size.xl,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xl,
   },
-  progressPanel: {
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    backgroundColor: color.surface,
-    ...shadow.card,
-  },
-  planHeader: {
-    flexDirection: "row",
+  headerIconButton: {
+    width: 48,
+    height: 48,
     alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    backgroundColor: "transparent",
+  },
+  headerPressed: {
+    opacity: 0.82,
+  },
+  dailyProgress: {
     gap: spacing.md,
-  },
-  planCopy: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  panelEyebrow: {
-    color: color.textSubtle,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-    textTransform: "uppercase",
-  },
-  panelTitle: {
-    color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
-  },
-  energyBadge: {
-    minWidth: 78,
-    alignItems: "flex-end",
-  },
-  energyValue: {
-    color: color.nutritionEnergy,
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
-  },
-  energyUnit: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-  },
-  progressBlock: {
-    gap: spacing.xs,
-  },
-  compactProgress: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  progressLabelRow: {
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  progressLabel: {
-    color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-  },
-  progressValue: {
-    flexShrink: 1,
-    textAlign: "right",
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-  },
-  progressTrack: {
-    height: 8,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-    backgroundColor: color.progressTrack,
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: radius.pill,
+    marginHorizontal: -spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: "#222226",
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: color.sheet,
   },
   macroGrid: {
     flexDirection: "row",
-    gap: spacing.md,
+    gap: spacing.xl,
   },
-  secondaryNutrients: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  secondaryNutrient: {
+  dailyMetric: {
     minWidth: 0,
     flex: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    backgroundColor: color.field,
+    alignItems: "center",
+    gap: spacing.xs,
   },
-  secondaryLabel: {
-    color: color.textSubtle,
-    fontSize: 11,
-    fontWeight: type.weight.black,
-    lineHeight: 14,
-  },
-  secondaryValue: {
-    color: color.text,
+  dailyMetricLabel: {
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
   },
+  dailyMetricTrack: {
+    width: "100%",
+    height: 6,
+    overflow: "hidden",
+    borderRadius: radius.pill,
+  },
+  dailyMetricFill: {
+    height: "100%",
+    borderRadius: radius.pill,
+  },
+  dailyMetricValue: {
+    fontSize: 14,
+    fontWeight: type.weight.black,
+    lineHeight: 18,
+  },
+  energyProgress: {
+    gap: spacing.xs,
+    alignItems: "center",
+  },
+  energyTrack: {
+    width: "100%",
+    height: 7,
+    overflow: "hidden",
+    borderRadius: radius.pill,
+    backgroundColor: "#233059",
+  },
+  energyFill: {
+    height: "100%",
+    borderRadius: radius.pill,
+  },
+  energyProgressValue: {
+    fontSize: type.size.xs,
+    fontWeight: type.weight.black,
+    lineHeight: type.lineHeight.xs,
+  },
+  dailyNutrientGrid: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  dailyNutrient: {
+    minWidth: 0,
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  dailyNutrientLabel: {
+    fontSize: 10,
+    fontWeight: type.weight.black,
+    lineHeight: 13,
+  },
+  dailyNutrientTrack: {
+    width: "100%",
+    height: 4,
+    overflow: "hidden",
+    borderRadius: radius.pill,
+  },
+  dailyNutrientFill: {
+    height: "100%",
+    borderRadius: radius.pill,
+  },
+  dailyNutrientValue: {
+    fontSize: 10,
+    fontWeight: type.weight.black,
+    lineHeight: 13,
+  },
   meals: {
-    gap: spacing.lg,
+    gap: spacing.xxl,
+    paddingTop: spacing.xl,
   },
   mealCard: {
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: color.surface,
     ...shadow.card,
   },
@@ -1697,12 +1942,6 @@ const styles = StyleSheet.create({
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.md,
   },
-  mealKcal: {
-    color: color.nutritionEnergy,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-  },
   macroStripe: {
     height: 4,
     flexDirection: "row",
@@ -1719,16 +1958,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: color.sheetBorder,
   },
-  emptyMeal: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    color: color.textSubtle,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
-  },
   mealEntryRow: {
-    minHeight: 62,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
@@ -1774,26 +2005,65 @@ const styles = StyleSheet.create({
     fontWeight: type.weight.black,
     lineHeight: 14,
   },
-  mealTotals: {
+  mealTotalColumns: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+  },
+  mealTotalColumn: {
+    minWidth: 0,
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
-  mealTotalText: {
-    color: color.textMuted,
+  mealTotalValue: {
+    fontSize: 14,
+    fontWeight: type.weight.black,
+    lineHeight: 18,
+  },
+  mealTotalLabel: {
+    fontSize: 10,
+    fontWeight: type.weight.black,
+    lineHeight: 13,
+  },
+  mealNutrientColumns: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+    backgroundColor: "#18181b",
+  },
+  mealNutrientColumn: {
+    minWidth: 0,
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  mealNutrientValue: {
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    lineHeight: 15,
+  },
+  mealNutrientLabel: {
+    fontSize: 10,
+    fontWeight: type.weight.semibold,
+    lineHeight: 13,
   },
   addFoodButton: {
     minHeight: 48,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: spacing.xs,
     borderTopWidth: 1,
     borderTopColor: color.sheetBorder,
     paddingHorizontal: spacing.lg,
+  },
+  addFoodIcon: {
+    marginTop: 1,
   },
   addFoodText: {
     color: color.primary,
@@ -1802,28 +2072,23 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.sm,
   },
   bottomAction: {
+    minHeight: 48,
     minWidth: 0,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xs,
+    gap: 2,
     borderWidth: 1,
     borderColor: "transparent",
     borderRadius: radius.sm,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
-  bottomGlyph: {
-    color: color.primary,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-  },
   bottomLabel: {
-    color: color.text,
+    color: color.actionSheetText,
     fontSize: 11,
     fontWeight: type.weight.black,
-    lineHeight: 14,
+    lineHeight: 12,
   },
   sheetList: {
     gap: spacing.sm,
@@ -1834,14 +2099,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     borderWidth: 1,
-    borderColor: color.divider,
+    borderColor: color.actionSheetBorder,
     borderRadius: radius.sm,
     padding: spacing.md,
-    backgroundColor: color.field,
+    backgroundColor: color.actionSheet,
   },
   planOptionSelected: {
     borderColor: color.primary,
-    backgroundColor: color.primarySoft,
+    backgroundColor: color.actionSheetPressed,
   },
   planOptionCopy: {
     minWidth: 0,
@@ -1849,13 +2114,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   planOptionName: {
-    color: color.text,
+    color: color.actionSheetText,
     fontSize: type.size.sm,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.sm,
   },
   planOptionMacros: {
-    color: color.textMuted,
+    color: color.actionSheetTextMuted,
     fontSize: type.size.xs,
     fontWeight: type.weight.semibold,
     lineHeight: type.lineHeight.xs,
@@ -1872,7 +2137,33 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   sheetAction: {
+    minHeight: 42,
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: color.actionSheetBorder,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: color.actionSheet,
+  },
+  sheetActionPressed: {
+    backgroundColor: color.actionSheetPressed,
+  },
+  sheetActionDanger: {
+    borderColor: color.dangerBorder,
+    backgroundColor: color.dangerBg,
+  },
+  sheetActionLabel: {
+    flexShrink: 1,
+    fontSize: type.size.sm,
+    fontWeight: type.weight.black,
+    lineHeight: type.lineHeight.sm,
+    textAlign: "center",
   },
   entrySheet: {
     gap: spacing.lg,

@@ -150,57 +150,54 @@ export function RangeSummary({ report }: RangeSummaryProps) {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Nutrition insights</Text>
-        <Text style={styles.title}>7-day range</Text>
-        <Text style={styles.dateRange}>
-          {formatDateTitle({ dateKey: report.startDateKey })} -{" "}
-          {formatDateTitle({ dateKey: report.endDateKey })}
-        </Text>
-      </View>
+      <SummaryInsights insights={insights} />
 
-      <SectionCard>
-        <View style={styles.overviewGrid}>
-          <OverviewMetric
-            label="Avg calories"
-            tone={color.nutritionEnergy}
-            value={_formatNutrient({
-              nutrientName: "energyKcal",
-              value: averageTotals.energyKcal,
-            })}
-          />
-          <OverviewMetric
-            label="Logged meals"
-            tone={color.primary}
-            value={formatNumber({
-              maximumFractionDigits: 0,
-              value: loggedMealCount,
-            })}
-          />
-          <OverviewMetric
-            label="In range"
-            tone={color.successText}
-            value={`${inRangeDays}/${dayCount}`}
-          />
-        </View>
-
-        <View style={styles.macroRow}>
-          {macroNutrients.map((nutrientName) => (
-            <MacroPill
-              key={nutrientName}
-              nutrientName={nutrientName}
-              value={averageTotals[nutrientName]}
+      <SectionCard style={styles.overviewPanel}>
+        <View style={styles.overviewContent}>
+          <Text style={styles.dateRange}>
+            {formatDateTitle({ dateKey: report.startDateKey })} -{" "}
+            {formatDateTitle({ dateKey: report.endDateKey })}
+          </Text>
+          <View style={styles.overviewGrid}>
+            <OverviewMetric
+              label="Avg calories"
+              tone={color.nutritionEnergy}
+              value={_formatNutrient({
+                nutrientName: "energyKcal",
+                value: averageTotals.energyKcal,
+              })}
             />
-          ))}
+            <OverviewMetric
+              label="Logged meals"
+              tone={color.primary}
+              value={formatNumber({
+                maximumFractionDigits: 0,
+                value: loggedMealCount,
+              })}
+            />
+            <OverviewMetric
+              label="In range"
+              tone={color.successText}
+              value={`${inRangeDays}/${dayCount}`}
+            />
+          </View>
+
+          <View style={styles.macroRow}>
+            {macroNutrients.map((nutrientName) => (
+              <MacroPill
+                key={nutrientName}
+                nutrientName={nutrientName}
+                value={averageTotals[nutrientName]}
+              />
+            ))}
+          </View>
         </View>
       </SectionCard>
-
-      <SummaryInsights insights={insights} />
 
       <View style={styles.section}>
         <SectionTitle
           subtitle="Average daily intake compared with daily targets when available."
-          title="Daily average"
+          title="7-day average"
         />
         <View style={styles.nutrientGrid}>
           {trackedNutrients.map((nutrientName) => (
@@ -249,7 +246,7 @@ function SummaryInsights({
   readonly insights: readonly NutritionReportInsight[];
 }) {
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, styles.summarySection]}>
       <SectionTitle
         subtitle="Patterns ranked from food-specific signals to broader habits."
         title="Summary"
@@ -490,29 +487,21 @@ export function formatSignedNumber({
 
 const styles = StyleSheet.create({
   root: {
-    gap: spacing.xxl,
-  },
-  header: {
-    gap: spacing.xs,
-  },
-  eyebrow: {
-    color: color.primary,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-    textTransform: "uppercase",
-  },
-  title: {
-    color: color.text,
-    fontSize: type.size.xxl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xxl,
+    gap: spacing.xxxl,
   },
   dateRange: {
     color: color.textMuted,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: type.size.xs,
+    fontWeight: type.weight.black,
+    lineHeight: type.lineHeight.xs,
+    textTransform: "uppercase",
+  },
+  overviewPanel: {
+    borderColor: color.sheetBorder,
+    backgroundColor: color.sheet,
+  },
+  overviewContent: {
+    gap: spacing.md,
   },
   overviewGrid: {
     flexDirection: "row",
@@ -530,9 +519,9 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: color.text,
-    fontSize: type.size.lg,
+    fontSize: type.size.md,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    lineHeight: type.lineHeight.md,
   },
   metricLabel: {
     color: color.textMuted,
@@ -544,7 +533,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
-    marginTop: spacing.lg,
   },
   macroPill: {
     minWidth: 96,
@@ -555,7 +543,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.sm,
-    backgroundColor: color.field,
+    backgroundColor: color.bg,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
@@ -579,15 +567,22 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+    paddingTop: spacing.xxl,
+  },
+  summarySection: {
+    borderTopWidth: 0,
+    paddingTop: 0,
   },
   sectionTitle: {
     gap: spacing.xs,
   },
   sectionHeading: {
     color: color.text,
-    fontSize: type.size.lg,
+    fontSize: type.size.md,
     fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    lineHeight: type.lineHeight.md,
   },
   sectionSubtitle: {
     color: color.textSubtle,
@@ -596,14 +591,13 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.md,
   },
   insightList: {
-    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
   },
   insightCard: {
-    borderWidth: 1,
-    borderColor: color.sheetBorder,
-    borderRadius: radius.sm,
-    backgroundColor: color.surface,
-    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: color.sheetBorder,
+    paddingVertical: spacing.sm,
   },
   insightText: {
     color: color.text,
@@ -614,6 +608,7 @@ const styles = StyleSheet.create({
   insightFoodText: {
     color: color.warningText,
     fontWeight: type.weight.black,
+    backgroundColor: color.warningBg,
   },
   emptyText: {
     color: color.textMuted,
@@ -634,7 +629,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.sm,
-    backgroundColor: color.surface,
+    backgroundColor: color.sheet,
     padding: spacing.md,
   },
   nutrientCardHeader: {
@@ -663,14 +658,10 @@ const styles = StyleSheet.create({
     lineHeight: type.lineHeight.xl,
   },
   nutrientTrack: {
-    height: 7,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-    backgroundColor: color.progressTrack,
+    display: "none",
   },
   nutrientFill: {
-    height: "100%",
-    borderRadius: radius.pill,
+    display: "none",
   },
   foodGroups: {
     gap: spacing.lg,
@@ -687,7 +678,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.sm,
-    backgroundColor: color.surface,
+    backgroundColor: color.sheet,
     paddingHorizontal: spacing.md,
   },
   divider: {

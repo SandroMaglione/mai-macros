@@ -24,6 +24,7 @@ import type {
 } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
+import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FoodNutrientOverview } from "./food-nutrient-overview";
@@ -134,6 +135,7 @@ export function FoodForm({
   const isCreating = action === "create";
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
+  const SubmitIcon = hasFailed ? RotateCcw : isCreating ? Plus : Save;
 
   return (
     <AppScreen
@@ -147,7 +149,7 @@ export function FoodForm({
         action={
           <IconButton
             accessibilityLabel="Back"
-            glyph="‹"
+            icon={ChevronLeft}
             onPress={onBack}
             variant="ghost"
           />
@@ -186,6 +188,7 @@ export function FoodForm({
 
         <Button
           disabled={disabled}
+          icon={SubmitIcon}
           loading={disabled}
           onPress={() => {
             actor.send({
