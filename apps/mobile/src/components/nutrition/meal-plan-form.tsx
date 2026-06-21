@@ -5,6 +5,7 @@ import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, type } from "@/theme/tokens";
 import {
   AppScreen,
+  BottomActionBar,
   Button,
   Field,
   IconButton,
@@ -177,94 +178,103 @@ export function MealPlanForm({
   const energyKcal = calculateMealPlanEnergyKcalFromValues({ values });
 
   return (
-    <AppScreen
-      scroll
-      contentStyle={styles.content}
-      scrollProps={{
-        keyboardShouldPersistTaps: "handled",
-      }}
-    >
-      <MaiHeader
-        action={
-          canNavigateBack ? (
-            <IconButton
-              accessibilityLabel="Back"
-              icon={ChevronLeft}
-              onPress={onBack}
-              variant="ghost"
-            />
-          ) : undefined
-        }
-        title={title}
-      />
-
-      <View style={styles.form}>
-        {errorMessage === undefined ? null : (
-          <Notice message={errorMessage} title="Plan not saved" tone="danger" />
-        )}
-
-        <Field
-          autoCapitalize="words"
-          autoCorrect={false}
-          editable={!isSubmitting}
-          label="Name"
-          onChangeText={(value) =>
-            send({ type: "changeField", name: "name", value })
+    <View style={styles.screen}>
+      <AppScreen
+        safeAreaEdges={["top"]}
+        scroll
+        contentStyle={styles.content}
+        scrollProps={{
+          keyboardShouldPersistTaps: "handled",
+        }}
+      >
+        <MaiHeader
+          action={
+            canNavigateBack ? (
+              <IconButton
+                accessibilityLabel="Back"
+                icon={ChevronLeft}
+                onPress={onBack}
+                variant="ghost"
+              />
+            ) : undefined
           }
-          placeholder="Training day"
-          returnKeyType="next"
-          value={values.name}
+          title={title}
         />
 
-        <SectionCard style={styles.card} title="Macros">
-          <View style={styles.macroGrid}>
-            {macroTargetFields.map((field) => (
-              <PlanTargetInput
-                field={field}
-                isSubmitting={isSubmitting}
-                key={field.name}
-                onChangeText={(value) =>
-                  send({ type: "changeField", name: field.name, value })
-                }
-                value={values[field.name]}
-              />
-            ))}
-          </View>
+        <View style={styles.form}>
+          {errorMessage === undefined ? null : (
+            <Notice
+              message={errorMessage}
+              title="Plan not saved"
+              tone="danger"
+            />
+          )}
 
-          <View style={styles.energyPanel}>
-            <Text style={styles.energyLabel}>Calories</Text>
-            <View style={styles.energyValueGroup}>
-              <Text
-                adjustsFontSizeToFit
-                numberOfLines={1}
-                style={styles.energyValue}
-              >
-                {formatNumber({
-                  maximumFractionDigits: 2,
-                  value: energyKcal,
-                })}
-              </Text>
-              <Text style={styles.energyUnit}>kcal</Text>
+          <Field
+            autoCapitalize="words"
+            autoCorrect={false}
+            editable={!isSubmitting}
+            label="Name"
+            onChangeText={(value) =>
+              send({ type: "changeField", name: "name", value })
+            }
+            placeholder="Training day"
+            returnKeyType="next"
+            value={values.name}
+          />
+
+          <SectionCard style={styles.card} title="Macros">
+            <View style={styles.macroGrid}>
+              {macroTargetFields.map((field) => (
+                <PlanTargetInput
+                  field={field}
+                  isSubmitting={isSubmitting}
+                  key={field.name}
+                  onChangeText={(value) =>
+                    send({ type: "changeField", name: field.name, value })
+                  }
+                  value={values[field.name]}
+                />
+              ))}
             </View>
-          </View>
-        </SectionCard>
 
-        <SectionCard style={styles.card} title="Nutrient limits">
-          <View style={styles.nutrientGrid}>
-            {nutrientTargetFields.map((field) => (
-              <PlanTargetInput
-                field={field}
-                isSubmitting={isSubmitting}
-                key={field.name}
-                onChangeText={(value) =>
-                  send({ type: "changeField", name: field.name, value })
-                }
-                value={values[field.name]}
-              />
-            ))}
-          </View>
-        </SectionCard>
+            <View style={styles.energyPanel}>
+              <Text style={styles.energyLabel}>Calories</Text>
+              <View style={styles.energyValueGroup}>
+                <Text
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                  style={styles.energyValue}
+                >
+                  {formatNumber({
+                    maximumFractionDigits: 2,
+                    value: energyKcal,
+                  })}
+                </Text>
+                <Text style={styles.energyUnit}>kcal</Text>
+              </View>
+            </View>
+          </SectionCard>
 
+          <SectionCard style={styles.card} title="Nutrient limits">
+            <View style={styles.nutrientGrid}>
+              {nutrientTargetFields.map((field) => (
+                <PlanTargetInput
+                  field={field}
+                  isSubmitting={isSubmitting}
+                  key={field.name}
+                  onChangeText={(value) =>
+                    send({ type: "changeField", name: field.name, value })
+                  }
+                  value={values[field.name]}
+                />
+              ))}
+            </View>
+          </SectionCard>
+        </View>
+      </AppScreen>
+
+      <BottomActionBar>
         <Button
           disabled={isSubmitting}
           icon={SubmitIcon}
@@ -272,11 +282,12 @@ export function MealPlanForm({
           onPress={() => {
             onSubmit(createMealPlanInputFromValues({ values }));
           }}
+          style={styles.footerButton}
         >
           {submitText}
         </Button>
-      </View>
-    </AppScreen>
+      </BottomActionBar>
+    </View>
   );
 }
 
@@ -362,6 +373,10 @@ function _formNonNegativeNumber(value: string) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: color.bg,
+  },
   content: {
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
@@ -433,5 +448,8 @@ const styles = StyleSheet.create({
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
     textTransform: "uppercase",
+  },
+  footerButton: {
+    flex: 1,
   },
 });

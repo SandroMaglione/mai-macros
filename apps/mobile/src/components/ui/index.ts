@@ -1,4 +1,3 @@
-export * from "./app-modal-sheet.tsx";
 export * from "./app-screen.tsx";
 export * from "./bottom-action-bar.tsx";
 export * from "./button.tsx";
@@ -7,5 +6,6 @@ export * from "./icon-button.tsx";
 export * from "./loading-view.tsx";
 export * from "./mai-header.tsx";
 export * from "./notice.tsx";
+export * from "./pager-tabs.tsx";
 export * from "./progress-bar.tsx";
 export * from "./section-card.tsx";

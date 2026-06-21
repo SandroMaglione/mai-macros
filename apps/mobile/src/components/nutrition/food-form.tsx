@@ -1,5 +1,6 @@
 import {
   AppScreen,
+  BottomActionBar,
   Button,
   Field,
   IconButton,
@@ -139,55 +140,68 @@ export function FoodForm({
   const SubmitIcon = hasFailed ? RotateCcw : isCreating ? Plus : Save;
 
   return (
-    <AppScreen
-      scroll
-      contentStyle={styles.content}
-      scrollProps={{
-        keyboardShouldPersistTaps: "handled",
-      }}
-    >
-      <MaiHeader
-        action={
-          <IconButton
-            accessibilityLabel="Back"
-            icon={ChevronLeft}
-            onPress={onBack}
-            variant="ghost"
-          />
-        }
-        title={title}
-      />
+    <View style={styles.screen}>
+      <AppScreen
+        safeAreaEdges={["top"]}
+        scroll
+        contentStyle={styles.content}
+        scrollProps={{
+          keyboardShouldPersistTaps: "handled",
+        }}
+      >
+        <MaiHeader
+          action={
+            <IconButton
+              accessibilityLabel="Back"
+              icon={ChevronLeft}
+              onPress={onBack}
+              variant="ghost"
+            />
+          }
+          title={title}
+        />
 
-      <View style={styles.form}>
-        {errorMessage === undefined ? null : (
-          <Notice message={errorMessage} title="Food not saved" tone="danger" />
-        )}
+        <View style={styles.form}>
+          {errorMessage === undefined ? null : (
+            <Notice
+              message={errorMessage}
+              title="Food not saved"
+              tone="danger"
+            />
+          )}
 
-        {isCreating ? (
-          <FoodQuickInputTextField
+          {isCreating ? (
+            <FoodQuickInputTextField
+              actor={actor}
+              disabled={disabled}
+              input={quickInput}
+            />
+          ) : null}
+
+          <FoodFormFields
             actor={actor}
             disabled={disabled}
-            input={quickInput}
+            values={formValues}
           />
-        ) : null}
 
-        <FoodFormFields actor={actor} disabled={disabled} values={formValues} />
+          <FoodFormOverview values={formValues} />
 
-        <FoodFormOverview values={formValues} />
+          <FoodNumberWarnings warnings={numberWarnings} />
 
-        <FoodNumberWarnings warnings={numberWarnings} />
+          {isCreating ? (
+            <FoodQuickInputFeedback parseResult={quickInputParseResult} />
+          ) : null}
 
-        {isCreating ? (
-          <FoodQuickInputFeedback parseResult={quickInputParseResult} />
-        ) : null}
+          {isCreating ? null : (
+            <Notice
+              message="Saving replaces this food when it is unused. Existing logs stay on the original food and future logs use the revised copy."
+              tone="neutral"
+            />
+          )}
+        </View>
+      </AppScreen>
 
-        {isCreating ? null : (
-          <Notice
-            message="Saving replaces this food when it is unused. Existing logs stay on the original food and future logs use the revised copy."
-            tone="neutral"
-          />
-        )}
-
+      <BottomActionBar>
         <Button
           disabled={disabled}
           icon={SubmitIcon}
@@ -197,11 +211,12 @@ export function FoodForm({
               type: "submit",
             });
           }}
+          style={styles.footerButton}
         >
           {submitText}
         </Button>
-      </View>
-    </AppScreen>
+      </BottomActionBar>
+    </View>
   );
 }
 
@@ -475,6 +490,10 @@ function _optionalTrimmedText(value: string) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: color.bg,
+  },
   content: {
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
@@ -506,5 +525,8 @@ const styles = StyleSheet.create({
   },
   noticeStack: {
     gap: spacing.sm,
+  },
+  footerButton: {
+    flex: 1,
   },
 });

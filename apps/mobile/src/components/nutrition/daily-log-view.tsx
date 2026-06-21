@@ -1,10 +1,8 @@
 import {
   AppHeader,
-  AppModalSheet,
   AppScreen,
   BottomActionBar,
   Button,
-  LoadingOverlay,
   LoadingView,
   Notice,
 } from "@/components/ui";
@@ -22,15 +20,13 @@ import {
   type Meal,
   type MealEntry,
   type NutrientTotals,
-  type Plan,
 } from "@mai/nutrition";
 import type { OpenedDay } from "@mai/nutrition/services/daily-logs";
 import { DailyLogs } from "@mai/nutrition/services/daily-logs";
 import { Foods } from "@mai/nutrition/services/foods";
-import type { MealFoodUsage } from "@mai/nutrition/services/meal-entries";
 import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { useMachine } from "@xstate/react";
-import { router, type RelativePathString } from "expo-router";
+import { router } from "expo-router";
 import { Array as EffectArray, Effect, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
@@ -40,23 +36,13 @@ import {
   ChevronRight,
   ClipboardList,
   Download,
-  Pencil,
   Plus,
-  Trash2,
 } from "lucide-react-native";
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { assertEvent, assign, fromPromise, setup } from "xstate";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { assign, fromPromise, setup } from "xstate";
 
 export type DailyLogViewData = {
   readonly day: OpenedDay;
-  readonly foodUsage: readonly MealFoodUsage[];
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
 };
@@ -78,57 +64,10 @@ type DailyLogLoadResult =
       readonly dateKey: string;
     };
 
-type SheetName = "plans" | "foods" | "backup" | null;
-
-type SelectedMealEntry = {
-  readonly food: Food | undefined;
-  readonly mealEntry: MealEntry;
-};
+type MacroDisplayMode = "consumed" | "remaining";
 
 type DailyLogRouteEvent = {
   readonly type: "reload";
-};
-
-type DailyLogViewEvent =
-  | {
-      readonly quantityGrams: string;
-      readonly type: "changeMealEntryQuantity";
-    }
-  | {
-      readonly dateKey: string;
-      readonly plan: Plan;
-      readonly type: "changePlan";
-    }
-  | {
-      readonly type: "closeMealEntry";
-    }
-  | {
-      readonly type: "closeSheet";
-    }
-  | {
-      readonly mealEntry: MealEntry;
-      readonly type: "deleteMealEntry";
-    }
-  | {
-      readonly sheet: Exclude<SheetName, null>;
-      readonly type: "openSheet";
-    }
-  | {
-      readonly mealEntry: MealEntry;
-      readonly quantityGrams: string;
-      readonly type: "reviseMealEntry";
-    }
-  | {
-      readonly selectedMealEntry: SelectedMealEntry;
-      readonly type: "selectMealEntry";
-    };
-
-type DailyLogViewContext = {
-  readonly activeSheet: SheetName;
-  readonly onReload: () => void;
-  readonly pendingMessage: string | null;
-  readonly quantityGrams: string;
-  readonly selectedMealEntry: SelectedMealEntry | null;
 };
 
 const mealOptions: readonly {
@@ -265,210 +204,26 @@ const dailyLogRouteMachine = setup({
   },
 });
 
-const dailyLogViewMachine = setup({
+const macroDisplayModeMachine = setup({
   types: {
-    context: {} as DailyLogViewContext,
-    events: {} as DailyLogViewEvent,
-    input: {} as {
-      readonly onReload: () => void;
+    events: {} as {
+      readonly type: "toggle";
     },
-  },
-  actors: {
-    changeDayPlan: fromPromise<
-      void,
-      {
-        readonly dateKey: string;
-        readonly planId: string;
-      }
-    >(({ input }) => changeDayPlan(input).then(() => undefined)),
-    deleteMealEntry: fromPromise<void, { readonly mealEntry: MealEntry }>(
-      ({ input }) => deleteMealEntry(input).then(() => undefined)
-    ),
-    reviseMealEntry: fromPromise<
-      void,
-      {
-        readonly mealEntry: MealEntry;
-        readonly quantityGrams: string;
-      }
-    >(({ input }) => reviseMealEntry(input).then(() => undefined)),
   },
 }).createMachine({
-  context: ({ input }) => ({
-    activeSheet: null,
-    onReload: input.onReload,
-    pendingMessage: null,
-    quantityGrams: "",
-    selectedMealEntry: null,
-  }),
-  initial: "Idle",
+  initial: "Consumed",
   states: {
-    Idle: {
+    Consumed: {
       on: {
-        changeMealEntryQuantity: {
-          actions: assign(({ event }) => {
-            assertEvent(event, "changeMealEntryQuantity");
-
-            return {
-              quantityGrams: event.quantityGrams,
-            };
-          }),
-        },
-        changePlan: {
-          target: "ChangingPlan",
-          actions: assign({
-            pendingMessage: "Changing plan",
-          }),
-        },
-        closeMealEntry: {
-          actions: assign({
-            quantityGrams: "",
-            selectedMealEntry: null,
-          }),
-        },
-        closeSheet: {
-          actions: assign({
-            activeSheet: null,
-          }),
-        },
-        deleteMealEntry: {
-          target: "DeletingMealEntry",
-          actions: assign({
-            pendingMessage: "Deleting entry",
-          }),
-        },
-        openSheet: {
-          actions: assign(({ event }) => {
-            assertEvent(event, "openSheet");
-
-            return {
-              activeSheet: event.sheet,
-            };
-          }),
-        },
-        reviseMealEntry: {
-          target: "RevisingMealEntry",
-          actions: assign({
-            pendingMessage: "Saving entry",
-          }),
-        },
-        selectMealEntry: {
-          actions: assign(({ event }) => {
-            assertEvent(event, "selectMealEntry");
-
-            return {
-              quantityGrams: `${event.selectedMealEntry.mealEntry.quantityGrams}`,
-              selectedMealEntry: event.selectedMealEntry,
-            };
-          }),
+        toggle: {
+          target: "Remaining",
         },
       },
     },
-    ChangingPlan: {
-      invoke: {
-        src: "changeDayPlan",
-        input: ({ event }) => {
-          assertEvent(event, "changePlan");
-
-          return {
-            dateKey: event.dateKey,
-            planId: event.plan.id,
-          };
-        },
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign({
-              activeSheet: null,
-              pendingMessage: null,
-            }),
-            ({ context }) => {
-              context.onReload();
-            },
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: [
-            assign({
-              pendingMessage: null,
-            }),
-            ({ event }) => {
-              Alert.alert("Could not change plan", _errorMessage(event.error));
-            },
-          ],
-        },
-      },
-    },
-    DeletingMealEntry: {
-      invoke: {
-        src: "deleteMealEntry",
-        input: ({ event }) => {
-          assertEvent(event, "deleteMealEntry");
-
-          return {
-            mealEntry: event.mealEntry,
-          };
-        },
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign({
-              pendingMessage: null,
-              quantityGrams: "",
-              selectedMealEntry: null,
-            }),
-            ({ context }) => {
-              context.onReload();
-            },
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: [
-            assign({
-              pendingMessage: null,
-            }),
-            ({ event }) => {
-              Alert.alert("Could not delete entry", _errorMessage(event.error));
-            },
-          ],
-        },
-      },
-    },
-    RevisingMealEntry: {
-      invoke: {
-        src: "reviseMealEntry",
-        input: ({ event }) => {
-          assertEvent(event, "reviseMealEntry");
-
-          return {
-            mealEntry: event.mealEntry,
-            quantityGrams: event.quantityGrams,
-          };
-        },
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign({
-              pendingMessage: null,
-              quantityGrams: "",
-              selectedMealEntry: null,
-            }),
-            ({ context }) => {
-              context.onReload();
-            },
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: [
-            assign({
-              pendingMessage: null,
-            }),
-            ({ event }) => {
-              Alert.alert("Could not save entry", _errorMessage(event.error));
-            },
-          ],
+    Remaining: {
+      on: {
+        toggle: {
+          target: "Consumed",
         },
       },
     },
@@ -518,14 +273,7 @@ export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
       <LoadingView message="Loading daily log" />
     </AppScreen>
   ) : (
-    <DailyLogView
-      data={snapshot.context.data}
-      onReload={() => {
-        send({
-          type: "reload",
-        });
-      }}
-    />
+    <DailyLogView data={snapshot.context.data} />
   );
 }
 
@@ -533,20 +281,7 @@ export function DailyLogTodayRoute() {
   return <DailyLogRoute dateKey={todayDateKey()} />;
 }
 
-export function DailyLogView({
-  data,
-  onReload,
-}: {
-  readonly data: DailyLogViewData;
-  readonly onReload: () => void;
-}) {
-  const [snapshot, , actor] = useMachine(dailyLogViewMachine, {
-    input: {
-      onReload,
-    },
-  });
-  const { activeSheet, pendingMessage, quantityGrams, selectedMealEntry } =
-    snapshot.context;
+export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   const nutrients = _calculateEntriesNutrients({
     foods: data.foods,
     mealEntries: data.mealEntries,
@@ -669,12 +404,6 @@ export function DailyLogView({
                 (mealEntry) => mealEntry.meal === mealOption.value
               )}
               mealLabel={mealOption.label}
-              onSelectMealEntry={(nextSelectedMealEntry) => {
-                actor.send({
-                  selectedMealEntry: nextSelectedMealEntry,
-                  type: "selectMealEntry",
-                });
-              }}
             />
           ))}
         </View>
@@ -692,9 +421,11 @@ export function DailyLogView({
           icon={ClipboardList}
           label="Plans"
           onPress={() => {
-            actor.send({
-              sheet: "plans",
-              type: "openSheet",
+            router.push({
+              pathname: "/plans",
+              params: {
+                dateKey: data.day.dailyLog.dateKey,
+              },
             });
           }}
         />
@@ -702,9 +433,11 @@ export function DailyLogView({
           icon={Apple}
           label="Foods"
           onPress={() => {
-            actor.send({
-              sheet: "foods",
-              type: "openSheet",
+            router.push({
+              pathname: "/foods",
+              params: {
+                dateKey: data.day.dailyLog.dateKey,
+              },
             });
           }}
         />
@@ -712,79 +445,10 @@ export function DailyLogView({
           icon={Download}
           label="Backup"
           onPress={() => {
-            actor.send({
-              sheet: "backup",
-              type: "openSheet",
-            });
+            router.push("/backup");
           }}
         />
       </BottomActionBar>
-
-      <PlansSheet
-        data={data}
-        onChangePlan={({ plan }) => {
-          actor.send({
-            dateKey: data.day.dailyLog.dateKey,
-            plan,
-            type: "changePlan",
-          });
-        }}
-        onClose={() => {
-          actor.send({
-            type: "closeSheet",
-          });
-        }}
-        visible={activeSheet === "plans"}
-      />
-      <FoodsSheet
-        dateKey={data.day.dailyLog.dateKey}
-        onClose={() => {
-          actor.send({
-            type: "closeSheet",
-          });
-        }}
-        visible={activeSheet === "foods"}
-      />
-      <BackupSheet
-        onClose={() => {
-          actor.send({
-            type: "closeSheet",
-          });
-        }}
-        visible={activeSheet === "backup"}
-      />
-      <MealEntrySheet
-        onChangeQuantity={(nextQuantityGrams) => {
-          actor.send({
-            quantityGrams: nextQuantityGrams,
-            type: "changeMealEntryQuantity",
-          });
-        }}
-        onClose={() => {
-          actor.send({
-            type: "closeMealEntry",
-          });
-        }}
-        onDelete={({ mealEntry }) => {
-          actor.send({
-            mealEntry,
-            type: "deleteMealEntry",
-          });
-        }}
-        onRevise={({ mealEntry, quantityGrams: nextQuantityGrams }) => {
-          actor.send({
-            mealEntry,
-            quantityGrams: nextQuantityGrams,
-            type: "reviseMealEntry",
-          });
-        }}
-        quantityGrams={quantityGrams}
-        selectedMealEntry={selectedMealEntry}
-      />
-      <LoadingOverlay
-        message={pendingMessage ?? undefined}
-        visible={pendingMessage !== null}
-      />
     </View>
   );
 }
@@ -798,13 +462,28 @@ function DailyProgress({
 }) {
   const plan = day.selectedPlan;
   const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+  const [snapshot, send] = useMachine(macroDisplayModeMachine);
+  const displayMode = snapshot.matches("Remaining") ? "remaining" : "consumed";
 
   return (
-    <View style={styles.dailyProgress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: displayMode === "remaining" }}
+      onPress={() => {
+        send({
+          type: "toggle",
+        });
+      }}
+      style={({ pressed }) => [
+        styles.dailyProgress,
+        pressed ? styles.pressed : null,
+      ]}
+    >
       <View style={styles.macroGrid}>
         {macroProgress.map((macro) => (
           <DailyProgressMetric
             colorValue={macro.color}
+            displayMode={displayMode}
             key={macro.key}
             label={macro.label}
             target={plan[macro.targetKey]}
@@ -816,6 +495,7 @@ function DailyProgress({
       </View>
 
       <DailyEnergyProgress
+        displayMode={displayMode}
         target={targetEnergyKcal}
         value={nutrients.energyKcal}
       />
@@ -823,6 +503,7 @@ function DailyProgress({
       <View style={styles.dailyNutrientGrid}>
         <DailyNutrientMetric
           colorValue={color.nutritionCarbs}
+          displayMode={displayMode}
           label="Fiber"
           target={plan.fiberTargetGrams}
           trackColor="#4a2031"
@@ -830,6 +511,7 @@ function DailyProgress({
         />
         <DailyNutrientMetric
           colorValue={color.nutritionCarbs}
+          displayMode={displayMode}
           label="Sugar"
           target={plan.sugarTargetGrams}
           trackColor="#4a2031"
@@ -837,6 +519,7 @@ function DailyProgress({
         />
         <DailyNutrientMetric
           colorValue={color.nutritionFat}
+          displayMode={displayMode}
           label="Sat fat"
           target={plan.saturatedFatTargetGrams}
           trackColor="#443719"
@@ -844,18 +527,20 @@ function DailyProgress({
         />
         <DailyNutrientMetric
           colorValue={color.nutritionSalt}
+          displayMode={displayMode}
           label="Salt"
           target={plan.saltTargetGrams}
           trackColor="#303034"
           value={nutrients.saltGrams}
         />
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 function DailyProgressMetric({
   colorValue,
+  displayMode,
   label,
   target,
   trackColor,
@@ -863,6 +548,7 @@ function DailyProgressMetric({
   value,
 }: {
   readonly colorValue: string;
+  readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number;
   readonly trackColor: string;
@@ -897,17 +583,18 @@ function DailyProgressMetric({
         numberOfLines={1}
         style={[styles.dailyMetricValue, { color: contentColor }]}
       >
-        {_formatMacroValue({ value })} / {_formatMacroValue({ value: target })}{" "}
-        {unit}
+        {_formatDisplayValue({ displayMode, target, unit, value })}
       </Text>
     </View>
   );
 }
 
 function DailyEnergyProgress({
+  displayMode,
   target,
   value,
 }: {
+  readonly displayMode: MacroDisplayMode;
   readonly target: number;
   readonly value: number;
 }) {
@@ -933,8 +620,12 @@ function DailyEnergyProgress({
         numberOfLines={1}
         style={[styles.energyProgressValue, { color: contentColor }]}
       >
-        {_formatMacroValue({ value })} / {_formatMacroValue({ value: target })}{" "}
-        kcal
+        {_formatDisplayValue({
+          displayMode,
+          target,
+          unit: "kcal",
+          value,
+        })}
       </Text>
     </View>
   );
@@ -942,12 +633,14 @@ function DailyEnergyProgress({
 
 function DailyNutrientMetric({
   colorValue,
+  displayMode,
   label,
   target,
   trackColor,
   value,
 }: {
   readonly colorValue: string;
+  readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number | undefined;
   readonly trackColor: string;
@@ -986,9 +679,12 @@ function DailyNutrientMetric({
         style={[styles.dailyNutrientValue, { color: contentColor }]}
       >
         {hasTarget
-          ? `${_formatMacroValue({ value })}g / ${_formatMacroValue({
-              value: target,
-            })}g`
+          ? _formatDisplayValue({
+              displayMode,
+              target,
+              unit: "g",
+              value,
+            })
           : `${_formatMacroValue({ value })}g`}
       </Text>
     </View>
@@ -1001,14 +697,12 @@ function MealSection({
   meal,
   mealEntries,
   mealLabel,
-  onSelectMealEntry,
 }: {
   readonly dateKey: string;
   readonly foods: readonly Food[];
   readonly meal: Meal;
   readonly mealEntries: readonly MealEntry[];
   readonly mealLabel: string;
-  readonly onSelectMealEntry: (selectedMealEntry: SelectedMealEntry) => void;
 }) {
   const nutrients = _calculateEntriesNutrients({ foods, mealEntries });
 
@@ -1034,9 +728,14 @@ function MealSection({
                 key={mealEntry.id}
                 mealEntry={mealEntry}
                 onPress={() => {
-                  onSelectMealEntry({
-                    food,
-                    mealEntry,
+                  router.push({
+                    pathname:
+                      "/days/[dateKey]/meals/[meal]/entries/[mealEntryId]/edit",
+                    params: {
+                      dateKey,
+                      meal,
+                      mealEntryId: mealEntry.id,
+                    },
                   });
                 }}
               />
@@ -1349,274 +1048,6 @@ function BottomAction({
   );
 }
 
-function PlansSheet({
-  data,
-  onChangePlan,
-  onClose,
-  visible,
-}: {
-  readonly data: DailyLogViewData;
-  readonly onChangePlan: ({ plan }: { readonly plan: Plan }) => void;
-  readonly onClose: () => void;
-  readonly visible: boolean;
-}) {
-  const selectedPlanId = data.day.selectedPlan.id;
-
-  return (
-    <AppModalSheet onClose={onClose} title="Plans" visible={visible}>
-      <View style={styles.sheetList}>
-        {data.day.plans.map((plan) => {
-          const isSelected = plan.id === selectedPlanId;
-
-          return (
-            <Pressable
-              accessibilityRole="button"
-              disabled={isSelected}
-              key={plan.id}
-              onPress={() => {
-                onChangePlan({ plan });
-              }}
-              style={[
-                styles.planOption,
-                isSelected ? styles.planOptionSelected : null,
-              ]}
-            >
-              <View style={styles.planOptionCopy}>
-                <Text style={styles.planOptionName}>{plan.name}</Text>
-                <Text style={styles.planOptionMacros}>
-                  {_formatMacroValue({
-                    value: calculatePlanEnergyKcal({ plan }),
-                  })}{" "}
-                  kcal | C {_formatMacroValue({ value: plan.carbsTargetGrams })}
-                  g | P {_formatMacroValue({ value: plan.proteinTargetGrams })}g
-                  | F {_formatMacroValue({ value: plan.fatTargetGrams })}g
-                </Text>
-              </View>
-              {isSelected ? (
-                <Text style={styles.selectedBadge}>Active</Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={styles.sheetActions}>
-        <SheetAction
-          icon={Pencil}
-          label="Edit plan"
-          onPress={() => {
-            onClose();
-            router.push({
-              pathname: "/plans/[planId]/edit",
-              params: {
-                dateKey: data.day.dailyLog.dateKey,
-                planId: data.day.selectedPlan.id,
-              },
-            });
-          }}
-        />
-        <SheetAction
-          icon={Plus}
-          label="New plan"
-          onPress={() => {
-            onClose();
-            router.push({
-              pathname: "/plans/new",
-              params: {
-                dateKey: data.day.dailyLog.dateKey,
-              },
-            });
-          }}
-        />
-      </View>
-    </AppModalSheet>
-  );
-}
-
-function FoodsSheet({
-  dateKey,
-  onClose,
-  visible,
-}: {
-  readonly dateKey: string;
-  readonly onClose: () => void;
-  readonly visible: boolean;
-}) {
-  return (
-    <AppModalSheet onClose={onClose} title="Foods" visible={visible}>
-      <View style={styles.sheetActions}>
-        <SheetAction
-          icon={Plus}
-          label="Create food"
-          onPress={() => {
-            onClose();
-            router.push({
-              pathname: "/foods/new",
-              params: {
-                dateKey,
-              },
-            });
-          }}
-        />
-        <SheetAction
-          icon={Pencil}
-          label="Edit foods"
-          onPress={() => {
-            onClose();
-            router.push({
-              pathname: "/foods/edit",
-              params: {
-                dateKey,
-              },
-            });
-          }}
-        />
-      </View>
-    </AppModalSheet>
-  );
-}
-
-function BackupSheet({
-  onClose,
-  visible,
-}: {
-  readonly onClose: () => void;
-  readonly visible: boolean;
-}) {
-  return (
-    <AppModalSheet onClose={onClose} title="Backup" visible={visible}>
-      <View style={styles.sheetActions}>
-        <SheetAction
-          icon={Download}
-          label="Open backup"
-          onPress={() => {
-            onClose();
-            router.push("/backup" as RelativePathString);
-          }}
-        />
-      </View>
-    </AppModalSheet>
-  );
-}
-
-function MealEntrySheet({
-  onChangeQuantity,
-  onClose,
-  onDelete,
-  onRevise,
-  quantityGrams,
-  selectedMealEntry,
-}: {
-  readonly onChangeQuantity: (quantityGrams: string) => void;
-  readonly onClose: () => void;
-  readonly onDelete: ({ mealEntry }: { readonly mealEntry: MealEntry }) => void;
-  readonly onRevise: ({
-    mealEntry,
-    quantityGrams,
-  }: {
-    readonly mealEntry: MealEntry;
-    readonly quantityGrams: string;
-  }) => void;
-  readonly quantityGrams: string;
-  readonly selectedMealEntry: SelectedMealEntry | null;
-}) {
-  return (
-    <AppModalSheet
-      onClose={onClose}
-      title={selectedMealEntry?.food?.name ?? "Meal entry"}
-      visible={selectedMealEntry !== null}
-    >
-      {selectedMealEntry === null ? null : (
-        <View style={styles.entrySheet}>
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Quantity</Text>
-            <View style={styles.quantityFieldShell}>
-              <TextInput
-                keyboardType="decimal-pad"
-                onChangeText={onChangeQuantity}
-                placeholder="0"
-                placeholderTextColor={color.textSubtle}
-                selectionColor={color.primary}
-                style={styles.quantityField}
-                value={quantityGrams}
-              />
-              <Text style={styles.quantityUnit}>g</Text>
-            </View>
-          </View>
-          <View style={styles.sheetActions}>
-            <SheetAction
-              danger
-              icon={Trash2}
-              label="Delete"
-              onPress={() => {
-                Alert.alert(
-                  "Delete entry",
-                  "This removes the meal entry from this day.",
-                  [
-                    {
-                      style: "cancel",
-                      text: "Cancel",
-                    },
-                    {
-                      onPress: () => {
-                        onDelete({
-                          mealEntry: selectedMealEntry.mealEntry,
-                        });
-                      },
-                      style: "destructive",
-                      text: "Delete",
-                    },
-                  ]
-                );
-              }}
-            />
-            <SheetAction
-              icon={Pencil}
-              label="Save"
-              onPress={() => {
-                onRevise({
-                  mealEntry: selectedMealEntry.mealEntry,
-                  quantityGrams,
-                });
-              }}
-            />
-          </View>
-        </View>
-      )}
-    </AppModalSheet>
-  );
-}
-
-function SheetAction({
-  danger = false,
-  icon: Icon,
-  label,
-  onPress,
-}: {
-  readonly danger?: boolean;
-  readonly icon: LucideIcon;
-  readonly label: string;
-  readonly onPress: () => void;
-}) {
-  const contentColor = danger ? color.dangerText : color.actionSheetText;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.sheetAction,
-        pressed ? styles.sheetActionPressed : null,
-        danger ? styles.sheetActionDanger : null,
-      ]}
-    >
-      <Icon color={contentColor} size={16} strokeWidth={3} />
-      <Text style={[styles.sheetActionLabel, { color: contentColor }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function getDailyLogViewData({
   result,
 }: {
@@ -1651,13 +1082,11 @@ export function loadDailyLog({
           dateKey: day.dailyLog.dateKey,
         },
       });
-      const foodUsage = yield* mealEntriesService.listFoodUsage();
 
       return {
         _tag: "OpenedDay" as const,
         data: {
           day,
-          foodUsage,
           foods,
           mealEntries,
         },
@@ -1675,66 +1104,6 @@ export function loadDailyLog({
         })
       )
     )
-  );
-}
-
-export function changeDayPlan({
-  dateKey,
-  planId,
-}: {
-  readonly dateKey: string;
-  readonly planId: string;
-}) {
-  return RuntimeClient.runPromise(
-    Effect.gen(function* () {
-      const dailyLogs = yield* DailyLogs;
-
-      return yield* dailyLogs.changePlan({
-        input: {
-          dateKey,
-          planId,
-        },
-      });
-    })
-  );
-}
-
-export function reviseMealEntry({
-  mealEntry,
-  quantityGrams,
-}: {
-  readonly mealEntry: MealEntry;
-  readonly quantityGrams: string;
-}) {
-  return RuntimeClient.runPromise(
-    Effect.gen(function* () {
-      const mealEntries = yield* MealEntries;
-
-      return yield* mealEntries.revise({
-        input: {
-          mealEntryId: mealEntry.id,
-          quantityGrams,
-        },
-      });
-    })
-  );
-}
-
-export function deleteMealEntry({
-  mealEntry,
-}: {
-  readonly mealEntry: MealEntry;
-}) {
-  return RuntimeClient.runPromise(
-    Effect.gen(function* () {
-      const mealEntries = yield* MealEntries;
-
-      return yield* mealEntries.delete({
-        input: {
-          mealEntryId: mealEntry.id,
-        },
-      });
-    })
   );
 }
 
@@ -1793,8 +1162,31 @@ function _formatMacroValue({ value }: { readonly value: number }) {
   });
 }
 
-function _errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Please try again.";
+function _formatDisplayValue({
+  displayMode,
+  target,
+  unit,
+  value,
+}: {
+  readonly displayMode: MacroDisplayMode;
+  readonly target: number;
+  readonly unit: "g" | "kcal";
+  readonly value: number;
+}) {
+  if (displayMode === "consumed") {
+    return `${_formatMacroValue({ value })} / ${_formatMacroValue({
+      value: target,
+    })} ${unit}`;
+  }
+
+  const remainingValue = target - value;
+  const formattedValue = _formatMacroValue({
+    value: Math.abs(remainingValue),
+  });
+
+  return remainingValue < 0
+    ? `-${formattedValue} ${unit}`
+    : `${formattedValue} ${unit} left`;
 }
 
 const styles = StyleSheet.create({
@@ -2121,117 +1513,5 @@ const styles = StyleSheet.create({
     fontSize: type.size.xs,
     fontWeight: type.weight.black,
     lineHeight: type.lineHeight.xs,
-  },
-  sheetList: {
-    gap: spacing.sm,
-  },
-  planOption: {
-    minHeight: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: color.actionSheetBorder,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    backgroundColor: color.actionSheet,
-  },
-  planOptionSelected: {
-    borderColor: color.primary,
-    backgroundColor: color.actionSheetPressed,
-  },
-  planOptionCopy: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  planOptionName: {
-    color: color.actionSheetText,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-  },
-  planOptionMacros: {
-    color: color.actionSheetTextMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
-  },
-  selectedBadge: {
-    color: color.primary,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
-  },
-  sheetActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  sheetAction: {
-    minHeight: 42,
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: color.actionSheetBorder,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: color.actionSheet,
-  },
-  sheetActionPressed: {
-    backgroundColor: color.actionSheetPressed,
-  },
-  sheetActionDanger: {
-    borderColor: color.dangerBorder,
-    backgroundColor: color.dangerBg,
-  },
-  sheetActionLabel: {
-    flexShrink: 1,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-    textAlign: "center",
-  },
-  entrySheet: {
-    gap: spacing.lg,
-  },
-  fieldGroup: {
-    gap: spacing.xs,
-  },
-  fieldLabel: {
-    color: color.text,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
-  },
-  quantityFieldShell: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: color.fieldBorder,
-    borderRadius: radius.sm,
-    backgroundColor: color.field,
-  },
-  quantityField: {
-    minWidth: 0,
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
-  },
-  quantityUnit: {
-    paddingRight: spacing.md,
-    color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
   },
 });
