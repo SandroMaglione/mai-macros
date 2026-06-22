@@ -14,6 +14,8 @@ import {
   FoodCategory,
   FoodId,
   FoodOrigin,
+  LocalData,
+  LocalDataResetError,
   MealEntry,
   NonEmptyString,
   NonNegativeNumber,
@@ -201,6 +203,28 @@ const _mapStoreError = <Value, Error, Requirements>(
         })
     )
   );
+
+export const IndexedDbLocalDataLayer = Layer.effect(
+  LocalData,
+  Effect.gen(function* () {
+    const database = yield* IndexedDbDatabase.IndexedDbDatabase;
+
+    return LocalData.of({
+      reset: database.rebuild.pipe(
+        Effect.mapError(
+          (cause) =>
+            new LocalDataResetError({
+              cause,
+            })
+        )
+      ),
+    });
+  })
+);
+
+export const BrowserLocalDataLayer = IndexedDbLocalDataLayer.pipe(
+  Layer.provide(BrowserDatabaseLayer)
+);
 
 export const IndexedDbNutritionStoreLayer = Layer.effect(
   NutritionStore,

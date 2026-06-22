@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./services/daily-logs": "./src/services/daily-logs.ts",
     "./services/foods": "./src/services/foods.ts",
+    "./services/local-data": "./src/local-data.ts",
     "./services/meal-entries": "./src/services/meal-entries.ts",
     "./services/meal-plans": "./src/services/meal-plans.ts",
     "./services/nutrition-reports": "./src/services/nutrition-reports.ts"

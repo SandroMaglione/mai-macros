@@ -1,11 +1,24 @@
-import { useSelector } from "@xstate/react";
-import { AlertTriangle, Download, Loader2, Upload } from "lucide-react";
+import { useMachine, useSelector } from "@xstate/react";
+import {
+  AlertTriangle,
+  Download,
+  Loader2,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useRef } from "react";
 
 import {
   type BackupTransferActorRef,
   type BackupTransferSnapshot,
 } from "../machines/backup-transfer-machine.ts";
+import {
+  LocalDataResetConfirmationText,
+  localDataResetMachine,
+  type LocalDataResetActorRef,
+  type LocalDataResetSnapshot,
+} from "../machines/local-data-reset-machine.ts";
 import { type BackupExportMetadata } from "../services/backup-export-metadata.ts";
 
 export type BackupTransferMode = "full" | "importOnly";
@@ -23,10 +36,12 @@ export function BackupTransferControls({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const snapshot = useSelector(actor, (state): BackupTransferSnapshot => state);
+  const [resetSnapshot, , resetActor] = useMachine(localDataResetMachine);
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
   const isLoading = snapshot.matches("Loading");
-  const disabled = isLoading || isExporting || isImporting;
+  const isResetting = resetSnapshot.matches("Resetting");
+  const disabled = isLoading || isExporting || isImporting || isResetting;
   const showExport = mode === "full";
   const { backupName, errorMessage, lastExport, successMessage } =
     snapshot.context;
@@ -127,6 +142,14 @@ export function BackupTransferControls({
         </button>
       </div>
 
+      {showExport ? (
+        <LocalDataResetControls
+          actor={resetActor}
+          disabled={disabled}
+          snapshot={resetSnapshot}
+        />
+      ) : null}
+
       {errorMessage === null ? null : (
         <div
           className="flex min-w-0 items-start gap-2 rounded-md border border-[#74322f] bg-[#201717] p-3 text-sm font-bold leading-snug text-[#ff8f88]"
@@ -171,7 +194,132 @@ export function BackupTransferControls({
           </div>
         </div>
       ) : null}
+
+      {isResetting ? (
+        <div
+          className="fixed inset-0 z-70 grid place-items-center bg-black/85 px-5 text-center backdrop-blur-sm"
+          role="alert"
+        >
+          <div className="grid max-w-[320px] justify-items-center gap-3">
+            <Loader2
+              aria-hidden="true"
+              className="animate-spin text-[#ff5a51]"
+              size={34}
+              strokeWidth={3}
+            />
+            <div className="grid gap-1">
+              <p className="text-lg font-black leading-tight text-[#f0f0f2]">
+                Deleting local data
+              </p>
+              <p className="text-sm font-bold leading-snug text-[#aaaab1]">
+                Rebuilding Mai from a fresh database.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function LocalDataResetControls({
+  actor,
+  disabled,
+  snapshot,
+}: {
+  readonly actor: LocalDataResetActorRef;
+  readonly disabled: boolean;
+  readonly snapshot: LocalDataResetSnapshot;
+}) {
+  const isIdle = snapshot.matches("Idle");
+  const isConfirming =
+    snapshot.matches("Confirming") || snapshot.matches("Failure");
+  const canReset =
+    snapshot.context.confirmationText === LocalDataResetConfirmationText;
+
+  if (isIdle) {
+    return (
+      <div className="grid gap-2 border-t border-[#29292d] pt-3">
+        <button
+          className="btn-secondary-danger"
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "begin" });
+          }}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" size={17} strokeWidth={3} />
+          Delete everything
+        </button>
+      </div>
+    );
+  }
+
+  if (!isConfirming) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border border-[#74322f] bg-[#201717] p-3">
+      <div className="grid gap-1">
+        <h3 className="text-sm font-black leading-tight text-[#ffb1ac]">
+          Delete all local data
+        </h3>
+        <p className="text-xs font-bold leading-snug text-[#ff8f88]">
+          This deletes plans, foods, daily logs, and meal entries on this
+          device. Type{" "}
+          <span className="text-[#ffd4d1]">
+            {LocalDataResetConfirmationText}
+          </span>{" "}
+          to confirm.
+        </p>
+      </div>
+
+      <input
+        autoComplete="off"
+        className={backupFieldClassName}
+        disabled={disabled}
+        onChange={(event) => {
+          actor.send({
+            confirmationText: event.currentTarget.value,
+            type: "changeConfirmationText",
+          });
+        }}
+        placeholder={LocalDataResetConfirmationText}
+        value={snapshot.context.confirmationText}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          className="btn-secondary"
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "cancel" });
+          }}
+          type="button"
+        >
+          <X aria-hidden="true" size={17} strokeWidth={3} />
+          Cancel
+        </button>
+        <button
+          className="btn-secondary-danger"
+          disabled={disabled || !canReset}
+          onClick={() => {
+            actor.send({ type: "reset" });
+          }}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" size={17} strokeWidth={3} />
+          Delete data
+        </button>
+      </div>
+
+      {snapshot.context.errorMessage === null ? null : (
+        <p className="rounded-md border border-[#74322f] bg-[#2a1717] p-3 text-sm font-bold leading-snug text-[#ff8f88]">
+          {snapshot.context.errorMessage}
+        </p>
+      )}
+    </div>
   );
 }
 

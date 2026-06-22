@@ -23,7 +23,7 @@ const MobileServicesLayer = Layer.mergeAll(
 );
 
 const MobileLayer = MobileServicesLayer.pipe(
-  Layer.provide(Layer.mergeAll(MobileStoreLayer, ReactNativeCryptoLayer))
+  Layer.provideMerge(Layer.mergeAll(MobileStoreLayer, ReactNativeCryptoLayer))
 );
 
 export const RuntimeClient = ManagedRuntime.make(MobileLayer);

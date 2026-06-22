@@ -4,6 +4,7 @@ import {
   DailyLog,
   DefaultFoods,
   Food,
+  LocalData,
   MealEntry,
   NutritionStore,
   Plan,
@@ -11,7 +12,10 @@ import {
 import { Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import { TestSqliteNutritionStoreLayer } from "../src/layers/test.ts";
+import {
+  TestSqliteDataLayer,
+  TestSqliteNutritionStoreLayer,
+} from "../src/layers/test.ts";
 
 const testLayer = Backups.layer.pipe(
   Layer.provideMerge(TestSqliteNutritionStoreLayer)
@@ -96,6 +100,32 @@ describe("SqliteNutritionStore", () => {
     assert.equal(result.foods.length, DefaultFoods.length + 1);
     assert.equal(result.plans.length, 1);
     assert.isDefined(result.foods.find((food) => food.name === "Greek yogurt"));
+  });
+
+  it("resets the sqlite database back to migration-seeded defaults", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* NutritionStore;
+        const localData = yield* LocalData;
+        const plan = yield* testPlan;
+        const food = yield* testFood;
+
+        yield* store.insertPlan(plan);
+        yield* store.insertFood(food);
+        yield* localData.reset;
+
+        return yield* store.readStores;
+      }).pipe(Effect.provide(TestSqliteDataLayer))
+    );
+
+    assert.equal(result.activeMealPlanSelections.length, 0);
+    assert.equal(result.dailyLogs.length, 0);
+    assert.equal(result.mealEntries.length, 0);
+    assert.equal(result.plans.length, 0);
+    assert.equal(result.foods.length, DefaultFoods.length);
+    assert.isUndefined(
+      result.foods.find((food) => food.name === "Greek yogurt")
+    );
   });
 });
 

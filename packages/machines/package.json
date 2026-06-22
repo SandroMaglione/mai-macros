@@ -7,6 +7,7 @@
     ".": "./src/main.ts",
     "./runtime": "./src/runtime.ts",
     "./foods": "./src/foods/main.ts",
+    "./local-data": "./src/local-data/main.ts",
     "./meal-plans": "./src/meal-plans/main.ts",
     "./backups": "./src/backups/main.ts"
   },

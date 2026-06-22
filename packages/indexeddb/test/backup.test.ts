@@ -11,13 +11,19 @@ import {
   DateKey,
   DefaultFoods,
   Food,
+  LocalData,
   MaiBackupJson,
   MaiBackupV1,
   Meal,
   MealEntry,
+  NutritionStore,
   Plan,
 } from "@mai/nutrition";
-import { IndexedDbNutritionStoreLayer, MaiDatabase } from "../src/index.ts";
+import {
+  IndexedDbLocalDataLayer,
+  IndexedDbNutritionStoreLayer,
+  MaiDatabase,
+} from "../src/index.ts";
 import {
   deleteFakeDatabase,
   layerFakeIndexedDb,
@@ -32,6 +38,11 @@ const backupsLayer = Backups.layer.pipe(
     IndexedDbNutritionStoreLayer.pipe(Layer.provideMerge(databaseLayer))
   )
 );
+
+const localDataLayer = Layer.mergeAll(
+  IndexedDbNutritionStoreLayer,
+  IndexedDbLocalDataLayer
+).pipe(Layer.provide(databaseLayer));
 
 const BackupJsonString = Schema.fromJsonString(Schema.Unknown);
 
@@ -270,6 +281,33 @@ describe("Backups", () => {
     assert.equal(result.mealEntriesByDate[0]?.id, mealEntryInput.id);
     assert.equal(result.mealEntriesByDateMeal[0]?.id, mealEntryInput.id);
     assert.equal(result.mealEntriesByFood[0]?.id, mealEntryInput.id);
+  });
+
+  it("resets the browser database back to migration-seeded defaults", async () => {
+    const program = Effect.gen(function* () {
+      const store = yield* NutritionStore;
+      const localData = yield* LocalData;
+      const food = yield* Schema.decodeEffect(Food)(foodInput);
+      const plan = yield* Schema.decodeEffect(Plan)(planInput);
+
+      yield* store.insertFood(food);
+      yield* store.insertPlan(plan);
+      yield* localData.reset;
+
+      return yield* store.readStores;
+    }).pipe(Effect.provide(localDataLayer));
+
+    const result = await Effect.runPromise(program);
+
+    assert.equal(result.activeMealPlanSelections.length, 0);
+    assert.equal(result.dailyLogs.length, 0);
+    assert.equal(result.mealEntries.length, 0);
+    assert.equal(result.plans.length, 0);
+    assert.equal(result.foods.length, DefaultFoods.length);
+    assert.equal(
+      result.foods.some((food) => food.id === foodInput.id),
+      false
+    );
   });
 
   it("imports database version 1 backups through plan-name migration", async () => {

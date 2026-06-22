@@ -1,6 +1,7 @@
 import { SqliteClient } from "@effect/sql-sqlite-node";
 import { Layer } from "effect";
 
+import { SqliteLocalDataLayer } from "../local-data.ts";
 import { runSqliteMigrations } from "../migrations/index.ts";
 import { SqliteNutritionStoreLayer } from "../store.ts";
 
@@ -10,6 +11,25 @@ export const TestSqliteClientLayer = SqliteClient.layer({
 });
 
 export const TestSqliteNutritionStoreLayer = SqliteNutritionStoreLayer.pipe(
+  Layer.provideMerge(
+    Layer.effectDiscard(runSqliteMigrations).pipe(
+      Layer.provideMerge(TestSqliteClientLayer)
+    )
+  )
+);
+
+export const TestSqliteLocalDataLayer = SqliteLocalDataLayer.pipe(
+  Layer.provideMerge(
+    Layer.effectDiscard(runSqliteMigrations).pipe(
+      Layer.provideMerge(TestSqliteClientLayer)
+    )
+  )
+);
+
+export const TestSqliteDataLayer = Layer.mergeAll(
+  SqliteNutritionStoreLayer,
+  SqliteLocalDataLayer
+).pipe(
   Layer.provideMerge(
     Layer.effectDiscard(runSqliteMigrations).pipe(
       Layer.provideMerge(TestSqliteClientLayer)

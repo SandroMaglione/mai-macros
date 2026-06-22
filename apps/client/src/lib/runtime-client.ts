@@ -1,6 +1,10 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import * as BrowserKeyValueStore from "@effect/platform-browser/BrowserKeyValueStore";
-import { BrowserNutritionStoreLayer } from "@mai/indexeddb";
+import {
+  BrowserDatabaseLayer,
+  IndexedDbLocalDataLayer,
+  IndexedDbNutritionStoreLayer,
+} from "@mai/indexeddb";
 import { Backups } from "@mai/nutrition";
 import { Layer, ManagedRuntime } from "effect";
 
@@ -14,6 +18,11 @@ import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { MealPlans } from "@mai/nutrition/services/meal-plans";
 import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
 
+const BrowserDataLayer = Layer.mergeAll(
+  IndexedDbNutritionStoreLayer,
+  IndexedDbLocalDataLayer
+).pipe(Layer.provide(BrowserDatabaseLayer));
+
 const ClientLayer = Layer.mergeAll(
   Backups.layer,
   MealPlans.layer,
@@ -24,9 +33,9 @@ const ClientLayer = Layer.mergeAll(
   BackupExportMetadataStore.layer,
   BrowserBackupDeliveryClientLayer
 ).pipe(
-  Layer.provide(
+  Layer.provideMerge(
     Layer.mergeAll(
-      BrowserNutritionStoreLayer,
+      BrowserDataLayer,
       BrowserCrypto.layer,
       BrowserKeyValueStore.layerLocalStorage
     )
