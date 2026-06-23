@@ -31,6 +31,7 @@ import { RuntimeClient } from "../runtime-client.ts";
 import { backupTransferMachine } from "../machines/backup-transfer-machine.ts";
 import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
+import { FoodCatalogTransferControls } from "./food-catalog-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import {
   FoodDefaultOriginDot,
@@ -1232,9 +1233,12 @@ function BackupActionSheet({
 }: {
   readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
 }) {
+  const router = useRouter();
+
   return (
     <ActionSheet eyebrow="Database" title="Backup">
       <BackupTransferControls actor={backupTransferActor} mode="full" />
+      <FoodCatalogTransferControls onImported={() => router.invalidate()} />
     </ActionSheet>
   );
 }

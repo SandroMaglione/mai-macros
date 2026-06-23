@@ -26,6 +26,7 @@
     "@expo/metro-runtime": "56.0.15",
     "@mai/machines": "workspace:^",
     "@mai/nutrition": "workspace:^",
+    "@mai/services": "workspace:^",
     "@mai/sqlite": "workspace:^",
     "@xstate/react": "^6.1.0",
     "effect": "4.0.0-beta.84",

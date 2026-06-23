@@ -9,11 +9,13 @@ import { BackupTransferMachine } from "@mai/machines";
 import {
   Backup,
   DailyLogs,
+  FoodCatalogTransfer,
   Foods,
   MealEntries,
   MealPlans,
   NutritionReports,
 } from "@mai/nutrition";
+import { QrCode } from "@mai/services";
 import { Layer, ManagedRuntime } from "effect";
 
 import { BrowserBackupDeliveryClientLayer } from "./services/backup-export-metadata.ts";
@@ -25,11 +27,13 @@ const BrowserDataLayer = Layer.mergeAll(
 
 const ClientLayer = Layer.mergeAll(
   Backup.Backups.layer,
+  FoodCatalogTransfer.FoodCatalogTransfers.layer,
   MealPlans.MealPlans.layer,
   DailyLogs.DailyLogs.layer,
   Foods.Foods.layer,
   MealEntries.MealEntries.layer,
   NutritionReports.NutritionReports.layer,
+  QrCode.QrCode.Default,
   BackupTransferMachine.BackupExportMetadataStore.layer,
   BrowserBackupDeliveryClientLayer
 ).pipe(

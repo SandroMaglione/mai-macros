@@ -1,11 +1,13 @@
 import {
   Backup,
   DailyLogs,
+  FoodCatalogTransfer,
   Foods,
   MealEntries,
   MealPlans,
   NutritionReports,
 } from "@mai/nutrition";
+import { QrCode } from "@mai/services";
 import { ReactNativeSqlite } from "@mai/sqlite";
 import { Layer, ManagedRuntime } from "effect";
 
@@ -20,8 +22,10 @@ const MobileServicesLayer = Layer.mergeAll(
   MealPlans.MealPlans.layer,
   DailyLogs.DailyLogs.layer,
   Foods.Foods.layer,
+  FoodCatalogTransfer.FoodCatalogTransfers.layer,
   MealEntries.MealEntries.layer,
-  NutritionReports.NutritionReports.layer
+  NutritionReports.NutritionReports.layer,
+  QrCode.QrCode.Default
 );
 
 const MobileLayer = MobileServicesLayer.pipe(

@@ -1,4 +1,13 @@
-import { Context, Data, DateTime, Effect, Equal, Layer, Schema } from "effect";
+import {
+  Array as EffectArray,
+  Context,
+  Data,
+  DateTime,
+  Effect,
+  Equal,
+  Layer,
+  Schema,
+} from "effect";
 
 import { DefaultFoods } from "../default-foods.ts";
 import {
@@ -110,9 +119,26 @@ export type FoodCatalogBasedOnFoodIdStatus =
   | "missing"
   | "none";
 
+export type FoodCatalogNameStatus = "same-name-local" | "unique";
+
+export type FoodCatalogImportSelectionReason =
+  | "already-present"
+  | "id-conflict"
+  | "missing-based-on-food-id"
+  | "same-name-local";
+
+export type FoodCatalogImportCandidateSelection = {
+  readonly defaultSelected: boolean;
+  readonly reasons: readonly FoodCatalogImportSelectionReason[];
+  readonly selectable: boolean;
+};
+
 export type FoodCatalogImportCandidate = {
   readonly basedOnFoodIdStatus: FoodCatalogBasedOnFoodIdStatus;
   readonly food: FoodCatalogFood;
+  readonly nameStatus: FoodCatalogNameStatus;
+  readonly sameNameLocalFoodIds: readonly FoodId[];
+  readonly selection: FoodCatalogImportCandidateSelection;
   readonly status: FoodCatalogImportCandidateStatus;
 };
 
@@ -369,18 +395,42 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
 
     return yield* Effect.forEach(catalog.stores.foods, (food) =>
       Effect.gen(function* () {
-        return {
-          basedOnFoodIdStatus: _basedOnFoodIdStatus({
-            catalogFoodIds,
-            defaultFoodIds,
-            food,
-            localFoodIds,
-          }),
+        const basedOnFoodIdStatus =
+          food.basedOnFoodId === undefined
+            ? "none"
+            : localFoodIds.includes(food.basedOnFoodId) ||
+                defaultFoodIds.includes(food.basedOnFoodId)
+              ? "available-locally"
+              : catalogFoodIds.includes(food.basedOnFoodId)
+                ? "available-in-catalog"
+                : "missing";
+        const sameNameLocalFoodIds = localFoods
+          .filter(
+            (localFood) =>
+              localFood.id !== food.id && localFood.name === food.name
+          )
+          .map((localFood) => localFood.id);
+        const nameStatus = EffectArray.isReadonlyArrayNonEmpty(
+          sameNameLocalFoodIds
+        )
+          ? "same-name-local"
+          : "unique";
+        const status = yield* _foodCatalogImportCandidateStatus({
           food,
-          status: yield* _foodCatalogImportCandidateStatus({
-            food,
-            localFoods,
+          localFoods,
+        });
+
+        return {
+          basedOnFoodIdStatus,
+          food,
+          nameStatus,
+          sameNameLocalFoodIds,
+          selection: _foodCatalogImportCandidateSelection({
+            basedOnFoodIdStatus,
+            nameStatus,
+            status,
           }),
+          status,
         } satisfies FoodCatalogImportCandidate;
       })
     );
@@ -410,33 +460,40 @@ const _foodCatalogImportCandidateStatus = Effect.fn(
     : ("id-conflict" satisfies FoodCatalogImportCandidateStatus);
 });
 
-function _basedOnFoodIdStatus({
-  catalogFoodIds,
-  defaultFoodIds,
-  food,
-  localFoodIds,
+function _foodCatalogImportCandidateSelection({
+  basedOnFoodIdStatus,
+  nameStatus,
+  status,
 }: {
-  readonly catalogFoodIds: readonly FoodId[];
-  readonly defaultFoodIds: readonly FoodId[];
-  readonly food: FoodCatalogFood;
-  readonly localFoodIds: readonly FoodId[];
-}): FoodCatalogBasedOnFoodIdStatus {
-  if (food.basedOnFoodId === undefined) {
-    return "none";
+  readonly basedOnFoodIdStatus: FoodCatalogBasedOnFoodIdStatus;
+  readonly nameStatus: FoodCatalogNameStatus;
+  readonly status: FoodCatalogImportCandidateStatus;
+}): FoodCatalogImportCandidateSelection {
+  const reasons: FoodCatalogImportSelectionReason[] = [];
+
+  if (status === "already-present") {
+    reasons.push("already-present");
   }
 
-  if (
-    localFoodIds.includes(food.basedOnFoodId) ||
-    defaultFoodIds.includes(food.basedOnFoodId)
-  ) {
-    return "available-locally";
+  if (status === "id-conflict") {
+    reasons.push("id-conflict");
   }
 
-  if (catalogFoodIds.includes(food.basedOnFoodId)) {
-    return "available-in-catalog";
+  if (basedOnFoodIdStatus === "missing") {
+    reasons.push("missing-based-on-food-id");
   }
 
-  return "missing";
+  if (nameStatus === "same-name-local") {
+    reasons.push("same-name-local");
+  }
+
+  const selectable = status !== "id-conflict";
+
+  return {
+    defaultSelected: selectable && status === "new" && nameStatus === "unique",
+    reasons,
+    selectable,
+  };
 }
 
 const _makeFoodCatalog = Effect.fn("_makeFoodCatalog")(function* ({

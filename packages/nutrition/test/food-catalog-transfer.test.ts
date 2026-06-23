@@ -50,6 +50,64 @@ describe("FoodCatalogTransfers", () => {
     assert.equal(result.exported.catalog.integrity.counts.foods, 1);
     assert.equal(result.exported.catalog.stores.foods[0]?.name, "Greek yogurt");
     assert.equal(result.preview.candidates[0]?.status, "already-present");
+    assert.equal(result.preview.candidates[0]?.nameStatus, "unique");
+    assert.deepEqual(result.preview.candidates[0]?.sameNameLocalFoodIds, []);
+    assert.deepEqual(result.preview.candidates[0]?.selection, {
+      defaultSelected: false,
+      reasons: ["already-present"],
+      selectable: true,
+    });
+  });
+
+  it("previews same-name local conflicts as selectable but not selected by default", async () => {
+    const sourceFood = await Effect.runPromise(testFood);
+    const sameNameLocalFood = await Effect.runPromise(testSameNameLocalFood);
+    const exported = await Effect.runPromise(
+      Effect.gen(function* () {
+        const transfers = yield* FoodCatalogTransfers;
+
+        return yield* transfers.exportToJson();
+      }).pipe(
+        Effect.provide(
+          _foodCatalogTestLayer({
+            stores: {
+              ...emptyStores,
+              foods: [sourceFood],
+            },
+          })
+        )
+      )
+    );
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const transfers = yield* FoodCatalogTransfers;
+
+        return yield* transfers.previewImportFromJson({
+          input: {
+            json: exported.json,
+          },
+        });
+      }).pipe(
+        Effect.provide(
+          _foodCatalogTestLayer({
+            stores: {
+              ...emptyStores,
+              foods: [sameNameLocalFood],
+            },
+          })
+        )
+      )
+    );
+    const candidate = result.candidates[0];
+
+    assert.equal(candidate?.status, "new");
+    assert.equal(candidate?.nameStatus, "same-name-local");
+    assert.deepEqual(candidate?.sameNameLocalFoodIds, [sameNameLocalFood.id]);
+    assert.deepEqual(candidate?.selection, {
+      defaultSelected: false,
+      reasons: ["same-name-local"],
+      selectable: true,
+    });
   });
 
   it("imports selected foods and detaches missing revision references", async () => {
@@ -101,6 +159,11 @@ describe("FoodCatalogTransfers", () => {
     );
 
     assert.equal(result.preview.candidates[0]?.basedOnFoodIdStatus, "missing");
+    assert.deepEqual(result.preview.candidates[0]?.selection, {
+      defaultSelected: true,
+      reasons: ["missing-based-on-food-id"],
+      selectable: true,
+    });
     assert.equal(result.imported.importedFoods[0]?.name, "Detached yogurt");
     assert.isUndefined(result.stores.foods[0]?.basedOnFoodId);
   });
@@ -233,8 +296,12 @@ describe("FoodCatalogTransfers", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const targetTransfers = yield* FoodCatalogTransfers;
-
-        return yield* targetTransfers
+        const preview = yield* targetTransfers.previewImportFromJson({
+          input: {
+            json: exported.json,
+          },
+        });
+        const error = yield* targetTransfers
           .importSelectedFromJson({
             input: {
               json: exported.json,
@@ -242,6 +309,11 @@ describe("FoodCatalogTransfers", () => {
             },
           })
           .pipe(Effect.flip);
+
+        return {
+          error,
+          preview,
+        };
       }).pipe(
         Effect.provide(
           _foodCatalogTestLayer({
@@ -254,8 +326,13 @@ describe("FoodCatalogTransfers", () => {
       )
     );
 
-    assert.instanceOf(result, FoodCatalogImportSelectionError);
-    assert.equal(result.reason, "selected-food-conflict");
+    assert.instanceOf(result.error, FoodCatalogImportSelectionError);
+    assert.equal(result.error.reason, "selected-food-conflict");
+    assert.deepEqual(result.preview.candidates[0]?.selection, {
+      defaultSelected: false,
+      reasons: ["id-conflict"],
+      selectable: false,
+    });
   });
 
   it("rejects catalogs that contain app-default foods", async () => {
@@ -522,6 +599,18 @@ const testConflictingFood = Schema.decodeEffect(Domain.Food)({
   name: "Different yogurt",
   origin: "user",
   proteinGramsPer100g: 1,
+  updatedAt: 0,
+});
+
+const testSameNameLocalFood = Schema.decodeEffect(Domain.Food)({
+  carbsGramsPer100g: 4,
+  createdAt: 0,
+  energyKcalPer100g: 61,
+  fatGramsPer100g: 0.4,
+  id: "f72a6e68-67ac-4caa-8dc3-f644751103ce",
+  name: "Greek yogurt",
+  origin: "user",
+  proteinGramsPer100g: 10,
   updatedAt: 0,
 });
 
