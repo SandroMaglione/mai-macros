@@ -1,6 +1,7 @@
 export * from "./backup.ts";
 export * from "./default-foods.ts";
 export * from "./domain.ts";
+export * from "./food-catalog-transfer.ts";
 export * from "./food-quick-input.ts";
 export * from "./local-data.ts";
 export * from "./metadata.ts";

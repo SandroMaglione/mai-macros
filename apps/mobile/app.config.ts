@@ -1,8 +1,9 @@
-import "tsx/cjs";
 import type { ExpoConfig } from "expo/config";
+import "tsx/cjs";
 
 const primary700 = "#df5819";
-const appBackground = "#ffffff";
+const iconBackground = "#f7f7f5";
+const appBackground = iconBackground;
 const appVersion = "1.0.0";
 
 export default {
@@ -23,7 +24,7 @@ export default {
   android: {
     package: "app.mai.mobile",
     adaptiveIcon: {
-      backgroundColor: primary700,
+      backgroundColor: iconBackground,
       foregroundImage: "./assets/images/android-icon-foreground.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
@@ -50,5 +51,8 @@ export default {
   },
   extra: {
     router: {},
+    eas: {
+      projectId: "30108e25-a43c-49ce-8e61-55a97499744e",
+    },
   },
 } satisfies ExpoConfig;
