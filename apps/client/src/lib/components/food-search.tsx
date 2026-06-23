@@ -1,9 +1,8 @@
-import type { Food } from "@mai/nutrition";
+import type { FoodSearchMachine } from "@mai/machines";
+import type { Domain } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
 import { Array } from "effect";
 import { Search } from "lucide-react";
-
-import type { FoodSearchActorRef } from "../machines/food-search-machine.ts";
 
 const darkFieldClassName =
   "min-h-10 w-full border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
@@ -22,7 +21,7 @@ export function FoodSearchField({
   shape = "rounded",
   showLabel = true,
 }: {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly ariaControls?: string;
   readonly ariaLabel: string;
   readonly autoFocus: boolean;
@@ -92,11 +91,11 @@ export function FoodSearchResults({
   id,
   shape = "rounded",
 }: {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
-  readonly getPrimaryLabel: (food: Food) => string;
-  readonly getSecondaryLabel: (food: Food) => string;
+  readonly getPrimaryLabel: (food: Domain.Food) => string;
+  readonly getSecondaryLabel: (food: Domain.Food) => string;
   readonly id: string;
   readonly shape?: "rounded" | "square";
 }) {
@@ -175,7 +174,7 @@ export function FoodSearchResults({
   );
 }
 
-export function FoodDefaultOriginDot({ food }: { readonly food: Food }) {
+export function FoodDefaultOriginDot({ food }: { readonly food: Domain.Food }) {
   if (food.origin !== "app-default") {
     return null;
   }

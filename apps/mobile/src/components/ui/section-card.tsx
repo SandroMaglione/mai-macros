@@ -1,4 +1,4 @@
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import {
   StyleSheet,
@@ -60,15 +60,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   subtitle: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   body: {
     padding: spacing.lg,

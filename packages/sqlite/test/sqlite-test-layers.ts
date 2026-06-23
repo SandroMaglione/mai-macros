@@ -1,9 +1,9 @@
 import { SqliteClient } from "@effect/sql-sqlite-node";
 import { Layer } from "effect";
 
-import { SqliteLocalDataLayer } from "../local-data.ts";
-import { runSqliteMigrations } from "../migrations/index.ts";
-import { SqliteNutritionStoreLayer } from "../store.ts";
+import { SqliteLocalDataLayer } from "../src/layers/sqlite-local-data.ts";
+import { runSqliteMigrations } from "../src/migrations/index.ts";
+import { SqliteNutritionStoreLayer } from "../src/layers/sqlite-nutrition-store.ts";
 
 export const TestSqliteClientLayer = SqliteClient.layer({
   disableWAL: true,

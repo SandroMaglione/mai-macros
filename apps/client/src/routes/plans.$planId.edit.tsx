@@ -1,12 +1,11 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useActorRef } from "@xstate/react";
-import { calculatePlanEnergyKcal } from "@mai/nutrition";
+import { MealPlans, Utils } from "@mai/nutrition";
 import { Effect } from "effect";
 
 import { MealPlanForm } from "../lib/components/meal-plan-form.tsx";
 import { reviseMealPlanMachine } from "../lib/machines/meal-plan-form-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { MealPlans } from "@mai/nutrition/services/meal-plans";
 
 export const Route = createFileRoute("/plans/$planId/edit")({
   validateSearch: (search) => ({
@@ -15,7 +14,7 @@ export const Route = createFileRoute("/plans/$planId/edit")({
   loader: async ({ params }) => {
     const plan = await RuntimeClient.runPromise(
       Effect.gen(function* () {
-        const mealPlans = yield* MealPlans;
+        const mealPlans = yield* MealPlans.MealPlans;
 
         return yield* mealPlans.get({
           input: {
@@ -44,7 +43,7 @@ function Component() {
   const actor = useActorRef(reviseMealPlanMachine, {
     input: {
       dateKey: search.dateKey,
-      energyKcal: calculatePlanEnergyKcal({ plan }),
+      energyKcal: Utils.calculatePlanEnergyKcal({ plan }),
       initialPlan: plan,
       navigate,
       planId: plan.id,

@@ -2,22 +2,12 @@ import { Effect, Layer, Schema } from "effect";
 import { afterEach, assert, describe, it } from "vitest";
 
 import {
-  ActiveMealPlanSelection,
-  BackupIntegrityError,
-  Backups,
-  CurrentDatabaseVersion,
-  DailyLog,
-  DatabaseName,
-  DateKey,
+  Backup,
   DefaultFoods,
-  Food,
-  LocalData,
-  MaiBackupJson,
-  MaiBackupV1,
-  Meal,
-  MealEntry,
-  NutritionStore,
-  Plan,
+  Domain,
+  LocalData as NutritionLocalData,
+  Metadata,
+  Store,
 } from "@mai/nutrition";
 import {
   IndexedDbLocalDataLayer,
@@ -29,11 +19,11 @@ import {
   layerFakeIndexedDb,
 } from "./indexed-db-test-utils.ts";
 
-const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
+const databaseLayer = MaiDatabase.layer(Metadata.DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
 );
 
-const backupsLayer = Backups.layer.pipe(
+const backupsLayer = Backup.Backups.layer.pipe(
   Layer.provideMerge(
     IndexedDbNutritionStoreLayer.pipe(Layer.provideMerge(databaseLayer))
   )
@@ -47,10 +37,10 @@ const localDataLayer = Layer.mergeAll(
 const BackupJsonString = Schema.fromJsonString(Schema.Unknown);
 
 afterEach(() =>
-  Effect.runPromise(deleteFakeDatabase({ databaseName: DatabaseName }))
+  Effect.runPromise(deleteFakeDatabase({ databaseName: Metadata.DatabaseName }))
 );
 
-const foodInput: typeof Food.Encoded = {
+const foodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   brand: "Mai",
@@ -67,7 +57,7 @@ const foodInput: typeof Food.Encoded = {
   updatedAt: 0,
 };
 
-const temporaryFoodInput: typeof Food.Encoded = {
+const temporaryFoodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c34",
   name: "Temporary berries",
   origin: "user",
@@ -79,7 +69,7 @@ const temporaryFoodInput: typeof Food.Encoded = {
   updatedAt: 0,
 };
 
-const planInput: typeof Plan.Encoded = {
+const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
   proteinTargetGrams: 160,
@@ -92,7 +82,7 @@ const planInput: typeof Plan.Encoded = {
   createdAt: 0,
 };
 
-const temporaryPlanInput: typeof Plan.Encoded = {
+const temporaryPlanInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
   name: "Temporary day",
   proteinTargetGrams: 120,
@@ -101,14 +91,14 @@ const temporaryPlanInput: typeof Plan.Encoded = {
   createdAt: 0,
 };
 
-const dailyLogInput: typeof DailyLog.Encoded = {
+const dailyLogInput: typeof Domain.DailyLog.Encoded = {
   dateKey: "2026-06-18",
   planId: planInput.id,
   createdAt: 0,
   updatedAt: 0,
 };
 
-const mealEntryInput: typeof MealEntry.Encoded = {
+const mealEntryInput: typeof Domain.MealEntry.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   dateKey: dailyLogInput.dateKey,
   meal: "breakfast",
@@ -118,22 +108,27 @@ const mealEntryInput: typeof MealEntry.Encoded = {
   updatedAt: 0,
 };
 
-const activeMealPlanSelectionInput: typeof ActiveMealPlanSelection.Encoded = {
-  id: "active-meal-plan",
-  planId: planInput.id,
-  updatedAt: 0,
-};
+const activeMealPlanSelectionInput: typeof Domain.ActiveMealPlanSelection.Encoded =
+  {
+    id: "active-meal-plan",
+    planId: planInput.id,
+    updatedAt: 0,
+  };
 
 describe("Backups", () => {
   it("exports the full database as schema-validated JSON", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;
-      const food = yield* Schema.decodeEffect(Food)(foodInput);
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
-      const dailyLog = yield* Schema.decodeEffect(DailyLog)(dailyLogInput);
-      const mealEntry = yield* Schema.decodeEffect(MealEntry)(mealEntryInput);
+      const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+      const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)(
+        dailyLogInput
+      );
+      const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)(
+        mealEntryInput
+      );
       const activeMealPlanSelection = yield* Schema.decodeEffect(
-        ActiveMealPlanSelection
+        Domain.ActiveMealPlanSelection
       )(activeMealPlanSelectionInput);
 
       yield* api.from("foods").insert(food);
@@ -144,9 +139,9 @@ describe("Backups", () => {
         .from("activeMealPlanSelections")
         .insert(activeMealPlanSelection);
 
-      const backups = yield* Backups;
+      const backups = yield* Backup.Backups;
       const exportedBackup = yield* backups.exportToJson();
-      const decodedFromJson = yield* Schema.decodeEffect(MaiBackupJson)(
+      const decodedFromJson = yield* Schema.decodeEffect(Backup.MaiBackupJson)(
         exportedBackup.json
       );
 
@@ -157,7 +152,10 @@ describe("Backups", () => {
 
     assert.equal(result.decodedFromJson.format, "mai.backup");
     assert.equal(result.decodedFromJson.formatVersion, 1);
-    assert.equal(result.decodedFromJson.source.databaseName, DatabaseName);
+    assert.equal(
+      result.decodedFromJson.source.databaseName,
+      Metadata.DatabaseName
+    );
     assert.equal(result.decodedFromJson.source.databaseVersion, 3);
     assert.equal(result.decodedFromJson.stores.dailyLogs.length, 1);
     assert.equal(result.decodedFromJson.stores.mealEntries.length, 1);
@@ -174,16 +172,22 @@ describe("Backups", () => {
   it("imports a backup by replacing the local database stores", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;
-      const food = yield* Schema.decodeEffect(Food)(foodInput);
-      const temporaryFood =
-        yield* Schema.decodeEffect(Food)(temporaryFoodInput);
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
-      const temporaryPlan =
-        yield* Schema.decodeEffect(Plan)(temporaryPlanInput);
-      const dailyLog = yield* Schema.decodeEffect(DailyLog)(dailyLogInput);
-      const mealEntry = yield* Schema.decodeEffect(MealEntry)(mealEntryInput);
+      const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+      const temporaryFood = yield* Schema.decodeEffect(Domain.Food)(
+        temporaryFoodInput
+      );
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+      const temporaryPlan = yield* Schema.decodeEffect(Domain.Plan)(
+        temporaryPlanInput
+      );
+      const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)(
+        dailyLogInput
+      );
+      const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)(
+        mealEntryInput
+      );
       const activeMealPlanSelection = yield* Schema.decodeEffect(
-        ActiveMealPlanSelection
+        Domain.ActiveMealPlanSelection
       )(activeMealPlanSelectionInput);
 
       yield* api.from("foods").insert(food);
@@ -194,7 +198,7 @@ describe("Backups", () => {
         .from("activeMealPlanSelections")
         .insert(activeMealPlanSelection);
 
-      const backups = yield* Backups;
+      const backups = yield* Backup.Backups;
       const exportedBackup = yield* backups.exportToJson();
 
       yield* api.from("foods").insert(temporaryFood);
@@ -212,10 +216,8 @@ describe("Backups", () => {
       const activeMealPlanSelections = yield* api
         .from("activeMealPlanSelections")
         .select();
-      const dateMealKey: [typeof DateKey.Type, typeof Meal.Type] = [
-        dailyLog.dateKey,
-        mealEntry.meal,
-      ];
+      const dateMealKey: [typeof Domain.DateKey.Type, typeof Domain.Meal.Type] =
+        [dailyLog.dateKey, mealEntry.meal];
       const foodsByName = yield* api
         .from("foods")
         .select("byName")
@@ -285,10 +287,10 @@ describe("Backups", () => {
 
   it("resets the browser database back to migration-seeded defaults", async () => {
     const program = Effect.gen(function* () {
-      const store = yield* NutritionStore;
-      const localData = yield* LocalData;
-      const food = yield* Schema.decodeEffect(Food)(foodInput);
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
+      const store = yield* Store.NutritionStore;
+      const localData = yield* NutritionLocalData.LocalData;
+      const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
 
       yield* store.insertFood(food);
       yield* store.insertPlan(plan);
@@ -303,7 +305,7 @@ describe("Backups", () => {
     assert.equal(result.dailyLogs.length, 0);
     assert.equal(result.mealEntries.length, 0);
     assert.equal(result.plans.length, 0);
-    assert.equal(result.foods.length, DefaultFoods.length);
+    assert.equal(result.foods.length, DefaultFoods.DefaultFoods.length);
     assert.equal(
       result.foods.some((food) => food.id === foodInput.id),
       false
@@ -329,7 +331,7 @@ describe("Backups", () => {
           },
         },
         source: {
-          databaseName: DatabaseName,
+          databaseName: Metadata.DatabaseName,
           databaseVersion: 1,
           exportedAt: 0,
         },
@@ -348,7 +350,7 @@ describe("Backups", () => {
       };
       const json =
         yield* Schema.encodeEffect(BackupJsonString)(legacyBackupInput);
-      const backups = yield* Backups;
+      const backups = yield* Backup.Backups;
       const importedBackup = yield* backups.importFromJson({
         input: {
           json,
@@ -366,7 +368,7 @@ describe("Backups", () => {
 
     assert.equal(
       result.importedBackup.backup.source.databaseVersion,
-      CurrentDatabaseVersion
+      Metadata.CurrentDatabaseVersion
     );
     assert.deepStrictEqual(
       result.plans.map((plan) => plan.name),
@@ -375,7 +377,7 @@ describe("Backups", () => {
     assert.equal(yogurt?.origin, "user");
     assert.equal(
       result.foods.filter((food) => food.origin === "app-default").length,
-      DefaultFoods.length
+      DefaultFoods.DefaultFoods.length
     );
   });
 
@@ -394,7 +396,7 @@ describe("Backups", () => {
           },
         },
         source: {
-          databaseName: DatabaseName,
+          databaseName: Metadata.DatabaseName,
           databaseVersion: 2,
           exportedAt: 0,
         },
@@ -413,7 +415,7 @@ describe("Backups", () => {
       };
       const json =
         yield* Schema.encodeEffect(BackupJsonString)(legacyBackupInput);
-      const backups = yield* Backups;
+      const backups = yield* Backup.Backups;
       const importedBackup = yield* backups.importFromJson({
         input: {
           json,
@@ -430,23 +432,23 @@ describe("Backups", () => {
 
     assert.equal(
       result.importedBackup.backup.source.databaseVersion,
-      CurrentDatabaseVersion
+      Metadata.CurrentDatabaseVersion
     );
     assert.equal(yogurt?.origin, "user");
     assert.equal(
       result.foods.filter((food) => food.origin === "app-default").length,
-      DefaultFoods.length
+      DefaultFoods.DefaultFoods.length
     );
   });
 
   it("rejects invalid backups before replacing local data", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
 
       yield* api.from("plans").insert(plan);
 
-      const invalidBackup = yield* Schema.decodeEffect(MaiBackupV1)({
+      const invalidBackup = yield* Schema.decodeEffect(Backup.MaiBackupV1)({
         format: "mai.backup",
         formatVersion: 1,
         integrity: {
@@ -459,7 +461,7 @@ describe("Backups", () => {
           },
         },
         source: {
-          databaseName: DatabaseName,
+          databaseName: Metadata.DatabaseName,
           databaseVersion: 3,
           exportedAt: 0,
         },
@@ -471,9 +473,10 @@ describe("Backups", () => {
           plans: [planInput],
         },
       });
-      const invalidJson =
-        yield* Schema.encodeEffect(MaiBackupJson)(invalidBackup);
-      const backups = yield* Backups;
+      const invalidJson = yield* Schema.encodeEffect(Backup.MaiBackupJson)(
+        invalidBackup
+      );
+      const backups = yield* Backup.Backups;
       const failure = yield* backups
         .importFromJson({
           input: {
@@ -488,7 +491,7 @@ describe("Backups", () => {
 
     const result = await Effect.runPromise(program);
 
-    if (!(result.failure instanceof BackupIntegrityError)) {
+    if (!(result.failure instanceof Backup.BackupIntegrityError)) {
       assert.fail("Expected BackupIntegrityError");
     }
 

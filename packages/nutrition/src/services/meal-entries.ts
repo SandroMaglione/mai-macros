@@ -11,7 +11,7 @@ import {
   Schema,
 } from "effect";
 
-import { NutritionStore } from "../store.ts";
+import { NutritionStore } from "./store.ts";
 
 const _FormPositiveNumber = Schema.NumberFromString.check(
   Schema.isFinite(),

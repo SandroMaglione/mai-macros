@@ -1,5 +1,6 @@
+import type { BackupTransferMachine } from "@mai/machines";
 import { DateTime, Effect } from "effect";
-import type { Plan } from "@mai/nutrition";
+import { MealPlans, type Domain } from "@mai/nutrition";
 import type { UseNavigateResult } from "@tanstack/react-router";
 import {
   assertEvent,
@@ -9,12 +10,8 @@ import {
   type ActorRefFrom,
 } from "xstate";
 
-import {
-  backupTransferMachine,
-  type BackupTransferImportedEvent,
-} from "./backup-transfer-machine.ts";
+import { backupTransferMachine } from "./backup-transfer-machine.ts";
 import { RuntimeClient } from "../runtime-client.ts";
-import { MealPlans } from "@mai/nutrition/services/meal-plans";
 import {
   calculateMealPlanEnergyKcalFromFormData,
   createMealPlanInputFromFormData,
@@ -40,7 +37,7 @@ export const submitMealPlanMachine = setup({
           readonly type: "changeTargets";
           readonly formData: FormData;
         }
-      | BackupTransferImportedEvent,
+      | BackupTransferMachine.BackupTransferImportedEvent,
     input: {} as {
       readonly dateKey: string | undefined;
       readonly navigate: UseNavigateResult<string>;
@@ -58,7 +55,7 @@ export const submitMealPlanMachine = setup({
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans;
+          const mealPlans = yield* MealPlans.MealPlans;
 
           const mealPlanInput = yield* Effect.sync(() =>
             createMealPlanInputFromFormData({
@@ -173,10 +170,10 @@ export const reviseMealPlanMachine = setup({
     context: {} as {
       readonly dateKey: string | undefined;
       readonly energyKcal: number;
-      readonly initialPlan: Plan;
+      readonly initialPlan: Domain.Plan;
       readonly latestFormData: FormData | null;
       readonly navigate: UseNavigateResult<string>;
-      readonly planId: Plan["id"];
+      readonly planId: Domain.Plan["id"];
     },
     events: {} as
       | {
@@ -190,9 +187,9 @@ export const reviseMealPlanMachine = setup({
     input: {} as {
       readonly dateKey: string | undefined;
       readonly energyKcal: number;
-      readonly initialPlan: Plan;
+      readonly initialPlan: Domain.Plan;
       readonly navigate: UseNavigateResult<string>;
-      readonly planId: Plan["id"];
+      readonly planId: Domain.Plan["id"];
     },
   },
   actors: {
@@ -202,12 +199,12 @@ export const reviseMealPlanMachine = setup({
         readonly formData: FormData;
         readonly dateKey: string | undefined;
         readonly navigate: UseNavigateResult<string>;
-        readonly planId: Plan["id"];
+        readonly planId: Domain.Plan["id"];
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans;
+          const mealPlans = yield* MealPlans.MealPlans;
           const today = dateKeyFromDate({
             date: yield* DateTime.nowAsDate,
           });

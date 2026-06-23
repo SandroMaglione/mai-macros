@@ -1,8 +1,4 @@
 import {
-  FoodDefaultOriginDot,
-  FoodNutrientOverview,
-} from "@/components/nutrition";
-import {
   AppHeader,
   AppScreen,
   BottomActionBar,
@@ -12,19 +8,13 @@ import {
   Notice,
   NumberField,
 } from "@/components/ui";
+import {
+  FoodDefaultOriginDot,
+  FoodNutrientOverview,
+} from "@/components/nutrition";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import {
-  calculateEntryNutrients,
-  DateKey,
-  Meal,
-  MealEntryId,
-  QuantityGrams,
-  type Food,
-  type MealEntry,
-} from "@mai/nutrition";
-import { Foods } from "@mai/nutrition/services/foods";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
+import { Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,10 +30,10 @@ import {
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 type EditMealEntryRouteData = {
-  readonly dateKey: DateKey;
-  readonly food: Food | undefined;
-  readonly meal: Meal;
-  readonly mealEntry: MealEntry;
+  readonly dateKey: Domain.DateKey;
+  readonly food: Domain.Food | undefined;
+  readonly meal: Domain.Meal;
+  readonly mealEntry: Domain.MealEntry;
 };
 
 type EditMealEntryRouteLoadResult =
@@ -82,7 +72,7 @@ const mealLabels = {
   breakfast: "Breakfast",
   dinner: "Dinner",
   lunch: "Lunch",
-} satisfies Record<Meal, string>;
+} satisfies Record<Domain.Meal, string>;
 
 const editMealEntryRouteLoaderMachine = setup({
   types: {
@@ -165,11 +155,11 @@ const editMealEntryRouteMachine = setup({
     input: {} as EditMealEntryRouteData,
   },
   actors: {
-    deleteMealEntry: fromPromise<MealEntryMutationResult, MealEntryId>(
+    deleteMealEntry: fromPromise<MealEntryMutationResult, Domain.MealEntryId>(
       ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
-            const mealEntries = yield* MealEntries;
+            const mealEntries = yield* MealEntries.MealEntries;
 
             yield* mealEntries.delete({
               input: {
@@ -197,13 +187,13 @@ const editMealEntryRouteMachine = setup({
     reviseMealEntry: fromPromise<
       MealEntryMutationResult,
       {
-        readonly mealEntryId: MealEntryId;
+        readonly mealEntryId: Domain.MealEntryId;
         readonly quantityGrams: string;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
 
           yield* mealEntries.revise({
             input: {
@@ -373,13 +363,13 @@ function ReadyEditMealEntryScreen({
   const selectedFoodNutrients =
     food === undefined
       ? undefined
-      : Schema.decodeOption(QuantityGrams)(
+      : Schema.decodeOption(Domain.QuantityGrams)(
           Number(snapshot.context.quantityGrams)
         ).pipe(
           Option.match({
             onNone: () => undefined,
             onSome: (quantityGrams) =>
-              calculateEntryNutrients({
+              Utils.calculateEntryNutrients({
                 food,
                 quantityGrams,
               }),
@@ -510,12 +500,15 @@ export function loadEditMealEntryRouteData({
   readonly mealParam: string | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeUnknownEffect(DateKey)(dateKeyParam);
-    const meal = yield* Schema.decodeUnknownEffect(Meal)(mealParam);
-    const mealEntryId =
-      yield* Schema.decodeUnknownEffect(MealEntryId)(mealEntryIdParam);
-    const foodsService = yield* Foods;
-    const mealEntriesService = yield* MealEntries;
+    const dateKey = yield* Schema.decodeUnknownEffect(Domain.DateKey)(
+      dateKeyParam
+    );
+    const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(mealParam);
+    const mealEntryId = yield* Schema.decodeUnknownEffect(Domain.MealEntryId)(
+      mealEntryIdParam
+    );
+    const foodsService = yield* Foods.Foods;
+    const mealEntriesService = yield* MealEntries.MealEntries;
     const mealEntries = yield* mealEntriesService.listForDay({
       input: {
         dateKey,
@@ -571,7 +564,7 @@ function _mutationMessage({
   return "";
 }
 
-function _replaceDay({ dateKey }: { readonly dateKey: DateKey }) {
+function _replaceDay({ dateKey }: { readonly dateKey: Domain.DateKey }) {
   router.replace({
     pathname: "/days/[dateKey]",
     params: {

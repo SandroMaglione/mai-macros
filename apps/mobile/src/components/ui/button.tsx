@@ -1,4 +1,4 @@
-import { color, radius, spacing, type } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
@@ -91,9 +91,9 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   pressed: {
     opacity: 0.86,

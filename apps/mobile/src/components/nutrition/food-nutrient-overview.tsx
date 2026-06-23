@@ -1,5 +1,5 @@
 import { formatNumber } from "@/lib/format";
-import { color, spacing, type } from "@/theme/tokens";
+import { color, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -251,15 +251,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   subtitle: {
     color: color.textMuted,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   headerNumbers: {
     minWidth: 112,
@@ -268,15 +268,15 @@ const styles = StyleSheet.create({
   },
   primaryLabel: {
     color: color.nutritionEnergy,
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
+    fontSize: tokens.type.size.xl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xl,
   },
   secondary: {
     color: color.textMuted,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   nutrientRow: {
     minHeight: 48,
@@ -290,15 +290,15 @@ const styles = StyleSheet.create({
   rowText: {
     minWidth: 0,
     flex: 1,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   rowValue: {
     maxWidth: 140,
     textAlign: "right",
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
 });

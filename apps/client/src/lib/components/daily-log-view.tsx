@@ -1,12 +1,5 @@
-import {
-  calculateEntryNutrients,
-  calculatePlanEnergyKcal,
-  type DateKey,
-  type Food,
-  type Meal,
-  type MealEntry,
-  QuantityGrams,
-} from "@mai/nutrition";
+import { BackupTransferMachine, FoodSearchMachine } from "@mai/machines";
+import { DailyLogs, Domain, MealEntries, Utils } from "@mai/nutrition";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array, Effect, Option, Order, Schema } from "effect";
@@ -35,11 +28,7 @@ import {
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
 import { RuntimeClient } from "../runtime-client.ts";
-import {
-  backupTransferMachine,
-  type BackupTransferActorRef,
-  type BackupTransferImportedEvent,
-} from "../machines/backup-transfer-machine.ts";
+import { backupTransferMachine } from "../machines/backup-transfer-machine.ts";
 import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
@@ -48,32 +37,13 @@ import {
   FoodSearchField,
   FoodSearchResults,
 } from "./food-search.tsx";
-import {
-  foodLowercaseNameOrder,
-  foodSearchMachine,
-  foodUserOriginOrder,
-  type FoodSearchEvent,
-  type FoodSearchSelectedEvent,
-} from "../machines/food-search-machine.ts";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import type {
-  ChangeDayPlanInput,
-  OpenedDay,
-} from "@mai/nutrition/services/daily-logs";
-import type {
-  CreateMealEntryInput,
-  DeleteMealEntryInput,
-  MealFoodUsage,
-  ReviseMealEntryInput,
-} from "@mai/nutrition/services/meal-entries";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate, shiftDateKey } from "../utils.ts";
 
 export type DailyLogViewData = {
-  readonly day: OpenedDay;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foods: readonly Food[];
-  readonly mealEntries: readonly MealEntry[];
+  readonly day: DailyLogs.OpenedDay;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntries: readonly Domain.MealEntry[];
 };
 
 type NutrientTotals = {
@@ -151,7 +121,7 @@ const darkFieldLabelClassName =
   "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
 
 const mealOptions: readonly {
-  readonly value: Meal;
+  readonly value: Domain.Meal;
   readonly label: string;
 }[] = [
   { value: "breakfast", label: "Breakfast" },
@@ -162,21 +132,21 @@ const mealOptions: readonly {
 type AddMealFoodDialogEvent =
   | {
       readonly type: "open";
-      readonly dateKey: DateKey;
-      readonly foodUsage: readonly MealFoodUsage[];
-      readonly foods: readonly Food[];
-      readonly meal: Meal;
+      readonly dateKey: Domain.DateKey;
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+      readonly foods: readonly Domain.Food[];
+      readonly meal: Domain.Meal;
     }
   | {
       readonly type: "openMealEntry";
-      readonly foodUsage: readonly MealFoodUsage[];
-      readonly foods: readonly Food[];
-      readonly mealEntry: MealEntry;
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+      readonly foods: readonly Domain.Food[];
+      readonly mealEntry: Domain.MealEntry;
     }
   | {
       readonly type: "close";
     }
-  | FoodSearchSelectedEvent
+  | FoodSearchMachine.FoodSearchSelectedEvent
   | {
       readonly type: "clearSelectedFood";
     }
@@ -198,34 +168,36 @@ type AddMealFoodDialogEvent =
     };
 
 type AddMealFoodDialogContext = {
-  readonly dateKey: DateKey | null;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
-  readonly meal: Meal | null;
-  readonly mealEntry: MealEntry | null;
+  readonly dateKey: Domain.DateKey | null;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foodSearchActor: ActorRefFrom<
+    typeof FoodSearchMachine.foodSearchMachine
+  >;
+  readonly meal: Domain.Meal | null;
+  readonly mealEntry: Domain.MealEntry | null;
   readonly mode: AddMealFoodDialogMode;
   readonly quantityGrams: string;
-  readonly selectedFood: Food | null;
+  readonly selectedFood: Domain.Food | null;
 };
 
 type DailyLogEvent =
   | {
       readonly type: "addMealEntry";
-      readonly input: CreateMealEntryInput;
+      readonly input: MealEntries.CreateMealEntryInput;
     }
   | {
       readonly type: "reviseMealEntry";
-      readonly input: ReviseMealEntryInput;
+      readonly input: MealEntries.ReviseMealEntryInput;
     }
   | {
       readonly type: "deleteMealEntry";
-      readonly input: DeleteMealEntryInput;
+      readonly input: MealEntries.DeleteMealEntryInput;
     }
   | {
       readonly type: "changePlan";
-      readonly input: ChangeDayPlanInput;
+      readonly input: DailyLogs.ChangeDayPlanInput;
     }
-  | BackupTransferImportedEvent;
+  | BackupTransferMachine.BackupTransferImportedEvent;
 
 const addMealFoodDialogClosedContext = {
   dateKey: null,
@@ -269,7 +241,7 @@ const addMealFoodDialogMachine = setup({
     events: {} as AddMealFoodDialogEvent,
   },
   actors: {
-    foodSearch: foodSearchMachine,
+    foodSearch: FoodSearchMachine.foodSearchMachine,
   },
 }).createMachine({
   context: ({ spawn }) => ({
@@ -290,7 +262,7 @@ const addMealFoodDialogMachine = setup({
         sendTo(({ context }) => context.foodSearchActor, {
           type: "reset",
           foods: [],
-        } satisfies FoodSearchEvent),
+        } satisfies FoodSearchMachine.FoodSearchEvent),
       ],
     },
     open: {
@@ -315,7 +287,7 @@ const addMealFoodDialogMachine = setup({
             assertEvent(event, "open");
             const mealFoodRecencyOrder = Order.mapInput(
               Order.flip(Order.Number),
-              (food: Food) =>
+              (food: Domain.Food) =>
                 _findFoodUsage({
                   foodId: food.id,
                   foodUsage: event.foodUsage,
@@ -324,14 +296,14 @@ const addMealFoodDialogMachine = setup({
             );
             const foods = Array.sortBy(
               mealFoodRecencyOrder,
-              foodUserOriginOrder,
-              foodLowercaseNameOrder
+              FoodSearchMachine.foodUserOriginOrder,
+              FoodSearchMachine.foodLowercaseNameOrder
             )(event.foods);
 
             return {
               type: "reset",
               foods,
-            } satisfies FoodSearchEvent;
+            } satisfies FoodSearchMachine.FoodSearchEvent;
           }
         ),
       ],
@@ -375,7 +347,7 @@ const addMealFoodDialogMachine = setup({
               foods: event.foods,
               query: selectedFood?.name ?? "",
               selectedFoodId: selectedFood?.id ?? null,
-            } satisfies FoodSearchEvent;
+            } satisfies FoodSearchMachine.FoodSearchEvent;
           }
         ),
       ],
@@ -435,7 +407,7 @@ const addMealFoodDialogMachine = setup({
             }),
             sendTo(({ context }) => context.foodSearchActor, {
               type: "clearSelectedFood",
-            } satisfies FoodSearchEvent),
+            } satisfies FoodSearchMachine.FoodSearchEvent),
           ],
         },
         submit: {
@@ -521,7 +493,7 @@ const dailyLogMachine = setup({
       readonly addMealFoodDialogActor: ActorRefFrom<
         typeof addMealFoodDialogMachine
       >;
-      readonly backupTransferActor: BackupTransferActorRef;
+      readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
       readonly invalidate: () => Promise<void>;
     },
     events: {} as DailyLogEvent,
@@ -535,13 +507,13 @@ const dailyLogMachine = setup({
     addMealEntry: fromPromise<
       "added" | "foodNotFound",
       {
-        readonly input: CreateMealEntryInput;
+        readonly input: MealEntries.CreateMealEntryInput;
         readonly invalidate: () => Promise<void>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
           yield* mealEntries.create({
             input: input.input,
           });
@@ -557,13 +529,13 @@ const dailyLogMachine = setup({
     reviseMealEntry: fromPromise<
       "revised" | "mealEntryNotFound",
       {
-        readonly input: ReviseMealEntryInput;
+        readonly input: MealEntries.ReviseMealEntryInput;
         readonly invalidate: () => Promise<void>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
           yield* mealEntries.revise({
             input: input.input,
           });
@@ -581,13 +553,13 @@ const dailyLogMachine = setup({
     deleteMealEntry: fromPromise<
       "deleted" | "mealEntryNotFound",
       {
-        readonly input: DeleteMealEntryInput;
+        readonly input: MealEntries.DeleteMealEntryInput;
         readonly invalidate: () => Promise<void>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
           yield* mealEntries.delete({
             input: input.input,
           });
@@ -605,13 +577,13 @@ const dailyLogMachine = setup({
     changeDayPlan: fromPromise<
       "changed" | "planNotFound",
       {
-        readonly input: ChangeDayPlanInput;
+        readonly input: DailyLogs.ChangeDayPlanInput;
         readonly invalidate: () => Promise<void>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const dailyLogs = yield* DailyLogs;
+          const dailyLogs = yield* DailyLogs.DailyLogs;
           yield* dailyLogs.changePlan({
             input: input.input,
           });
@@ -1040,8 +1012,8 @@ function BottomActionNav({
   dailyLogActor,
   disabled,
 }: {
-  readonly backupTransferActor: BackupTransferActorRef;
-  readonly day: OpenedDay;
+  readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
+  readonly day: DailyLogs.OpenedDay;
   readonly dailyLogActor: DailyLogActorRef;
   readonly disabled: boolean;
 }) {
@@ -1157,7 +1129,7 @@ function PlansActionSheet({
   dailyLogActor,
   disabled,
 }: {
-  readonly day: OpenedDay;
+  readonly day: DailyLogs.OpenedDay;
   readonly dailyLogActor: DailyLogActorRef;
   readonly disabled: boolean;
 }) {
@@ -1230,7 +1202,7 @@ function PlansActionSheet({
   );
 }
 
-function FoodsActionSheet({ dateKey }: { readonly dateKey: DateKey }) {
+function FoodsActionSheet({ dateKey }: { readonly dateKey: Domain.DateKey }) {
   return (
     <ActionSheet eyebrow="Food library" title="Foods">
       <nav aria-label="Food actions" className="grid grid-cols-2 gap-2">
@@ -1258,7 +1230,7 @@ function FoodsActionSheet({ dateKey }: { readonly dateKey: DateKey }) {
 function BackupActionSheet({
   backupTransferActor,
 }: {
-  readonly backupTransferActor: BackupTransferActorRef;
+  readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
 }) {
   return (
     <ActionSheet eyebrow="Database" title="Backup">
@@ -1278,13 +1250,13 @@ function MealSection({
   mealValue,
 }: {
   readonly addMealFoodDialogActor: AddMealFoodDialogActorRef;
-  readonly dateKey: DateKey;
+  readonly dateKey: Domain.DateKey;
   readonly disabled: boolean;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foods: readonly Food[];
-  readonly mealEntries: readonly MealEntry[];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
-  readonly mealValue: Meal;
+  readonly mealValue: Domain.Meal;
 }) {
   const mealNutrients = _calculateEntriesNutrients({
     foods,
@@ -1387,11 +1359,11 @@ function AddMealFoodDialog({
   const selectedFoodNutrients =
     selectedFood === null
       ? undefined
-      : Schema.decodeOption(QuantityGrams)(Number(quantityGrams)).pipe(
+      : Schema.decodeOption(Domain.QuantityGrams)(Number(quantityGrams)).pipe(
           Option.match({
             onNone: () => undefined,
             onSome: (validatedQuantityGrams) =>
-              calculateEntryNutrients({
+              Utils.calculateEntryNutrients({
                 food: selectedFood,
                 quantityGrams: validatedQuantityGrams,
               }),
@@ -1532,7 +1504,7 @@ function AddMealFoodDialog({
                   const nutrients =
                     foodHistory === undefined
                       ? undefined
-                      : calculateEntryNutrients({
+                      : Utils.calculateEntryNutrients({
                           food,
                           quantityGrams: foodHistory.latestQuantityGrams,
                         });
@@ -1816,11 +1788,11 @@ function DailyProgress({
   day,
   nutrients,
 }: {
-  readonly day: OpenedDay;
+  readonly day: DailyLogs.OpenedDay;
   readonly nutrients: NutrientTotals;
 }) {
   const plan = day.selectedPlan;
-  const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+  const targetEnergyKcal = Utils.calculatePlanEnergyKcal({ plan });
   const [macroDisplayModeSnapshot, sendMacroDisplayMode] = useMachine(
     macroDisplayModeMachine
   );
@@ -2149,9 +2121,9 @@ function MealEntryItem({
 }: {
   readonly addMealFoodDialogActor: AddMealFoodDialogActorRef;
   readonly disabled: boolean;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foods: readonly Food[];
-  readonly mealEntry: MealEntry;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntry: Domain.MealEntry;
   readonly mealLabel: string;
 }) {
   const food = _findFoodById({
@@ -2187,7 +2159,7 @@ function MealEntryItem({
     );
   }
 
-  const nutrients = calculateEntryNutrients({
+  const nutrients = Utils.calculateEntryNutrients({
     food,
     quantityGrams: mealEntry.quantityGrams,
   });
@@ -2249,8 +2221,8 @@ function _findFoodById({
   foods,
   foodId,
 }: {
-  readonly foods: readonly Food[];
-  readonly foodId: Food["id"] | null;
+  readonly foods: readonly Domain.Food[];
+  readonly foodId: Domain.Food["id"] | null;
 }) {
   return foodId === null ? undefined : foods.find((food) => food.id === foodId);
 }
@@ -2259,8 +2231,8 @@ function _findFoodUsage({
   foodId,
   foodUsage,
 }: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foodId: Domain.Food["id"];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
 }
@@ -2268,7 +2240,7 @@ function _findFoodUsage({
 function _formatQuantityGramsInputValue({
   quantityGrams,
 }: {
-  readonly quantityGrams: MealFoodUsage["latestQuantityGrams"];
+  readonly quantityGrams: MealEntries.MealFoodUsage["latestQuantityGrams"];
 }) {
   return `${quantityGrams}`;
 }
@@ -2277,8 +2249,8 @@ function _calculateEntriesNutrients({
   foods,
   mealEntries,
 }: {
-  readonly foods: readonly Food[];
-  readonly mealEntries: readonly MealEntry[];
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntries: readonly Domain.MealEntry[];
 }): NutrientTotals {
   return mealEntries.reduce(
     (totals, mealEntry) => {
@@ -2288,7 +2260,7 @@ function _calculateEntriesNutrients({
         return totals;
       }
 
-      const nutrients = calculateEntryNutrients({
+      const nutrients = Utils.calculateEntryNutrients({
         food,
         quantityGrams: mealEntry.quantityGrams,
       });

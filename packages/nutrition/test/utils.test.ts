@@ -1,21 +1,9 @@
 import { Effect, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import {
-  EntryNutrients,
-  Food,
-  NonNegativeNumber,
-  Plan,
-  QuantityGrams,
-} from "../src/domain.ts";
-import {
-  calculateEntryNutrients,
-  calculateMacronutrientEnergyKcal,
-  calculatePlanEnergyKcal,
-  dateKeysInRange,
-} from "../src/utils.ts";
+import { Domain, Utils } from "../src/index.ts";
 
-const foodInput: typeof Food.Encoded = {
+const foodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   brand: "Mai",
@@ -32,7 +20,7 @@ const foodInput: typeof Food.Encoded = {
   updatedAt: 0,
 };
 
-const planInput: typeof Plan.Encoded = {
+const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
   proteinTargetGrams: 160,
@@ -47,7 +35,7 @@ const planInput: typeof Plan.Encoded = {
 
 describe("nutrition utils", () => {
   it("calculates energy from macronutrients", () => {
-    const energyKcal = calculateMacronutrientEnergyKcal({
+    const energyKcal = Utils.calculateMacronutrientEnergyKcal({
       proteinGrams: 160,
       carbsGrams: 220,
       fatGrams: 70,
@@ -58,10 +46,11 @@ describe("nutrition utils", () => {
 
   it("calculates plan energy from macro targets and validates the result", async () => {
     const program = Effect.gen(function* () {
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
-      const energyKcal = calculatePlanEnergyKcal({ plan });
-      const validatedEnergyKcal =
-        yield* Schema.decodeEffect(NonNegativeNumber)(energyKcal);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+      const energyKcal = Utils.calculatePlanEnergyKcal({ plan });
+      const validatedEnergyKcal = yield* Schema.decodeEffect(
+        Domain.NonNegativeNumber
+      )(energyKcal);
 
       return { energyKcal, validatedEnergyKcal };
     });
@@ -74,14 +63,17 @@ describe("nutrition utils", () => {
 
   it("calculates entry nutrients and validates the result", async () => {
     const program = Effect.gen(function* () {
-      const food = yield* Schema.decodeEffect(Food)(foodInput);
-      const quantityGrams = yield* Schema.decodeEffect(QuantityGrams)(150);
-      const calculatedNutrients = calculateEntryNutrients({
+      const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
+        150
+      );
+      const calculatedNutrients = Utils.calculateEntryNutrients({
         food,
         quantityGrams,
       });
-      const validatedNutrients =
-        yield* Schema.decodeEffect(EntryNutrients)(calculatedNutrients);
+      const validatedNutrients = yield* Schema.decodeEffect(
+        Domain.EntryNutrients
+      )(calculatedNutrients);
 
       return { calculatedNutrients, validatedNutrients };
     });
@@ -96,7 +88,7 @@ describe("nutrition utils", () => {
   });
 
   it("lists date keys in a closed range", () => {
-    const dateKeys = dateKeysInRange({
+    const dateKeys = Utils.dateKeysInRange({
       endDateKey: "2026-06-21",
       startDateKey: "2026-06-19",
     });
@@ -105,7 +97,7 @@ describe("nutrition utils", () => {
   });
 
   it("handles month boundaries and leap days in date key ranges", () => {
-    const dateKeys = dateKeysInRange({
+    const dateKeys = Utils.dateKeysInRange({
       endDateKey: "2024-03-01",
       startDateKey: "2024-02-28",
     });
@@ -114,7 +106,7 @@ describe("nutrition utils", () => {
   });
 
   it("returns no date keys for reversed ranges", () => {
-    const dateKeys = dateKeysInRange({
+    const dateKeys = Utils.dateKeysInRange({
       endDateKey: "2026-06-19",
       startDateKey: "2026-06-21",
     });
@@ -125,7 +117,7 @@ describe("nutrition utils", () => {
   it("rejects invalid calendar date keys", () => {
     assert.throws(
       () =>
-        dateKeysInRange({
+        Utils.dateKeysInRange({
           endDateKey: "2026-02-29",
           startDateKey: "2026-02-28",
         }),
@@ -147,16 +139,19 @@ describe("nutrition utils", () => {
       updatedAt: foodInput.updatedAt,
     };
     const program = Effect.gen(function* () {
-      const food = yield* Schema.decodeEffect(Food)(
+      const food = yield* Schema.decodeEffect(Domain.Food)(
         foodWithoutSecondaryNutrients
       );
-      const quantityGrams = yield* Schema.decodeEffect(QuantityGrams)(100);
-      const calculatedNutrients = calculateEntryNutrients({
+      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
+        100
+      );
+      const calculatedNutrients = Utils.calculateEntryNutrients({
         food,
         quantityGrams,
       });
-      const validatedNutrients =
-        yield* Schema.decodeEffect(EntryNutrients)(calculatedNutrients);
+      const validatedNutrients = yield* Schema.decodeEffect(
+        Domain.EntryNutrients
+      )(calculatedNutrients);
 
       return { calculatedNutrients, validatedNutrients };
     });
@@ -171,7 +166,7 @@ describe("nutrition utils", () => {
 
   it("fails when food input violates its schema", async () => {
     const program = Effect.gen(function* () {
-      const failure = yield* Schema.decodeEffect(Food)({
+      const failure = yield* Schema.decodeEffect(Domain.Food)({
         ...foodInput,
         energyKcalPer100g: -1,
       }).pipe(Effect.flip);

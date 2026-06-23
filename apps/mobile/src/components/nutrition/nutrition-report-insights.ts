@@ -1,13 +1,4 @@
-import {
-  addNutrientTotals,
-  emptyNutrientTotals,
-  type Food,
-  type Meal,
-  type NutrientName,
-  type NutrientTotals,
-} from "@mai/nutrition";
-
-import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
+import { NutritionReports, Reporting, type Domain } from "@mai/nutrition";
 
 export type NutritionReportInsightKind =
   | "diet-concentration"
@@ -30,15 +21,15 @@ export type NutritionReportInsight = {
 
 type FoodInsightContributor = {
   readonly daysByDateKey: Record<string, true>;
-  readonly foodId: Food["id"];
-  readonly mealsByName: Record<Meal, Record<string, true>>;
+  readonly foodId: Domain.Food["id"];
+  readonly mealsByName: Record<Domain.Meal, Record<string, true>>;
   readonly name: string;
-  readonly totals: NutrientTotals;
+  readonly totals: Reporting.NutrientTotals;
 };
 
 type MealInsightContributor = {
-  readonly meal: Meal;
-  readonly totals: NutrientTotals;
+  readonly meal: Domain.Meal;
+  readonly totals: Reporting.NutrientTotals;
 };
 
 const insightNutrients = [
@@ -50,7 +41,7 @@ const insightNutrients = [
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
-] as const satisfies readonly NutrientName[];
+] as const satisfies readonly Reporting.NutrientName[];
 
 const nutrientInsightLabels = {
   carbsGrams: "carbs",
@@ -61,41 +52,41 @@ const nutrientInsightLabels = {
   saltGrams: "salt",
   saturatedFatGrams: "saturated fat",
   sugarGrams: "sugar",
-} satisfies Record<NutrientName, string>;
+} satisfies Record<Reporting.NutrientName, string>;
 
 const mealInsightLabels = {
   breakfast: "Breakfast",
   dinner: "Dinner",
   lunch: "Lunch",
-} satisfies Record<Meal, string>;
+} satisfies Record<Domain.Meal, string>;
 
 const insightMeals = [
   "breakfast",
   "lunch",
   "dinner",
-] as const satisfies readonly Meal[];
+] as const satisfies readonly Domain.Meal[];
 
 export function getNutritionReportInsights({
   limit,
   report,
 }: {
   readonly limit: number;
-  readonly report: NutritionReportRange;
+  readonly report: NutritionReports.NutritionReportRange;
 }): readonly NutritionReportInsight[] {
   const dayCount = report.days.length;
-  const totals = report.days.reduce<NutrientTotals>(
+  const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
-      addNutrientTotals({
+      Reporting.addNutrientTotals({
         left: currentTotals,
         right: day.totals,
       }),
-    emptyNutrientTotals()
+    Reporting.emptyNutrientTotals()
   );
   const getEntryTotals = ({
     entry,
   }: {
-    readonly entry: NutritionReportRange["days"][number]["entries"][number];
-  }): NutrientTotals => ({
+    readonly entry: NutritionReports.NutritionReportRange["days"][number]["entries"][number];
+  }): Reporting.NutrientTotals => ({
     carbsGrams: entry.nutrients.carbsGrams,
     energyKcal: entry.nutrients.energyKcal,
     fatGrams: entry.nutrients.fatGrams,
@@ -122,7 +113,7 @@ export function getNutritionReportInsights({
                   lunch: {},
                 },
                 name: entry.food.name,
-                totals: emptyNutrientTotals(),
+                totals: Reporting.emptyNutrientTotals(),
               } satisfies FoodInsightContributor);
 
             return {
@@ -140,7 +131,7 @@ export function getNutritionReportInsights({
                     [day.dateKey]: true,
                   },
                 },
-                totals: addNutrientTotals({
+                totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: getEntryTotals({ entry }),
                 }),
@@ -153,23 +144,23 @@ export function getNutritionReportInsights({
     )
   );
   const mealContributors = Object.values(
-    report.days.reduce<Record<Meal, MealInsightContributor>>(
+    report.days.reduce<Record<Domain.Meal, MealInsightContributor>>(
       (contributors, day) =>
-        day.entries.reduce<Record<Meal, MealInsightContributor>>(
+        day.entries.reduce<Record<Domain.Meal, MealInsightContributor>>(
           (nextContributors, entry) => {
             const meal = entry.mealEntry.meal;
             const current =
               nextContributors[meal] ??
               ({
                 meal,
-                totals: emptyNutrientTotals(),
+                totals: Reporting.emptyNutrientTotals(),
               } satisfies MealInsightContributor);
 
             return {
               ...nextContributors,
               [meal]: {
                 ...current,
-                totals: addNutrientTotals({
+                totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: getEntryTotals({ entry }),
                 }),
@@ -181,17 +172,17 @@ export function getNutritionReportInsights({
       {
         breakfast: {
           meal: "breakfast",
-          totals: emptyNutrientTotals(),
+          totals: Reporting.emptyNutrientTotals(),
         },
         dinner: {
           meal: "dinner",
-          totals: emptyNutrientTotals(),
+          totals: Reporting.emptyNutrientTotals(),
         },
         lunch: {
           meal: "lunch",
-          totals: emptyNutrientTotals(),
+          totals: Reporting.emptyNutrientTotals(),
         },
-      } satisfies Record<Meal, MealInsightContributor>
+      } satisfies Record<Domain.Meal, MealInsightContributor>
     )
   );
   const formatPercent = ({ share }: { readonly share: number }) =>
@@ -409,13 +400,13 @@ export function getNutritionReportInsights({
         const otherMeals = mealContributors.filter(
           (otherMeal) => otherMeal.meal !== meal.meal
         );
-        const otherTotals = otherMeals.reduce<NutrientTotals>(
+        const otherTotals = otherMeals.reduce<Reporting.NutrientTotals>(
           (currentTotals, otherMeal) =>
-            addNutrientTotals({
+            Reporting.addNutrientTotals({
               left: currentTotals,
               right: otherMeal.totals,
             }),
-          emptyNutrientTotals()
+          Reporting.emptyNutrientTotals()
         );
         const mealProteinDensity =
           meal.totals.energyKcal <= 0

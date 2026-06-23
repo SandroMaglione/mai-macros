@@ -1,13 +1,7 @@
 import { Effect } from "effect";
 import { assert, describe, it } from "vitest";
 
-import {
-  parseFoodQuickInput,
-  type FoodQuickInput,
-  type FoodQuickInputFieldName,
-  type FoodQuickInputParseIssue,
-  type FoodQuickInputParseResult,
-} from "../src/food-quick-input.ts";
+import { FoodQuickInput } from "../src/index.ts";
 
 describe("food quick input parser", () => {
   it("parses a full positional Italian label order", async () => {
@@ -191,7 +185,10 @@ describe("food quick input parser", () => {
       },
     ] satisfies readonly {
       readonly input: string;
-      readonly missingFields: readonly (FoodQuickInputFieldName | undefined)[];
+      readonly missingFields: readonly (
+        | FoodQuickInput.FoodQuickInputFieldName
+        | undefined
+      )[];
       readonly partial: Record<string, number | string>;
     }[];
 
@@ -321,15 +318,15 @@ function _parseFoodQuickInput({
   input,
 }: {
   readonly input: string;
-}): Promise<FoodQuickInputParseResult> {
-  return Effect.runPromise(parseFoodQuickInput({ input }));
+}): Promise<FoodQuickInput.FoodQuickInputParseResult> {
+  return Effect.runPromise(FoodQuickInput.parseFoodQuickInput({ input }));
 }
 
 function _expectComplete({
   result,
 }: {
-  readonly result: FoodQuickInputParseResult;
-}): FoodQuickInput {
+  readonly result: FoodQuickInput.FoodQuickInputParseResult;
+}): FoodQuickInput.FoodQuickInput {
   if (result.status !== "complete") {
     assert.fail(`Expected complete parse result, got ${result.status}.`);
   }
@@ -342,7 +339,7 @@ function _expectComplete({
 function _issueFields({
   issues,
 }: {
-  readonly issues: readonly FoodQuickInputParseIssue[];
+  readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
 }) {
   return issues.map((issue) => issue.field);
 }
@@ -350,7 +347,7 @@ function _issueFields({
 function _issueReasons({
   issues,
 }: {
-  readonly issues: readonly FoodQuickInputParseIssue[];
+  readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
 }) {
   return issues.map((issue) => issue.reason);
 }

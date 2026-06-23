@@ -1,4 +1,4 @@
-import { color, shadow, spacing, type } from "@/theme/tokens";
+import { color, shadow, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import {
   StyleSheet,
@@ -158,26 +158,26 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: "rgba(255,255,255,0.75)",
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   title: {
     maxWidth: 220,
     color: color.white,
     textAlign: "center",
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
+    fontSize: tokens.type.size.xl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xl,
   },
   subtitle: {
     maxWidth: 220,
     color: "rgba(255,255,255,0.82)",
     textAlign: "center",
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   children: {
     marginTop: spacing.md,

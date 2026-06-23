@@ -1,4 +1,4 @@
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -169,9 +169,9 @@ const styles = StyleSheet.create({
     opacity: 0.86,
   },
   tabText: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   tabTextActive: {
     color: color.white,

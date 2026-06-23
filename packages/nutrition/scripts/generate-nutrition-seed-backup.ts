@@ -4,36 +4,27 @@ import { fileURLToPath } from "node:url";
 
 import { Effect, Schema } from "effect";
 
-import {
-  DefaultFoods,
-  type MaiBackup,
-  type MaiBackupEncoded,
-  MaiBackupJson,
-  validateBackup,
-} from "../src/index.ts";
+import { Backup, DefaultFoods } from "../src/index.ts";
 
-type BackupStores = MaiBackupEncoded["stores"];
-type BackupFood = BackupStores["foods"][number];
-type BackupPlan = BackupStores["plans"][number];
-type BackupMealEntry = BackupStores["mealEntries"][number];
-type BackupDailyLog = BackupStores["dailyLogs"][number];
-type BackupActiveMealPlanSelection =
-  BackupStores["activeMealPlanSelections"][number];
-type DecodedBackupFood = MaiBackup["stores"]["foods"][number];
-type MealName = BackupMealEntry["meal"];
 type FoodKey = string;
 type SeedFoodDefinition = readonly [
   foodKey: FoodKey,
   food: Omit<
-    BackupFood,
+    Backup.MaiBackupEncoded["stores"]["foods"][number],
     "basedOnFoodId" | "createdAt" | "id" | "origin" | "updatedAt"
   >,
 ];
-type MealSeedEntry = Pick<BackupMealEntry, "foodId" | "quantityGrams">;
-type MealSeedTemplate = Record<MealName, readonly MealSeedEntry[]>;
+type MealSeedEntry = Pick<
+  Backup.MaiBackupEncoded["stores"]["mealEntries"][number],
+  "foodId" | "quantityGrams"
+>;
+type MealSeedTemplate = Record<
+  Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"],
+  readonly MealSeedEntry[]
+>;
 type DaySeedTemplate = {
   readonly meals: MealSeedTemplate;
-  readonly planId: BackupPlan["id"];
+  readonly planId: Backup.MaiBackupEncoded["stores"]["plans"][number]["id"];
 };
 type NutrientTotals = {
   carbsGrams: number;
@@ -46,8 +37,8 @@ type Summary = {
   readonly averageEnergyKcal: number;
   readonly averageFatGrams: number;
   readonly averageProteinGrams: number;
-  readonly firstDateKey: BackupDailyLog["dateKey"];
-  readonly lastDateKey: BackupDailyLog["dateKey"];
+  readonly firstDateKey: Backup.MaiBackupEncoded["stores"]["dailyLogs"][number]["dateKey"];
+  readonly lastDateKey: Backup.MaiBackupEncoded["stores"]["dailyLogs"][number]["dateKey"];
 };
 
 const outputDefaultPath = fileURLToPath(
@@ -67,11 +58,17 @@ const todayDateKey =
 
 assertDateKey(todayDateKey);
 
-const foodId = (index: number): BackupFood["id"] =>
+const foodId = (
+  index: number
+): Backup.MaiBackupEncoded["stores"]["foods"][number]["id"] =>
   `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
-const planId = (index: number): BackupPlan["id"] =>
+const planId = (
+  index: number
+): Backup.MaiBackupEncoded["stores"]["plans"][number]["id"] =>
   `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
-const mealEntryId = (index: number): BackupMealEntry["id"] =>
+const mealEntryId = (
+  index: number
+): Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["id"] =>
   `30000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 
 const seedCreatedAt = timestampForDateKey({
@@ -629,16 +626,20 @@ const foodDefinitions = [
   ],
 ] satisfies readonly SeedFoodDefinition[];
 
-const foods: BackupFood[] = foodDefinitions.map(
-  ([, food], index): BackupFood => ({
-    id: foodId(index + 1),
-    ...food,
-    origin: "user",
-    createdAt: seedCreatedAt,
-    updatedAt: seedCreatedAt,
-  })
-);
-const foodIdsByKey = new Map<FoodKey, BackupFood["id"]>();
+const foods: Backup.MaiBackupEncoded["stores"]["foods"][number][] =
+  foodDefinitions.map(
+    ([, food], index): Backup.MaiBackupEncoded["stores"]["foods"][number] => ({
+      id: foodId(index + 1),
+      ...food,
+      origin: "user",
+      createdAt: seedCreatedAt,
+      updatedAt: seedCreatedAt,
+    })
+  );
+const foodIdsByKey = new Map<
+  FoodKey,
+  Backup.MaiBackupEncoded["stores"]["foods"][number]["id"]
+>();
 
 for (const [foodKey] of foodDefinitions) {
   foodIdsByKey.set(foodKey, foodId(foodIdsByKey.size + 1));
@@ -649,7 +650,7 @@ const greekYogurtFood = requiredItem({
   name: "Greek yogurt seed food",
   values: foods,
 });
-const lowSugarYogurt: BackupFood = {
+const lowSugarYogurt: Backup.MaiBackupEncoded["stores"]["foods"][number] = {
   ...greekYogurtFood,
   id: foodId(foods.length + 1),
   basedOnFoodId: greekYogurtFood.id,
@@ -671,7 +672,10 @@ const appDefaultFoodNamesByKey = {
   appKiwi: "kiwi",
   appStrawberry: "strawberry",
   appTomato: "tomato",
-} satisfies Record<FoodKey, BackupFood["name"]>;
+} satisfies Record<
+  FoodKey,
+  Backup.MaiBackupEncoded["stores"]["foods"][number]["name"]
+>;
 const appDefaultFoods = Object.entries(appDefaultFoodNamesByKey).map(
   ([foodKey, foodName]) => {
     const food = defaultFoodByName({ foodName });
@@ -684,7 +688,7 @@ const appDefaultFoods = Object.entries(appDefaultFoodNamesByKey).map(
 
 foods.push(...appDefaultFoods);
 
-const plans: BackupPlan[] = [
+const plans: Backup.MaiBackupEncoded["stores"]["plans"][number][] = [
   {
     id: planId(1),
     name: "Seed balanced 2000 kcal",
@@ -743,7 +747,7 @@ const meal = ({
   quantityGrams,
 }: {
   readonly foodKey: FoodKey;
-  readonly quantityGrams: BackupMealEntry["quantityGrams"];
+  readonly quantityGrams: Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["quantityGrams"];
 }): MealSeedEntry => ({
   foodId: foodIdFor({ foodKey }),
   quantityGrams,
@@ -1035,15 +1039,15 @@ const mealNames = [
   "breakfast",
   "lunch",
   "dinner",
-] satisfies readonly MealName[];
+] satisfies readonly Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"][];
 
-const backup: MaiBackupEncoded = buildBackup();
+const backup: Backup.MaiBackupEncoded = buildBackup();
 const json = `${JSON.stringify(backup, null, 2)}\n`;
-const decodedBackup: MaiBackup = await Effect.runPromise(
+const decodedBackup: Backup.MaiBackup = await Effect.runPromise(
   Effect.gen(function* () {
-    const decoded = yield* Schema.decodeEffect(MaiBackupJson)(json);
+    const decoded = yield* Schema.decodeEffect(Backup.MaiBackupJson)(json);
 
-    yield* validateBackup({ backup: decoded });
+    yield* Backup.validateBackup({ backup: decoded });
 
     return decoded;
   })
@@ -1061,20 +1065,23 @@ console.log(
   ].join("\n")
 );
 
-function buildBackup(): MaiBackupEncoded {
+function buildBackup(): Backup.MaiBackupEncoded {
   const startDateKey = shiftDateKey({
     dateKey: todayDateKey,
     days: -(dayCount - 1),
   });
-  const activeMealPlanSelections: BackupActiveMealPlanSelection[] = [
-    {
-      id: "active-meal-plan",
-      planId: balancedPlan.id,
-      updatedAt: timestampForDateKey({ dateKey: todayDateKey, hour: 12 }),
-    },
-  ];
-  const dailyLogs: BackupDailyLog[] = [];
-  const mealEntries: BackupMealEntry[] = [];
+  const activeMealPlanSelections: Backup.MaiBackupEncoded["stores"]["activeMealPlanSelections"][number][] =
+    [
+      {
+        id: "active-meal-plan",
+        planId: balancedPlan.id,
+        updatedAt: timestampForDateKey({ dateKey: todayDateKey, hour: 12 }),
+      },
+    ];
+  const dailyLogs: Backup.MaiBackupEncoded["stores"]["dailyLogs"][number][] =
+    [];
+  const mealEntries: Backup.MaiBackupEncoded["stores"]["mealEntries"][number][] =
+    [];
   let nextMealEntry = 1;
 
   for (const [dayIndex, templateName] of schedule.entries()) {
@@ -1135,7 +1142,11 @@ function buildBackup(): MaiBackupEncoded {
   };
 }
 
-function calculateSummary({ backup }: { readonly backup: MaiBackup }): Summary {
+function calculateSummary({
+  backup,
+}: {
+  readonly backup: Backup.MaiBackup;
+}): Summary {
   const foodById = new Map(backup.stores.foods.map((food) => [food.id, food]));
   const dayTotals: NutrientTotals[] = backup.stores.dailyLogs.map(
     (dailyLog) => {
@@ -1213,7 +1224,9 @@ function averageRounded({
   return Math.round((total / totals.length) * 10) / 10;
 }
 
-function mealHour(mealName: MealName): number {
+function mealHour(
+  mealName: Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"]
+): number {
   return { breakfast: 7, dinner: 19, lunch: 12 }[mealName];
 }
 
@@ -1275,7 +1288,7 @@ function foodIdFor({
   foodKey,
 }: {
   readonly foodKey: FoodKey;
-}): BackupFood["id"] {
+}): Backup.MaiBackupEncoded["stores"]["foods"][number]["id"] {
   const id = foodIdsByKey.get(foodKey);
 
   if (id === undefined) {
@@ -1289,9 +1302,12 @@ function foodByIdFor({
   foodById,
   foodId,
 }: {
-  readonly foodById: ReadonlyMap<DecodedBackupFood["id"], DecodedBackupFood>;
-  readonly foodId: DecodedBackupFood["id"];
-}): DecodedBackupFood {
+  readonly foodById: ReadonlyMap<
+    Backup.MaiBackup["stores"]["foods"][number]["id"],
+    Backup.MaiBackup["stores"]["foods"][number]
+  >;
+  readonly foodId: Backup.MaiBackup["stores"]["foods"][number]["id"];
+}): Backup.MaiBackup["stores"]["foods"][number] {
   const food = foodById.get(foodId);
 
   if (food === undefined) {
@@ -1304,9 +1320,11 @@ function foodByIdFor({
 function defaultFoodByName({
   foodName,
 }: {
-  readonly foodName: BackupFood["name"];
-}): BackupFood {
-  const food = DefaultFoods.find((candidate) => candidate.name === foodName);
+  readonly foodName: Backup.MaiBackupEncoded["stores"]["foods"][number]["name"];
+}): Backup.MaiBackupEncoded["stores"]["foods"][number] {
+  const food = DefaultFoods.DefaultFoods.find(
+    (candidate) => candidate.name === foodName
+  );
 
   if (food === undefined) {
     throw new Error(`Missing app-default food ${foodName}`);

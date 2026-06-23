@@ -1,4 +1,4 @@
-import type { DateKey } from "@mai/nutrition";
+import type { Domain } from "@mai/nutrition";
 
 export const formatNumber = ({
   maximumFractionDigits = 1,
@@ -11,7 +11,11 @@ export const formatNumber = ({
     maximumFractionDigits,
   }).format(value);
 
-export const formatDateTitle = ({ dateKey }: { readonly dateKey: DateKey }) => {
+export const formatDateTitle = ({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey;
+}) => {
   const date = new Date(`${dateKey}T00:00:00`);
 
   return new Intl.DateTimeFormat(undefined, {

@@ -26,7 +26,7 @@ import {
   evaluatePlanNutrientTargets,
   isInsideExpectedPlanRange,
 } from "../reporting.ts";
-import { NutritionStore } from "../store.ts";
+import { NutritionStore } from "./store.ts";
 import { calculateEntryNutrients, dateKeysInRange } from "../utils.ts";
 
 const _GetNutritionReportRangeInput = Schema.Struct({

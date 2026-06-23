@@ -17,7 +17,7 @@ import {
   Plan,
   PlanId,
 } from "../domain.ts";
-import { NutritionStore } from "../store.ts";
+import { NutritionStore } from "./store.ts";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isFinite(),

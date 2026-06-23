@@ -1,4 +1,4 @@
-import type { Food, FoodCategory } from "@mai/nutrition";
+import type { Domain } from "@mai/nutrition";
 import { Array, Order } from "effect";
 import {
   assertEvent,
@@ -23,37 +23,37 @@ const foodCategoryLabels = {
   sweetener: "Sweetener",
   tuber: "Tuber",
   vegetable: "Vegetable",
-} satisfies Record<FoodCategory, string>;
+} satisfies Record<Domain.FoodCategory, string>;
 
 export type FoodSearchSelectedEvent = {
   readonly type: "foodSearchSelected";
-  readonly food: Food | null;
+  readonly food: Domain.Food | null;
   readonly selection: "explicit" | "firstMatching";
 };
 
 type FoodSearchContext = {
-  readonly foods: readonly Food[];
-  readonly matchingFoods: readonly Food[];
+  readonly foods: readonly Domain.Food[];
+  readonly matchingFoods: readonly Domain.Food[];
   readonly query: string;
-  readonly selectedFoodId: Food["id"] | null;
+  readonly selectedFoodId: Domain.Food["id"] | null;
 };
 
 type FoodSearchInput = {
-  readonly foods: readonly Food[];
+  readonly foods: readonly Domain.Food[];
   readonly query?: string;
-  readonly selectedFoodId?: Food["id"] | null;
+  readonly selectedFoodId?: Domain.Food["id"] | null;
 };
 
 export type FoodSearchEvent =
   | {
       readonly type: "reset";
-      readonly foods: readonly Food[];
+      readonly foods: readonly Domain.Food[];
       readonly query?: string;
-      readonly selectedFoodId?: Food["id"] | null;
+      readonly selectedFoodId?: Domain.Food["id"] | null;
     }
   | {
       readonly type: "changeFoods";
-      readonly foods: readonly Food[];
+      readonly foods: readonly Domain.Food[];
     }
   | {
       readonly type: "changeQuery";
@@ -64,18 +64,19 @@ export type FoodSearchEvent =
     }
   | {
       readonly type: "selectFood";
-      readonly foodId: Food["id"];
+      readonly foodId: Domain.Food["id"];
     }
   | {
       readonly type: "clearSelectedFood";
     };
 
-export const foodUserOriginOrder = Order.mapInput(Order.Number, (food: Food) =>
-  food.origin === "user" ? 0 : 1
+export const foodUserOriginOrder = Order.mapInput(
+  Order.Number,
+  (food: Domain.Food) => (food.origin === "user" ? 0 : 1)
 );
 export const foodLowercaseNameOrder = Order.mapInput(
   Order.String,
-  (food: Food) => food.name.toLocaleLowerCase()
+  (food: Domain.Food) => food.name.toLocaleLowerCase()
 );
 const foodOriginThenNameOrder = Order.combineAll([
   foodUserOriginOrder,
@@ -85,7 +86,7 @@ const foodOriginThenNameOrder = Order.combineAll([
 export function getFoodCategoryLabel({
   category,
 }: {
-  readonly category: FoodCategory;
+  readonly category: Domain.FoodCategory;
 }) {
   return foodCategoryLabels[category];
 }
@@ -94,7 +95,7 @@ export function filterFoodsByQuery({
   foods,
   query,
 }: {
-  readonly foods: readonly Food[];
+  readonly foods: readonly Domain.Food[];
   readonly query: string;
 }) {
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -126,7 +127,7 @@ export function filterFoodsByQuery({
 export function sortFoodsByOriginAndName({
   foods,
 }: {
-  readonly foods: readonly Food[];
+  readonly foods: readonly Domain.Food[];
 }) {
   return Array.sort(foods, foodOriginThenNameOrder);
 }

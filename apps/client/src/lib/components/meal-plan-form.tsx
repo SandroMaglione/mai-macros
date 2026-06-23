@@ -1,4 +1,5 @@
-import type { Plan } from "@mai/nutrition";
+import type { BackupTransferMachine } from "@mai/machines";
+import type { Domain } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { useSelector } from "@xstate/react";
 import { ChevronLeft, Flame, Plus, Save } from "lucide-react";
@@ -8,7 +9,6 @@ import {
   BackupTransferControls,
   type BackupTransferMode,
 } from "./backup-transfer-controls.tsx";
-import type { BackupTransferActorRef } from "../machines/backup-transfer-machine.ts";
 import type { MealPlanFormActorRef } from "../machines/meal-plan-form-machine.ts";
 
 type MealPlanFormAction = "create" | "edit";
@@ -122,11 +122,11 @@ export function MealPlanForm({
 }: {
   readonly action: MealPlanFormAction;
   readonly actor: MealPlanFormActorRef;
-  readonly backupTransferActor?: BackupTransferActorRef | null;
+  readonly backupTransferActor?: BackupTransferMachine.BackupTransferActorRef | null;
   readonly backupTransferMode?: BackupTransferMode;
   readonly canNavigateBack?: boolean;
   readonly dateKey: string | undefined;
-  readonly initialPlan: Plan | null;
+  readonly initialPlan: Domain.Plan | null;
 }) {
   const snapshot = useSelector(actor, (state) => state);
   const formDisabled =
@@ -279,7 +279,7 @@ function PlanTargetInput({
 }: {
   readonly disabled: boolean;
   readonly field: PlanTargetField;
-  readonly initialPlan: Plan | null;
+  readonly initialPlan: Domain.Plan | null;
 }) {
   return (
     <label className={planFieldLabelClassName}>

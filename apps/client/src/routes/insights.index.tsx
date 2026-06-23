@@ -1,10 +1,9 @@
-import { DateKey } from "@mai/nutrition";
+import { Domain, NutritionReports } from "@mai/nutrition";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { DateTime, Effect, Schema } from "effect";
 
 import { RangeSummary } from "../lib/components/range-summary.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
 import { dateKeyFromDate, shiftDateKey } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/insights/")({
@@ -14,7 +13,7 @@ export const Route = createFileRoute("/insights/")({
         const todayDateKey = dateKeyFromDate({
           date: yield* DateTime.nowAsDate,
         });
-        const reports = yield* NutritionReports;
+        const reports = yield* NutritionReports.NutritionReports;
         const report = yield* reports.getRange({
           input: {
             endDateKey: todayDateKey,
@@ -34,7 +33,7 @@ export const Route = createFileRoute("/insights/")({
           Effect.gen(function* () {
             return {
               _tag: "NoPlans" as const,
-              dateKey: yield* Schema.decodeEffect(DateKey)(
+              dateKey: yield* Schema.decodeEffect(Domain.DateKey)(
                 dateKeyFromDate({ date: yield* DateTime.nowAsDate })
               ),
             };

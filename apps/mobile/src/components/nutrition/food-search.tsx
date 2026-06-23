@@ -1,7 +1,7 @@
 import { formatNumber } from "@/lib/format";
-import { color, radius, spacing, type } from "@/theme/tokens";
-import type { Food } from "@mai/nutrition";
-import { type FoodSearchActorRef } from "@mai/machines/foods";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
+import { type Domain } from "@mai/nutrition";
+import { type FoodSearchMachine } from "@mai/machines";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
 import { Search } from "lucide-react-native";
@@ -16,12 +16,12 @@ import {
 } from "react-native";
 
 type FoodSearchProps = {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly disabled?: boolean;
   readonly emptyFoodsText?: string;
   readonly emptySearchText?: string;
-  readonly getPrimaryLabel?: (food: Food) => string;
-  readonly getSecondaryLabel?: (food: Food) => string;
+  readonly getPrimaryLabel?: (food: Domain.Food) => string;
+  readonly getSecondaryLabel?: (food: Domain.Food) => string;
   readonly placeholder?: string;
 };
 
@@ -59,7 +59,7 @@ export function FoodSearchField({
   disabled,
   placeholder = "Search food or brand",
 }: {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly autoFocus?: boolean;
   readonly disabled: boolean;
   readonly placeholder?: string;
@@ -106,12 +106,12 @@ export function FoodSearchResults({
   getPrimaryLabel,
   getSecondaryLabel,
 }: {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly disabled: boolean;
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
-  readonly getPrimaryLabel?: (food: Food) => string;
-  readonly getSecondaryLabel?: (food: Food) => string;
+  readonly getPrimaryLabel?: (food: Domain.Food) => string;
+  readonly getSecondaryLabel?: (food: Domain.Food) => string;
 }) {
   const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
   const matchingFoods = useSelector(
@@ -158,12 +158,12 @@ export function createFoodSearchRenderItem({
   getSecondaryLabel,
   selectedFoodId,
 }: {
-  readonly actor: FoodSearchActorRef;
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly disabled: boolean;
-  readonly getPrimaryLabel: ((food: Food) => string) | undefined;
-  readonly getSecondaryLabel: ((food: Food) => string) | undefined;
-  readonly selectedFoodId: Food["id"] | null;
-}): ListRenderItem<Food> {
+  readonly getPrimaryLabel: ((food: Domain.Food) => string) | undefined;
+  readonly getSecondaryLabel: ((food: Domain.Food) => string) | undefined;
+  readonly selectedFoodId: Domain.Food["id"] | null;
+}): ListRenderItem<Domain.Food> {
   return ({ item }) => (
     <FoodSearchResult
       disabled={disabled}
@@ -181,7 +181,7 @@ export function createFoodSearchRenderItem({
   );
 }
 
-export function FoodDefaultOriginDot({ food }: { readonly food: Food }) {
+export function FoodDefaultOriginDot({ food }: { readonly food: Domain.Food }) {
   return food.origin === "app-default" ? (
     <View
       accessibilityLabel="Pre-installed food"
@@ -200,7 +200,7 @@ function FoodSearchResult({
   selected,
 }: {
   readonly disabled: boolean;
-  readonly food: Food;
+  readonly food: Domain.Food;
   readonly onPress: () => void;
   readonly primaryLabel?: string;
   readonly secondaryLabel?: string;
@@ -275,9 +275,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   list: {
     flex: 1,
@@ -297,9 +297,9 @@ const styles = StyleSheet.create({
   emptyText: {
     color: color.textMuted,
     textAlign: "center",
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   result: {
     minHeight: 64,
@@ -340,15 +340,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   resultSummary: {
     color: color.textMuted,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   resultMetrics: {
     width: 112,
@@ -360,16 +360,16 @@ const styles = StyleSheet.create({
     maxWidth: 112,
     color: color.nutritionEnergy,
     textAlign: "right",
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   secondaryMetric: {
     maxWidth: 112,
     color: color.textMuted,
     textAlign: "right",
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
 });

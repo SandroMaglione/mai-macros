@@ -1,15 +1,7 @@
-import {
-  addNutrientTotals,
-  divideNutrientTotals,
-  emptyNutrientTotals,
-  getPlanNutrientTargetAmount,
-  type NutrientName,
-  type NutrientTotals,
-} from "@mai/nutrition";
+import { NutritionReports, Reporting } from "@mai/nutrition";
 import { Array } from "effect";
 
 import { getNutritionReportInsights } from "../nutrition-report-insights.ts";
-import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
 import {
   formatReportNutrient,
   formatReportSignedNumber,
@@ -22,7 +14,7 @@ import {
 export function RangeSummary({
   report,
 }: {
-  readonly report: NutritionReportRange;
+  readonly report: NutritionReports.NutritionReportRange;
 }) {
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
@@ -33,14 +25,14 @@ export function RangeSummary({
         ({
           foodId: entry.food.id,
           name: entry.food.name,
-          totals: emptyNutrientTotals(),
+          totals: Reporting.emptyNutrientTotals(),
         } satisfies FoodContributor);
 
       return {
         ...contributors,
         [entry.food.id]: {
           ...current,
-          totals: addNutrientTotals({
+          totals: Reporting.addNutrientTotals({
             left: current.totals,
             right: {
               carbsGrams: entry.nutrients.carbsGrams,
@@ -57,15 +49,15 @@ export function RangeSummary({
       };
     }, {})
   ).sort((left, right) => right.totals.energyKcal - left.totals.energyKcal);
-  const totals = report.days.reduce<NutrientTotals>(
+  const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
-      addNutrientTotals({
+      Reporting.addNutrientTotals({
         left: currentTotals,
         right: day.totals,
       }),
-    emptyNutrientTotals()
+    Reporting.emptyNutrientTotals()
   );
-  const averageTotals = divideNutrientTotals({
+  const averageTotals = Reporting.divideNutrientTotals({
     divisor: dayCount,
     totals,
   });
@@ -96,7 +88,7 @@ export function RangeSummary({
       nutrientName: "sugarGrams",
       report,
     }),
-  } satisfies Record<NutrientName, number | null>;
+  } satisfies Record<Reporting.NutrientName, number | null>;
   const summaryInsights = getNutritionReportInsights({
     limit: 6,
     report,
@@ -214,12 +206,12 @@ function _getAverageTargetAmount({
   nutrientName,
   report,
 }: {
-  readonly nutrientName: NutrientName;
-  readonly report: NutritionReportRange;
+  readonly nutrientName: Reporting.NutrientName;
+  readonly report: NutritionReports.NutritionReportRange;
 }) {
   const dayCount = report.days.length;
   const targetAmounts = report.days.flatMap((day) => {
-    const amount = getPlanNutrientTargetAmount({
+    const amount = Reporting.getPlanNutrientTargetAmount({
       nutrientName,
       plan: day.plan,
     });
@@ -259,7 +251,7 @@ function NutrientBalanceTile({
   target,
 }: {
   readonly actual: number;
-  readonly nutrientName: NutrientName;
+  readonly nutrientName: Reporting.NutrientName;
   readonly target: number | null;
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
@@ -289,5 +281,5 @@ function NutrientBalanceTile({
 type FoodContributor = {
   readonly foodId: string;
   readonly name: string;
-  readonly totals: NutrientTotals;
+  readonly totals: Reporting.NutrientTotals;
 };

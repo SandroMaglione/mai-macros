@@ -1,13 +1,13 @@
-import { LocalData, LocalDataResetError } from "@mai/nutrition";
+import { LocalData as NutritionLocalData } from "@mai/nutrition";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { runSqliteMigrations } from "./migrations/index.ts";
+import { runSqliteMigrations } from "../migrations/index.ts";
 
 export const makeSqliteLocalData = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  return LocalData.of({
+  return NutritionLocalData.LocalData.of({
     reset: Effect.mapError(
       Effect.gen(function* () {
         yield* sql`PRAGMA foreign_keys = OFF`;
@@ -23,7 +23,7 @@ export const makeSqliteLocalData = Effect.gen(function* () {
         );
       }),
       (cause) =>
-        new LocalDataResetError({
+        new NutritionLocalData.LocalDataResetError({
           cause,
         })
     ),
@@ -31,6 +31,6 @@ export const makeSqliteLocalData = Effect.gen(function* () {
 });
 
 export const SqliteLocalDataLayer = Layer.effect(
-  LocalData,
+  NutritionLocalData.LocalData,
   makeSqliteLocalData
 );

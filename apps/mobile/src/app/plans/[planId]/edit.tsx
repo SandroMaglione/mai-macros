@@ -3,15 +3,7 @@ import { AppScreen, LoadingView, MaiHeader, Notice } from "@/components/ui";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
-import type { DateKey, Plan, PlanId } from "@mai/nutrition";
-import {
-  DateKey as DateKeySchema,
-  PlanId as PlanIdSchema,
-} from "@mai/nutrition";
-import {
-  MealPlans,
-  type CreateMealPlanInput,
-} from "@mai/nutrition/services/meal-plans";
+import { Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Match, Option, Schema } from "effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -21,8 +13,8 @@ import { assign, fromPromise, setup } from "xstate";
 type RouteDecodeResult =
   | {
       readonly _tag: "Valid";
-      readonly dateKey: DateKey | undefined;
-      readonly planId: PlanId;
+      readonly dateKey: Domain.DateKey | undefined;
+      readonly planId: Domain.PlanId;
     }
   | {
       readonly _tag: "Invalid";
@@ -46,21 +38,21 @@ type SubmitResult =
     };
 
 const EditRouteParams = Schema.Struct({
-  dateKey: Schema.optional(DateKeySchema),
-  planId: PlanIdSchema,
+  dateKey: Schema.optional(Domain.DateKey),
+  planId: Domain.PlanId,
 });
 
 const editPlanRouteMachine = setup({
   types: {
     context: {} as {
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
       readonly errorMessage: string | undefined;
-      readonly plan: Plan | null;
-      readonly planId: PlanId | null;
+      readonly plan: Domain.Plan | null;
+      readonly planId: Domain.PlanId | null;
       readonly router: ReturnType<typeof useRouter>;
     },
     events: {} as {
-      readonly input: CreateMealPlanInput;
+      readonly input: MealPlans.CreateMealPlanInput;
       readonly type: "submit";
     },
     input: {} as {
@@ -69,10 +61,10 @@ const editPlanRouteMachine = setup({
     },
   },
   actors: {
-    loadMealPlan: fromPromise<Plan | null, PlanId>((input) =>
+    loadMealPlan: fromPromise<Domain.Plan | null, Domain.PlanId>((input) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans;
+          const mealPlans = yield* MealPlans.MealPlans;
 
           return yield* mealPlans.get({
             input: {
@@ -88,14 +80,14 @@ const editPlanRouteMachine = setup({
     reviseMealPlan: fromPromise<
       SubmitResult,
       {
-        readonly dateKey: DateKey;
-        readonly input: CreateMealPlanInput;
-        readonly planId: PlanId;
+        readonly dateKey: Domain.DateKey;
+        readonly input: MealPlans.CreateMealPlanInput;
+        readonly planId: Domain.PlanId;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans;
+          const mealPlans = yield* MealPlans.MealPlans;
 
           yield* mealPlans.revise({
             input: {
@@ -416,7 +408,7 @@ export function replaceToDateKey({
   dateKey,
   router,
 }: {
-  readonly dateKey: DateKey;
+  readonly dateKey: Domain.DateKey;
   readonly router: ReturnType<typeof useRouter>;
 }) {
   if (dateKey === todayDateKey()) {
@@ -430,8 +422,8 @@ export function replaceToDateKey({
   });
 }
 
-export function decodeTodayDateKey(): DateKey {
-  return Schema.decodeOption(DateKeySchema)(todayDateKey()).pipe(
+export function decodeTodayDateKey(): Domain.DateKey {
+  return Schema.decodeOption(Domain.DateKey)(todayDateKey()).pipe(
     Option.getOrThrow
   );
 }
@@ -440,7 +432,7 @@ export function replaceBack({
   dateKey,
   router,
 }: {
-  readonly dateKey: DateKey | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly router: ReturnType<typeof useRouter>;
 }) {
   if (dateKey === undefined) {

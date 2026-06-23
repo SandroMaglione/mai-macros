@@ -1,4 +1,4 @@
-import type { NutrientName } from "@mai/nutrition";
+import type { Reporting } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,7 +10,7 @@ export const reportPrimaryNutrients = [
   "proteinGrams",
   "carbsGrams",
   "fatGrams",
-] as const satisfies readonly NutrientName[];
+] as const satisfies readonly Reporting.NutrientName[];
 
 export const reportTrackedNutrients = [
   "energyKcal",
@@ -21,7 +21,7 @@ export const reportTrackedNutrients = [
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
-] as const satisfies readonly NutrientName[];
+] as const satisfies readonly Reporting.NutrientName[];
 
 export const reportNutrientLabels = {
   carbsGrams: "Carbs",
@@ -32,7 +32,7 @@ export const reportNutrientLabels = {
   saltGrams: "Salt",
   saturatedFatGrams: "Sat fat",
   sugarGrams: "Sugar",
-} satisfies Record<NutrientName, string>;
+} satisfies Record<Reporting.NutrientName, string>;
 
 export const reportNutrientUnits = {
   carbsGrams: "g",
@@ -43,7 +43,7 @@ export const reportNutrientUnits = {
   saltGrams: "g",
   saturatedFatGrams: "g",
   sugarGrams: "g",
-} satisfies Record<NutrientName, "g" | "kcal">;
+} satisfies Record<Reporting.NutrientName, "g" | "kcal">;
 
 export const reportNutrientToneClassNames = {
   carbsGrams: "text-[#ff4f8b]",
@@ -54,7 +54,7 @@ export const reportNutrientToneClassNames = {
   saltGrams: "text-[#aaaab1]",
   saturatedFatGrams: "text-[#ffbd35]",
   sugarGrams: "text-[#ff7aa9]",
-} satisfies Record<NutrientName, string>;
+} satisfies Record<Reporting.NutrientName, string>;
 
 export function NutritionInsightsLayout({
   children,
@@ -113,7 +113,7 @@ export function formatReportNutrient({
   nutrientName,
   value,
 }: {
-  readonly nutrientName: NutrientName;
+  readonly nutrientName: Reporting.NutrientName;
   readonly value: number;
 }) {
   const unit = reportNutrientUnits[nutrientName];

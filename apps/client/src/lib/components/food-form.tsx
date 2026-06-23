@@ -1,15 +1,5 @@
-import {
-  type Food,
-  type FoodQuickInputParseIssue,
-  type FoodQuickInputParseResult,
-} from "@mai/nutrition";
-import {
-  type FoodFormActorRef,
-  type FoodFormSnapshot,
-  type FoodFormValues,
-  type FoodNumberWarning,
-  type FoodNutrientFieldName,
-} from "@mai/machines/foods";
+import type { FoodFormMachine } from "@mai/machines";
+import type { Domain, FoodQuickInput } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
 import { useSelector } from "@xstate/react";
 import { Array } from "effect";
@@ -24,14 +14,12 @@ import {
   formatFoodNutrientNumber,
 } from "./food-nutrient-overview.tsx";
 
-export { foodFormMachine, type FoodFormSubmitEvent } from "@mai/machines/foods";
-
 type FoodFormAction = "create" | "edit";
 
 type FoodNutrientField = {
   readonly accentClassName: string;
   readonly label: string;
-  readonly name: FoodNutrientFieldName;
+  readonly name: FoodFormMachine.FoodNutrientFieldName;
   readonly placeholder: string;
   readonly required: boolean;
   readonly step: "0.01";
@@ -129,7 +117,7 @@ export function FoodForm({
   hasFailed,
 }: {
   readonly action: FoodFormAction;
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly dateKey: string | undefined;
   readonly disabled: boolean;
   readonly hasFailed: boolean;
@@ -138,7 +126,10 @@ export function FoodForm({
   const SubmitIcon = isCreating ? Plus : Save;
   const title = isCreating ? "Create food" : "Edit food";
   const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
-  const snapshot = useSelector(actor, (state): FoodFormSnapshot => state);
+  const snapshot = useSelector(
+    actor,
+    (state): FoodFormMachine.FoodFormSnapshot => state
+  );
   const { formValues, numberWarnings, quickInput, quickInputParseResult } =
     snapshot.context;
 
@@ -211,7 +202,7 @@ function FoodQuickInputTextField({
   disabled,
   input,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly input: string;
 }) {
@@ -239,7 +230,7 @@ function FoodQuickInputTextField({
 function FoodQuickInputFeedback({
   parseResult,
 }: {
-  readonly parseResult: FoodQuickInputParseResult;
+  readonly parseResult: FoodQuickInput.FoodQuickInputParseResult;
 }) {
   return (
     <div className="grid gap-4">
@@ -252,7 +243,7 @@ function FoodQuickInputFeedback({
 function FoodQuickInputPreview({
   parseResult,
 }: {
-  readonly parseResult: FoodQuickInputParseResult;
+  readonly parseResult: FoodQuickInput.FoodQuickInputParseResult;
 }) {
   if (parseResult.status === "empty") {
     return (
@@ -291,7 +282,7 @@ function FoodQuickInputPreview({
 function FoodQuickInputIssues({
   issues,
 }: {
-  readonly issues: readonly FoodQuickInputParseIssue[];
+  readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
 }) {
   const firstIssue = issues[0];
 
@@ -314,7 +305,7 @@ function FoodQuickInputIssues({
 function FoodQuickInputIssue({
   issue,
 }: {
-  readonly issue: FoodQuickInputParseIssue;
+  readonly issue: FoodQuickInput.FoodQuickInputParseIssue;
 }) {
   return (
     <div className="border-b border-[#3d2827] py-2 first:pt-0 last:border-b-0 last:pb-0">
@@ -328,7 +319,7 @@ function FoodQuickInputIssue({
 function FoodNumberWarnings({
   warnings,
 }: {
-  readonly warnings: readonly FoodNumberWarning[];
+  readonly warnings: readonly FoodFormMachine.FoodNumberWarning[];
 }) {
   if (!Array.isReadonlyArrayNonEmpty(warnings)) {
     return null;
@@ -366,11 +357,11 @@ export function FoodFormFields({
   initialFood,
   values,
 }: {
-  readonly actor?: FoodFormActorRef;
+  readonly actor?: FoodFormMachine.FoodFormActorRef;
   readonly autoFocusName: boolean;
   readonly disabled: boolean;
-  readonly initialFood: Food | null;
-  readonly values?: FoodFormValues;
+  readonly initialFood: Domain.Food | null;
+  readonly values?: FoodFormMachine.FoodFormValues;
 }) {
   return (
     <>
@@ -475,11 +466,11 @@ function FoodNutrientInput({
   initialFood,
   values,
 }: {
-  readonly actor?: FoodFormActorRef;
+  readonly actor?: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
-  readonly initialFood: Food | null;
-  readonly values?: FoodFormValues;
+  readonly initialFood: Domain.Food | null;
+  readonly values?: FoodFormMachine.FoodFormValues;
 }) {
   const unitPaddingClassName = field.unit === "kcal" ? "pr-14" : "pr-9";
 
@@ -553,8 +544,8 @@ function _sendFoodFormValueChange({
   name,
   value,
 }: {
-  readonly actor: FoodFormActorRef | undefined;
-  readonly name: keyof FoodFormValues;
+  readonly actor: FoodFormMachine.FoodFormActorRef | undefined;
+  readonly name: keyof FoodFormMachine.FoodFormValues;
   readonly value: string;
 }) {
   if (actor === undefined) {

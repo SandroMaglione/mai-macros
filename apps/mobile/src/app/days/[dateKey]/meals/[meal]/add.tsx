@@ -18,27 +18,8 @@ import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import {
-  calculateEntryNutrients,
-  DateKey,
-  type Food,
-  Meal,
-  QuantityGrams,
-} from "@mai/nutrition";
-import {
-  foodLowercaseNameOrder,
-  foodSearchMachine,
-  foodUserOriginOrder,
-  type FoodSearchEvent,
-  type FoodSearchSelectedEvent,
-} from "@mai/machines/foods";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import { Foods } from "@mai/nutrition/services/foods";
-import {
-  MealEntries,
-  type CreateMealEntryInput,
-  type MealFoodUsage,
-} from "@mai/nutrition/services/meal-entries";
+import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
+import { FoodSearchMachine } from "@mai/machines";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Option, Order, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
@@ -60,10 +41,10 @@ import {
 } from "xstate";
 
 type AddMealFoodRouteData = {
-  readonly dateKey: DateKey;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foods: readonly Food[];
-  readonly meal: Meal;
+  readonly dateKey: Domain.DateKey;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly meal: Domain.Meal;
 };
 
 type AddMealFoodRouteLoadResult =
@@ -72,7 +53,7 @@ type AddMealFoodRouteLoadResult =
     }
   | {
       readonly _tag: "NoMealPlans";
-      readonly dateKey: DateKey;
+      readonly dateKey: Domain.DateKey;
     }
   | {
       readonly _tag: "Ready";
@@ -80,7 +61,7 @@ type AddMealFoodRouteLoadResult =
     };
 
 type AddMealFoodRouteEvent =
-  | FoodSearchSelectedEvent
+  | FoodSearchMachine.FoodSearchSelectedEvent
   | {
       readonly type: "changeQuantity";
       readonly quantityGrams: string;
@@ -96,20 +77,22 @@ type AddMealFoodRouteEvent =
     };
 
 type AddMealFoodRouteContext = {
-  readonly dateKey: DateKey;
-  readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly meal: Meal;
+  readonly dateKey: Domain.DateKey;
+  readonly foodSearchActor: ActorRefFrom<
+    typeof FoodSearchMachine.foodSearchMachine
+  >;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly meal: Domain.Meal;
   readonly notice: string | null;
   readonly quantityGrams: string;
-  readonly selectedFood: Food | null;
+  readonly selectedFood: Domain.Food | null;
 };
 
 const mealLabels = {
   breakfast: "Breakfast",
   dinner: "Dinner",
   lunch: "Lunch",
-} satisfies Record<Meal, string>;
+} satisfies Record<Domain.Meal, string>;
 
 const addMealFoodRouteMachine = setup({
   types: {
@@ -121,12 +104,12 @@ const addMealFoodRouteMachine = setup({
     addMealEntry: fromPromise<
       "added" | "foodNotFound",
       {
-        readonly input: CreateMealEntryInput;
+        readonly input: MealEntries.CreateMealEntryInput;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
           yield* mealEntries.create({
             input: input.input,
           });
@@ -139,13 +122,13 @@ const addMealFoodRouteMachine = setup({
         )
       )
     ),
-    foodSearch: foodSearchMachine,
+    foodSearch: FoodSearchMachine.foodSearchMachine,
   },
 }).createMachine({
   context: ({ input, spawn }) => {
     const mealFoodRecencyOrder = Order.mapInput(
       Order.flip(Order.Number),
-      (food: Food) =>
+      (food: Domain.Food) =>
         _findFoodUsage({
           foodId: food.id,
           foodUsage: input.foodUsage,
@@ -160,8 +143,8 @@ const addMealFoodRouteMachine = setup({
         input: {
           foods: EffectArray.sortBy(
             mealFoodRecencyOrder,
-            foodUserOriginOrder,
-            foodLowercaseNameOrder
+            FoodSearchMachine.foodUserOriginOrder,
+            FoodSearchMachine.foodLowercaseNameOrder
           )(input.foods),
         },
       }),
@@ -245,7 +228,7 @@ const addMealFoodRouteMachine = setup({
             }),
             sendTo(({ context }) => context.foodSearchActor, {
               type: "clearSelectedFood",
-            } satisfies FoodSearchEvent),
+            } satisfies FoodSearchMachine.FoodSearchEvent),
           ],
         },
         submit: {
@@ -471,11 +454,11 @@ function ReadyAddMealFoodRoute({
   const selectedFoodNutrients =
     selectedFood === null
       ? undefined
-      : Schema.decodeOption(QuantityGrams)(Number(quantityGrams)).pipe(
+      : Schema.decodeOption(Domain.QuantityGrams)(Number(quantityGrams)).pipe(
           Option.match({
             onNone: () => undefined,
             onSome: (validatedQuantityGrams) =>
-              calculateEntryNutrients({
+              Utils.calculateEntryNutrients({
                 food: selectedFood,
                 quantityGrams: validatedQuantityGrams,
               }),
@@ -537,7 +520,7 @@ function ReadyAddMealFoodRoute({
               const nutrients =
                 foodHistory === undefined || mealHistory === undefined
                   ? undefined
-                  : calculateEntryNutrients({
+                  : Utils.calculateEntryNutrients({
                       food,
                       quantityGrams: foodHistory.latestQuantityGrams,
                     });
@@ -596,9 +579,9 @@ function QuantityEntry({
   readonly disabled: boolean;
   readonly mealLabel: string;
   readonly quantityGrams: string;
-  readonly selectedFood: Food;
+  readonly selectedFood: Domain.Food;
   readonly selectedFoodNutrients:
-    | ReturnType<typeof calculateEntryNutrients>
+    | ReturnType<typeof Utils.calculateEntryNutrients>
     | undefined;
   readonly selectedFoodQuantityLabel: string;
   readonly submitDisabled: boolean;
@@ -681,11 +664,13 @@ export function loadAddMealFoodRouteData({
   readonly mealParam: string | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeUnknownEffect(DateKey)(dateKeyParam);
-    const meal = yield* Schema.decodeUnknownEffect(Meal)(mealParam);
-    const dailyLogs = yield* DailyLogs;
-    const foodsService = yield* Foods;
-    const mealEntriesService = yield* MealEntries;
+    const dateKey = yield* Schema.decodeUnknownEffect(Domain.DateKey)(
+      dateKeyParam
+    );
+    const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(mealParam);
+    const dailyLogs = yield* DailyLogs.DailyLogs;
+    const foodsService = yield* Foods.Foods;
+    const mealEntriesService = yield* MealEntries.MealEntries;
     const day = yield* dailyLogs.open({
       input: {
         dateKey,
@@ -722,8 +707,8 @@ function _findFoodUsage({
   foodId,
   foodUsage,
 }: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foodId: Domain.Food["id"];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
 }

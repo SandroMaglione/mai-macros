@@ -1,24 +1,4 @@
-import {
-  ActiveMealPlanSelection,
-  ActiveMealPlanSelectionId,
-  DailyLog,
-  DateKey,
-  Food,
-  FoodCategory,
-  FoodId,
-  FoodOrigin,
-  Meal,
-  MealEntry,
-  MealEntryId,
-  NonEmptyString,
-  NonNegativeNumber,
-  NutritionStore,
-  NutritionStoreError,
-  Plan,
-  PlanId,
-  PositiveNumber,
-  type NutritionStores,
-} from "@mai/nutrition";
+import { Domain, Store } from "@mai/nutrition";
 import { Effect, Layer, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -35,65 +15,65 @@ const _mapStoreError = <Value, Error, Requirements>(
   effect.pipe(
     Effect.mapError(
       (cause) =>
-        new NutritionStoreError({
+        new Store.NutritionStoreError({
           cause,
         })
     )
   );
 
 const FoodRow = Schema.Struct({
-  basedOnFoodId: Schema.NullOr(FoodId),
-  brand: Schema.NullOr(NonEmptyString),
-  carbsGramsPer100g: NonNegativeNumber,
-  category: Schema.NullOr(FoodCategory),
+  basedOnFoodId: Schema.NullOr(Domain.FoodId),
+  brand: Schema.NullOr(Domain.NonEmptyString),
+  carbsGramsPer100g: Domain.NonNegativeNumber,
+  category: Schema.NullOr(Domain.FoodCategory),
   createdAt: Schema.Number,
-  energyKcalPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.NullOr(NonNegativeNumber),
-  id: FoodId,
-  name: NonEmptyString,
-  origin: FoodOrigin,
-  proteinGramsPer100g: NonNegativeNumber,
-  saltGramsPer100g: Schema.NullOr(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.NullOr(NonNegativeNumber),
-  sugarGramsPer100g: Schema.NullOr(NonNegativeNumber),
+  energyKcalPer100g: Domain.NonNegativeNumber,
+  fatGramsPer100g: Domain.NonNegativeNumber,
+  fiberGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
+  id: Domain.FoodId,
+  name: Domain.NonEmptyString,
+  origin: Domain.FoodOrigin,
+  proteinGramsPer100g: Domain.NonNegativeNumber,
+  saltGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
+  sugarGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
   updatedAt: Schema.Number,
 });
 
 const PlanRow = Schema.Struct({
-  basedOnPlanId: Schema.NullOr(PlanId),
-  carbsTargetGrams: NonNegativeNumber,
+  basedOnPlanId: Schema.NullOr(Domain.PlanId),
+  carbsTargetGrams: Domain.NonNegativeNumber,
   createdAt: Schema.Number,
-  fatTargetGrams: NonNegativeNumber,
-  fiberTargetGrams: Schema.NullOr(NonNegativeNumber),
-  id: PlanId,
-  name: NonEmptyString,
-  proteinTargetGrams: NonNegativeNumber,
-  saltTargetGrams: Schema.NullOr(NonNegativeNumber),
-  saturatedFatTargetGrams: Schema.NullOr(NonNegativeNumber),
-  sugarTargetGrams: Schema.NullOr(NonNegativeNumber),
+  fatTargetGrams: Domain.NonNegativeNumber,
+  fiberTargetGrams: Schema.NullOr(Domain.NonNegativeNumber),
+  id: Domain.PlanId,
+  name: Domain.NonEmptyString,
+  proteinTargetGrams: Domain.NonNegativeNumber,
+  saltTargetGrams: Schema.NullOr(Domain.NonNegativeNumber),
+  saturatedFatTargetGrams: Schema.NullOr(Domain.NonNegativeNumber),
+  sugarTargetGrams: Schema.NullOr(Domain.NonNegativeNumber),
 });
 
 const DailyLogRow = Schema.Struct({
   createdAt: Schema.Number,
-  dateKey: DateKey,
-  planId: PlanId,
+  dateKey: Domain.DateKey,
+  planId: Domain.PlanId,
   updatedAt: Schema.Number,
 });
 
 const ActiveMealPlanSelectionRow = Schema.Struct({
-  id: ActiveMealPlanSelectionId,
-  planId: PlanId,
+  id: Domain.ActiveMealPlanSelectionId,
+  planId: Domain.PlanId,
   updatedAt: Schema.Number,
 });
 
 const MealEntryRow = Schema.Struct({
   createdAt: Schema.Number,
-  dateKey: DateKey,
-  foodId: FoodId,
-  id: MealEntryId,
-  meal: Meal,
-  quantityGrams: PositiveNumber,
+  dateKey: Domain.DateKey,
+  foodId: Domain.FoodId,
+  id: Domain.MealEntryId,
+  meal: Domain.Meal,
+  quantityGrams: Domain.PositiveNumber,
   updatedAt: Schema.Number,
 });
 
@@ -168,7 +148,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     sugarGramsPer100g,
     ...row
   }: typeof FoodRow.Type) =>
-    Schema.decodeEffect(Food)({
+    Schema.decodeEffect(Domain.Food)({
       ...row,
       ...(basedOnFoodId === null ? {} : { basedOnFoodId }),
       ...(brand === null ? {} : { brand }),
@@ -189,7 +169,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     sugarTargetGrams,
     ...row
   }: typeof PlanRow.Type) =>
-    Schema.decodeEffect(Plan)({
+    Schema.decodeEffect(Domain.Plan)({
       ...row,
       ...(basedOnPlanId === null ? {} : { basedOnPlanId }),
       ...(fiberTargetGrams === null ? {} : { fiberTargetGrams }),
@@ -199,14 +179,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     });
 
   const decodeDailyLogRow = (row: typeof DailyLogRow.Type) =>
-    Schema.decodeEffect(DailyLog)(row);
+    Schema.decodeEffect(Domain.DailyLog)(row);
 
   const decodeActiveMealPlanSelectionRow = (
     row: typeof ActiveMealPlanSelectionRow.Type
-  ) => Schema.decodeEffect(ActiveMealPlanSelection)(row);
+  ) => Schema.decodeEffect(Domain.ActiveMealPlanSelection)(row);
 
   const decodeMealEntryRow = (row: typeof MealEntryRow.Type) =>
-    Schema.decodeEffect(MealEntry)(row);
+    Schema.decodeEffect(Domain.MealEntry)(row);
 
   const listFoodRows = SqlSchema.findAll({
     Request: EmptyRequest,
@@ -215,14 +195,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const findFoodByIdRows = SqlSchema.findAll({
-    Request: FoodId,
+    Request: Domain.FoodId,
     Result: FoodRow,
     execute: (foodId) =>
       sql`SELECT ${sql.literal(selectFoodColumns)} FROM foods WHERE id = ${foodId}`,
   });
 
   const findFoodsByNameRows = SqlSchema.findAll({
-    Request: NonEmptyString,
+    Request: Domain.NonEmptyString,
     Result: FoodRow,
     execute: (name) =>
       sql`SELECT ${sql.literal(selectFoodColumns)} FROM foods WHERE name = ${name}`,
@@ -235,14 +215,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const findPlanByIdRows = SqlSchema.findAll({
-    Request: PlanId,
+    Request: Domain.PlanId,
     Result: PlanRow,
     execute: (planId) =>
       sql`SELECT ${sql.literal(selectPlanColumns)} FROM plans WHERE id = ${planId}`,
   });
 
   const findPlansByNameRows = SqlSchema.findAll({
-    Request: NonEmptyString,
+    Request: Domain.NonEmptyString,
     Result: PlanRow,
     execute: (name) =>
       sql`SELECT ${sql.literal(selectPlanColumns)} FROM plans WHERE name = ${name}`,
@@ -256,21 +236,21 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const findDailyLogByDateKeyRows = SqlSchema.findAll({
-    Request: DateKey,
+    Request: Domain.DateKey,
     Result: DailyLogRow,
     execute: (dateKey) =>
       sql`SELECT ${sql.literal(selectDailyLogColumns)} FROM daily_logs WHERE date_key = ${dateKey}`,
   });
 
   const findDailyLogsByPlanRows = SqlSchema.findAll({
-    Request: PlanId,
+    Request: Domain.PlanId,
     Result: DailyLogRow,
     execute: (planId) =>
       sql`SELECT ${sql.literal(selectDailyLogColumns)} FROM daily_logs WHERE plan_id = ${planId}`,
   });
 
   const findActiveMealPlanSelectionRows = SqlSchema.findAll({
-    Request: ActiveMealPlanSelectionId,
+    Request: Domain.ActiveMealPlanSelectionId,
     Result: ActiveMealPlanSelectionRow,
     execute: (id) =>
       sql`SELECT ${sql.literal(selectActiveMealPlanSelectionColumns)} FROM active_meal_plan_selections WHERE id = ${id}`,
@@ -284,28 +264,28 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const findMealEntryByIdRows = SqlSchema.findAll({
-    Request: MealEntryId,
+    Request: Domain.MealEntryId,
     Result: MealEntryRow,
     execute: (mealEntryId) =>
       sql`SELECT ${sql.literal(selectMealEntryColumns)} FROM meal_entries WHERE id = ${mealEntryId}`,
   });
 
   const findMealEntriesByDateRows = SqlSchema.findAll({
-    Request: DateKey,
+    Request: Domain.DateKey,
     Result: MealEntryRow,
     execute: (dateKey) =>
       sql`SELECT ${sql.literal(selectMealEntryColumns)} FROM meal_entries WHERE date_key = ${dateKey}`,
   });
 
   const countMealEntriesByDateRows = SqlSchema.findOne({
-    Request: DateKey,
+    Request: Domain.DateKey,
     Result: CountRow,
     execute: (dateKey) =>
       sql`SELECT COUNT(*) AS count FROM meal_entries WHERE date_key = ${dateKey}`,
   });
 
   const countMealEntriesByFoodRows = SqlSchema.findOne({
-    Request: FoodId,
+    Request: Domain.FoodId,
     Result: CountRow,
     execute: (foodId) =>
       sql`SELECT COUNT(*) AS count FROM meal_entries WHERE food_id = ${foodId}`,
@@ -327,7 +307,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
   );
 
-  const foodRowValues = (food: typeof Food.Encoded) => ({
+  const foodRowValues = (food: typeof Domain.Food.Encoded) => ({
     based_on_food_id: food.basedOnFoodId ?? null,
     brand: food.brand ?? null,
     carbs_grams_per_100g: food.carbsGramsPer100g,
@@ -346,7 +326,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     updated_at: food.updatedAt,
   });
 
-  const planRowValues = (plan: typeof Plan.Encoded) => ({
+  const planRowValues = (plan: typeof Domain.Plan.Encoded) => ({
     based_on_plan_id: plan.basedOnPlanId ?? null,
     carbs_target_grams: plan.carbsTargetGrams,
     created_at: plan.createdAt,
@@ -360,7 +340,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     sugar_target_grams: plan.sugarTargetGrams ?? null,
   });
 
-  const dailyLogRowValues = (dailyLog: typeof DailyLog.Encoded) => ({
+  const dailyLogRowValues = (dailyLog: typeof Domain.DailyLog.Encoded) => ({
     created_at: dailyLog.createdAt,
     date_key: dailyLog.dateKey,
     plan_id: dailyLog.planId,
@@ -368,14 +348,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const activeMealPlanSelectionRowValues = (
-    selection: typeof ActiveMealPlanSelection.Encoded
+    selection: typeof Domain.ActiveMealPlanSelection.Encoded
   ) => ({
     id: selection.id,
     plan_id: selection.planId,
     updated_at: selection.updatedAt,
   });
 
-  const mealEntryRowValues = (mealEntry: typeof MealEntry.Encoded) => ({
+  const mealEntryRowValues = (mealEntry: typeof Domain.MealEntry.Encoded) => ({
     created_at: mealEntry.createdAt,
     date_key: mealEntry.dateKey,
     food_id: mealEntry.foodId,
@@ -385,8 +365,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     updated_at: mealEntry.updatedAt,
   });
 
-  const upsertFood = (food: Food) =>
-    Schema.encodeEffect(Food)(food).pipe(
+  const upsertFood = (food: Domain.Food) =>
+    Schema.encodeEffect(Domain.Food)(food).pipe(
       Effect.flatMap((encodedFood) => {
         const row = foodRowValues(encodedFood);
 
@@ -398,8 +378,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
-  const upsertPlan = (plan: Plan) =>
-    Schema.encodeEffect(Plan)(plan).pipe(
+  const upsertPlan = (plan: Domain.Plan) =>
+    Schema.encodeEffect(Domain.Plan)(plan).pipe(
       Effect.flatMap((encodedPlan) => {
         const row = planRowValues(encodedPlan);
 
@@ -411,8 +391,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
-  const upsertDailyLog = (dailyLog: DailyLog) =>
-    Schema.encodeEffect(DailyLog)(dailyLog).pipe(
+  const upsertDailyLog = (dailyLog: Domain.DailyLog) =>
+    Schema.encodeEffect(Domain.DailyLog)(dailyLog).pipe(
       Effect.flatMap((encodedDailyLog) => {
         const row = dailyLogRowValues(encodedDailyLog);
 
@@ -424,8 +404,10 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
-  const upsertActiveMealPlanSelection = (selection: ActiveMealPlanSelection) =>
-    Schema.encodeEffect(ActiveMealPlanSelection)(selection).pipe(
+  const upsertActiveMealPlanSelection = (
+    selection: Domain.ActiveMealPlanSelection
+  ) =>
+    Schema.encodeEffect(Domain.ActiveMealPlanSelection)(selection).pipe(
       Effect.flatMap((encodedSelection) => {
         const row = activeMealPlanSelectionRowValues(encodedSelection);
 
@@ -437,8 +419,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
-  const upsertMealEntry = (mealEntry: MealEntry) =>
-    Schema.encodeEffect(MealEntry)(mealEntry).pipe(
+  const upsertMealEntry = (mealEntry: Domain.MealEntry) =>
+    Schema.encodeEffect(Domain.MealEntry)(mealEntry).pipe(
       Effect.flatMap((encodedMealEntry) => {
         const row = mealEntryRowValues(encodedMealEntry);
 
@@ -450,7 +432,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
-  return NutritionStore.of({
+  return Store.NutritionStore.of({
     countMealEntriesByDate: (dateKey) =>
       _mapStoreError(
         countMealEntriesByDateRows(dateKey).pipe(Effect.map((row) => row.count))
@@ -549,7 +531,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
           Effect.gen(function* () {
             const activeMealPlanSelections =
               yield* findActiveMealPlanSelectionRows(
-                "active-meal-plan" satisfies ActiveMealPlanSelectionId
+                "active-meal-plan" satisfies Domain.ActiveMealPlanSelectionId
               ).pipe(
                 Effect.flatMap((rows) =>
                   Effect.forEach(rows, decodeActiveMealPlanSelectionRow)
@@ -566,7 +548,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
               foods,
               mealEntries,
               plans,
-            } satisfies NutritionStores;
+            } satisfies Store.NutritionStores;
           })
         );
       })
@@ -621,11 +603,11 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 });
 
 export const SqliteNutritionStoreLayer = Layer.effect(
-  NutritionStore,
+  Store.NutritionStore,
   makeSqliteNutritionStore.pipe(
     Effect.mapError(
       (cause) =>
-        new NutritionStoreError({
+        new Store.NutritionStoreError({
           cause,
         })
     )

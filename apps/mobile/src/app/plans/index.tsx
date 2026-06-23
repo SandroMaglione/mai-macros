@@ -13,12 +13,7 @@ import { MealPlanSummaryCard } from "@/components/nutrition";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { DateKey, type Plan } from "@mai/nutrition";
-import { DailyLogs, type OpenedDay } from "@mai/nutrition/services/daily-logs";
-import {
-  MealPlans,
-  type CreateMealPlanInput,
-} from "@mai/nutrition/services/meal-plans";
+import { DailyLogs, Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
@@ -26,10 +21,13 @@ import { ChevronLeft, Pencil } from "lucide-react-native";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
-type PlansDay = Pick<OpenedDay, "dailyLog" | "plans" | "selectedPlan">;
+type PlansDay = Pick<
+  DailyLogs.OpenedDay,
+  "dailyLog" | "plans" | "selectedPlan"
+>;
 
 type PlansRouteData = {
-  readonly dateKey: DateKey;
+  readonly dateKey: Domain.DateKey;
   readonly day: PlansDay;
 };
 
@@ -39,7 +37,7 @@ type PlansRouteLoadResult =
     }
   | {
       readonly _tag: "NoMealPlans";
-      readonly dateKey: DateKey;
+      readonly dateKey: Domain.DateKey;
     }
   | {
       readonly _tag: "Ready";
@@ -51,21 +49,21 @@ type PlansTabIndex = 0 | 1 | 2;
 type SavePlanInput =
   | {
       readonly action: "create";
-      readonly dateKey: DateKey;
-      readonly input: CreateMealPlanInput;
+      readonly dateKey: Domain.DateKey;
+      readonly input: MealPlans.CreateMealPlanInput;
     }
   | {
       readonly action: "revise";
-      readonly dateKey: DateKey;
-      readonly input: CreateMealPlanInput;
-      readonly planId: Plan["id"];
+      readonly dateKey: Domain.DateKey;
+      readonly input: MealPlans.CreateMealPlanInput;
+      readonly planId: Domain.Plan["id"];
     };
 
 type SavePlanResult =
   | {
       readonly _tag: "Saved";
       readonly day: PlansDay;
-      readonly editingPlan: Plan;
+      readonly editingPlan: Domain.Plan;
       readonly notice: string;
     }
   | {
@@ -79,20 +77,20 @@ type PlansRouteEvent =
       readonly type: "selectTab";
     }
   | {
-      readonly plan: Plan;
+      readonly plan: Domain.Plan;
       readonly type: "changePlan";
     }
   | {
-      readonly input: CreateMealPlanInput;
+      readonly input: MealPlans.CreateMealPlanInput;
       readonly type: "createPlan";
     }
   | {
-      readonly input: CreateMealPlanInput;
-      readonly plan: Plan;
+      readonly input: MealPlans.CreateMealPlanInput;
+      readonly plan: Domain.Plan;
       readonly type: "revisePlan";
     }
   | {
-      readonly plan: Plan;
+      readonly plan: Domain.Plan;
       readonly type: "selectEditPlan";
     }
   | {
@@ -105,9 +103,9 @@ const plansRouteMachine = setup({
       readonly activeTab: PlansTabIndex;
       readonly data: PlansRouteData | null;
       readonly dateKeyParam: string | undefined;
-      readonly editingPlan: Plan | null;
+      readonly editingPlan: Domain.Plan | null;
       readonly notice: string | null;
-      readonly redirectDateKey: DateKey | null;
+      readonly redirectDateKey: Domain.DateKey | null;
     },
     events: {} as PlansRouteEvent,
     input: {} as {
@@ -118,13 +116,13 @@ const plansRouteMachine = setup({
     changePlan: fromPromise<
       PlansDay,
       {
-        readonly dateKey: DateKey;
-        readonly planId: Plan["id"];
+        readonly dateKey: Domain.DateKey;
+        readonly planId: Domain.Plan["id"];
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const dailyLogs = yield* DailyLogs;
+          const dailyLogs = yield* DailyLogs.DailyLogs;
 
           return yield* dailyLogs.changePlan({
             input: {
@@ -453,13 +451,16 @@ function ReadyPlansScreen({
   readonly activeTab: PlansTabIndex;
   readonly data: PlansRouteData;
   readonly disabled: boolean;
-  readonly editingPlan: Plan | null;
+  readonly editingPlan: Domain.Plan | null;
   readonly notice: string | null;
-  readonly onChangePlan: (plan: Plan) => void;
+  readonly onChangePlan: (plan: Domain.Plan) => void;
   readonly onClearEditPlan: () => void;
-  readonly onCreatePlan: (input: CreateMealPlanInput) => void;
-  readonly onRevisePlan: (plan: Plan, input: CreateMealPlanInput) => void;
-  readonly onSelectEditPlan: (plan: Plan) => void;
+  readonly onCreatePlan: (input: MealPlans.CreateMealPlanInput) => void;
+  readonly onRevisePlan: (
+    plan: Domain.Plan,
+    input: MealPlans.CreateMealPlanInput
+  ) => void;
+  readonly onSelectEditPlan: (plan: Domain.Plan) => void;
   readonly onSelectTab: (index: number) => void;
 }) {
   const selectedPlan = data.day.selectedPlan;
@@ -579,9 +580,9 @@ function PlanSelectTab({
   selectedPlanId,
 }: {
   readonly disabled: boolean;
-  readonly onChangePlan: (plan: Plan) => void;
-  readonly plans: readonly Plan[];
-  readonly selectedPlanId: Plan["id"];
+  readonly onChangePlan: (plan: Domain.Plan) => void;
+  readonly plans: readonly Domain.Plan[];
+  readonly selectedPlanId: Domain.Plan["id"];
 }) {
   return (
     <ScrollView
@@ -619,12 +620,15 @@ function PlanEditTab({
   selectedPlanId,
 }: {
   readonly disabled: boolean;
-  readonly editingPlan: Plan | null;
+  readonly editingPlan: Domain.Plan | null;
   readonly onClearEditPlan: () => void;
-  readonly onRevisePlan: (plan: Plan, input: CreateMealPlanInput) => void;
-  readonly onSelectEditPlan: (plan: Plan) => void;
-  readonly plans: readonly Plan[];
-  readonly selectedPlanId: Plan["id"];
+  readonly onRevisePlan: (
+    plan: Domain.Plan,
+    input: MealPlans.CreateMealPlanInput
+  ) => void;
+  readonly onSelectEditPlan: (plan: Domain.Plan) => void;
+  readonly plans: readonly Domain.Plan[];
+  readonly selectedPlanId: Domain.Plan["id"];
 }) {
   if (editingPlan === null) {
     return (
@@ -680,10 +684,10 @@ export function loadPlansRouteData({
   readonly dateKeyParam: string | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeEffect(DateKey)(
+    const dateKey = yield* Schema.decodeEffect(Domain.DateKey)(
       dateKeyParam ?? todayDateKey()
     );
-    const dailyLogs = yield* DailyLogs;
+    const dailyLogs = yield* DailyLogs.DailyLogs;
     const day = yield* dailyLogs.open({
       input: {
         dateKey,
@@ -714,8 +718,8 @@ export function loadPlansRouteData({
 
 export function savePlan({ input }: { readonly input: SavePlanInput }) {
   return Effect.gen(function* () {
-    const dailyLogs = yield* DailyLogs;
-    const mealPlans = yield* MealPlans;
+    const dailyLogs = yield* DailyLogs.DailyLogs;
+    const mealPlans = yield* MealPlans.MealPlans;
 
     if (input.action === "create") {
       const created = yield* mealPlans.create({

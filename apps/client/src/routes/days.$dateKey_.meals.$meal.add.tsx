@@ -1,10 +1,5 @@
-import {
-  calculateEntryNutrients,
-  DateKey,
-  type Food,
-  Meal,
-  QuantityGrams,
-} from "@mai/nutrition";
+import { FoodSearchMachine } from "@mai/machines";
+import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import {
   createFileRoute,
   Link,
@@ -34,32 +29,18 @@ import {
   AppHeader,
   appHeaderActionClassName,
 } from "../lib/components/app-header.tsx";
-import {
-  foodLowercaseNameOrder,
-  foodSearchMachine,
-  foodUserOriginOrder,
-  type FoodSearchEvent,
-  type FoodSearchSelectedEvent,
-} from "../lib/machines/food-search-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import { Foods } from "@mai/nutrition/services/foods";
-import {
-  MealEntries,
-  type CreateMealEntryInput,
-  type MealFoodUsage,
-} from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 type AddMealFoodPageData = {
-  readonly dateKey: DateKey;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly foods: readonly Food[];
-  readonly meal: Meal;
+  readonly dateKey: Domain.DateKey;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly meal: Domain.Meal;
 };
 
 type AddMealFoodPageEvent =
-  | FoodSearchSelectedEvent
+  | FoodSearchMachine.FoodSearchSelectedEvent
   | {
       readonly type: "changeQuantity";
       readonly quantityGrams: string;
@@ -72,13 +53,15 @@ type AddMealFoodPageEvent =
     };
 
 type AddMealFoodPageContext = {
-  readonly dateKey: DateKey;
-  readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
-  readonly foodUsage: readonly MealFoodUsage[];
-  readonly meal: Meal;
+  readonly dateKey: Domain.DateKey;
+  readonly foodSearchActor: ActorRefFrom<
+    typeof FoodSearchMachine.foodSearchMachine
+  >;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+  readonly meal: Domain.Meal;
   readonly navigate: UseNavigateResult<string>;
   readonly quantityGrams: string;
-  readonly selectedFood: Food | null;
+  readonly selectedFood: Domain.Food | null;
 };
 
 type AddMealFoodPageInput = AddMealFoodPageData & {
@@ -89,7 +72,7 @@ const mealLabels = {
   breakfast: "Breakfast",
   dinner: "Dinner",
   lunch: "Lunch",
-} satisfies Record<Meal, string>;
+} satisfies Record<Domain.Meal, string>;
 
 const darkFieldClassName =
   "min-h-10 w-full border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
@@ -100,11 +83,15 @@ export const Route = createFileRoute("/days/$dateKey_/meals/$meal/add")({
   loader: async ({ params }) => {
     const result = await RuntimeClient.runPromise(
       Effect.gen(function* () {
-        const dateKey = yield* Schema.decodeEffect(DateKey)(params.dateKey);
-        const meal = yield* Schema.decodeUnknownEffect(Meal)(params.meal);
-        const dailyLogs = yield* DailyLogs;
-        const foodsService = yield* Foods;
-        const mealEntriesService = yield* MealEntries;
+        const dateKey = yield* Schema.decodeEffect(Domain.DateKey)(
+          params.dateKey
+        );
+        const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(
+          params.meal
+        );
+        const dailyLogs = yield* DailyLogs.DailyLogs;
+        const foodsService = yield* Foods.Foods;
+        const mealEntriesService = yield* MealEntries.MealEntries;
         const day = yield* dailyLogs.open({
           input: {
             dateKey,
@@ -165,12 +152,12 @@ const addMealFoodPageMachine = setup({
     addMealEntry: fromPromise<
       "added" | "foodNotFound",
       {
-        readonly input: CreateMealEntryInput;
+        readonly input: MealEntries.CreateMealEntryInput;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealEntries = yield* MealEntries;
+          const mealEntries = yield* MealEntries.MealEntries;
           yield* mealEntries.create({
             input: input.input,
           });
@@ -182,13 +169,13 @@ const addMealFoodPageMachine = setup({
         )
       )
     ),
-    foodSearch: foodSearchMachine,
+    foodSearch: FoodSearchMachine.foodSearchMachine,
   },
 }).createMachine({
   context: ({ input, spawn }) => {
     const mealFoodRecencyOrder = Order.mapInput(
       Order.flip(Order.Number),
-      (food: Food) =>
+      (food: Domain.Food) =>
         _findFoodUsage({
           foodId: food.id,
           foodUsage: input.foodUsage,
@@ -203,8 +190,8 @@ const addMealFoodPageMachine = setup({
         input: {
           foods: Array.sortBy(
             mealFoodRecencyOrder,
-            foodUserOriginOrder,
-            foodLowercaseNameOrder
+            FoodSearchMachine.foodUserOriginOrder,
+            FoodSearchMachine.foodLowercaseNameOrder
           )(input.foods),
         },
       }),
@@ -277,7 +264,7 @@ const addMealFoodPageMachine = setup({
             }),
             sendTo(({ context }) => context.foodSearchActor, {
               type: "clearSelectedFood",
-            } satisfies FoodSearchEvent),
+            } satisfies FoodSearchMachine.FoodSearchEvent),
           ],
         },
         submit: {
@@ -378,11 +365,11 @@ function Component() {
   const selectedFoodNutrients =
     selectedFood === null
       ? undefined
-      : Schema.decodeOption(QuantityGrams)(Number(quantityGrams)).pipe(
+      : Schema.decodeOption(Domain.QuantityGrams)(Number(quantityGrams)).pipe(
           Option.match({
             onNone: () => undefined,
             onSome: (validatedQuantityGrams) =>
-              calculateEntryNutrients({
+              Utils.calculateEntryNutrients({
                 food: selectedFood,
                 quantityGrams: validatedQuantityGrams,
               }),
@@ -435,7 +422,7 @@ function Component() {
               const nutrients =
                 foodHistory === undefined
                   ? undefined
-                  : calculateEntryNutrients({
+                  : Utils.calculateEntryNutrients({
                       food,
                       quantityGrams: foodHistory.latestQuantityGrams,
                     });
@@ -570,8 +557,8 @@ function _findFoodUsage({
   foodId,
   foodUsage,
 }: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foodId: Domain.Food["id"];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
 }

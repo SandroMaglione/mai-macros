@@ -3,12 +3,7 @@ import { AppScreen, LoadingView, MaiHeader, Notice } from "@/components/ui";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
-import type { DateKey } from "@mai/nutrition";
-import { DateKey as DateKeySchema } from "@mai/nutrition";
-import {
-  MealPlans,
-  type CreateMealPlanInput,
-} from "@mai/nutrition/services/meal-plans";
+import { Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Match, Option, Schema } from "effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -18,7 +13,7 @@ import { assign, fromPromise, setup } from "xstate";
 type SearchDecodeResult =
   | {
       readonly _tag: "Valid";
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
     }
   | {
       readonly _tag: "Invalid";
@@ -39,19 +34,19 @@ type SubmitResult =
     };
 
 const SearchParams = Schema.Struct({
-  dateKey: Schema.optional(DateKeySchema),
+  dateKey: Schema.optional(Domain.DateKey),
 });
 
 const newPlanRouteMachine = setup({
   types: {
     context: {} as {
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
       readonly errorMessage: string | undefined;
       readonly hasExistingPlan: boolean;
       readonly router: ReturnType<typeof useRouter>;
     },
     events: {} as {
-      readonly input: CreateMealPlanInput;
+      readonly input: MealPlans.CreateMealPlanInput;
       readonly type: "submit";
     },
     input: {} as {
@@ -60,11 +55,11 @@ const newPlanRouteMachine = setup({
     },
   },
   actors: {
-    createMealPlan: fromPromise<SubmitResult, CreateMealPlanInput>(
+    createMealPlan: fromPromise<SubmitResult, MealPlans.CreateMealPlanInput>(
       ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
-            const mealPlans = yield* MealPlans;
+            const mealPlans = yield* MealPlans.MealPlans;
 
             yield* mealPlans.create({ input });
 
@@ -93,7 +88,7 @@ const newPlanRouteMachine = setup({
     loadExistingPlans: fromPromise(() =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans;
+          const mealPlans = yield* MealPlans.MealPlans;
           const plans = yield* mealPlans.list();
 
           return EffectArray.isReadonlyArrayNonEmpty(plans);
@@ -310,7 +305,7 @@ export function replaceToDateKey({
   dateKey,
   router,
 }: {
-  readonly dateKey: DateKey | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly router: ReturnType<typeof useRouter>;
 }) {
   const today = todayDateKey();
@@ -331,7 +326,7 @@ export function replaceBack({
   dateKey,
   router,
 }: {
-  readonly dateKey: DateKey | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly router: ReturnType<typeof useRouter>;
 }) {
   if (dateKey === undefined) {

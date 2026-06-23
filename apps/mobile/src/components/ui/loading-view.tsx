@@ -1,4 +1,4 @@
-import { color, spacing, type } from "@/theme/tokens";
+import { color, spacing, tokens } from "@/theme/tokens";
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
 
 type LoadingViewProps = {
@@ -39,9 +39,9 @@ const styles = StyleSheet.create({
   },
   message: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   overlay: {
     flex: 1,

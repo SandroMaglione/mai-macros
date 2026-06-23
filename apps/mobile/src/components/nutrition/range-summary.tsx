@@ -1,18 +1,10 @@
-import {
-  addNutrientTotals,
-  divideNutrientTotals,
-  emptyNutrientTotals,
-  getPlanNutrientTargetAmount,
-  type NutrientName,
-  type NutrientTotals,
-} from "@mai/nutrition";
-import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
+import { NutritionReports, Reporting } from "@mai/nutrition";
 import { Array as EffectArray } from "effect";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { formatNumber } from "@/lib/format";
-import { color, radius, spacing, type } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 
 import {
   getNutritionReportInsights,
@@ -20,13 +12,13 @@ import {
 } from "./nutrition-report-insights.ts";
 
 type RangeSummaryProps = {
-  readonly report: NutritionReportRange;
+  readonly report: NutritionReports.NutritionReportRange;
 };
 
 type FoodContributor = {
   readonly foodId: string;
   readonly name: string;
-  readonly totals: NutrientTotals;
+  readonly totals: Reporting.NutrientTotals;
 };
 
 const trackedNutrients = [
@@ -38,7 +30,7 @@ const trackedNutrients = [
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
-] as const satisfies readonly NutrientName[];
+] as const satisfies readonly Reporting.NutrientName[];
 
 const nutrientLabels = {
   carbsGrams: "Carbs",
@@ -49,7 +41,7 @@ const nutrientLabels = {
   saltGrams: "Salt",
   saturatedFatGrams: "Sat fat",
   sugarGrams: "Sugar",
-} satisfies Record<NutrientName, string>;
+} satisfies Record<Reporting.NutrientName, string>;
 
 const nutrientColors = {
   carbsGrams: color.nutritionCarbs,
@@ -60,28 +52,28 @@ const nutrientColors = {
   saltGrams: color.nutritionSalt,
   saturatedFatGrams: color.warningText,
   sugarGrams: color.nutritionSugar,
-} satisfies Record<NutrientName, string>;
+} satisfies Record<Reporting.NutrientName, string>;
 
 export function RangeSummary({ report }: RangeSummaryProps) {
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
-  const totals = report.days.reduce<NutrientTotals>(
+  const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
-      addNutrientTotals({
+      Reporting.addNutrientTotals({
         left: currentTotals,
         right: day.totals,
       }),
-    emptyNutrientTotals()
+    Reporting.emptyNutrientTotals()
   );
   const averageTotals =
     dayCount === 0
-      ? emptyNutrientTotals()
-      : divideNutrientTotals({
+      ? Reporting.emptyNutrientTotals()
+      : Reporting.divideNutrientTotals({
           divisor: dayCount,
           totals,
         });
   const averageTargetTotals = trackedNutrients.reduce<
-    Record<NutrientName, number | null>
+    Record<Reporting.NutrientName, number | null>
   >(
     (targets, nutrientName) => ({
       ...targets,
@@ -108,14 +100,14 @@ export function RangeSummary({ report }: RangeSummaryProps) {
         ({
           foodId: entry.food.id,
           name: entry.food.name,
-          totals: emptyNutrientTotals(),
+          totals: Reporting.emptyNutrientTotals(),
         } satisfies FoodContributor);
 
       return {
         ...contributors,
         [entry.food.id]: {
           ...current,
-          totals: addNutrientTotals({
+          totals: Reporting.addNutrientTotals({
             left: current.totals,
             right: {
               carbsGrams: entry.nutrients.carbsGrams,
@@ -232,7 +224,7 @@ function NutrientBalanceCard({
   target,
 }: {
   readonly actual: number;
-  readonly nutrientName: NutrientName;
+  readonly nutrientName: Reporting.NutrientName;
   readonly target: number | null;
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
@@ -268,7 +260,7 @@ function FoodContributorGroup({
   nutrientName,
 }: {
   readonly foods: readonly FoodContributor[];
-  readonly nutrientName: NutrientName;
+  readonly nutrientName: Reporting.NutrientName;
 }) {
   return (
     <View style={styles.foodGroup}>
@@ -322,12 +314,12 @@ export function getAverageTargetAmount({
   nutrientName,
   report,
 }: {
-  readonly nutrientName: NutrientName;
-  readonly report: NutritionReportRange;
+  readonly nutrientName: Reporting.NutrientName;
+  readonly report: NutritionReports.NutritionReportRange;
 }) {
   const dayCount = report.days.length;
   const targetAmounts = report.days.flatMap((day) => {
-    const amount = getPlanNutrientTargetAmount({
+    const amount = Reporting.getPlanNutrientTargetAmount({
       nutrientName,
       plan: day.plan,
     });
@@ -346,7 +338,7 @@ function _formatNutrient({
   nutrientName,
   value,
 }: {
-  readonly nutrientName: NutrientName;
+  readonly nutrientName: Reporting.NutrientName;
   readonly value: number;
 }) {
   if (nutrientName === "energyKcal") {
@@ -397,15 +389,15 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     color: color.text,
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
+    fontSize: tokens.type.size.xl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xl,
   },
   sectionSubtitle: {
     color: color.textSubtle,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   insightList: {
     borderTopWidth: 1,
@@ -418,19 +410,19 @@ const styles = StyleSheet.create({
   },
   insightText: {
     color: color.text,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   insightFoodText: {
     color: color.warningText,
-    fontWeight: type.weight.black,
+    fontWeight: tokens.type.weight.black,
   },
   emptyText: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   nutrientGrid: {
     flexDirection: "row",
@@ -450,21 +442,21 @@ const styles = StyleSheet.create({
   },
   nutrientCardTitle: {
     minWidth: 0,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   nutrientDelta: {
     color: color.textMuted,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   nutrientValue: {
     color: color.text,
-    fontSize: type.size.xxl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xxl,
+    fontSize: tokens.type.size.xxl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xxl,
   },
   foodGroups: {
     gap: spacing.lg,
@@ -473,9 +465,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   foodGroupTitle: {
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   foodRows: {
     borderWidth: 1,
@@ -498,14 +490,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   foodAmount: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
 });

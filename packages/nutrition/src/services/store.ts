@@ -11,7 +11,7 @@ import type {
   MealEntryId,
   Plan,
   PlanId,
-} from "./domain.ts";
+} from "../domain.ts";
 
 export class NutritionStoreError extends Data.TaggedError(
   "NutritionStoreError"

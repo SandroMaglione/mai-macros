@@ -7,40 +7,28 @@ import {
 import { Effect, Layer, References, Schema } from "effect";
 
 import {
-  ActiveMealPlanSelection,
-  DailyLog,
-  DatabaseName,
-  Food,
-  FoodCategory,
-  FoodId,
-  FoodOrigin,
-  LocalData,
-  LocalDataResetError,
-  MealEntry,
-  NonEmptyString,
-  NonNegativeNumber,
-  NutritionStore,
-  NutritionStoreError,
-  Plan,
-  type NutritionStores,
+  DefaultFoods,
+  Domain,
+  LocalData as NutritionLocalData,
+  Metadata,
+  Store,
 } from "@mai/nutrition";
-import { DefaultFoods } from "@mai/nutrition";
 
 class LegacyFood extends Schema.Class<LegacyFood>("LegacyFood")({
-  id: FoodId,
-  basedOnFoodId: Schema.optional(FoodId),
-  name: NonEmptyString,
-  brand: Schema.optional(NonEmptyString),
-  category: Schema.optional(FoodCategory),
-  origin: Schema.optional(FoodOrigin),
-  energyKcalPer100g: NonNegativeNumber,
-  proteinGramsPer100g: NonNegativeNumber,
-  carbsGramsPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
-  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  id: Domain.FoodId,
+  basedOnFoodId: Schema.optional(Domain.FoodId),
+  name: Domain.NonEmptyString,
+  brand: Schema.optional(Domain.NonEmptyString),
+  category: Schema.optional(Domain.FoodCategory),
+  origin: Schema.optional(Domain.FoodOrigin),
+  energyKcalPer100g: Domain.NonNegativeNumber,
+  proteinGramsPer100g: Domain.NonNegativeNumber,
+  carbsGramsPer100g: Domain.NonNegativeNumber,
+  fatGramsPer100g: Domain.NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
@@ -56,7 +44,7 @@ class LegacyFoodsTable extends IndexedDbTable.make({
 
 export class FoodsTable extends IndexedDbTable.make({
   name: "foods",
-  schema: Food,
+  schema: Domain.Food,
   keyPath: "id",
   indexes: {
     byName: "name",
@@ -65,7 +53,7 @@ export class FoodsTable extends IndexedDbTable.make({
 
 export class PlansTable extends IndexedDbTable.make({
   name: "plans",
-  schema: Plan,
+  schema: Domain.Plan,
   keyPath: "id",
   indexes: {
     byName: "name",
@@ -74,7 +62,7 @@ export class PlansTable extends IndexedDbTable.make({
 
 export class DailyLogsTable extends IndexedDbTable.make({
   name: "dailyLogs",
-  schema: DailyLog,
+  schema: Domain.DailyLog,
   keyPath: "dateKey",
   indexes: {
     byPlan: "planId",
@@ -83,13 +71,13 @@ export class DailyLogsTable extends IndexedDbTable.make({
 
 export class ActiveMealPlanSelectionsTable extends IndexedDbTable.make({
   name: "activeMealPlanSelections",
-  schema: ActiveMealPlanSelection,
+  schema: Domain.ActiveMealPlanSelection,
   keyPath: "id",
 }) {}
 
 export class MealEntriesTable extends IndexedDbTable.make({
   name: "mealEntries",
-  schema: MealEntry,
+  schema: Domain.MealEntry,
   keyPath: "id",
   indexes: {
     byDate: "dateKey",
@@ -156,9 +144,9 @@ export class MaiDatabase extends IndexedDbDatabase.make(
 
           usedNames.push(name);
 
-          const encodedPlan = yield* Schema.encodeEffect(Plan)(plan);
+          const encodedPlan = yield* Schema.encodeEffect(Domain.Plan)(plan);
 
-          return yield* Schema.decodeEffect(Plan)({
+          return yield* Schema.decodeEffect(Domain.Plan)({
             ...encodedPlan,
             name,
           });
@@ -179,18 +167,18 @@ export class MaiDatabase extends IndexedDbDatabase.make(
           ...food,
           origin: food.origin ?? "user",
         }));
-        const defaultFoods = yield* Schema.decodeEffect(Schema.Array(Food))(
-          DefaultFoods
-        );
+        const defaultFoods = yield* Schema.decodeEffect(
+          Schema.Array(Domain.Food)
+        )(DefaultFoods.DefaultFoods);
 
         yield* to.from("foods").upsertAll([...userFoods, ...defaultFoods]);
       }).pipe(Effect.provideService(References.PreventSchedulerYield, true));
     })
   ) {}
 
-export const BrowserDatabaseLayer = MaiDatabase.layer(DatabaseName).pipe(
-  Layer.provide(IndexedDb.layerWindow)
-);
+export const BrowserDatabaseLayer = MaiDatabase.layer(
+  Metadata.DatabaseName
+).pipe(Layer.provide(IndexedDb.layerWindow));
 
 const _mapStoreError = <Value, Error, Requirements>(
   effect: Effect.Effect<Value, Error, Requirements>
@@ -198,22 +186,22 @@ const _mapStoreError = <Value, Error, Requirements>(
   effect.pipe(
     Effect.mapError(
       (cause) =>
-        new NutritionStoreError({
+        new Store.NutritionStoreError({
           cause,
         })
     )
   );
 
 export const IndexedDbLocalDataLayer = Layer.effect(
-  LocalData,
+  NutritionLocalData.LocalData,
   Effect.gen(function* () {
     const database = yield* IndexedDbDatabase.IndexedDbDatabase;
 
-    return LocalData.of({
+    return NutritionLocalData.LocalData.of({
       reset: database.rebuild.pipe(
         Effect.mapError(
           (cause) =>
-            new LocalDataResetError({
+            new NutritionLocalData.LocalDataResetError({
               cause,
             })
         )
@@ -227,7 +215,7 @@ export const BrowserLocalDataLayer = IndexedDbLocalDataLayer.pipe(
 );
 
 export const IndexedDbNutritionStoreLayer = Layer.effect(
-  NutritionStore,
+  Store.NutritionStore,
   Effect.gen(function* () {
     const api = yield* MaiDatabase.getQueryBuilder;
     const tables = [
@@ -317,7 +305,7 @@ export const IndexedDbNutritionStoreLayer = Layer.effect(
               foods,
               mealEntries,
               plans,
-            } satisfies NutritionStores;
+            } satisfies Store.NutritionStores;
           })
         )
       ),
@@ -370,7 +358,7 @@ export const IndexedDbNutritionStoreLayer = Layer.effect(
 
       upsertPlans: (plans) =>
         _mapStoreError(api.from("plans").upsertAll(Array.from(plans))),
-    } satisfies NutritionStore["Service"];
+    } satisfies Store.NutritionStore["Service"];
   })
 );
 

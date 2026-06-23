@@ -1,6 +1,6 @@
 import { AppHeader, AppScreen, IconButton, PagerTabs } from "@/components/ui";
 import { color, spacing } from "@/theme/tokens";
-import { DateKey as DateKeySchema, type DateKey } from "@mai/nutrition";
+import { Domain } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Option, Schema } from "effect";
 import { router, useLocalSearchParams } from "expo-router";
@@ -16,7 +16,7 @@ type FoodsTabIndex = 0 | 1;
 type FoodsDateKeyDecodeResult =
   | {
       readonly _tag: "Valid";
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
     }
   | {
       readonly _tag: "Invalid";
@@ -62,7 +62,7 @@ export default function FoodsScreen() {
           _tag: "Valid",
           dateKey: undefined,
         }
-      : Schema.decodeOption(DateKeySchema)(dateKeyParam).pipe(
+      : Schema.decodeOption(Domain.DateKey)(dateKeyParam).pipe(
           Option.match({
             onNone: () => ({
               _tag: "Invalid" as const,

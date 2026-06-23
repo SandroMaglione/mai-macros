@@ -9,22 +9,15 @@ import {
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
-  DateKey,
-  addNutrientTotals,
-  calculateEntryNutrients,
-  calculatePlanEnergyKcal,
-  emptyNutrientTotals,
-  type Food,
-  type Meal,
-  type MealEntry,
-  type NutrientTotals,
+  DailyLogs,
+  Domain,
+  Foods,
+  MealEntries,
+  Reporting,
+  Utils,
 } from "@mai/nutrition";
-import type { OpenedDay } from "@mai/nutrition/services/daily-logs";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import { Foods } from "@mai/nutrition/services/foods";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
 import { Array as EffectArray, Effect, Schema } from "effect";
@@ -42,9 +35,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
 export type DailyLogViewData = {
-  readonly day: OpenedDay;
-  readonly foods: readonly Food[];
-  readonly mealEntries: readonly MealEntry[];
+  readonly day: DailyLogs.OpenedDay;
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntries: readonly Domain.MealEntry[];
 };
 
 type DailyLogRouteProps = {
@@ -72,7 +65,7 @@ type DailyLogRouteEvent = {
 
 const mealOptions: readonly {
   readonly label: string;
-  readonly value: Meal;
+  readonly value: Domain.Meal;
 }[] = [
   { label: "Breakfast", value: "breakfast" },
   { label: "Lunch", value: "lunch" },
@@ -458,11 +451,11 @@ function DailyProgress({
   day,
   nutrients,
 }: {
-  readonly day: OpenedDay;
-  readonly nutrients: NutrientTotals;
+  readonly day: DailyLogs.OpenedDay;
+  readonly nutrients: Reporting.NutrientTotals;
 }) {
   const plan = day.selectedPlan;
-  const targetEnergyKcal = calculatePlanEnergyKcal({ plan });
+  const targetEnergyKcal = Utils.calculatePlanEnergyKcal({ plan });
   const [snapshot, send] = useMachine(macroDisplayModeMachine);
   const displayMode = snapshot.matches("Remaining") ? "remaining" : "consumed";
 
@@ -700,9 +693,9 @@ function MealSection({
   mealLabel,
 }: {
   readonly dateKey: string;
-  readonly foods: readonly Food[];
-  readonly meal: Meal;
-  readonly mealEntries: readonly MealEntry[];
+  readonly foods: readonly Domain.Food[];
+  readonly meal: Domain.Meal;
+  readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
 }) {
   const nutrients = _calculateEntriesNutrients({ foods, mealEntries });
@@ -776,7 +769,7 @@ function MealSection({
 function MealTotalColumns({
   nutrients,
 }: {
-  readonly nutrients: NutrientTotals;
+  readonly nutrients: Reporting.NutrientTotals;
 }) {
   return (
     <View style={styles.mealTotalColumns}>
@@ -834,7 +827,7 @@ function MealTotalColumn({
 function MealNutrientColumns({
   nutrients,
 }: {
-  readonly nutrients: NutrientTotals;
+  readonly nutrients: Reporting.NutrientTotals;
 }) {
   return (
     <View style={styles.mealNutrientColumns}>
@@ -887,7 +880,7 @@ function MealNutrientColumn({
 function MealMacroStripe({
   nutrients,
 }: {
-  readonly nutrients: NutrientTotals;
+  readonly nutrients: Reporting.NutrientTotals;
 }) {
   const total =
     nutrients.carbsGrams + nutrients.proteinGrams + nutrients.fatGrams;
@@ -934,14 +927,14 @@ function MealEntryRow({
   mealEntry,
   onPress,
 }: {
-  readonly food: Food | undefined;
-  readonly mealEntry: MealEntry;
+  readonly food: Domain.Food | undefined;
+  readonly mealEntry: Domain.MealEntry;
   readonly onPress: () => void;
 }) {
   const nutrients =
     food === undefined
       ? undefined
-      : calculateEntryNutrients({
+      : Utils.calculateEntryNutrients({
           food,
           quantityGrams: mealEntry.quantityGrams,
         });
@@ -1068,10 +1061,12 @@ export function loadDailyLog({
 }): Promise<DailyLogLoadResult> {
   return RuntimeClient.runPromise(
     Effect.gen(function* () {
-      const decodedDateKey = yield* Schema.decodeEffect(DateKey)(dateKey);
-      const dailyLogs = yield* DailyLogs;
-      const foodsService = yield* Foods;
-      const mealEntriesService = yield* MealEntries;
+      const decodedDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
+        dateKey
+      );
+      const dailyLogs = yield* DailyLogs.DailyLogs;
+      const foodsService = yield* Foods.Foods;
+      const mealEntriesService = yield* MealEntries.MealEntries;
       const day = yield* dailyLogs.open({
         input: {
           dateKey: decodedDateKey,
@@ -1112,9 +1107,9 @@ function _calculateEntriesNutrients({
   foods,
   mealEntries,
 }: {
-  readonly foods: readonly Food[];
-  readonly mealEntries: readonly MealEntry[];
-}): NutrientTotals {
+  readonly foods: readonly Domain.Food[];
+  readonly mealEntries: readonly Domain.MealEntry[];
+}): Reporting.NutrientTotals {
   return mealEntries.reduce((totals, mealEntry) => {
     const food = _findFoodById({
       foodId: mealEntry.foodId,
@@ -1125,12 +1120,12 @@ function _calculateEntriesNutrients({
       return totals;
     }
 
-    const nutrients = calculateEntryNutrients({
+    const nutrients = Utils.calculateEntryNutrients({
       food,
       quantityGrams: mealEntry.quantityGrams,
     });
 
-    return addNutrientTotals({
+    return Reporting.addNutrientTotals({
       left: totals,
       right: {
         carbsGrams: nutrients.carbsGrams,
@@ -1143,15 +1138,15 @@ function _calculateEntriesNutrients({
         sugarGrams: nutrients.sugarGrams ?? 0,
       },
     });
-  }, emptyNutrientTotals());
+  }, Reporting.emptyNutrientTotals());
 }
 
 function _findFoodById({
   foodId,
   foods,
 }: {
-  readonly foodId: Food["id"];
-  readonly foods: readonly Food[];
+  readonly foodId: Domain.Food["id"];
+  readonly foods: readonly Domain.Food[];
 }) {
   return foods.find((food) => food.id === foodId);
 }
@@ -1219,16 +1214,16 @@ const styles = StyleSheet.create({
   },
   dateEyebrow: {
     color: "rgba(255,255,255,0.72)",
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   date: {
     color: color.white,
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
+    fontSize: tokens.type.size.xl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xl,
   },
   headerIconButton: {
     width: 48,
@@ -1265,9 +1260,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   dailyMetricLabel: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   dailyMetricTrack: {
     width: "100%",
@@ -1280,9 +1275,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   dailyMetricValue: {
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   energyProgress: {
     gap: spacing.xs,
@@ -1300,9 +1295,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   energyProgressValue: {
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   dailyNutrientGrid: {
     flexDirection: "row",
@@ -1315,9 +1310,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dailyNutrientLabel: {
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   dailyNutrientTrack: {
     width: "100%",
@@ -1330,9 +1325,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   dailyNutrientValue: {
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   meals: {
     gap: spacing.xxl,
@@ -1356,9 +1351,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   macroStripe: {
     height: 4,
@@ -1396,15 +1391,15 @@ const styles = StyleSheet.create({
   },
   entryName: {
     color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   entryDetail: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.medium,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.medium,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   entryNumbers: {
     maxWidth: 188,
@@ -1413,15 +1408,15 @@ const styles = StyleSheet.create({
   },
   entryKcal: {
     color: color.nutritionEnergy,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   entryMacros: {
     color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   entryMacroLabel: {
     color: color.textMuted,
@@ -1449,14 +1444,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   mealTotalValue: {
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   mealTotalLabel: {
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   mealNutrientColumns: {
     flexDirection: "row",
@@ -1473,14 +1468,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   mealNutrientValue: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   mealNutrientLabel: {
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   addFoodButton: {
     minHeight: 60,
@@ -1498,9 +1493,9 @@ const styles = StyleSheet.create({
   },
   addFoodText: {
     color: color.primary,
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   bottomAction: {
     minHeight: 52,
@@ -1515,8 +1510,8 @@ const styles = StyleSheet.create({
   },
   bottomLabel: {
     color: color.actionSheetText,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
 });

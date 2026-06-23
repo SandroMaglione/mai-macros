@@ -1,4 +1,4 @@
-import { LocalData, LocalDataResetConfirmationText } from "@mai/nutrition";
+import { LocalData as NutritionLocalData } from "@mai/nutrition";
 import { Effect } from "effect";
 import {
   assertEvent,
@@ -9,9 +9,7 @@ import {
   type SnapshotFrom,
 } from "xstate";
 
-import type { MachineRuntime } from "../runtime";
-
-export { LocalDataResetConfirmationText };
+import type { MachineRuntime } from "./runtime";
 
 export type LocalDataResetEvent =
   | {
@@ -28,12 +26,10 @@ export type LocalDataResetEvent =
       readonly type: "reset";
     };
 
-type LocalDataResetServices = LocalData;
-
 type RestartApp = () => Promise<void> | void;
 
 const ResetLocalData = Effect.gen(function* () {
-  const localData = yield* LocalData;
+  const localData = yield* NutritionLocalData.LocalData;
 
   yield* localData.reset;
 });
@@ -46,7 +42,7 @@ export const makeLocalDataResetMachine = ({
   runtime,
 }: {
   readonly restartApp: RestartApp;
-  readonly runtime: MachineRuntime<LocalDataResetServices>;
+  readonly runtime: MachineRuntime<NutritionLocalData.LocalData>;
 }) =>
   setup({
     types: {
@@ -64,7 +60,8 @@ export const makeLocalDataResetMachine = ({
     },
     guards: {
       confirmationMatches: ({ context }) =>
-        context.confirmationText === LocalDataResetConfirmationText,
+        context.confirmationText ===
+        NutritionLocalData.LocalDataResetConfirmationText,
     },
   }).createMachine({
     context: () => ({

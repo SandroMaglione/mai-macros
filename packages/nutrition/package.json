@@ -4,13 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./services/daily-logs": "./src/services/daily-logs.ts",
-    "./services/foods": "./src/services/foods.ts",
-    "./services/local-data": "./src/local-data.ts",
-    "./services/meal-entries": "./src/services/meal-entries.ts",
-    "./services/meal-plans": "./src/services/meal-plans.ts",
-    "./services/nutrition-reports": "./src/services/nutrition-reports.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "seed": "NODE_OPTIONS='--experimental-strip-types' node scripts/generate-nutrition-seed-backup.ts",

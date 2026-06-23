@@ -10,18 +10,9 @@ import {
   SectionCard,
   TextArea,
 } from "@/components/ui";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
-import type {
-  FoodFormActorRef,
-  FoodFormSnapshot,
-  FoodFormValues,
-  FoodNumberWarning,
-  FoodNutrientFieldName,
-} from "@mai/machines/foods";
-import type {
-  FoodQuickInputParseIssue,
-  FoodQuickInputParseResult,
-} from "@mai/nutrition";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import type { FoodFormMachine } from "@mai/machines";
+import type { FoodQuickInput } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
 import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
@@ -33,15 +24,13 @@ import {
   type FoodNutrientOverviewNutrients,
 } from "./food-nutrient-overview";
 
-export { foodFormMachine, type FoodFormSubmitEvent } from "@mai/machines/foods";
-
 type FoodFormAction = "create" | "edit";
 type FoodFormLayout = "screen" | "embedded";
 
 type FoodNutrientField = {
   readonly accentColor: string;
   readonly label: string;
-  readonly name: FoodNutrientFieldName;
+  readonly name: FoodFormMachine.FoodNutrientFieldName;
   readonly placeholder: string;
   readonly required: boolean;
   readonly unit: "g" | "kcal";
@@ -127,14 +116,17 @@ export function FoodForm({
   onBack,
 }: {
   readonly action: FoodFormAction;
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly errorMessage?: string;
   readonly hasFailed: boolean;
   readonly layout?: FoodFormLayout;
   readonly onBack: () => void;
 }) {
-  const snapshot = useSelector(actor, (state): FoodFormSnapshot => state);
+  const snapshot = useSelector(
+    actor,
+    (state): FoodFormMachine.FoodFormSnapshot => state
+  );
   const { formValues, numberWarnings, quickInput, quickInputParseResult } =
     snapshot.context;
   const isCreating = action === "create";
@@ -238,7 +230,7 @@ function FoodQuickInputTextField({
   disabled,
   input,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly input: string;
 }) {
@@ -266,9 +258,9 @@ function FoodFormFields({
   disabled,
   values,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
-  readonly values: FoodFormValues;
+  readonly values: FoodFormMachine.FoodFormValues;
 }) {
   return (
     <>
@@ -346,7 +338,7 @@ function FoodNutrientInput({
   field,
   value,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
   readonly value: string;
@@ -376,7 +368,7 @@ function FoodNutrientInput({
 function FoodNumberWarnings({
   warnings,
 }: {
-  readonly warnings: readonly FoodNumberWarning[];
+  readonly warnings: readonly FoodFormMachine.FoodNumberWarning[];
 }) {
   if (!EffectArray.isReadonlyArrayNonEmpty(warnings)) {
     return null;
@@ -398,12 +390,16 @@ function FoodNumberWarnings({
 function FoodQuickInputFeedback({
   parseResult,
 }: {
-  readonly parseResult: FoodQuickInputParseResult;
+  readonly parseResult: FoodQuickInput.FoodQuickInputParseResult;
 }) {
   return <FoodQuickInputIssues issues={parseResult.issues} />;
 }
 
-function FoodFormOverview({ values }: { readonly values: FoodFormValues }) {
+function FoodFormOverview({
+  values,
+}: {
+  readonly values: FoodFormMachine.FoodFormValues;
+}) {
   return (
     <FoodNutrientOverview
       brand={_optionalTrimmedText(values.brand)}
@@ -418,7 +414,7 @@ function FoodFormOverview({ values }: { readonly values: FoodFormValues }) {
 function FoodQuickInputIssues({
   issues,
 }: {
-  readonly issues: readonly FoodQuickInputParseIssue[];
+  readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
 }) {
   if (!EffectArray.isReadonlyArrayNonEmpty(issues)) {
     return null;
@@ -442,8 +438,8 @@ function _sendFoodFormValueChange({
   name,
   value,
 }: {
-  readonly actor: FoodFormActorRef;
-  readonly name: keyof FoodFormValues;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly name: keyof FoodFormMachine.FoodFormValues;
   readonly value: string;
 }) {
   actor.send({
@@ -456,7 +452,7 @@ function _sendFoodFormValueChange({
 export function foodNutrientOverviewFromFormValues({
   values,
 }: {
-  readonly values: FoodFormValues;
+  readonly values: FoodFormMachine.FoodFormValues;
 }): FoodNutrientOverviewNutrients {
   return {
     carbsGrams: _nonNegativeFormNumber(values.carbsGramsPer100g),
@@ -473,7 +469,7 @@ export function foodNutrientOverviewFromFormValues({
 export function foodNutrientOverviewPrimaryLabel({
   values,
 }: {
-  readonly values: FoodFormValues;
+  readonly values: FoodFormMachine.FoodFormValues;
 }) {
   const energyKcal = _nonNegativeFormNumber(values.energyKcalPer100g);
 
@@ -536,15 +532,15 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   nutrientLabel: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   unit: {
     color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   noticeStack: {
     gap: spacing.sm,

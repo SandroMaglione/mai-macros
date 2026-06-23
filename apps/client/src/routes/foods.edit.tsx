@@ -1,4 +1,5 @@
-import type { Food } from "@mai/nutrition";
+import { FoodSearchMachine } from "@mai/machines";
+import { Foods, MealEntries, type Domain } from "@mai/nutrition";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
@@ -22,16 +23,7 @@ import {
   FoodSearchField,
   FoodSearchResults,
 } from "../lib/components/food-search.tsx";
-import {
-  foodSearchMachine,
-  sortFoodsByOriginAndName,
-  type FoodSearchEvent,
-  type FoodSearchSelectedEvent,
-} from "../lib/machines/food-search-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { Foods, type ReviseFoodInput } from "@mai/nutrition/services/foods";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
-import type { MealFoodUsage } from "@mai/nutrition/services/meal-entries";
 import { createFoodInputFromFormData } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/foods/edit")({
@@ -41,9 +33,9 @@ export const Route = createFileRoute("/foods/edit")({
   loader: async () =>
     RuntimeClient.runPromise(
       Effect.gen(function* () {
-        const foodsService = yield* Foods;
-        const mealEntriesService = yield* MealEntries;
-        const foods = sortFoodsByOriginAndName({
+        const foodsService = yield* Foods.Foods;
+        const mealEntriesService = yield* MealEntries.MealEntries;
+        const foods = FoodSearchMachine.sortFoodsByOriginAndName({
           foods: yield* foodsService.list(),
         });
         const foodUsage = yield* mealEntriesService.listFoodUsage();
@@ -60,47 +52,49 @@ export const Route = createFileRoute("/foods/edit")({
 type ReviseFoodOutput =
   | "foodNotFound"
   | {
-      readonly food: Food;
-      readonly previousFood: Food;
+      readonly food: Domain.Food;
+      readonly previousFood: Domain.Food;
     };
 
 type EditFoodsEvent =
-  | FoodSearchSelectedEvent
+  | FoodSearchMachine.FoodSearchSelectedEvent
   | {
       readonly type: "clearSelectedFood";
     }
   | {
       readonly type: "reviseFood";
-      readonly input: ReviseFoodInput;
+      readonly input: Foods.ReviseFoodInput;
     };
 
 const editFoodsMachine = setup({
   types: {
     context: {} as {
-      readonly foodUsage: readonly MealFoodUsage[];
-      readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+      readonly foodSearchActor: ActorRefFrom<
+        typeof FoodSearchMachine.foodSearchMachine
+      >;
       readonly invalidate: () => Promise<void>;
-      readonly selectedFood: Food | null;
+      readonly selectedFood: Domain.Food | null;
     },
     events: {} as EditFoodsEvent,
     input: {} as {
-      readonly foods: readonly Food[];
-      readonly foodUsage: readonly MealFoodUsage[];
+      readonly foods: readonly Domain.Food[];
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
       readonly invalidate: () => Promise<void>;
     },
   },
   actors: {
-    foodSearch: foodSearchMachine,
+    foodSearch: FoodSearchMachine.foodSearchMachine,
     reviseFood: fromPromise<
       ReviseFoodOutput,
       {
-        readonly input: ReviseFoodInput;
+        readonly input: Foods.ReviseFoodInput;
         readonly invalidate: () => Promise<void>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const foods = yield* Foods;
+          const foods = yield* Foods.Foods;
           const revisedFood = yield* foods.revise({
             input: input.input,
           });
@@ -141,7 +135,7 @@ const editFoodsMachine = setup({
         }),
         sendTo(({ context }) => context.foodSearchActor, {
           type: "clearSelectedFood",
-        } satisfies FoodSearchEvent),
+        } satisfies FoodSearchMachine.FoodSearchEvent),
       ],
     },
     foodSearchSelected: {
@@ -182,7 +176,7 @@ const editFoodsMachine = setup({
               }),
               sendTo(({ context }) => context.foodSearchActor, {
                 type: "clearSelectedFood",
-              } satisfies FoodSearchEvent),
+              } satisfies FoodSearchMachine.FoodSearchEvent),
             ],
           },
           {
@@ -202,7 +196,7 @@ const editFoodsMachine = setup({
                       foods: currentFoods,
                       query: foodSearchSnapshot.context.query,
                       selectedFoodId: null,
-                    } satisfies FoodSearchEvent;
+                    } satisfies FoodSearchMachine.FoodSearchEvent;
                   }
 
                   const foodsWithRevision =
@@ -217,7 +211,7 @@ const editFoodsMachine = setup({
                             food.id === output.food.id ? output.food : food
                           )
                         : [...currentFoods, output.food];
-                  const foods = sortFoodsByOriginAndName({
+                  const foods = FoodSearchMachine.sortFoodsByOriginAndName({
                     foods: foodsWithRevision,
                   });
 
@@ -226,7 +220,7 @@ const editFoodsMachine = setup({
                     foods,
                     query: foodSearchSnapshot.context.query,
                     selectedFoodId: null,
-                  } satisfies FoodSearchEvent;
+                  } satisfies FoodSearchMachine.FoodSearchEvent;
                 }
               ),
               assign({
@@ -421,8 +415,8 @@ function _findFoodUsage({
   foodId,
   foodUsage,
 }: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foodId: Domain.Food["id"];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
 }

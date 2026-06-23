@@ -1,17 +1,14 @@
 import { Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import {
-  Food,
-  FoodCatalogImportSelectionError,
-  FoodCatalogTransfers,
-  NutritionStore,
-  type NutritionStores,
-} from "../src/index.ts";
+import { Domain, FoodCatalogTransfer, Store } from "../src/index.ts";
+
+const { FoodCatalogImportSelectionError, FoodCatalogTransfers } =
+  FoodCatalogTransfer;
 
 const defaultFoodId = "19b02c22-7151-4f6f-a0e0-6bc1f407fb50";
 
-const emptyStores: NutritionStores = {
+const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
   dailyLogs: [],
   foods: [],
@@ -75,7 +72,7 @@ describe("FoodCatalogTransfers", () => {
     );
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const targetStore = yield* NutritionStore;
+        const targetStore = yield* Store.NutritionStore;
         const targetTransfers = yield* FoodCatalogTransfers;
         const preview = yield* targetTransfers.previewImportFromJson({
           input: {
@@ -145,7 +142,7 @@ describe("FoodCatalogTransfers", () => {
 
         return {
           preview,
-          stores: yield* (yield* NutritionStore).readStores,
+          stores: yield* (yield* Store.NutritionStore).readStores,
         };
       }).pipe(
         Effect.provide(
@@ -200,7 +197,7 @@ describe("FoodCatalogTransfers", () => {
           },
         });
 
-        return yield* (yield* NutritionStore).readStores;
+        return yield* (yield* Store.NutritionStore).readStores;
       }).pipe(
         Effect.provide(
           _foodCatalogTestLayer({
@@ -298,10 +295,10 @@ describe("FoodCatalogTransfers", () => {
 function _foodCatalogTestLayer({
   stores,
 }: {
-  readonly stores: NutritionStores;
+  readonly stores: Store.NutritionStores;
 }) {
   let currentStores = stores;
-  const upsertFoods = (foods: readonly Food[]) =>
+  const upsertFoods = (foods: readonly Domain.Food[]) =>
     Effect.sync(() => {
       currentStores = {
         ...currentStores,
@@ -314,7 +311,7 @@ function _foodCatalogTestLayer({
       };
     });
 
-  const storeLayer = Layer.succeed(NutritionStore, {
+  const storeLayer = Layer.succeed(Store.NutritionStore, {
     countMealEntriesByDate: (dateKey) =>
       Effect.sync(
         () =>
@@ -487,7 +484,7 @@ function _foodCatalogTestLayer({
   );
 }
 
-const testDefaultFood = Schema.decodeEffect(Food)({
+const testDefaultFood = Schema.decodeEffect(Domain.Food)({
   carbsGramsPer100g: 13.81,
   category: "fruit",
   createdAt: 1781873744758,
@@ -504,7 +501,7 @@ const testDefaultFood = Schema.decodeEffect(Food)({
   updatedAt: 1781873744758,
 });
 
-const testFood = Schema.decodeEffect(Food)({
+const testFood = Schema.decodeEffect(Domain.Food)({
   carbsGramsPer100g: 3.6,
   createdAt: 0,
   energyKcalPer100g: 59,
@@ -516,7 +513,7 @@ const testFood = Schema.decodeEffect(Food)({
   updatedAt: 0,
 });
 
-const testConflictingFood = Schema.decodeEffect(Food)({
+const testConflictingFood = Schema.decodeEffect(Domain.Food)({
   carbsGramsPer100g: 10,
   createdAt: 0,
   energyKcalPer100g: 100,
@@ -528,7 +525,7 @@ const testConflictingFood = Schema.decodeEffect(Food)({
   updatedAt: 0,
 });
 
-const testFoodBasedOnUserFood = Schema.decodeEffect(Food)({
+const testFoodBasedOnUserFood = Schema.decodeEffect(Domain.Food)({
   basedOnFoodId: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   carbsGramsPer100g: 3.7,
   createdAt: 1,
@@ -541,7 +538,7 @@ const testFoodBasedOnUserFood = Schema.decodeEffect(Food)({
   updatedAt: 1,
 });
 
-const testFoodBasedOnMissingFood = Schema.decodeEffect(Food)({
+const testFoodBasedOnMissingFood = Schema.decodeEffect(Domain.Food)({
   basedOnFoodId: "90b81ef4-c6dd-4b43-8491-f795a8c974ff",
   carbsGramsPer100g: 3.7,
   createdAt: 1,
@@ -554,7 +551,7 @@ const testFoodBasedOnMissingFood = Schema.decodeEffect(Food)({
   updatedAt: 1,
 });
 
-const testFoodBasedOnDefaultFood = Schema.decodeEffect(Food)({
+const testFoodBasedOnDefaultFood = Schema.decodeEffect(Domain.Food)({
   basedOnFoodId: defaultFoodId,
   carbsGramsPer100g: 10,
   createdAt: 1,

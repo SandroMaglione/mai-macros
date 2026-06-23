@@ -1,11 +1,4 @@
 import {
-  FoodNutrientOverview,
-  FoodSearchField,
-  FoodSearchResults,
-  foodNutrientOverviewFromFormValues,
-  foodNutrientOverviewPrimaryLabel,
-} from "@/components/nutrition";
-import {
   AppHeader,
   AppScreen,
   BottomActionBar,
@@ -18,28 +11,18 @@ import {
   NumberField,
   SectionCard,
 } from "@/components/ui";
+import {
+  FoodNutrientOverview,
+  FoodSearchField,
+  FoodSearchResults,
+  foodNutrientOverviewFromFormValues,
+  foodNutrientOverviewPrimaryLabel,
+} from "@/components/nutrition";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
-import type { DateKey, Food } from "@mai/nutrition";
-import { DateKey as DateKeySchema } from "@mai/nutrition";
-import {
-  createFoodInputFromFormValues,
-  foodFormMachine,
-  foodSearchMachine,
-  sortFoodsByOriginAndName,
-  type FoodFormActorRef,
-  type FoodFormValues,
-  type FoodNumberWarning,
-  type FoodNutrientFieldName,
-  type FoodSearchEvent,
-  type FoodSearchSelectedEvent,
-} from "@mai/machines/foods";
-import { Foods, type ReviseFoodInput } from "@mai/nutrition/services/foods";
-import {
-  MealEntries,
-  type MealFoodUsage,
-} from "@mai/nutrition/services/meal-entries";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import { Domain, Foods, MealEntries } from "@mai/nutrition";
+import { FoodFormMachine, FoodSearchMachine } from "@mai/machines";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array as EffectArray, Effect, Schema } from "effect";
 import { type Href, router, useLocalSearchParams } from "expo-router";
@@ -62,9 +45,9 @@ import {
 } from "xstate";
 
 type EditFoodsRouteData = {
-  readonly dateKey: DateKey | undefined;
-  readonly foods: readonly Food[];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly dateKey: Domain.DateKey | undefined;
+  readonly foods: readonly Domain.Food[];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 };
 
 type EditFoodsLayout = "screen" | "embedded";
@@ -92,14 +75,14 @@ type ReviseFoodOutput =
     };
 
 type FoodLibraryData = {
-  readonly foods: readonly Food[];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foods: readonly Domain.Food[];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 };
 
 type EditFoodsRouteEvent =
-  | FoodSearchSelectedEvent
+  | FoodSearchMachine.FoodSearchSelectedEvent
   | {
-      readonly input: ReviseFoodInput;
+      readonly input: Foods.ReviseFoodInput;
       readonly type: "reviseFood";
     }
   | {
@@ -110,18 +93,20 @@ type EditFoodsRouteEvent =
     };
 
 type EditFoodsRouteContext = {
-  readonly dateKey: DateKey | undefined;
-  readonly foods: readonly Food[];
-  readonly foodSearchActor: ActorRefFrom<typeof foodSearchMachine>;
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly dateKey: Domain.DateKey | undefined;
+  readonly foods: readonly Domain.Food[];
+  readonly foodSearchActor: ActorRefFrom<
+    typeof FoodSearchMachine.foodSearchMachine
+  >;
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
   readonly notice: string | null;
-  readonly selectedFood: Food | null;
+  readonly selectedFood: Domain.Food | null;
 };
 
 type FoodNutrientField = {
   readonly accentColor: string;
   readonly label: string;
-  readonly name: FoodNutrientFieldName;
+  readonly name: FoodFormMachine.FoodNutrientFieldName;
   readonly placeholder: string;
   readonly unit: "g" | "kcal";
 };
@@ -195,16 +180,16 @@ const editFoodsRouteMachine = setup({
     input: {} as EditFoodsRouteData,
   },
   actors: {
-    foodSearch: foodSearchMachine,
+    foodSearch: FoodSearchMachine.foodSearchMachine,
     reviseFood: fromPromise<
       ReviseFoodOutput,
       {
-        readonly input: ReviseFoodInput;
+        readonly input: Foods.ReviseFoodInput;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const foods = yield* Foods;
+          const foods = yield* Foods.Foods;
 
           yield* foods.revise({
             input: input.input,
@@ -260,7 +245,7 @@ const editFoodsRouteMachine = setup({
         }),
         sendTo(({ context }) => context.foodSearchActor, {
           type: "clearSelectedFood",
-        } satisfies FoodSearchEvent),
+        } satisfies FoodSearchMachine.FoodSearchEvent),
       ],
     },
     foodSearchSelected: {
@@ -316,7 +301,7 @@ const editFoodsRouteMachine = setup({
                     foods: output.data.foods,
                     query: "",
                     selectedFoodId: null,
-                  } satisfies FoodSearchEvent;
+                  } satisfies FoodSearchMachine.FoodSearchEvent;
                 }
               ),
             ],
@@ -354,7 +339,7 @@ const editFoodsRouteMachine = setup({
                     foods: output.data.foods,
                     query: "",
                     selectedFoodId: null,
-                  } satisfies FoodSearchEvent;
+                  } satisfies FoodSearchMachine.FoodSearchEvent;
                 }
               ),
             ],
@@ -672,10 +657,10 @@ function FoodEditForm({
   readonly disabled: boolean;
   readonly layout: EditFoodsLayout;
   readonly revisionMessage: string;
-  readonly selectedFood: Food;
+  readonly selectedFood: Domain.Food;
   readonly submitLabel: string;
 }) {
-  const [snapshot, , formActor] = useMachine(foodFormMachine, {
+  const [snapshot, , formActor] = useMachine(FoodFormMachine.foodFormMachine, {
     input: {
       initialFood: selectedFood,
       syncQuickInputFromFields: false,
@@ -706,7 +691,7 @@ function FoodEditForm({
         actor.send({
           type: "reviseFood",
           input: {
-            ...createFoodInputFromFormValues({ formValues }),
+            ...FoodFormMachine.createFoodInputFromFormValues({ formValues }),
             foodId: selectedFood.id,
           },
         });
@@ -769,10 +754,10 @@ function FoodFormFields({
   selectedFood,
   values,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
-  readonly selectedFood: Food;
-  readonly values: FoodFormValues;
+  readonly selectedFood: Domain.Food;
+  readonly values: FoodFormMachine.FoodFormValues;
 }) {
   return (
     <View style={styles.formSections}>
@@ -853,10 +838,10 @@ function FoodNutrientInput({
   selectedFood,
   value,
 }: {
-  readonly actor: FoodFormActorRef;
+  readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
-  readonly selectedFood: Food;
+  readonly selectedFood: Domain.Food;
   readonly value: string;
 }) {
   const fieldWarning = useSelector(actor, (snapshot) =>
@@ -892,7 +877,7 @@ function FoodNutrientInput({
 function FoodNumberWarnings({
   warnings,
 }: {
-  readonly warnings: readonly FoodNumberWarning[];
+  readonly warnings: readonly FoodFormMachine.FoodNumberWarning[];
 }) {
   const generalWarnings = warnings.filter(
     (warning) => warning.field === undefined
@@ -915,7 +900,11 @@ function FoodNumberWarnings({
   );
 }
 
-function BackButton({ dateKey }: { readonly dateKey: DateKey | undefined }) {
+function BackButton({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey | undefined;
+}) {
   return (
     <IconButton
       accessibilityLabel={
@@ -951,7 +940,7 @@ export function loadEditFoodsRouteData({
     const dateKey =
       dateKeyParam === undefined
         ? undefined
-        : yield* Schema.decodeEffect(DateKeySchema)(dateKeyParam);
+        : yield* Schema.decodeEffect(Domain.DateKey)(dateKeyParam);
     const data = yield* _loadFoodLibraryData();
 
     return {
@@ -972,9 +961,9 @@ export function loadEditFoodsRouteData({
 
 function _loadFoodLibraryData() {
   return Effect.gen(function* () {
-    const foodsService = yield* Foods;
-    const mealEntriesService = yield* MealEntries;
-    const foods = sortFoodsByOriginAndName({
+    const foodsService = yield* Foods.Foods;
+    const mealEntriesService = yield* MealEntries.MealEntries;
+    const foods = FoodSearchMachine.sortFoodsByOriginAndName({
       foods: yield* foodsService.list(),
     });
     const foodUsage = yield* mealEntriesService.listFoodUsage();
@@ -1001,8 +990,8 @@ function _findFoodUsage({
   foodId,
   foodUsage,
 }: {
-  readonly foodId: Food["id"];
-  readonly foodUsage: readonly MealFoodUsage[];
+  readonly foodId: Domain.Food["id"];
+  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
 }
@@ -1020,7 +1009,7 @@ export function firstParam(param: string | string[] | undefined) {
 export function backHrefForDateKey({
   dateKey,
 }: {
-  readonly dateKey: DateKey | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
 }): Href {
   return dateKey === undefined
     ? "/"
@@ -1100,15 +1089,15 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   nutrientLabel: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   unitLabel: {
     color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   warnings: {
     gap: spacing.sm,

@@ -1,14 +1,12 @@
 import {
-  calculateMacronutrientEnergyKcal,
-  type DateKey,
-  type FoodQuickInput,
-  type Plan,
+  FoodQuickInput,
+  Foods,
+  MealEntries,
+  MealPlans,
+  Utils,
+  type Domain,
 } from "@mai/nutrition";
 import { Array, DateTime, Iterable, Option, Schema } from "effect";
-
-import type { CreateFoodInput } from "@mai/nutrition/services/foods";
-import type { CreateMealEntryInput } from "@mai/nutrition/services/meal-entries";
-import type { CreateMealPlanInput } from "@mai/nutrition/services/meal-plans";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isFinite(),
@@ -53,7 +51,7 @@ const _localDateTimeFromDate = ({ date }: { readonly date: Date }) =>
 const _localDateTimeFromDateKey = ({
   dateKey,
 }: {
-  readonly dateKey: DateKey | string;
+  readonly dateKey: Domain.DateKey | string;
 }) =>
   DateTime.makeZoned(dateKey, {
     adjustForTimeZone: true,
@@ -98,7 +96,7 @@ export const shiftDateKey = ({
   dateKey,
   days,
 }: {
-  readonly dateKey: DateKey | string;
+  readonly dateKey: Domain.DateKey | string;
   readonly days: number;
 }) => {
   return DateTime.formatIsoDate(
@@ -110,8 +108,8 @@ export const dateKeysInRange = ({
   endDateKey,
   startDateKey,
 }: {
-  readonly endDateKey: DateKey | string;
-  readonly startDateKey: DateKey | string;
+  readonly endDateKey: Domain.DateKey | string;
+  readonly startDateKey: Domain.DateKey | string;
 }) => {
   const startDate = _localDateTimeFromDateKey({ dateKey: startDateKey });
   const endDate = _localDateTimeFromDateKey({ dateKey: endDateKey });
@@ -155,7 +153,7 @@ export const endOfMonthDateKey = ({ date }: { readonly date: Date }) => {
 export const monthKeyFromDateKey = ({
   dateKey,
 }: {
-  readonly dateKey: DateKey | string;
+  readonly dateKey: Domain.DateKey | string;
 }) => dateKey.slice(0, 7);
 
 export const dateFromMonthKey = ({ monthKey }: { readonly monthKey: string }) =>
@@ -165,7 +163,7 @@ export const createMealPlanInputFromFormData = ({
   formData,
 }: {
   readonly formData: FormData;
-}): CreateMealPlanInput => {
+}): MealPlans.CreateMealPlanInput => {
   const fiberTargetGrams = _formOptionalString({
     formData,
     name: "fiberTargetGrams",
@@ -211,7 +209,7 @@ export const mealPlanFormHasChangesFromPlan = ({
   plan,
 }: {
   readonly formData: FormData;
-  readonly plan: Plan;
+  readonly plan: Domain.Plan;
 }) => {
   const input = createMealPlanInputFromFormData({ formData });
 
@@ -267,7 +265,7 @@ export const calculateMealPlanEnergyKcalFromFormData = ({
 }: {
   readonly formData: FormData;
 }) =>
-  calculateMacronutrientEnergyKcal({
+  Utils.calculateMacronutrientEnergyKcal({
     proteinGrams: _formNonNegativeNumber({
       formData,
       name: "proteinTargetGrams",
@@ -286,7 +284,7 @@ export const createFoodInputFromFormData = ({
   formData,
 }: {
   readonly formData: FormData;
-}): CreateFoodInput => {
+}): Foods.CreateFoodInput => {
   const brand = _formTrimmedString({ formData, name: "brand" });
   const fiberGramsPer100g = _formOptionalString({
     formData,
@@ -336,8 +334,8 @@ export const createFoodInputFromFormData = ({
 export const createFoodInputFromFoodQuickInput = ({
   food,
 }: {
-  readonly food: FoodQuickInput;
-}): CreateFoodInput => {
+  readonly food: FoodQuickInput.FoodQuickInput;
+}): Foods.CreateFoodInput => {
   return {
     name: food.name,
     ...(food.brand === undefined ? {} : { brand: food.brand }),
@@ -388,9 +386,9 @@ export const createMealEntryInputFromFormData = ({
   dateKey,
   formData,
 }: {
-  readonly dateKey: DateKey;
+  readonly dateKey: Domain.DateKey;
   readonly formData: FormData;
-}): CreateMealEntryInput => {
+}): MealEntries.CreateMealEntryInput => {
   return {
     dateKey,
     meal: _formString({

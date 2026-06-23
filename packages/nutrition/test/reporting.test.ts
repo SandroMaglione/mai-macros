@@ -1,18 +1,9 @@
 import { Effect, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import { Food, Plan, QuantityGrams } from "../src/domain.ts";
-import {
-  calculateEntriesNutrientTotals,
-  evaluateNutrientTarget,
-  evaluatePlanNutrientTargets,
-  getPlanNutrientTarget,
-  isInsideExpectedPlanRange,
-  makeNutrientTarget,
-  NutrientTargetSemanticsByName,
-} from "../src/reporting.ts";
+import { Domain, Reporting } from "../src/index.ts";
 
-const planInput: typeof Plan.Encoded = {
+const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
   proteinTargetGrams: 160,
@@ -25,7 +16,7 @@ const planInput: typeof Plan.Encoded = {
   createdAt: 0,
 };
 
-const completeFoodInput: typeof Food.Encoded = {
+const completeFoodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   brand: "Mai",
@@ -42,7 +33,7 @@ const completeFoodInput: typeof Food.Encoded = {
   updatedAt: 0,
 };
 
-const partialFoodInput: typeof Food.Encoded = {
+const partialFoodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   name: "Rice",
   origin: "user",
@@ -56,78 +47,88 @@ const partialFoodInput: typeof Food.Encoded = {
 
 describe("nutrition reporting", () => {
   it("assigns target semantics by nutrient behavior", () => {
-    assert.equal(NutrientTargetSemanticsByName.proteinGrams, "minimum");
-    assert.equal(NutrientTargetSemanticsByName.fiberGrams, "minimum");
-    assert.equal(NutrientTargetSemanticsByName.sugarGrams, "maximum");
-    assert.equal(NutrientTargetSemanticsByName.saltGrams, "maximum");
-    assert.equal(NutrientTargetSemanticsByName.saturatedFatGrams, "maximum");
-    assert.equal(NutrientTargetSemanticsByName.energyKcal, "range");
-    assert.equal(NutrientTargetSemanticsByName.carbsGrams, "range");
-    assert.equal(NutrientTargetSemanticsByName.fatGrams, "range");
+    assert.equal(
+      Reporting.NutrientTargetSemanticsByName.proteinGrams,
+      "minimum"
+    );
+    assert.equal(Reporting.NutrientTargetSemanticsByName.fiberGrams, "minimum");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.sugarGrams, "maximum");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.saltGrams, "maximum");
+    assert.equal(
+      Reporting.NutrientTargetSemanticsByName.saturatedFatGrams,
+      "maximum"
+    );
+    assert.equal(Reporting.NutrientTargetSemanticsByName.energyKcal, "range");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.carbsGrams, "range");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.fatGrams, "range");
   });
 
   it("evaluates range targets with the default tolerance", () => {
-    const target = makeNutrientTarget({
+    const target = Reporting.makeNutrientTarget({
       amount: 2000,
       nutrientName: "energyKcal",
     });
 
     assert.equal(
-      evaluateNutrientTarget({ target, value: 1800 }).status,
+      Reporting.evaluateNutrientTarget({ target, value: 1800 }).status,
       "inside"
     );
     assert.equal(
-      evaluateNutrientTarget({ target, value: 2200 }).status,
+      Reporting.evaluateNutrientTarget({ target, value: 2200 }).status,
       "inside"
     );
     assert.equal(
-      evaluateNutrientTarget({ target, value: 1799 }).status,
+      Reporting.evaluateNutrientTarget({ target, value: 1799 }).status,
       "below"
     );
     assert.equal(
-      evaluateNutrientTarget({ target, value: 2201 }).status,
+      Reporting.evaluateNutrientTarget({ target, value: 2201 }).status,
       "above"
     );
   });
 
   it("evaluates minimum and maximum targets with directional semantics", () => {
-    const proteinTarget = makeNutrientTarget({
+    const proteinTarget = Reporting.makeNutrientTarget({
       amount: 160,
       nutrientName: "proteinGrams",
     });
-    const sugarTarget = makeNutrientTarget({
+    const sugarTarget = Reporting.makeNutrientTarget({
       amount: 50,
       nutrientName: "sugarGrams",
     });
 
     assert.equal(
-      evaluateNutrientTarget({ target: proteinTarget, value: 159 }).status,
+      Reporting.evaluateNutrientTarget({ target: proteinTarget, value: 159 })
+        .status,
       "below"
     );
     assert.equal(
-      evaluateNutrientTarget({ target: proteinTarget, value: 170 }).status,
+      Reporting.evaluateNutrientTarget({ target: proteinTarget, value: 170 })
+        .status,
       "inside"
     );
     assert.equal(
-      evaluateNutrientTarget({ target: sugarTarget, value: 49 }).status,
+      Reporting.evaluateNutrientTarget({ target: sugarTarget, value: 49 })
+        .status,
       "inside"
     );
     assert.equal(
-      evaluateNutrientTarget({ target: sugarTarget, value: 51 }).status,
+      Reporting.evaluateNutrientTarget({ target: sugarTarget, value: 51 })
+        .status,
       "above"
     );
   });
 
   it("builds plan targets from macro calories and optional nutrient targets", async () => {
     const program = Effect.gen(function* () {
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
 
       return {
-        energyTarget: getPlanNutrientTarget({
+        energyTarget: Reporting.getPlanNutrientTarget({
           nutrientName: "energyKcal",
           plan,
         }),
-        fiberTarget: getPlanNutrientTarget({
+        fiberTarget: Reporting.getPlanNutrientTarget({
           nutrientName: "fiberGrams",
           plan,
         }),
@@ -146,10 +147,10 @@ describe("nutrition reporting", () => {
 
   it("detects whether a daily plan is inside all expected nutrient ranges", async () => {
     const program = Effect.gen(function* () {
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
 
       return {
-        insideStatuses: evaluatePlanNutrientTargets({
+        insideStatuses: Reporting.evaluatePlanNutrientTargets({
           plan,
           totals: {
             carbsGrams: 220,
@@ -162,7 +163,7 @@ describe("nutrition reporting", () => {
             sugarGrams: 40,
           },
         }),
-        outsideStatuses: evaluatePlanNutrientTargets({
+        outsideStatuses: Reporting.evaluatePlanNutrientTargets({
           plan,
           totals: {
             carbsGrams: 220,
@@ -181,20 +182,26 @@ describe("nutrition reporting", () => {
     const result = await Effect.runPromise(program);
 
     assert.isTrue(
-      isInsideExpectedPlanRange({ statuses: result.insideStatuses })
+      Reporting.isInsideExpectedPlanRange({ statuses: result.insideStatuses })
     );
     assert.isFalse(
-      isInsideExpectedPlanRange({ statuses: result.outsideStatuses })
+      Reporting.isInsideExpectedPlanRange({ statuses: result.outsideStatuses })
     );
   });
 
   it("aggregates entries while preserving optional nutrient coverage", async () => {
     const program = Effect.gen(function* () {
-      const completeFood = yield* Schema.decodeEffect(Food)(completeFoodInput);
-      const partialFood = yield* Schema.decodeEffect(Food)(partialFoodInput);
-      const quantityGrams = yield* Schema.decodeEffect(QuantityGrams)(100);
+      const completeFood = yield* Schema.decodeEffect(Domain.Food)(
+        completeFoodInput
+      );
+      const partialFood = yield* Schema.decodeEffect(Domain.Food)(
+        partialFoodInput
+      );
+      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
+        100
+      );
 
-      return calculateEntriesNutrientTotals({
+      return Reporting.calculateEntriesNutrientTotals({
         entries: [
           { food: completeFood, quantityGrams },
           { food: partialFood, quantityGrams },

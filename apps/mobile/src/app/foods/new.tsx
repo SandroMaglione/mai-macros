@@ -1,13 +1,8 @@
-import {
-  FoodForm,
-  foodFormMachine,
-  type FoodFormSubmitEvent,
-} from "@/components/nutrition/food-form";
+import { FoodForm } from "@/components/nutrition/food-form";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
-import type { DateKey } from "@mai/nutrition";
-import { DateKey as DateKeySchema } from "@mai/nutrition";
-import { Foods, type CreateFoodInput } from "@mai/nutrition/services/foods";
+import { FoodFormMachine } from "@mai/machines";
+import { Domain, Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -29,7 +24,7 @@ import {
 type SearchDecodeResult =
   | {
       readonly _tag: "Valid";
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
     }
   | {
       readonly _tag: "Invalid";
@@ -46,39 +41,41 @@ type SubmitResult =
 type CreateFoodRouteMode = "screen" | "embedded";
 
 const SearchParams = Schema.Struct({
-  dateKey: Schema.optional(DateKeySchema),
+  dateKey: Schema.optional(Domain.DateKey),
 });
 
 const createFoodRouteMachine = setup({
   types: {
     context: {} as {
-      readonly dateKey: DateKey | undefined;
-      readonly foodFormActor: ActorRefFrom<typeof foodFormMachine>;
+      readonly dateKey: Domain.DateKey | undefined;
+      readonly foodFormActor: ActorRefFrom<
+        typeof FoodFormMachine.foodFormMachine
+      >;
       readonly mode: CreateFoodRouteMode;
       readonly notice: string | null;
     },
     events: {} as
-      | FoodFormSubmitEvent
+      | FoodFormMachine.FoodFormSubmitEvent
       | {
           readonly type: "clearNotice";
         },
     input: {} as {
-      readonly dateKey: DateKey | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
       readonly initialNotice: string | null;
       readonly mode: CreateFoodRouteMode;
     },
   },
   actors: {
-    foodForm: foodFormMachine,
+    foodForm: FoodFormMachine.foodFormMachine,
     submitFood: fromPromise<
       SubmitResult,
       {
-        readonly input: CreateFoodInput;
+        readonly input: Foods.CreateFoodInput;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const foods = yield* Foods;
+          const foods = yield* Foods.Foods;
 
           yield* foods.create({
             input: input.input,
@@ -264,7 +261,7 @@ export function CreateFoodPanel({
   mode,
   onBack,
 }: {
-  readonly dateKey: DateKey | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly initialNotice: string | null;
   readonly mode: CreateFoodRouteMode;
   readonly onBack: () => void;

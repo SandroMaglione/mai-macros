@@ -17,7 +17,7 @@ import {
   Schema,
 } from "effect";
 
-import { NutritionStore } from "../store.ts";
+import { NutritionStore } from "./store.ts";
 import { PlanNotFound } from "./meal-plans.ts";
 
 const _OpenDayInput = Schema.Struct({

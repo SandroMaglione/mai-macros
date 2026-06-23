@@ -1,4 +1,4 @@
-import { color, radius, spacing, type } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 import {
   StyleSheet,
   Text,
@@ -47,14 +47,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   title: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   message: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
 });
 

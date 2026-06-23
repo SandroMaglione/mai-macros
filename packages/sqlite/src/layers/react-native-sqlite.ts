@@ -1,9 +1,9 @@
 import * as SqliteClient from "@effect/sql-sqlite-react-native/SqliteClient";
 import { Layer } from "effect";
 
-import { SqliteLocalDataLayer } from "../local-data.ts";
+import { SqliteLocalDataLayer } from "./sqlite-local-data.ts";
 import { runSqliteMigrations } from "../migrations/index.ts";
-import { SqliteNutritionStoreLayer } from "../store.ts";
+import { SqliteNutritionStoreLayer } from "./sqlite-nutrition-store.ts";
 
 export const ReactNativeSqliteLayer = (config: {
   readonly encryptionKey?: string | undefined;

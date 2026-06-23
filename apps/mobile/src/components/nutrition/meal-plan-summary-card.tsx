@@ -1,6 +1,6 @@
 import { formatNumber } from "@/lib/format";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
-import { calculatePlanEnergyKcal, type Plan } from "@mai/nutrition";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import { Utils, type Domain } from "@mai/nutrition";
 import { Circle, CircleCheck } from "lucide-react-native";
 import {
   Pressable,
@@ -15,7 +15,7 @@ type MealPlanSummaryCardProps = {
   readonly disabled: boolean;
   readonly isActive: boolean;
   readonly onPress: () => void;
-  readonly plan: Plan;
+  readonly plan: Domain.Plan;
   readonly style?: StyleProp<ViewStyle>;
 };
 
@@ -38,7 +38,7 @@ export function MealPlanSummaryCard({
       colorValue: color.nutritionEnergy,
       label: "Calories",
       value: `${_formatPlanNumber({
-        value: calculatePlanEnergyKcal({ plan }),
+        value: Utils.calculatePlanEnergyKcal({ plan }),
       })} kcal`,
     },
     {
@@ -178,9 +178,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.text,
-    fontSize: type.size.lg,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.lg,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
   },
   divider: {
     height: 1,
@@ -200,15 +200,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   rowValue: {
     maxWidth: 150,
     textAlign: "right",
-    fontSize: type.size.md,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
 });

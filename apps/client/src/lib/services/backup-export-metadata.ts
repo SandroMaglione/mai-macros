@@ -1,16 +1,5 @@
-import {
-  BackupDeliveryClient,
-  BackupShareAborted,
-  BackupShareFailed,
-} from "@mai/machines/backups";
+import { BackupTransferMachine } from "@mai/machines";
 import { Effect, Layer } from "effect";
-
-export { BackupExportMetadataStore } from "@mai/machines/backups";
-
-export type {
-  BackupExportMetadata,
-  BackupTransferCounts,
-} from "@mai/machines/backups";
 
 const ErrorMessageFromUnknown = ({ error }: { readonly error: unknown }) =>
   error instanceof Error ? error.message : "Unexpected browser error.";
@@ -55,8 +44,8 @@ const ShareBackupFile = ({ file }: { readonly file: File }) =>
       }),
     catch: (error) =>
       error instanceof DOMException && error.name === "AbortError"
-        ? new BackupShareAborted()
-        : new BackupShareFailed({
+        ? new BackupTransferMachine.BackupShareAborted()
+        : new BackupTransferMachine.BackupShareFailed({
             message: ErrorMessageFromUnknown({ error }),
           }),
   });
@@ -96,8 +85,8 @@ const DeliverBackup = ({
   });
 
 export const BrowserBackupDeliveryClientLayer = Layer.succeed(
-  BackupDeliveryClient,
-  BackupDeliveryClient.of({
+  BackupTransferMachine.BackupDeliveryClient,
+  BackupTransferMachine.BackupDeliveryClient.of({
     deliver: DeliverBackup,
   })
 );

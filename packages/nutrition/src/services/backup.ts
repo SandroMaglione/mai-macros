@@ -11,9 +11,9 @@ import {
   NonEmptyString,
   NonNegativeNumber,
   Plan,
-} from "./domain.ts";
-import { DefaultFoods } from "./default-foods.ts";
-import { CurrentDatabaseVersion, DatabaseName } from "./metadata.ts";
+} from "../domain.ts";
+import { DefaultFoods } from "../default-foods.ts";
+import { CurrentDatabaseVersion, DatabaseName } from "../metadata.ts";
 import { NutritionStore } from "./store.ts";
 
 export const MaiBackupFormat = Schema.Literal("mai.backup");

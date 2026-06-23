@@ -1,8 +1,6 @@
-import type { Plan } from "@mai/nutrition";
-import { calculateMacronutrientEnergyKcal } from "@mai/nutrition";
-import type { CreateMealPlanInput } from "@mai/nutrition/services/meal-plans";
+import { MealPlans, Utils, type Domain } from "@mai/nutrition";
 import { formatNumber } from "@/lib/format";
-import { color, radius, shadow, spacing, type } from "@/theme/tokens";
+import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
   AppScreen,
   BottomActionBar,
@@ -109,7 +107,7 @@ const mealPlanFormMachine = setup({
       readonly value: string;
     },
     input: {} as {
-      readonly initialPlan: Plan | null;
+      readonly initialPlan: Domain.Plan | null;
     },
   },
 }).createMachine({
@@ -164,11 +162,11 @@ export function MealPlanForm({
   readonly action: MealPlanFormAction;
   readonly canNavigateBack?: boolean;
   readonly errorMessage?: string;
-  readonly initialPlan: Plan | null;
+  readonly initialPlan: Domain.Plan | null;
   readonly isSubmitting: boolean;
   readonly layout?: MealPlanFormLayout;
   readonly onBack: () => void;
-  readonly onSubmit: (input: CreateMealPlanInput) => void;
+  readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {
   const [snapshot, send] = useMachine(mealPlanFormMachine, {
     input: { initialPlan },
@@ -312,7 +310,7 @@ export function createMealPlanInputFromValues({
   values,
 }: {
   readonly values: MealPlanFormValues;
-}): CreateMealPlanInput {
+}): MealPlans.CreateMealPlanInput {
   const fiberTargetGrams = _optionalFormString(values.fiberTargetGrams);
   const sugarTargetGrams = _optionalFormString(values.sugarTargetGrams);
   const saturatedFatTargetGrams = _optionalFormString(
@@ -366,7 +364,7 @@ export function calculateMealPlanEnergyKcalFromValues({
 }: {
   readonly values: MealPlanFormValues;
 }) {
-  return calculateMacronutrientEnergyKcal({
+  return Utils.calculateMacronutrientEnergyKcal({
     carbsGrams: _formNonNegativeNumber(values.carbsTargetGrams),
     fatGrams: _formNonNegativeNumber(values.fatTargetGrams),
     proteinGrams: _formNonNegativeNumber(values.proteinTargetGrams),
@@ -427,15 +425,15 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   targetLabel: {
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   unit: {
     color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   energyPanel: {
     minHeight: 78,
@@ -452,9 +450,9 @@ const styles = StyleSheet.create({
   },
   energyLabel: {
     color: color.nutritionEnergy,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
     textTransform: "uppercase",
   },
   energyValueGroup: {
@@ -465,15 +463,15 @@ const styles = StyleSheet.create({
   energyValue: {
     maxWidth: 190,
     color: color.nutritionEnergy,
-    fontSize: type.size.xxl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xxl,
+    fontSize: tokens.type.size.xxl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xxl,
   },
   energyUnit: {
     color: color.textMuted,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   footerButton: {

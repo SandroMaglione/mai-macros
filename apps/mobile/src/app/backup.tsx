@@ -11,12 +11,9 @@ import {
   TextArea,
 } from "@/components/ui";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, spacing, type } from "@/theme/tokens";
-import {
-  LocalDataResetConfirmationText,
-  makeLocalDataResetMachine,
-} from "@mai/machines/local-data";
-import { Backups, type MaiBackup } from "@mai/nutrition";
+import { color, spacing, tokens } from "@/theme/tokens";
+import { LocalDataResetMachine } from "@mai/machines";
+import { Backup, LocalData as NutritionLocalData } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect } from "effect";
 import { router } from "expo-router";
@@ -240,7 +237,7 @@ const backupRouteMachine = setup({
   },
 });
 
-const localDataResetMachine = makeLocalDataResetMachine({
+const localDataResetMachine = LocalDataResetMachine.makeLocalDataResetMachine({
   restartApp: () => {
     if (router.canDismiss()) {
       router.dismissAll();
@@ -492,7 +489,8 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
   const isResetting = snapshot.matches("Resetting");
   const resetDisabled = disabled || isResetting;
   const canReset =
-    snapshot.context.confirmationText === LocalDataResetConfirmationText;
+    snapshot.context.confirmationText ===
+    NutritionLocalData.LocalDataResetConfirmationText;
 
   return (
     <ScrollView
@@ -525,7 +523,7 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
               <Text style={styles.confirmationText}>
                 Type{" "}
                 <Text style={styles.confirmationPhrase}>
-                  {LocalDataResetConfirmationText}
+                  {NutritionLocalData.LocalDataResetConfirmationText}
                 </Text>{" "}
                 to confirm.
               </Text>
@@ -540,7 +538,7 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
                     type: "changeConfirmationText",
                   });
                 }}
-                placeholder={LocalDataResetConfirmationText}
+                placeholder={NutritionLocalData.LocalDataResetConfirmationText}
                 value={snapshot.context.confirmationText}
               />
               <View style={styles.inlineActions}>
@@ -588,7 +586,7 @@ export function exportMobileBackup({
   readonly backupName: string;
 }) {
   return Effect.gen(function* () {
-    const backups = yield* Backups;
+    const backups = yield* Backup.Backups;
     const exportedBackup = yield* backups.exportToJson();
     const fileName = backupFileName({
       backup: exportedBackup.backup,
@@ -605,7 +603,7 @@ export function exportMobileBackup({
 
 export function importMobileBackup({ json }: { readonly json: string }) {
   return Effect.gen(function* () {
-    const backups = yield* Backups;
+    const backups = yield* Backup.Backups;
     const importedBackup = yield* backups.importFromJson({
       input: {
         json,
@@ -622,7 +620,7 @@ export function backupFileName({
   backup,
   backupName,
 }: {
-  readonly backup: MaiBackup;
+  readonly backup: Backup.MaiBackup;
   readonly backupName: string;
 }) {
   const exportedAt = new Date(DateTime.toEpochMillis(backup.source.exportedAt));
@@ -640,7 +638,7 @@ export function backupFileName({
 export function backupImportMessage({
   backup,
 }: {
-  readonly backup: MaiBackup;
+  readonly backup: Backup.MaiBackup;
 }) {
   const totalRecords =
     backup.integrity.counts.dailyLogs +
@@ -689,24 +687,24 @@ const styles = StyleSheet.create({
   },
   confirmationText: {
     color: color.textMuted,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   confirmationPhrase: {
     color: color.dangerText,
-    fontWeight: type.weight.black,
+    fontWeight: tokens.type.weight.black,
   },
   resetErrorText: {
     color: color.dangerText,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   warningText: {
     color: color.dangerText,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
   },
 });

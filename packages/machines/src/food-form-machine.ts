@@ -1,9 +1,4 @@
-import {
-  parseFoodQuickInput,
-  type Food,
-  type FoodQuickInputParseResult,
-} from "@mai/nutrition";
-import type { CreateFoodInput } from "@mai/nutrition/services/foods";
+import { FoodQuickInput, type Domain, type Foods } from "@mai/nutrition";
 import { Effect } from "effect";
 import {
   assign,
@@ -37,7 +32,7 @@ type FoodFormMachineContext = {
   readonly formValues: FoodFormValues;
   readonly numberWarnings: readonly FoodNumberWarning[];
   readonly quickInput: string;
-  readonly quickInputParseResult: FoodQuickInputParseResult;
+  readonly quickInputParseResult: FoodQuickInput.FoodQuickInputParseResult;
   readonly syncQuickInputFromFields: boolean;
 };
 
@@ -59,7 +54,7 @@ type FoodFormMachineEvent =
     };
 
 export type FoodFormSubmitEvent = {
-  readonly input: CreateFoodInput;
+  readonly input: Foods.CreateFoodInput;
   readonly type: "submit";
 };
 
@@ -68,7 +63,7 @@ export const foodFormMachine = setup({
     context: {} as FoodFormMachineContext,
     events: {} as FoodFormMachineEvent,
     input: {} as {
-      readonly initialFood: Food | null;
+      readonly initialFood: Domain.Food | null;
       readonly syncQuickInputFromFields: boolean;
     },
   },
@@ -146,7 +141,9 @@ export const foodFormMachine = setup({
           numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
           quickInput,
           quickInputParseResult: context.syncQuickInputFromFields
-            ? Effect.runSync(parseFoodQuickInput({ input: quickInput }))
+            ? Effect.runSync(
+                FoodQuickInput.parseFoodQuickInput({ input: quickInput })
+              )
             : context.quickInputParseResult,
         };
       }),
@@ -154,7 +151,7 @@ export const foodFormMachine = setup({
     changeQuickInput: {
       actions: assign(({ event }) => {
         const quickInputParseResult = Effect.runSync(
-          parseFoodQuickInput({ input: event.input })
+          FoodQuickInput.parseFoodQuickInput({ input: event.input })
         );
         const { partial } = quickInputParseResult;
         const formValues = {
@@ -212,7 +209,7 @@ function _foodFormContextFromInput({
   initialFood,
   syncQuickInputFromFields,
 }: {
-  readonly initialFood: Food | null;
+  readonly initialFood: Domain.Food | null;
   readonly syncQuickInputFromFields: boolean;
 }): FoodFormMachineContext {
   const food = initialFood;
@@ -241,7 +238,7 @@ function _foodFormContextFromInput({
     numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
     quickInput,
     quickInputParseResult: Effect.runSync(
-      parseFoodQuickInput({ input: quickInput })
+      FoodQuickInput.parseFoodQuickInput({ input: quickInput })
     ),
     syncQuickInputFromFields,
   };
@@ -326,7 +323,7 @@ export function createFoodInputFromFormValues({
   formValues,
 }: {
   readonly formValues: FoodFormValues;
-}): CreateFoodInput {
+}): Foods.CreateFoodInput {
   const brand = formValues.brand.trim();
   const fiberGramsPer100g = _optionalFormValue(formValues.fiberGramsPer100g);
   const sugarGramsPer100g = _optionalFormValue(formValues.sugarGramsPer100g);

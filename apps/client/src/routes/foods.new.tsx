@@ -3,17 +3,14 @@ import {
   useNavigate,
   type UseNavigateResult,
 } from "@tanstack/react-router";
+import { FoodFormMachine } from "@mai/machines";
+import { Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect } from "effect";
 import { assertEvent, fromPromise, setup, type ActorRefFrom } from "xstate";
 
-import {
-  FoodForm,
-  foodFormMachine,
-  type FoodFormSubmitEvent,
-} from "../lib/components/food-form.tsx";
+import { FoodForm } from "../lib/components/food-form.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { Foods, type CreateFoodInput } from "@mai/nutrition/services/foods";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 export const Route = createFileRoute("/foods/new")({
@@ -27,28 +24,30 @@ const createFoodMachine = setup({
   types: {
     context: {} as {
       readonly dateKey: string | undefined;
-      readonly foodFormActor: ActorRefFrom<typeof foodFormMachine>;
+      readonly foodFormActor: ActorRefFrom<
+        typeof FoodFormMachine.foodFormMachine
+      >;
       readonly navigate: UseNavigateResult<string>;
     },
-    events: {} as FoodFormSubmitEvent,
+    events: {} as FoodFormMachine.FoodFormSubmitEvent,
     input: {} as {
       readonly dateKey: string | undefined;
       readonly navigate: UseNavigateResult<string>;
     },
   },
   actors: {
-    foodForm: foodFormMachine,
+    foodForm: FoodFormMachine.foodFormMachine,
     submitFood: fromPromise<
       void,
       {
-        readonly input: CreateFoodInput;
+        readonly input: Foods.CreateFoodInput;
         readonly dateKey: string | undefined;
         readonly navigate: UseNavigateResult<string>;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const foods = yield* Foods;
+          const foods = yield* Foods.Foods;
           yield* foods.create({ input: input.input });
 
           const today = dateKeyFromDate({

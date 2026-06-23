@@ -1,4 +1,4 @@
-import { Backups, type MaiBackup } from "@mai/nutrition";
+import { Backup } from "@mai/nutrition";
 import { Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import * as KeyValueStore from "effect/unstable/persistence/KeyValueStore";
 import {
@@ -11,7 +11,7 @@ import {
   type SnapshotFrom,
 } from "xstate";
 
-import type { MachineRuntime } from "../runtime";
+import type { MachineRuntime } from "./runtime";
 
 export type BackupTransferAction = "export" | "import";
 export type BackupExportDelivery = "downloaded" | "shared";
@@ -186,7 +186,7 @@ const BackupTransferResultFromBackup = ({
   fileName,
 }: {
   readonly action: BackupTransferAction;
-  readonly backup: MaiBackup;
+  readonly backup: Backup.MaiBackup;
   readonly backupName: string;
   readonly delivery?: BackupExportDelivery;
   readonly fileName: string;
@@ -290,13 +290,13 @@ const ErrorMessageFromUnknown = ({ error }: { readonly error: unknown }) =>
   error instanceof Error ? error.message : "Unexpected file error.";
 
 type BackupTransferServices =
-  | Backups
+  | Backup.Backups
   | BackupDeliveryClient
   | BackupExportMetadataStore;
 
 const ExportBackup = ({ backupName }: { readonly backupName: string }) =>
   Effect.gen(function* () {
-    const backups = yield* Backups;
+    const backups = yield* Backup.Backups;
     const deliveryClient = yield* BackupDeliveryClient;
     const metadataStore = yield* BackupExportMetadataStore;
     const exportedBackup = yield* backups.exportToJson();
@@ -339,7 +339,7 @@ const ImportBackup = ({ source }: { readonly source: BackupImportSource }) =>
           message: ErrorMessageFromUnknown({ error }),
         }),
     });
-    const backups = yield* Backups;
+    const backups = yield* Backup.Backups;
     const importedBackup = yield* backups.importFromJson({
       input: { json },
     });

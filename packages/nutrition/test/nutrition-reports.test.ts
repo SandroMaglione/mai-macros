@@ -1,18 +1,9 @@
 import { Array as EffectArray, Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import {
-  ActiveMealPlanSelection,
-  type DateKey,
-  type FoodId,
-  type MealEntryId,
-  Plan,
-  type PlanId,
-} from "../src/domain.ts";
-import { NutritionReports } from "../src/services/nutrition-reports.ts";
-import { NutritionStore, type NutritionStores } from "../src/store.ts";
+import { Domain, NutritionReports, Store } from "../src/index.ts";
 
-const emptyStores: NutritionStores = {
+const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
   dailyLogs: [],
   foods: [],
@@ -23,7 +14,7 @@ const emptyStores: NutritionStores = {
 describe("NutritionReports", () => {
   it("loads an empty range when an active plan exists with no logs", async () => {
     const program = Effect.gen(function* () {
-      const plan = yield* Schema.decodeEffect(Plan)({
+      const plan = yield* Schema.decodeEffect(Domain.Plan)({
         carbsTargetGrams: 220,
         createdAt: 0,
         fatTargetGrams: 70,
@@ -31,19 +22,21 @@ describe("NutritionReports", () => {
         name: "Training day",
         proteinTargetGrams: 160,
       });
-      const selection = yield* Schema.decodeEffect(ActiveMealPlanSelection)({
+      const selection = yield* Schema.decodeEffect(
+        Domain.ActiveMealPlanSelection
+      )({
         id: "active-meal-plan",
         planId: plan.id,
         updatedAt: 0,
       });
-      const stores: NutritionStores = {
+      const stores: Store.NutritionStores = {
         ...emptyStores,
         activeMealPlanSelections: [selection],
         plans: [plan],
       };
 
       return yield* Effect.gen(function* () {
-        const reports = yield* NutritionReports;
+        const reports = yield* NutritionReports.NutritionReports;
 
         return yield* reports.getRange({
           input: {
@@ -53,16 +46,16 @@ describe("NutritionReports", () => {
         });
       }).pipe(
         Effect.provide(
-          NutritionReports.layer.pipe(
+          NutritionReports.NutritionReports.layer.pipe(
             Layer.provide(
-              Layer.succeed(NutritionStore, {
-                countMealEntriesByDate: (dateKey: DateKey) =>
+              Layer.succeed(Store.NutritionStore, {
+                countMealEntriesByDate: (dateKey: Domain.DateKey) =>
                   Effect.succeed(
                     stores.mealEntries.filter(
                       (mealEntry) => mealEntry.dateKey === dateKey
                     ).length
                   ),
-                countMealEntriesByFood: (foodId: FoodId) =>
+                countMealEntriesByFood: (foodId: Domain.FoodId) =>
                   Effect.succeed(
                     stores.mealEntries.filter(
                       (mealEntry) => mealEntry.foodId === foodId
@@ -75,19 +68,19 @@ describe("NutritionReports", () => {
                       (selection) => selection.id === activeMealPlanSelectionId
                     )
                   ),
-                findDailyLogByDateKey: (dateKey: DateKey) =>
+                findDailyLogByDateKey: (dateKey: Domain.DateKey) =>
                   Effect.succeed(
                     stores.dailyLogs.filter(
                       (dailyLog) => dailyLog.dateKey === dateKey
                     )
                   ),
-                findDailyLogsByPlan: (planId: PlanId) =>
+                findDailyLogsByPlan: (planId: Domain.PlanId) =>
                   Effect.succeed(
                     stores.dailyLogs.filter(
                       (dailyLog) => dailyLog.planId === planId
                     )
                   ),
-                findFoodById: (foodId: FoodId) =>
+                findFoodById: (foodId: Domain.FoodId) =>
                   Effect.succeed(
                     stores.foods.filter((food) => food.id === foodId)
                   ),
@@ -95,19 +88,19 @@ describe("NutritionReports", () => {
                   Effect.succeed(
                     stores.foods.filter((food) => food.name === name)
                   ),
-                findMealEntryById: (mealEntryId: MealEntryId) =>
+                findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
                   Effect.succeed(
                     stores.mealEntries.filter(
                       (mealEntry) => mealEntry.id === mealEntryId
                     )
                   ),
-                findMealEntriesByDate: (dateKey: DateKey) =>
+                findMealEntriesByDate: (dateKey: Domain.DateKey) =>
                   Effect.succeed(
                     stores.mealEntries.filter(
                       (mealEntry) => mealEntry.dateKey === dateKey
                     )
                   ),
-                findPlanById: (planId: PlanId) =>
+                findPlanById: (planId: Domain.PlanId) =>
                   Effect.succeed(
                     stores.plans.filter((plan) => plan.id === planId)
                   ),

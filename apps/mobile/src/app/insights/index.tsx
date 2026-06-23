@@ -1,5 +1,4 @@
-import { DateKey } from "@mai/nutrition";
-import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
+import { Domain, NutritionReports } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect, Schema } from "effect";
 import { useRouter } from "expo-router";
@@ -17,9 +16,7 @@ import {
 } from "@/components/ui";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, spacing, type } from "@/theme/tokens";
-
-import type { NutritionReportRange } from "@mai/nutrition/services/nutrition-reports";
+import { color, spacing, tokens } from "@/theme/tokens";
 
 type LoadResult =
   | {
@@ -28,11 +25,11 @@ type LoadResult =
     }
   | {
       readonly _tag: "Loaded";
-      readonly report: NutritionReportRange;
+      readonly report: NutritionReports.NutritionReportRange;
     }
   | {
       readonly _tag: "NoPlans";
-      readonly dateKey: DateKey;
+      readonly dateKey: Domain.DateKey;
     };
 
 type InsightsRouter = ReturnType<typeof useRouter>;
@@ -45,7 +42,7 @@ type InsightsRouteContext =
     }
   | {
       readonly _tag: "Loaded";
-      readonly report: NutritionReportRange;
+      readonly report: NutritionReports.NutritionReportRange;
       readonly router: InsightsRouter;
     }
   | {
@@ -237,7 +234,7 @@ export function getLoadedReport({
   result,
 }: {
   readonly result: LoadResult;
-}): NutritionReportRange {
+}): NutritionReports.NutritionReportRange {
   if (result._tag !== "Loaded") {
     throw new Error("Expected a loaded nutrition report.");
   }
@@ -249,7 +246,7 @@ export function getNoPlansDateKey({
   result,
 }: {
   readonly result: LoadResult;
-}): DateKey {
+}): Domain.DateKey {
   if (result._tag !== "NoPlans") {
     throw new Error("Expected a no-plans nutrition report result.");
   }
@@ -260,21 +257,21 @@ export function getNoPlansDateKey({
 export function loadDefaultRange(): Effect.Effect<
   LoadResult,
   never,
-  NutritionReports
+  NutritionReports.NutritionReports
 > {
   return Effect.gen(function* () {
-    const today = yield* Schema.decodeEffect(DateKey)(
+    const today = yield* Schema.decodeEffect(Domain.DateKey)(
       dateKeyFromDate({
         date: yield* DateTime.nowAsDate,
       })
     );
-    const startDateKey = yield* Schema.decodeEffect(DateKey)(
+    const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
       shiftDateKey({
         dateKey: today,
         days: -6,
       })
     );
-    const reports = yield* NutritionReports;
+    const reports = yield* NutritionReports.NutritionReports;
     const report = yield* reports.getRange({
       input: {
         endDateKey: today,
@@ -289,7 +286,7 @@ export function loadDefaultRange(): Effect.Effect<
   }).pipe(
     Effect.catchTag("NoNutritionReportPlans", () =>
       Effect.gen(function* () {
-        const today = yield* Schema.decodeEffect(DateKey)(
+        const today = yield* Schema.decodeEffect(Domain.DateKey)(
           dateKeyFromDate({
             date: yield* DateTime.nowAsDate,
           })
@@ -346,8 +343,8 @@ const styles = StyleSheet.create({
   },
   failureTitle: {
     color: color.text,
-    fontSize: type.size.xl,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.xl,
+    fontSize: tokens.type.size.xl,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xl,
   },
 });

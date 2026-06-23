@@ -1,4 +1,4 @@
-import { DefaultFoods, Food } from "@mai/nutrition";
+import { DefaultFoods, Domain } from "@mai/nutrition";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -131,15 +131,15 @@ export default Effect.gen(function* () {
   yield* sql`CREATE INDEX meal_entries_by_date_meal ON meal_entries(date_key, meal)`;
   yield* sql`CREATE INDEX meal_entries_by_food ON meal_entries(food_id)`;
 
-  const defaultFoods = yield* Schema.decodeEffect(Schema.Array(Food))(
-    DefaultFoods
+  const defaultFoods = yield* Schema.decodeEffect(Schema.Array(Domain.Food))(
+    DefaultFoods.DefaultFoods
   );
 
   yield* Effect.forEach(
     defaultFoods,
     (food) =>
       Effect.gen(function* () {
-        const encodedFood = yield* Schema.encodeEffect(Food)(food);
+        const encodedFood = yield* Schema.encodeEffect(Domain.Food)(food);
 
         yield* sql`
           INSERT INTO foods ${sql.insert({

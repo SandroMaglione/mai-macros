@@ -1,19 +1,16 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Data, DateTime, Effect, Schema } from "effect";
 
-import { DateKey } from "@mai/nutrition";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
 import {
   DailyLogView,
   type DailyLogViewData,
 } from "../lib/components/daily-log-view.tsx";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import { Foods } from "@mai/nutrition/services/foods";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
 import { dateKeyFromDate } from "../lib/utils.ts";
 
 type RouteLoaderResult = Data.TaggedEnum<{
-  NoMealPlans: { readonly dateKey: DateKey };
+  NoMealPlans: { readonly dateKey: Domain.DateKey };
   OpenedDay: { readonly data: DailyLogViewData };
   InvalidDateKey: {};
 }>;
@@ -23,10 +20,10 @@ export const Route = createFileRoute("/")({
   loader: async () => {
     const result = await RuntimeClient.runPromise(
       Effect.gen(function* () {
-        const dailyLogs = yield* DailyLogs;
-        const foodsService = yield* Foods;
-        const mealEntriesService = yield* MealEntries;
-        const dateKey = yield* Schema.decodeEffect(DateKey)(
+        const dailyLogs = yield* DailyLogs.DailyLogs;
+        const foodsService = yield* Foods.Foods;
+        const mealEntriesService = yield* MealEntries.MealEntries;
+        const dateKey = yield* Schema.decodeEffect(Domain.DateKey)(
           dateKeyFromDate({ date: yield* DateTime.nowAsDate })
         );
 

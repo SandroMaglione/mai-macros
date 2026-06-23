@@ -1,25 +1,27 @@
-import { ReactNativeSqliteLayer } from "@mai/sqlite";
-import { Backups } from "@mai/nutrition";
-import { DailyLogs } from "@mai/nutrition/services/daily-logs";
-import { Foods } from "@mai/nutrition/services/foods";
-import { MealEntries } from "@mai/nutrition/services/meal-entries";
-import { MealPlans } from "@mai/nutrition/services/meal-plans";
-import { NutritionReports } from "@mai/nutrition/services/nutrition-reports";
+import {
+  Backup,
+  DailyLogs,
+  Foods,
+  MealEntries,
+  MealPlans,
+  NutritionReports,
+} from "@mai/nutrition";
+import { ReactNativeSqlite } from "@mai/sqlite";
 import { Layer, ManagedRuntime } from "effect";
 
 import { ReactNativeCryptoLayer } from "./react-native-crypto.ts";
 
-const MobileStoreLayer = ReactNativeSqliteLayer({
+const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
   filename: "mai.db",
 });
 
 const MobileServicesLayer = Layer.mergeAll(
-  Backups.layer,
-  MealPlans.layer,
-  DailyLogs.layer,
-  Foods.layer,
-  MealEntries.layer,
-  NutritionReports.layer
+  Backup.Backups.layer,
+  MealPlans.MealPlans.layer,
+  DailyLogs.DailyLogs.layer,
+  Foods.Foods.layer,
+  MealEntries.MealEntries.layer,
+  NutritionReports.NutritionReports.layer
 );
 
 const MobileLayer = MobileServicesLayer.pipe(

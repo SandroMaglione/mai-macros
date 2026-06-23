@@ -6,75 +6,55 @@ import {
 import { Effect, Layer, Schema } from "effect";
 import { afterEach, assert, describe, it } from "vitest";
 
-import {
-  ActiveMealPlanSelectionId,
-  calculateEntryNutrients,
-  DailyLog,
-  DatabaseName,
-  DateKey,
-  DefaultFoods,
-  EntryNutrients,
-  Food,
-  FoodCategory,
-  FoodId,
-  FoodOrigin,
-  Meal,
-  MealEntry,
-  MealEntryId,
-  NonEmptyString,
-  NonNegativeNumber,
-  Plan,
-  PlanId,
-  QuantityGrams,
-} from "@mai/nutrition";
+import { DefaultFoods, Domain, Metadata, Utils } from "@mai/nutrition";
 import { MaiDatabase } from "../src/index.ts";
 import {
   deleteFakeDatabase,
   layerFakeIndexedDb,
 } from "./indexed-db-test-utils.ts";
 
-const databaseLayer = MaiDatabase.layer(DatabaseName).pipe(
+const databaseLayer = MaiDatabase.layer(Metadata.DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
 );
 
 class LegacySeedFood extends Schema.Class<LegacySeedFood>("LegacySeedFood")({
-  id: FoodId,
-  basedOnFoodId: Schema.optional(FoodId),
-  name: NonEmptyString,
-  brand: Schema.optional(NonEmptyString),
-  category: Schema.optional(FoodCategory),
-  origin: Schema.optional(FoodOrigin),
-  energyKcalPer100g: NonNegativeNumber,
-  proteinGramsPer100g: NonNegativeNumber,
-  carbsGramsPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
-  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  id: Domain.FoodId,
+  basedOnFoodId: Schema.optional(Domain.FoodId),
+  name: Domain.NonEmptyString,
+  brand: Schema.optional(Domain.NonEmptyString),
+  category: Schema.optional(Domain.FoodCategory),
+  origin: Schema.optional(Domain.FoodOrigin),
+  energyKcalPer100g: Domain.NonNegativeNumber,
+  proteinGramsPer100g: Domain.NonNegativeNumber,
+  carbsGramsPer100g: Domain.NonNegativeNumber,
+  fatGramsPer100g: Domain.NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(Domain.NonNegativeNumber),
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
 }) {}
 
 class LegacySeedPlan extends Schema.Class<LegacySeedPlan>("LegacySeedPlan")({
-  id: PlanId,
-  basedOnPlanId: Schema.optional(PlanId),
-  name: NonEmptyString,
-  proteinTargetGrams: NonNegativeNumber,
-  carbsTargetGrams: NonNegativeNumber,
-  fatTargetGrams: NonNegativeNumber,
-  fiberTargetGrams: Schema.optional(NonNegativeNumber),
-  sugarTargetGrams: Schema.optional(NonNegativeNumber),
-  saltTargetGrams: Schema.optional(NonNegativeNumber),
-  saturatedFatTargetGrams: Schema.optional(NonNegativeNumber),
+  id: Domain.PlanId,
+  basedOnPlanId: Schema.optional(Domain.PlanId),
+  name: Domain.NonEmptyString,
+  proteinTargetGrams: Domain.NonNegativeNumber,
+  carbsTargetGrams: Domain.NonNegativeNumber,
+  fatTargetGrams: Domain.NonNegativeNumber,
+  fiberTargetGrams: Schema.optional(Domain.NonNegativeNumber),
+  sugarTargetGrams: Schema.optional(Domain.NonNegativeNumber),
+  saltTargetGrams: Schema.optional(Domain.NonNegativeNumber),
+  saturatedFatTargetGrams: Schema.optional(Domain.NonNegativeNumber),
   createdAt: Schema.Number,
 }) {}
 
 class LegacySeedDailyLog extends Schema.Class<LegacySeedDailyLog>(
   "LegacySeedDailyLog"
 )({
-  dateKey: DateKey,
-  planId: PlanId,
+  dateKey: Domain.DateKey,
+  planId: Domain.PlanId,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
 }) {}
@@ -82,19 +62,19 @@ class LegacySeedDailyLog extends Schema.Class<LegacySeedDailyLog>(
 class LegacySeedActiveMealPlanSelection extends Schema.Class<LegacySeedActiveMealPlanSelection>(
   "LegacySeedActiveMealPlanSelection"
 )({
-  id: ActiveMealPlanSelectionId,
-  planId: PlanId,
+  id: Domain.ActiveMealPlanSelectionId,
+  planId: Domain.PlanId,
   updatedAt: Schema.Number,
 }) {}
 
 class LegacySeedMealEntry extends Schema.Class<LegacySeedMealEntry>(
   "LegacySeedMealEntry"
 )({
-  id: MealEntryId,
-  dateKey: DateKey,
-  meal: Meal,
-  foodId: FoodId,
-  quantityGrams: QuantityGrams,
+  id: Domain.MealEntryId,
+  dateKey: Domain.DateKey,
+  meal: Domain.Meal,
+  foodId: Domain.FoodId,
+  quantityGrams: Domain.QuantityGrams,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
 }) {}
@@ -200,18 +180,18 @@ class LegacyVersion2Database extends IndexedDbDatabase.make(
 ) {}
 
 const legacyVersion1DatabaseLayer = LegacyVersion1Database.layer(
-  DatabaseName
+  Metadata.DatabaseName
 ).pipe(Layer.provide(layerFakeIndexedDb));
 
 const legacyVersion2DatabaseLayer = LegacyVersion2Database.layer(
-  DatabaseName
+  Metadata.DatabaseName
 ).pipe(Layer.provide(layerFakeIndexedDb));
 
 afterEach(() =>
-  Effect.runPromise(deleteFakeDatabase({ databaseName: DatabaseName }))
+  Effect.runPromise(deleteFakeDatabase({ databaseName: Metadata.DatabaseName }))
 );
 
-const foodInput: typeof Food.Encoded = {
+const foodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   brand: "Mai",
@@ -228,7 +208,7 @@ const foodInput: typeof Food.Encoded = {
   updatedAt: 0,
 };
 
-const planInput: typeof Plan.Encoded = {
+const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
   proteinTargetGrams: 160,
@@ -241,14 +221,14 @@ const planInput: typeof Plan.Encoded = {
   createdAt: 0,
 };
 
-const dailyLogInput: typeof DailyLog.Encoded = {
+const dailyLogInput: typeof Domain.DailyLog.Encoded = {
   dateKey: "2026-06-18",
   planId: planInput.id,
   createdAt: 0,
   updatedAt: 0,
 };
 
-const mealEntryInput: typeof MealEntry.Encoded = {
+const mealEntryInput: typeof Domain.MealEntry.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   dateKey: dailyLogInput.dateKey,
   meal: "breakfast",
@@ -300,7 +280,7 @@ describe("MaiDatabase", () => {
 
     const result = await Effect.runPromise(program);
 
-    assert.equal(result.name, DatabaseName);
+    assert.equal(result.name, Metadata.DatabaseName);
     assert.equal(result.version, 3);
     assert.equal(result.planNameIndexIsUnique, true);
     assert.deepStrictEqual(result.storeNames, [
@@ -316,15 +296,19 @@ describe("MaiDatabase", () => {
       "byDateMeal",
       "byFood",
     ]);
-    assert.equal(result.seededFoodCount, DefaultFoods.length);
+    assert.equal(result.seededFoodCount, DefaultFoods.DefaultFoods.length);
   });
 
   it("persists and reads daily meal data through plan and food references", async () => {
     const program = Effect.gen(function* () {
-      const food = yield* Schema.decodeEffect(Food)(foodInput);
-      const plan = yield* Schema.decodeEffect(Plan)(planInput);
-      const dailyLog = yield* Schema.decodeEffect(DailyLog)(dailyLogInput);
-      const mealEntry = yield* Schema.decodeEffect(MealEntry)(mealEntryInput);
+      const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+      const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+      const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)(
+        dailyLogInput
+      );
+      const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)(
+        mealEntryInput
+      );
       const api = yield* MaiDatabase.getQueryBuilder;
       const insertedFoodKey = yield* api.from("foods").insert(food);
       const insertedPlanKey = yield* api.from("plans").insert(plan);
@@ -340,10 +324,8 @@ describe("MaiDatabase", () => {
         .select()
         .equals(storedLog.planId)
         .first();
-      const dateMealKey: [typeof DateKey.Type, typeof Meal.Type] = [
-        storedLog.dateKey,
-        "breakfast",
-      ];
+      const dateMealKey: [typeof Domain.DateKey.Type, typeof Domain.Meal.Type] =
+        [storedLog.dateKey, "breakfast"];
       const storedEntries = yield* api
         .from("mealEntries")
         .select("byDateMeal")
@@ -357,12 +339,13 @@ describe("MaiDatabase", () => {
         .select()
         .equals(storedEntry.foodId)
         .first();
-      const calculatedNutrients = calculateEntryNutrients({
+      const calculatedNutrients = Utils.calculateEntryNutrients({
         food: storedFood,
         quantityGrams: storedEntry.quantityGrams,
       });
-      const validatedNutrients =
-        yield* Schema.decodeEffect(EntryNutrients)(calculatedNutrients);
+      const validatedNutrients = yield* Schema.decodeEffect(
+        Domain.EntryNutrients
+      )(calculatedNutrients);
 
       return {
         insertedEntryKey,
@@ -489,9 +472,9 @@ describe("MaiDatabase", () => {
     assert.deepStrictEqual(result.foodIndexes, ["byName"]);
     assert.equal(
       result.foods.filter((food) => food.origin === "app-default").length,
-      DefaultFoods.length
+      DefaultFoods.DefaultFoods.length
     );
-    assert.equal(result.foods.length, DefaultFoods.length + 3);
+    assert.equal(result.foods.length, DefaultFoods.DefaultFoods.length + 3);
     assert.equal(completeFood.origin, "user");
     assert.equal(completeFood.category, "dairy-egg");
     assert.equal(completeFood.fiberGramsPer100g, 0);
@@ -519,7 +502,7 @@ describe("MaiDatabase", () => {
   });
 
   it("renames duplicate legacy plan names before making the index unique", async () => {
-    const legacyPlans: readonly (typeof Plan.Encoded)[] = [
+    const legacyPlans: readonly (typeof Domain.Plan.Encoded)[] = [
       planInput,
       {
         ...planInput,
@@ -579,7 +562,7 @@ function _expectFood({
   foods,
   name,
 }: {
-  readonly foods: readonly Food[];
+  readonly foods: readonly Domain.Food[];
   readonly name: string;
 }) {
   const food = foods.find((item) => item.name === name);

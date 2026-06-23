@@ -1,4 +1,4 @@
-import type { DateKey } from "@mai/nutrition";
+import type { Domain } from "@mai/nutrition";
 
 const _dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -20,7 +20,7 @@ export const shiftDateKey = ({
   dateKey,
   days,
 }: {
-  readonly dateKey: DateKey | string;
+  readonly dateKey: Domain.DateKey | string;
   readonly days: number;
 }) => {
   const match = _dateKeyPattern.exec(dateKey);

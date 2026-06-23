@@ -1,13 +1,9 @@
 import {
-  ActiveMealPlanSelection,
-  Backups,
-  DailyLog,
+  Backup,
   DefaultFoods,
-  Food,
-  LocalData,
-  MealEntry,
-  NutritionStore,
-  Plan,
+  Domain,
+  LocalData as NutritionLocalData,
+  Store,
 } from "@mai/nutrition";
 import { Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
@@ -15,9 +11,9 @@ import { assert, describe, it } from "vitest";
 import {
   TestSqliteDataLayer,
   TestSqliteNutritionStoreLayer,
-} from "../src/layers/test.ts";
+} from "./sqlite-test-layers.ts";
 
-const testLayer = Backups.layer.pipe(
+const testLayer = Backup.Backups.layer.pipe(
   Layer.provideMerge(TestSqliteNutritionStoreLayer)
 );
 
@@ -25,7 +21,7 @@ describe("SqliteNutritionStore", () => {
   it("seeds app default foods during initial migration", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const store = yield* NutritionStore;
+        const store = yield* Store.NutritionStore;
 
         return yield* store.listFoods;
       }).pipe(Effect.provide(testLayer))
@@ -33,14 +29,14 @@ describe("SqliteNutritionStore", () => {
 
     assert.equal(
       result.filter((food) => food.origin === "app-default").length,
-      DefaultFoods.length
+      DefaultFoods.DefaultFoods.length
     );
   });
 
   it("persists and reads the current nutrition model", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const store = yield* NutritionStore;
+        const store = yield* Store.NutritionStore;
         const plan = yield* testPlan;
         const food = yield* testFood;
         const dailyLog = yield* testDailyLog;
@@ -75,8 +71,8 @@ describe("SqliteNutritionStore", () => {
   it("exports and imports shared backups", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const store = yield* NutritionStore;
-        const backups = yield* Backups;
+        const store = yield* Store.NutritionStore;
+        const backups = yield* Backup.Backups;
         const plan = yield* testPlan;
         const food = yield* testFood;
 
@@ -97,16 +93,20 @@ describe("SqliteNutritionStore", () => {
       }).pipe(Effect.provide(testLayer))
     );
 
-    assert.equal(result.foods.length, DefaultFoods.length + 1);
+    assert.equal(result.foods.length, DefaultFoods.DefaultFoods.length + 1);
     assert.equal(result.plans.length, 1);
-    assert.isDefined(result.foods.find((food) => food.name === "Greek yogurt"));
+    assert.isDefined(
+      result.foods.find(
+        (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
+      )
+    );
   });
 
   it("resets the sqlite database back to migration-seeded defaults", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const store = yield* NutritionStore;
-        const localData = yield* LocalData;
+        const store = yield* Store.NutritionStore;
+        const localData = yield* NutritionLocalData.LocalData;
         const plan = yield* testPlan;
         const food = yield* testFood;
 
@@ -122,14 +122,16 @@ describe("SqliteNutritionStore", () => {
     assert.equal(result.dailyLogs.length, 0);
     assert.equal(result.mealEntries.length, 0);
     assert.equal(result.plans.length, 0);
-    assert.equal(result.foods.length, DefaultFoods.length);
+    assert.equal(result.foods.length, DefaultFoods.DefaultFoods.length);
     assert.isUndefined(
-      result.foods.find((food) => food.name === "Greek yogurt")
+      result.foods.find(
+        (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
+      )
     );
   });
 });
 
-const testFood = Schema.decodeEffect(Food)({
+const testFood = Schema.decodeEffect(Domain.Food)({
   carbsGramsPer100g: 3.6,
   createdAt: 0,
   energyKcalPer100g: 59,
@@ -141,7 +143,7 @@ const testFood = Schema.decodeEffect(Food)({
   updatedAt: 0,
 });
 
-const testPlan = Schema.decodeEffect(Plan)({
+const testPlan = Schema.decodeEffect(Domain.Plan)({
   carbsTargetGrams: 220,
   createdAt: 0,
   fatTargetGrams: 70,
@@ -150,20 +152,20 @@ const testPlan = Schema.decodeEffect(Plan)({
   proteinTargetGrams: 160,
 });
 
-const testDailyLog = Schema.decodeEffect(DailyLog)({
+const testDailyLog = Schema.decodeEffect(Domain.DailyLog)({
   createdAt: 0,
   dateKey: "2026-06-20",
   planId: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   updatedAt: 0,
 });
 
-const testSelection = Schema.decodeEffect(ActiveMealPlanSelection)({
+const testSelection = Schema.decodeEffect(Domain.ActiveMealPlanSelection)({
   id: "active-meal-plan",
   planId: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   updatedAt: 0,
 });
 
-const testMealEntry = Schema.decodeEffect(MealEntry)({
+const testMealEntry = Schema.decodeEffect(Domain.MealEntry)({
   createdAt: 0,
   dateKey: "2026-06-20",
   foodId: "9535a059-a61f-42e1-a2e0-35ec87203c24",

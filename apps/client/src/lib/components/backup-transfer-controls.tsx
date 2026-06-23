@@ -1,3 +1,8 @@
+import type {
+  BackupTransferMachine,
+  LocalDataResetMachine,
+} from "@mai/machines";
+import { LocalData as NutritionLocalData } from "@mai/nutrition";
 import { useMachine, useSelector } from "@xstate/react";
 import {
   AlertTriangle,
@@ -9,17 +14,7 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 
-import {
-  type BackupTransferActorRef,
-  type BackupTransferSnapshot,
-} from "../machines/backup-transfer-machine.ts";
-import {
-  LocalDataResetConfirmationText,
-  localDataResetMachine,
-  type LocalDataResetActorRef,
-  type LocalDataResetSnapshot,
-} from "../machines/local-data-reset-machine.ts";
-import { type BackupExportMetadata } from "../services/backup-export-metadata.ts";
+import { localDataResetMachine } from "../machines/local-data-reset-machine.ts";
 
 export type BackupTransferMode = "full" | "importOnly";
 
@@ -27,15 +22,19 @@ const backupPanelClassName =
   "grid gap-3 rounded-lg border border-[#29292d] bg-[#161618] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]";
 const backupFieldClassName =
   "min-h-10 w-full rounded-md border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
+
 export function BackupTransferControls({
   actor,
   mode,
 }: {
-  readonly actor: BackupTransferActorRef;
+  readonly actor: BackupTransferMachine.BackupTransferActorRef;
   readonly mode: BackupTransferMode;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const snapshot = useSelector(actor, (state): BackupTransferSnapshot => state);
+  const snapshot = useSelector(
+    actor,
+    (state): BackupTransferMachine.BackupTransferSnapshot => state
+  );
   const [resetSnapshot, , resetActor] = useMachine(localDataResetMachine);
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
@@ -227,15 +226,16 @@ function LocalDataResetControls({
   disabled,
   snapshot,
 }: {
-  readonly actor: LocalDataResetActorRef;
+  readonly actor: LocalDataResetMachine.LocalDataResetActorRef;
   readonly disabled: boolean;
-  readonly snapshot: LocalDataResetSnapshot;
+  readonly snapshot: LocalDataResetMachine.LocalDataResetSnapshot;
 }) {
   const isIdle = snapshot.matches("Idle");
   const isConfirming =
     snapshot.matches("Confirming") || snapshot.matches("Failure");
   const canReset =
-    snapshot.context.confirmationText === LocalDataResetConfirmationText;
+    snapshot.context.confirmationText ===
+    NutritionLocalData.LocalDataResetConfirmationText;
 
   if (isIdle) {
     return (
@@ -269,7 +269,7 @@ function LocalDataResetControls({
           This deletes plans, foods, daily logs, and meal entries on this
           device. Type{" "}
           <span className="text-[#ffd4d1]">
-            {LocalDataResetConfirmationText}
+            {NutritionLocalData.LocalDataResetConfirmationText}
           </span>{" "}
           to confirm.
         </p>
@@ -285,7 +285,7 @@ function LocalDataResetControls({
             type: "changeConfirmationText",
           });
         }}
-        placeholder={LocalDataResetConfirmationText}
+        placeholder={NutritionLocalData.LocalDataResetConfirmationText}
         value={snapshot.context.confirmationText}
       />
 
@@ -328,7 +328,7 @@ function BackupExportRecency({
   metadata,
 }: {
   readonly isLoading: boolean;
-  readonly metadata: BackupExportMetadata | null;
+  readonly metadata: BackupTransferMachine.BackupExportMetadata | null;
 }) {
   if (isLoading) {
     return (

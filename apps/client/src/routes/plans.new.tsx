@@ -1,4 +1,4 @@
-import { DateKey } from "@mai/nutrition";
+import { Domain, MealPlans } from "@mai/nutrition";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
 import { Array, Effect, Option, Schema } from "effect";
@@ -6,13 +6,12 @@ import { Array, Effect, Option, Schema } from "effect";
 import { MealPlanForm } from "../lib/components/meal-plan-form.tsx";
 import { submitMealPlanMachine } from "../lib/machines/meal-plan-form-machine.ts";
 import { RuntimeClient } from "../lib/runtime-client.ts";
-import { MealPlans } from "@mai/nutrition/services/meal-plans";
 
 export const Route = createFileRoute("/plans/new")({
   validateSearch: (search) => ({
     dateKey:
       typeof search.dateKey === "string"
-        ? Schema.decodeOption(DateKey)(search.dateKey).pipe(
+        ? Schema.decodeOption(Domain.DateKey)(search.dateKey).pipe(
             Option.match({
               onNone: () => undefined,
               onSome: (dateKey) => dateKey,
@@ -23,7 +22,7 @@ export const Route = createFileRoute("/plans/new")({
   loader: async () =>
     RuntimeClient.runPromise(
       Effect.gen(function* () {
-        const mealPlans = yield* MealPlans;
+        const mealPlans = yield* MealPlans.MealPlans;
         const plans = yield* mealPlans.list();
 
         return {

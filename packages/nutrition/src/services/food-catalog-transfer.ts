@@ -1,14 +1,14 @@
 import { Context, Data, DateTime, Effect, Equal, Layer, Schema } from "effect";
 
-import { DefaultFoods } from "./default-foods.ts";
+import { DefaultFoods } from "../default-foods.ts";
 import {
   Food,
   FoodCategory,
   FoodId,
   NonEmptyString,
   NonNegativeNumber,
-} from "./domain.ts";
-import { CurrentDatabaseVersion, DatabaseName } from "./metadata.ts";
+} from "../domain.ts";
+import { CurrentDatabaseVersion, DatabaseName } from "../metadata.ts";
 import { NutritionStore } from "./store.ts";
 
 export const MaiFoodCatalogFormat = Schema.Literal("mai.food-catalog");

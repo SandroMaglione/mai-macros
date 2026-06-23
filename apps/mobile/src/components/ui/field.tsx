@@ -1,4 +1,4 @@
-import { color, radius, spacing, type } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import {
   StyleSheet,
@@ -91,9 +91,9 @@ const styles = StyleSheet.create({
   },
   label: {
     color: color.text,
-    fontSize: type.size.sm,
-    fontWeight: type.weight.black,
-    lineHeight: type.lineHeight.sm,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   inputShell: {
     minHeight: 44,
@@ -113,9 +113,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     color: color.text,
-    fontSize: type.size.md,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.md,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   inputMultiline: {
     minHeight: 108,
@@ -126,9 +126,9 @@ const styles = StyleSheet.create({
   },
   supportingText: {
     color: color.textSubtle,
-    fontSize: type.size.xs,
-    fontWeight: type.weight.semibold,
-    lineHeight: type.lineHeight.xs,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.xs,
   },
   errorText: {
     color: color.dangerText,

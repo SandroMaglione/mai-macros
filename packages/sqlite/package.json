@@ -4,9 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./react-native": "./src/layers/react-native.ts",
-    "./test": "./src/layers/test.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "test": "vitest run",
