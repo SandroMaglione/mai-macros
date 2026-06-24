@@ -96,12 +96,17 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
             });
           }
 
-          const dateKeys = yield* Effect.forEach(
-            dateKeysInRange({
-              endDateKey: decodedInput.endDateKey,
-              startDateKey: decodedInput.startDateKey,
-            }),
-            (dateKey) => Schema.decodeEffect(DateKey)(dateKey)
+          const dateKeys = yield* dateKeysInRange({
+            endDateKey: decodedInput.endDateKey,
+            startDateKey: decodedInput.startDateKey,
+          }).pipe(
+            Effect.mapError(
+              () =>
+                new InvalidNutritionReportRange({
+                  endDateKey: decodedInput.endDateKey,
+                  startDateKey: decodedInput.startDateKey,
+                })
+            )
           );
           const dateKeySet = HashSet.fromIterable(dateKeys);
           const foods = yield* store.listFoods;

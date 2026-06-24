@@ -1,3 +1,5 @@
+import { Array, Data, Effect, Schema } from "effect";
+
 import type {
   DateKey,
   EntryNutrients,
@@ -5,6 +7,25 @@ import type {
   Plan,
   QuantityGrams,
 } from "./domain.ts";
+import { DateKey as DateKeySchema } from "./domain.ts";
+
+const dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+const dayInMilliseconds = 24 * 60 * 60 * 1000;
+
+export type DateKeyRangeBoundary =
+  | "endDateKey"
+  | "generatedDateKey"
+  | "startDateKey";
+
+export class InvalidDateKey extends Data.TaggedError("InvalidDateKey")<{
+  readonly boundary: DateKeyRangeBoundary;
+  readonly dateKey: string;
+}> {}
+
+type CalendarDate = {
+  readonly dateKey: DateKey;
+  readonly utcNoonEpochMilliseconds: number;
+};
 
 export const calculateMacronutrientEnergyKcal = ({
   proteinGrams,
@@ -62,55 +83,104 @@ export const dateKeysInRange = ({
 }: {
   readonly endDateKey: DateKey | string;
   readonly startDateKey: DateKey | string;
-}) => {
-  const dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
-  const parseDateKey = ({
-    dateKey,
-  }: {
-    readonly dateKey: DateKey | string;
-  }) => {
-    const match = dateKeyPattern.exec(dateKey);
+}) =>
+  Effect.gen(function* () {
+    const startDate = yield* _parseDateKey({
+      boundary: "startDateKey",
+      dateKey: startDateKey,
+    });
+    const endDate = yield* _parseDateKey({
+      boundary: "endDateKey",
+      dateKey: endDateKey,
+    });
+
+    if (startDate.utcNoonEpochMilliseconds > endDate.utcNoonEpochMilliseconds) {
+      return [];
+    }
+
+    const dayCount =
+      Math.floor(
+        (endDate.utcNoonEpochMilliseconds -
+          startDate.utcNoonEpochMilliseconds) /
+          dayInMilliseconds
+      ) + 1;
+
+    return yield* Effect.forEach(
+      Array.makeBy(dayCount, (dayIndex) => {
+        const date = new Date(
+          startDate.utcNoonEpochMilliseconds + dayIndex * dayInMilliseconds
+        );
+
+        return [
+          date.getUTCFullYear().toString().padStart(4, "0"),
+          (date.getUTCMonth() + 1).toString().padStart(2, "0"),
+          date.getUTCDate().toString().padStart(2, "0"),
+        ].join("-");
+      }),
+      (dateKey) =>
+        Schema.decodeEffect(DateKeySchema)(dateKey).pipe(
+          Effect.mapError(
+            () =>
+              new InvalidDateKey({
+                boundary: "generatedDateKey",
+                dateKey,
+              })
+          )
+        )
+    );
+  });
+
+function _parseDateKey({
+  boundary,
+  dateKey,
+}: {
+  readonly boundary: Exclude<DateKeyRangeBoundary, "generatedDateKey">;
+  readonly dateKey: DateKey | string;
+}): Effect.Effect<CalendarDate, InvalidDateKey> {
+  return Effect.gen(function* () {
+    const decodedDateKey = yield* Schema.decodeEffect(DateKeySchema)(
+      dateKey
+    ).pipe(
+      Effect.mapError(
+        () =>
+          new InvalidDateKey({
+            boundary,
+            dateKey,
+          })
+      )
+    );
+    const match = dateKeyPattern.exec(decodedDateKey);
 
     if (match === null) {
-      throw new RangeError(`Invalid date key: ${dateKey}`);
+      return yield* new InvalidDateKey({
+        boundary,
+        dateKey,
+      });
     }
 
     const [, yearString, monthString, dayString] = match;
     const year = Number(yearString);
     const month = Number(monthString);
     const day = Number(dayString);
-    const date = new Date(year, month - 1, day, 12);
+    const date = new Date(0);
+
+    date.setUTCFullYear(year, month - 1, day);
+    date.setUTCHours(12, 0, 0, 0);
 
     if (
-      date.getFullYear() !== year ||
-      date.getMonth() !== month - 1 ||
-      date.getDate() !== day
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
     ) {
-      throw new RangeError(`Invalid date key: ${dateKey}`);
+      return yield* new InvalidDateKey({
+        boundary,
+        dateKey,
+      });
     }
 
-    return date;
-  };
-  const formatDateKey = ({ date }: { readonly date: Date }) =>
-    [
-      date.getFullYear().toString().padStart(4, "0"),
-      (date.getMonth() + 1).toString().padStart(2, "0"),
-      date.getDate().toString().padStart(2, "0"),
-    ].join("-");
-  const startDate = parseDateKey({ dateKey: startDateKey });
-  const endDate = parseDateKey({ dateKey: endDateKey });
-
-  if (startDate > endDate) {
-    return [];
-  }
-
-  const dateKeys: string[] = [];
-  const cursor = new Date(startDate);
-
-  while (cursor <= endDate) {
-    dateKeys.push(formatDateKey({ date: cursor }));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dateKeys;
-};
+    return {
+      dateKey: decodedDateKey,
+      utcNoonEpochMilliseconds: date.getTime(),
+    };
+  });
+}

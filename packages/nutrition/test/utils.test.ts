@@ -87,42 +87,63 @@ describe("nutrition utils", () => {
     assert.closeTo(result.validatedNutrients.fatGrams, 0.6, 0.000_001);
   });
 
-  it("lists date keys in a closed range", () => {
-    const dateKeys = Utils.dateKeysInRange({
-      endDateKey: "2026-06-21",
-      startDateKey: "2026-06-19",
-    });
+  it("lists date keys in a closed range", async () => {
+    const dateKeys = await Effect.runPromise(
+      Utils.dateKeysInRange({
+        endDateKey: "2026-06-21",
+        startDateKey: "2026-06-19",
+      })
+    );
 
     assert.deepEqual(dateKeys, ["2026-06-19", "2026-06-20", "2026-06-21"]);
   });
 
-  it("handles month boundaries and leap days in date key ranges", () => {
-    const dateKeys = Utils.dateKeysInRange({
-      endDateKey: "2024-03-01",
-      startDateKey: "2024-02-28",
-    });
+  it("handles month boundaries and leap days in date key ranges", async () => {
+    const dateKeys = await Effect.runPromise(
+      Utils.dateKeysInRange({
+        endDateKey: "2024-03-01",
+        startDateKey: "2024-02-28",
+      })
+    );
 
     assert.deepEqual(dateKeys, ["2024-02-28", "2024-02-29", "2024-03-01"]);
   });
 
-  it("returns no date keys for reversed ranges", () => {
-    const dateKeys = Utils.dateKeysInRange({
-      endDateKey: "2026-06-19",
-      startDateKey: "2026-06-21",
-    });
+  it("returns no date keys for reversed ranges", async () => {
+    const dateKeys = await Effect.runPromise(
+      Utils.dateKeysInRange({
+        endDateKey: "2026-06-19",
+        startDateKey: "2026-06-21",
+      })
+    );
 
     assert.deepEqual(dateKeys, []);
   });
 
-  it("rejects invalid calendar date keys", () => {
-    assert.throws(
-      () =>
-        Utils.dateKeysInRange({
-          endDateKey: "2026-02-29",
-          startDateKey: "2026-02-28",
-        }),
-      RangeError
+  it("fails with a typed error for invalid date key formats", async () => {
+    const failure = await Effect.runPromise(
+      Utils.dateKeysInRange({
+        endDateKey: "2026-06-21",
+        startDateKey: "2026/06/19",
+      }).pipe(Effect.flip)
     );
+
+    assert.instanceOf(failure, Utils.InvalidDateKey);
+    assert.equal(failure.boundary, "startDateKey");
+    assert.equal(failure.dateKey, "2026/06/19");
+  });
+
+  it("fails with a typed error for invalid calendar date keys", async () => {
+    const failure = await Effect.runPromise(
+      Utils.dateKeysInRange({
+        endDateKey: "2026-02-29",
+        startDateKey: "2026-02-28",
+      }).pipe(Effect.flip)
+    );
+
+    assert.instanceOf(failure, Utils.InvalidDateKey);
+    assert.equal(failure.boundary, "endDateKey");
+    assert.equal(failure.dateKey, "2026-02-29");
   });
 
   it("keeps missing secondary entry nutrients optional", async () => {
