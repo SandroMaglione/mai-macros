@@ -9,21 +9,21 @@ import {
   NumberField,
 } from "@/components/ui";
 import {
-  FoodDefaultOriginDot,
   FoodNutrientOverview,
   FoodSearchField,
   FoodSearchResults,
 } from "@/components/nutrition";
 import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import { FoodSearchMachine } from "@mai/machines";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Option, Order, Schema } from "effect";
-import { router, useLocalSearchParams } from "expo-router";
-import { ChevronLeft, Pencil, Plus } from "lucide-react-native";
+import { Redirect, router } from "expo-router";
+import { Check, ChevronLeft, Plus } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -48,9 +48,6 @@ type AddMealFoodRouteData = {
 };
 
 type AddMealFoodRouteLoadResult =
-  | {
-      readonly _tag: "InvalidRoute";
-    }
   | {
       readonly _tag: "NoMealPlans";
       readonly dateKey: Domain.DateKey;
@@ -93,6 +90,11 @@ const mealLabels = {
   dinner: "Dinner",
   lunch: "Lunch",
 } satisfies Record<Domain.Meal, string>;
+
+const AddMealFoodRouteParams = Schema.Struct({
+  dateKey: Domain.DateKey,
+  meal: Domain.Meal,
+});
 
 const addMealFoodRouteMachine = setup({
   types: {
@@ -295,29 +297,29 @@ const addMealFoodRouteLoaderMachine = setup({
   types: {
     context: {} as {
       readonly data: AddMealFoodRouteData | null;
-      readonly dateKeyParam: string | undefined;
-      readonly mealParam: string | undefined;
+      readonly dateKey: Domain.DateKey;
+      readonly meal: Domain.Meal;
       readonly message: string | null;
     },
     input: {} as {
-      readonly dateKeyParam: string | undefined;
-      readonly mealParam: string | undefined;
+      readonly dateKey: Domain.DateKey;
+      readonly meal: Domain.Meal;
     },
   },
   actors: {
     loadRouteData: fromPromise<
       AddMealFoodRouteLoadResult,
       {
-        readonly dateKeyParam: string | undefined;
-        readonly mealParam: string | undefined;
+        readonly dateKey: Domain.DateKey;
+        readonly meal: Domain.Meal;
       }
     >(({ input }) => RuntimeClient.runPromise(loadAddMealFoodRouteData(input))),
   },
 }).createMachine({
   context: ({ input }) => ({
     data: null,
-    dateKeyParam: input.dateKeyParam,
-    mealParam: input.mealParam,
+    dateKey: input.dateKey,
+    meal: input.meal,
     message: null,
   }),
   initial: "Loading",
@@ -326,17 +328,10 @@ const addMealFoodRouteLoaderMachine = setup({
       invoke: {
         src: "loadRouteData",
         input: ({ context }) => ({
-          dateKeyParam: context.dateKeyParam,
-          mealParam: context.mealParam,
+          dateKey: context.dateKey,
+          meal: context.meal,
         }),
         onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "InvalidRoute",
-            target: "Redirected",
-            actions: () => {
-              _replacePath("/");
-            },
-          },
           {
             guard: ({ event }) => event.output._tag === "NoMealPlans",
             target: "Redirected",
@@ -371,16 +366,16 @@ const addMealFoodRouteLoaderMachine = setup({
 });
 
 export default function AddMealFoodRoute() {
-  const params = useLocalSearchParams<{
-    readonly dateKey?: string | string[];
-    readonly meal?: string | string[];
-  }>();
-  const dateKeyParam = _firstParam(params.dateKey);
-  const mealParam = _firstParam(params.meal);
+  const routeParams = useSchemaLocalSearchParams(AddMealFoodRouteParams);
+
+  if (Option.isNone(routeParams)) {
+    return <Redirect href="/" />;
+  }
+
   const [snapshot] = useMachine(addMealFoodRouteLoaderMachine, {
     input: {
-      dateKeyParam,
-      mealParam,
+      dateKey: routeParams.value.dateKey,
+      meal: routeParams.value.meal,
     },
   });
 
@@ -433,7 +428,11 @@ function ReadyAddMealFoodRoute({
   const selectedFood = snapshot.context.selectedFood;
   const disabled =
     snapshot.matches("Submitting") || snapshot.matches("Submitted");
+  const clearSelectedFoodEvent = {
+    type: "clearSelectedFood",
+  } satisfies AddMealFoodRouteEvent;
   const submitEvent = { type: "submit" } satisfies AddMealFoodRouteEvent;
+  const submitDisabled = disabled || !snapshot.can(submitEvent);
   const mealLabel = mealLabels[meal];
   const selectedFoodUsage =
     selectedFood === null
@@ -447,7 +446,7 @@ function ReadyAddMealFoodRoute({
   );
   const selectedFoodQuantityLabel =
     selectedFoodUsage === undefined || selectedMealUsage === undefined
-      ? "No previous"
+      ? undefined
       : `${_formatPreciseNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
@@ -478,9 +477,18 @@ function ReadyAddMealFoodRoute({
           embedded
           leading={
             <IconButton
-              accessibilityLabel={`Back to ${dateKey}`}
+              accessibilityLabel={
+                snapshot.can(clearSelectedFoodEvent)
+                  ? "Back to food selection"
+                  : `Back to ${dateKey}`
+              }
               icon={ChevronLeft}
               onPress={() => {
+                if (snapshot.can(clearSelectedFoodEvent)) {
+                  actor.send(clearSelectedFoodEvent);
+                  return;
+                }
+
                 _replacePath(`/days/${dateKey}`);
               }}
               variant="ghost"
@@ -489,13 +497,36 @@ function ReadyAddMealFoodRoute({
           shadow
           style={selectedFood === null ? styles.searchHeader : undefined}
           title={mealLabel}
+          trailing={
+            selectedFood === null ? (
+              <IconButton
+                accessibilityLabel="Create food"
+                icon={Plus}
+                onPress={() => {
+                  router.push({
+                    pathname: "/foods/new",
+                    params: {
+                      dateKey,
+                    },
+                  });
+                }}
+                variant="ghost"
+              />
+            ) : (
+              <IconButton
+                accessibilityLabel={`Add food to ${mealLabel}`}
+                disabled={submitDisabled}
+                icon={Check}
+                onPress={() => {
+                  actor.send(submitEvent);
+                }}
+                variant="ghost"
+              />
+            )
+          }
         >
           {selectedFood === null ? (
-            <FoodSearchField
-              actor={foodSearchActor}
-              autoFocus
-              disabled={disabled}
-            />
+            <FoodSearchField actor={foodSearchActor} disabled={disabled} />
           ) : null}
         </AppHeader>
 
@@ -504,50 +535,52 @@ function ReadyAddMealFoodRoute({
         )}
 
         {selectedFood === null ? (
-          <FoodSearchResults
-            actor={foodSearchActor}
-            disabled={disabled}
-            emptyFoodsText="Create a food before logging this meal."
-            emptySearchText="No foods found."
-            getPrimaryLabel={(food) => {
-              const foodHistory = _findFoodUsage({
-                foodId: food.id,
-                foodUsage,
-              });
-              const mealHistory = foodHistory?.meals.find(
-                (usage) => usage.meal === meal
-              );
-              const nutrients =
-                foodHistory === undefined || mealHistory === undefined
+          <View style={styles.searchBody}>
+            <FoodSearchResults
+              actor={foodSearchActor}
+              disabled={disabled}
+              emptyFoodsText="Create a food before logging this meal."
+              emptySearchText="No foods found."
+              getPrimaryLabel={(food) => {
+                const foodHistory = _findFoodUsage({
+                  foodId: food.id,
+                  foodUsage,
+                });
+                const mealHistory = foodHistory?.meals.find(
+                  (usage) => usage.meal === meal
+                );
+                const nutrients =
+                  foodHistory === undefined || mealHistory === undefined
+                    ? undefined
+                    : Utils.calculateEntryNutrients({
+                        food,
+                        quantityGrams: foodHistory.latestQuantityGrams,
+                      });
+
+                return nutrients === undefined
+                  ? "New"
+                  : `${formatNumber({
+                      maximumFractionDigits: 0,
+                      value: nutrients.energyKcal,
+                    })} kcal`;
+              }}
+              getSecondaryLabel={(food) => {
+                const foodHistory = _findFoodUsage({
+                  foodId: food.id,
+                  foodUsage,
+                });
+                const mealHistory = foodHistory?.meals.find(
+                  (usage) => usage.meal === meal
+                );
+
+                return foodHistory === undefined || mealHistory === undefined
                   ? undefined
-                  : Utils.calculateEntryNutrients({
-                      food,
-                      quantityGrams: foodHistory.latestQuantityGrams,
-                    });
-
-              return nutrients === undefined
-                ? "New"
-                : `${formatNumber({
-                    maximumFractionDigits: 0,
-                    value: nutrients.energyKcal,
-                  })} kcal`;
-            }}
-            getSecondaryLabel={(food) => {
-              const foodHistory = _findFoodUsage({
-                foodId: food.id,
-                foodUsage,
-              });
-              const mealHistory = foodHistory?.meals.find(
-                (usage) => usage.meal === meal
-              );
-
-              return foodHistory === undefined || mealHistory === undefined
-                ? "No previous"
-                : `${_formatPreciseNumber({
-                    value: foodHistory.latestQuantityGrams,
-                  })} g`;
-            }}
-          />
+                  : `${_formatPreciseNumber({
+                      value: foodHistory.latestQuantityGrams,
+                    })} g`;
+              }}
+            />
+          </View>
         ) : (
           <QuantityEntry
             actor={actor}
@@ -557,7 +590,7 @@ function ReadyAddMealFoodRoute({
             selectedFood={selectedFood}
             selectedFoodNutrients={selectedFoodNutrients}
             selectedFoodQuantityLabel={selectedFoodQuantityLabel}
-            submitDisabled={disabled || !snapshot.can(submitEvent)}
+            submitDisabled={submitDisabled}
           />
         )}
       </AppScreen>
@@ -583,7 +616,7 @@ function QuantityEntry({
   readonly selectedFoodNutrients:
     | ReturnType<typeof Utils.calculateEntryNutrients>
     | undefined;
-  readonly selectedFoodQuantityLabel: string;
+  readonly selectedFoodQuantityLabel: string | undefined;
   readonly submitDisabled: boolean;
 }) {
   return (
@@ -591,6 +624,7 @@ function QuantityEntry({
       <View style={styles.quantityBody}>
         <NumberField
           accessibilityLabel={`${mealLabel} quantity in grams`}
+          autoFocus
           editable={!disabled}
           label="Grams"
           onChangeText={(value) => {
@@ -601,34 +635,21 @@ function QuantityEntry({
           }}
           placeholder="150"
           rightElement={<Text style={styles.unitLabel}>g</Text>}
+          selectTextOnFocus
           value={quantityGrams}
         />
         <FoodNutrientOverview
           brand={selectedFood.brand}
           name={selectedFood.name}
-          namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
           nutrients={selectedFoodNutrients}
           secondaryLabel={selectedFoodQuantityLabel}
         />
       </View>
       <BottomActionBar>
         <Button
-          disabled={disabled}
-          icon={Pencil}
-          onPress={() => {
-            actor.send({
-              type: "clearSelectedFood",
-            });
-          }}
-          style={styles.footerButton}
-          variant="secondary"
-        >
-          Change food
-        </Button>
-        <Button
           accessibilityLabel={`Add food to ${mealLabel}`}
           disabled={submitDisabled}
-          icon={Plus}
+          icon={Check}
           loading={disabled}
           onPress={() => {
             actor.send({
@@ -657,17 +678,13 @@ export function getAddMealFoodRouteData({
 }
 
 export function loadAddMealFoodRouteData({
-  dateKeyParam,
-  mealParam,
+  dateKey,
+  meal,
 }: {
-  readonly dateKeyParam: string | undefined;
-  readonly mealParam: string | undefined;
+  readonly dateKey: Domain.DateKey;
+  readonly meal: Domain.Meal;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeUnknownEffect(Domain.DateKey)(
-      dateKeyParam
-    );
-    const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(mealParam);
     const dailyLogs = yield* DailyLogs.DailyLogs;
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
@@ -694,11 +711,6 @@ export function loadAddMealFoodRouteData({
         _tag: "NoMealPlans" as const,
         dateKey,
       })
-    ),
-    Effect.catchTag("SchemaError", () =>
-      Effect.succeed({
-        _tag: "InvalidRoute" as const,
-      })
     )
   );
 }
@@ -711,10 +723,6 @@ function _findFoodUsage({
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 }) {
   return foodUsage.find((usage) => usage.foodId === foodId);
-}
-
-function _firstParam(param: string | string[] | undefined) {
-  return globalThis.Array.isArray(param) ? param[0] : param;
 }
 
 function _replacePath(path: string) {
@@ -741,6 +749,10 @@ const styles = StyleSheet.create({
   },
   searchHeader: {
     marginBottom: 0,
+  },
+  searchBody: {
+    flex: 1,
+    marginHorizontal: -spacing.lg,
   },
   notice: {
     marginBottom: spacing.md,

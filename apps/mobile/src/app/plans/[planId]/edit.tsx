@@ -1,12 +1,13 @@
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
 import { AppScreen, LoadingView, MaiHeader, Notice } from "@/components/ui";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
 import { Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Match, Option, Schema } from "effect";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
@@ -23,6 +24,7 @@ type RouteDecodeResult =
 type SubmitResult =
   | {
       readonly _tag: "Revised";
+      readonly dateKey: Domain.DateKey;
     }
   | {
       readonly _tag: "PlanNameAlreadyExists";
@@ -61,45 +63,71 @@ const editPlanRouteMachine = setup({
     },
   },
   actors: {
-    loadMealPlan: fromPromise<Domain.Plan | null, Domain.PlanId>((input) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const mealPlans = yield* MealPlans.MealPlans;
+    loadMealPlan: fromPromise<Domain.Plan | null, Domain.PlanId | null>(
+      (input) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            if (input.input === null) {
+              return yield* Effect.succeed(null);
+            }
 
-          return yield* mealPlans.get({
-            input: {
-              planId: input.input,
-            },
-          });
-        }).pipe(
-          Effect.catchTag("PlanNotFound", () => Effect.succeed(null)),
-          Effect.catchTag("SchemaError", () => Effect.succeed(null))
+            const planId = input.input;
+            const mealPlans = yield* MealPlans.MealPlans;
+
+            return yield* mealPlans.get({
+              input: {
+                planId,
+              },
+            });
+          }).pipe(
+            Effect.catchTag("PlanNotFound", () => Effect.succeed(null)),
+            Effect.catchTag("SchemaError", () => Effect.succeed(null))
+          )
         )
-      )
     ),
     reviseMealPlan: fromPromise<
       SubmitResult,
       {
-        readonly dateKey: Domain.DateKey;
+        readonly dateKey: Option.Option<Domain.DateKey>;
         readonly input: MealPlans.CreateMealPlanInput;
-        readonly planId: Domain.PlanId;
+        readonly planId: Domain.PlanId | null;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
-          const mealPlans = yield* MealPlans.MealPlans;
+          if (input.planId === null) {
+            return yield* Effect.succeed({
+              _tag: "PlanNotFound" as const,
+            });
+          }
 
-          yield* mealPlans.revise({
-            input: {
-              ...input.input,
-              dateKey: input.dateKey,
-              planId: input.planId,
-            },
-          });
+          const planId = input.planId;
 
-          return {
-            _tag: "Revised" as const,
-          };
+          return yield* input.dateKey.pipe(
+            Option.match({
+              onNone: () =>
+                Effect.succeed({
+                  _tag: "SchemaError" as const,
+                }),
+              onSome: (dateKey) =>
+                Effect.gen(function* () {
+                  const mealPlans = yield* MealPlans.MealPlans;
+
+                  yield* mealPlans.revise({
+                    input: {
+                      ...input.input,
+                      dateKey,
+                      planId,
+                    },
+                  });
+
+                  return {
+                    _tag: "Revised" as const,
+                    dateKey,
+                  };
+                }),
+            })
+          );
         }).pipe(
           Effect.catchTag("PlanNameAlreadyExists", () =>
             Effect.succeed({
@@ -146,13 +174,7 @@ const editPlanRouteMachine = setup({
       },
       invoke: {
         src: "loadMealPlan",
-        input: ({ context }) => {
-          if (context.planId === null) {
-            throw new Error("Missing plan id.");
-          }
-
-          return context.planId;
-        },
+        input: ({ context }) => context.planId,
         onDone: [
           {
             guard: ({ event }) => event.output === null,
@@ -190,24 +212,22 @@ const editPlanRouteMachine = setup({
     Submitting: {
       invoke: {
         src: "reviseMealPlan",
-        input: ({ context, event }) => {
-          if (context.planId === null) {
-            throw new Error("Cannot revise without a plan id.");
-          }
-
-          return {
-            dateKey: context.dateKey ?? decodeTodayDateKey(),
-            input: event.input,
-            planId: context.planId,
-          };
-        },
+        input: ({ context, event }) => ({
+          dateKey: resolveDateKey({ dateKey: context.dateKey }),
+          input: event.input,
+          planId: context.planId,
+        }),
         onDone: [
           {
             guard: ({ event }) => event.output._tag === "Revised",
             target: "Revised",
-            actions: ({ context }) => {
+            actions: ({ context, event }) => {
+              if (event.output._tag !== "Revised") {
+                return;
+              }
+
               replaceToDateKey({
-                dateKey: context.dateKey ?? decodeTodayDateKey(),
+                dateKey: event.output.dateKey,
                 router: context.router,
               });
             },
@@ -236,13 +256,21 @@ const editPlanRouteMachine = setup({
 
 export default function EditPlanScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const [snapshot, send] = useMachine(editPlanRouteMachine, {
-    input: {
-      routeParams: decodeEditPlanRouteParams({
+  const routeParams = useSchemaLocalSearchParams(EditRouteParams).pipe(
+    Option.match({
+      onNone: () => ({
+        _tag: "Invalid" as const,
+      }),
+      onSome: (params) => ({
+        _tag: "Valid" as const,
         dateKey: params.dateKey,
         planId: params.planId,
       }),
+    })
+  );
+  const [snapshot, send] = useMachine(editPlanRouteMachine, {
+    input: {
+      routeParams,
       router,
     },
   });
@@ -298,86 +326,6 @@ export default function EditPlanScreen() {
   );
 }
 
-export function decodeEditPlanRouteParams({
-  dateKey,
-  planId,
-}: {
-  readonly dateKey: unknown;
-  readonly planId: unknown;
-}): RouteDecodeResult {
-  const dateKeyParam = optionalStringParam({ value: dateKey });
-  const planIdParam = requiredStringParam({ value: planId });
-
-  if (dateKeyParam._tag === "Invalid" || planIdParam._tag === "Invalid") {
-    return {
-      _tag: "Invalid",
-    };
-  }
-
-  return Schema.decodeOption(EditRouteParams)({
-    dateKey: dateKeyParam.value,
-    planId: planIdParam.value,
-  }).pipe(
-    Option.match({
-      onNone: () => ({
-        _tag: "Invalid" as const,
-      }),
-      onSome: (routeParams) => ({
-        _tag: "Valid" as const,
-        dateKey: routeParams.dateKey,
-        planId: routeParams.planId,
-      }),
-    })
-  );
-}
-
-export function optionalStringParam({ value }: { readonly value: unknown }):
-  | {
-      readonly _tag: "Valid";
-      readonly value: string | undefined;
-    }
-  | {
-      readonly _tag: "Invalid";
-    } {
-  if (value === undefined) {
-    return {
-      _tag: "Valid",
-      value: undefined,
-    };
-  }
-
-  if (typeof value === "string") {
-    return {
-      _tag: "Valid",
-      value,
-    };
-  }
-
-  return {
-    _tag: "Invalid",
-  };
-}
-
-export function requiredStringParam({ value }: { readonly value: unknown }):
-  | {
-      readonly _tag: "Valid";
-      readonly value: string;
-    }
-  | {
-      readonly _tag: "Invalid";
-    } {
-  if (typeof value === "string") {
-    return {
-      _tag: "Valid",
-      value,
-    };
-  }
-
-  return {
-    _tag: "Invalid",
-  };
-}
-
 export function submitErrorMessage({
   result,
 }: {
@@ -422,10 +370,16 @@ export function replaceToDateKey({
   });
 }
 
-export function decodeTodayDateKey(): Domain.DateKey {
-  return Schema.decodeOption(Domain.DateKey)(todayDateKey()).pipe(
-    Option.getOrThrow
-  );
+export function resolveDateKey({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey | undefined;
+}): Option.Option<Domain.DateKey> {
+  if (dateKey !== undefined) {
+    return Option.some(dateKey);
+  }
+
+  return Schema.decodeOption(Domain.DateKey)(todayDateKey());
 }
 
 export function replaceBack({

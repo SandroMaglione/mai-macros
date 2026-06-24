@@ -1,9 +1,10 @@
 import { AppHeader, AppScreen, IconButton, PagerTabs } from "@/components/ui";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { color, spacing } from "@/theme/tokens";
 import { Domain } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Option, Schema } from "effect";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { assertEvent, assign, setup } from "xstate";
@@ -21,6 +22,10 @@ type FoodsDateKeyDecodeResult =
   | {
       readonly _tag: "Invalid";
     };
+
+const FoodsSearchParams = Schema.Struct({
+  dateKey: Schema.optional(Domain.DateKey),
+});
 
 const foodsHubMachine = setup({
   types: {
@@ -50,33 +55,21 @@ const foodsHubMachine = setup({
 });
 
 export default function FoodsScreen() {
-  const params = useLocalSearchParams<{
-    readonly dateKey?: string | string[];
-  }>();
-  const dateKeyParam = globalThis.Array.isArray(params.dateKey)
-    ? params.dateKey[0]
-    : params.dateKey;
-  const dateKeyResult: FoodsDateKeyDecodeResult =
-    dateKeyParam === undefined
-      ? {
-          _tag: "Valid",
-          dateKey: undefined,
-        }
-      : Schema.decodeOption(Domain.DateKey)(dateKeyParam).pipe(
-          Option.match({
-            onNone: () => ({
-              _tag: "Invalid" as const,
-            }),
-            onSome: (dateKey) => ({
-              _tag: "Valid" as const,
-              dateKey,
-            }),
-          })
-        );
+  const dateKeyResult = useSchemaLocalSearchParams(FoodsSearchParams).pipe(
+    Option.match({
+      onNone: () => ({
+        _tag: "Invalid" as const,
+      }),
+      onSome: ({ dateKey }) => ({
+        _tag: "Valid" as const,
+        dateKey,
+      }),
+    })
+  ) satisfies FoodsDateKeyDecodeResult;
   const dateKey =
     dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
   const panelDateKeyParam =
-    dateKeyResult._tag === "Valid" ? dateKeyParam : undefined;
+    dateKeyResult._tag === "Valid" ? dateKey : undefined;
   const [snapshot, send] = useMachine(foodsHubMachine);
   const activeTab = snapshot.context.activeTab;
   const tabs = [
@@ -169,7 +162,7 @@ export default function FoodsScreen() {
                 ...tabs[1],
                 content: (
                   <EditFoodsPanelLoader
-                    dateKeyParam={panelDateKeyParam}
+                    dateKey={panelDateKeyParam}
                     layout="embedded"
                   />
                 ),

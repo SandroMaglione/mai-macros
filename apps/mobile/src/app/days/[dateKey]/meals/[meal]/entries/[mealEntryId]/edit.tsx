@@ -8,16 +8,14 @@ import {
   Notice,
   NumberField,
 } from "@/components/ui";
-import {
-  FoodDefaultOriginDot,
-  FoodNutrientOverview,
-} from "@/components/nutrition";
+import { FoodNutrientOverview } from "@/components/nutrition";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { ChevronLeft, Save, Trash2 } from "lucide-react-native";
 import {
   Alert,
@@ -74,27 +72,33 @@ const mealLabels = {
   lunch: "Lunch",
 } satisfies Record<Domain.Meal, string>;
 
+const EditMealEntryRouteParams = Schema.Struct({
+  dateKey: Domain.DateKey,
+  meal: Domain.Meal,
+  mealEntryId: Domain.MealEntryId,
+});
+
 const editMealEntryRouteLoaderMachine = setup({
   types: {
     context: {} as {
       readonly data: EditMealEntryRouteData | null;
-      readonly dateKeyParam: string | undefined;
-      readonly mealEntryIdParam: string | undefined;
-      readonly mealParam: string | undefined;
+      readonly dateKey: Domain.DateKey;
+      readonly meal: Domain.Meal;
+      readonly mealEntryId: Domain.MealEntryId;
     },
     input: {} as {
-      readonly dateKeyParam: string | undefined;
-      readonly mealEntryIdParam: string | undefined;
-      readonly mealParam: string | undefined;
+      readonly dateKey: Domain.DateKey;
+      readonly meal: Domain.Meal;
+      readonly mealEntryId: Domain.MealEntryId;
     },
   },
   actors: {
     loadRouteData: fromPromise<
       EditMealEntryRouteLoadResult,
       {
-        readonly dateKeyParam: string | undefined;
-        readonly mealEntryIdParam: string | undefined;
-        readonly mealParam: string | undefined;
+        readonly dateKey: Domain.DateKey;
+        readonly meal: Domain.Meal;
+        readonly mealEntryId: Domain.MealEntryId;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(loadEditMealEntryRouteData(input))
@@ -103,9 +107,9 @@ const editMealEntryRouteLoaderMachine = setup({
 }).createMachine({
   context: ({ input }) => ({
     data: null,
-    dateKeyParam: input.dateKeyParam,
-    mealEntryIdParam: input.mealEntryIdParam,
-    mealParam: input.mealParam,
+    dateKey: input.dateKey,
+    meal: input.meal,
+    mealEntryId: input.mealEntryId,
   }),
   initial: "Loading",
   states: {
@@ -113,9 +117,9 @@ const editMealEntryRouteLoaderMachine = setup({
       invoke: {
         src: "loadRouteData",
         input: ({ context }) => ({
-          dateKeyParam: context.dateKeyParam,
-          mealEntryIdParam: context.mealEntryIdParam,
-          mealParam: context.mealParam,
+          dateKey: context.dateKey,
+          meal: context.meal,
+          mealEntryId: context.mealEntryId,
         }),
         onDone: [
           {
@@ -316,16 +320,17 @@ const editMealEntryRouteMachine = setup({
 });
 
 export default function EditMealEntryScreen() {
-  const params = useLocalSearchParams<{
-    readonly dateKey?: string | string[];
-    readonly meal?: string | string[];
-    readonly mealEntryId?: string | string[];
-  }>();
+  const routeParams = useSchemaLocalSearchParams(EditMealEntryRouteParams);
+
+  if (Option.isNone(routeParams)) {
+    return <Redirect href="/" />;
+  }
+
   const [snapshot] = useMachine(editMealEntryRouteLoaderMachine, {
     input: {
-      dateKeyParam: _firstParam(params.dateKey),
-      mealEntryIdParam: _firstParam(params.mealEntryId),
-      mealParam: _firstParam(params.meal),
+      dateKey: routeParams.value.dateKey,
+      meal: routeParams.value.meal,
+      mealEntryId: routeParams.value.mealEntryId,
     },
   });
 
@@ -434,7 +439,6 @@ function ReadyEditMealEntryScreen({
             <FoodNutrientOverview
               brand={data.food.brand}
               name={data.food.name}
-              namePrefix={<FoodDefaultOriginDot food={data.food} />}
               nutrients={selectedFoodNutrients}
               secondaryLabel={`${data.mealEntry.quantityGrams} g logged`}
             />
@@ -491,22 +495,15 @@ function ReadyEditMealEntryScreen({
 }
 
 export function loadEditMealEntryRouteData({
-  dateKeyParam,
-  mealEntryIdParam,
-  mealParam,
+  dateKey,
+  mealEntryId,
+  meal,
 }: {
-  readonly dateKeyParam: string | undefined;
-  readonly mealEntryIdParam: string | undefined;
-  readonly mealParam: string | undefined;
+  readonly dateKey: Domain.DateKey;
+  readonly mealEntryId: Domain.MealEntryId;
+  readonly meal: Domain.Meal;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeUnknownEffect(Domain.DateKey)(
-      dateKeyParam
-    );
-    const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(mealParam);
-    const mealEntryId = yield* Schema.decodeUnknownEffect(Domain.MealEntryId)(
-      mealEntryIdParam
-    );
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
     const mealEntries = yield* mealEntriesService.listForDay({
@@ -535,17 +532,7 @@ export function loadEditMealEntryRouteData({
         mealEntry,
       },
     };
-  }).pipe(
-    Effect.catchTag("SchemaError", () =>
-      Effect.succeed({
-        _tag: "InvalidRoute" as const,
-      })
-    )
-  );
-}
-
-function _firstParam(param: string | string[] | undefined) {
-  return globalThis.Array.isArray(param) ? param[0] : param;
+  });
 }
 
 function _mutationMessage({

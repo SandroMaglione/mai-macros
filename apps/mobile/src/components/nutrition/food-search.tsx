@@ -1,12 +1,15 @@
 import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { type Domain } from "@mai/nutrition";
+import { Utils, type Domain } from "@mai/nutrition";
 import { type FoodSearchMachine } from "@mai/machines";
-import { useSelector } from "@xstate/react";
+import { useMachine, useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
-import { Search } from "lucide-react-native";
+import { Check, ChevronDown, Search } from "lucide-react-native";
 import {
+  ActionSheetIOS,
+  Modal,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +17,7 @@ import {
   View,
   type ListRenderItem,
 } from "react-native";
+import { setup } from "xstate";
 
 type FoodSearchProps = {
   readonly actor: FoodSearchMachine.FoodSearchActorRef;
@@ -21,9 +25,138 @@ type FoodSearchProps = {
   readonly emptyFoodsText?: string;
   readonly emptySearchText?: string;
   readonly getPrimaryLabel?: (food: Domain.Food) => string;
-  readonly getSecondaryLabel?: (food: Domain.Food) => string;
+  readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
   readonly placeholder?: string;
 };
+
+const dominantMacronutrientIndicator = {
+  carbs: {
+    accessibilityLabel: "mostly carbs",
+    color: color.nutritionCarbs,
+  },
+  fat: {
+    accessibilityLabel: "mostly fat",
+    color: color.nutritionFat,
+  },
+  protein: {
+    accessibilityLabel: "mostly protein",
+    color: color.nutritionProtein,
+  },
+} satisfies Record<
+  Utils.DominantMacronutrient,
+  {
+    readonly accessibilityLabel: string;
+    readonly color: string;
+  }
+>;
+
+type FoodSearchMacroOrderOption = {
+  readonly accessibilityLabel: string;
+  readonly color: string;
+  readonly key: string;
+  readonly label: string;
+  readonly macroOrder: FoodSearchMachine.FoodSearchMacroOrder | null;
+};
+
+type FoodSearchMacroOrderDialogEvent =
+  | {
+      readonly type: "close";
+    }
+  | {
+      readonly type: "open";
+    };
+
+const foodSearchMacroOrderDialogMachine = setup({
+  types: {
+    events: {} as FoodSearchMacroOrderDialogEvent,
+  },
+}).createMachine({
+  initial: "Closed",
+  states: {
+    Closed: {
+      on: {
+        open: {
+          target: "Open",
+        },
+      },
+    },
+    Open: {
+      on: {
+        close: {
+          target: "Closed",
+        },
+      },
+    },
+  },
+});
+
+const foodSearchDefaultMacroOrderOption = {
+  accessibilityLabel: "Use default food order",
+  color: color.textSubtle,
+  key: "default",
+  label: "Default",
+  macroOrder: null,
+} satisfies FoodSearchMacroOrderOption;
+
+const foodSearchMacroOrderOptions = [
+  foodSearchDefaultMacroOrderOption,
+  {
+    accessibilityLabel: "Order foods by calories",
+    color: color.nutritionEnergy,
+    key: "energy",
+    label: "Calories",
+    macroOrder: "energy",
+  },
+  {
+    accessibilityLabel: "Order foods by fat",
+    color: color.nutritionFat,
+    key: "fat",
+    label: "Fat",
+    macroOrder: "fat",
+  },
+  {
+    accessibilityLabel: "Order foods by saturated fat",
+    color: color.nutritionFat,
+    key: "saturated-fat",
+    label: "Saturated fat",
+    macroOrder: "saturatedFat",
+  },
+  {
+    accessibilityLabel: "Order foods by carbs",
+    color: color.nutritionCarbs,
+    key: "carbs",
+    label: "Carbs",
+    macroOrder: "carbs",
+  },
+  {
+    accessibilityLabel: "Order foods by sugar",
+    color: color.nutritionSugar,
+    key: "sugar",
+    label: "Sugar",
+    macroOrder: "sugar",
+  },
+  {
+    accessibilityLabel: "Order foods by fiber",
+    color: color.nutritionFiber,
+    key: "fiber",
+    label: "Fiber",
+    macroOrder: "fiber",
+  },
+  {
+    accessibilityLabel: "Order foods by protein",
+    color: color.nutritionProtein,
+    key: "protein",
+    label: "Protein",
+    macroOrder: "protein",
+  },
+  {
+    accessibilityLabel: "Order foods by salt",
+    color: color.nutritionSalt,
+    key: "salt",
+    label: "Salt",
+    macroOrder: "salt",
+  },
+] satisfies readonly FoodSearchMacroOrderOption[];
 
 export function FoodSearch({
   actor,
@@ -64,7 +197,18 @@ export function FoodSearchField({
   readonly disabled: boolean;
   readonly placeholder?: string;
 }) {
+  const [dialogSnapshot, dialogSend] = useMachine(
+    foodSearchMacroOrderDialogMachine
+  );
   const query = useSelector(actor, (snapshot) => snapshot.context.query);
+  const macroOrder = useSelector(
+    actor,
+    (snapshot) => snapshot.context.macroOrder
+  );
+  const selectedOrderOption =
+    foodSearchMacroOrderOptions.find(
+      (option) => option.macroOrder === macroOrder
+    ) ?? foodSearchDefaultMacroOrderOption;
 
   return (
     <View style={styles.searchShell}>
@@ -94,7 +238,151 @@ export function FoodSearchField({
         style={styles.searchInput}
         value={query}
       />
+      <FoodSearchMacroOrderSelector
+        disabled={disabled}
+        selectedOption={selectedOrderOption}
+        onPress={() => {
+          if (Platform.OS === "ios") {
+            ActionSheetIOS.showActionSheetWithOptions(
+              {
+                cancelButtonIndex: foodSearchMacroOrderOptions.length,
+                options: [
+                  ...foodSearchMacroOrderOptions.map((option) => option.label),
+                  "Cancel",
+                ],
+                title: "Order foods",
+                userInterfaceStyle: "dark",
+              },
+              (buttonIndex) => {
+                const option = foodSearchMacroOrderOptions[buttonIndex];
+
+                if (option === undefined) {
+                  return;
+                }
+
+                actor.send({
+                  macroOrder: option.macroOrder,
+                  type: "changeMacroOrder",
+                });
+              }
+            );
+            return;
+          }
+
+          dialogSend({
+            type: "open",
+          } satisfies FoodSearchMacroOrderDialogEvent);
+        }}
+      />
+      <FoodSearchMacroOrderDialog
+        actor={actor}
+        selectedOption={selectedOrderOption}
+        visible={dialogSnapshot.matches("Open")}
+        onClose={() => {
+          dialogSend({
+            type: "close",
+          } satisfies FoodSearchMacroOrderDialogEvent);
+        }}
+      />
     </View>
+  );
+}
+
+function FoodSearchMacroOrderSelector({
+  disabled,
+  onPress,
+  selectedOption,
+}: {
+  readonly disabled: boolean;
+  readonly onPress: () => void;
+  readonly selectedOption: FoodSearchMacroOrderOption;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={selectedOption.accessibilityLabel}
+      accessibilityRole="button"
+      disabled={disabled}
+      hitSlop={spacing.sm}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.orderSelector,
+        pressed && !disabled ? styles.orderSelectorPressed : null,
+        disabled ? styles.orderSelectorDisabled : null,
+      ]}
+    >
+      <View
+        accessible={false}
+        style={[
+          styles.orderSelectorDot,
+          { backgroundColor: selectedOption.color },
+        ]}
+      />
+      <ChevronDown color={color.textSubtle} size={14} strokeWidth={3} />
+    </Pressable>
+  );
+}
+
+function FoodSearchMacroOrderDialog({
+  actor,
+  onClose,
+  selectedOption,
+  visible,
+}: {
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly onClose: () => void;
+  readonly selectedOption: FoodSearchMacroOrderOption;
+  readonly visible: boolean;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={visible}
+    >
+      <Pressable
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.orderDialogBackdrop}
+      >
+        <View style={styles.orderDialog} onStartShouldSetResponder={() => true}>
+          <Text style={styles.orderDialogTitle}>Order foods</Text>
+          {foodSearchMacroOrderOptions.map((option) => (
+            <Pressable
+              accessibilityLabel={option.accessibilityLabel}
+              accessibilityRole="button"
+              key={option.key}
+              onPress={() => {
+                actor.send({
+                  macroOrder: option.macroOrder,
+                  type: "changeMacroOrder",
+                });
+                onClose();
+              }}
+              style={({ pressed }) => [
+                styles.orderDialogOption,
+                selectedOption.key === option.key
+                  ? styles.orderDialogOptionSelected
+                  : null,
+                pressed ? styles.orderDialogOptionPressed : null,
+              ]}
+            >
+              <View
+                accessible={false}
+                style={[
+                  styles.orderDialogOptionDot,
+                  { backgroundColor: option.color },
+                ]}
+              />
+              <Text style={styles.orderDialogOptionLabel}>{option.label}</Text>
+              {selectedOption.key === option.key ? (
+                <Check color={color.text} size={18} strokeWidth={3} />
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -111,7 +399,7 @@ export function FoodSearchResults({
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
   readonly getPrimaryLabel?: (food: Domain.Food) => string;
-  readonly getSecondaryLabel?: (food: Domain.Food) => string;
+  readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
 }) {
   const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
   const matchingFoods = useSelector(
@@ -131,6 +419,7 @@ export function FoodSearchResults({
   return (
     <FlatList
       data={matchingFoods}
+      ItemSeparatorComponent={FoodSearchSeparator}
       keyboardShouldPersistTaps="handled"
       keyExtractor={(food) => food.id}
       ListEmptyComponent={<FoodSearchEmpty text={emptyText} />}
@@ -161,7 +450,9 @@ export function createFoodSearchRenderItem({
   readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly disabled: boolean;
   readonly getPrimaryLabel: ((food: Domain.Food) => string) | undefined;
-  readonly getSecondaryLabel: ((food: Domain.Food) => string) | undefined;
+  readonly getSecondaryLabel:
+    | ((food: Domain.Food) => string | undefined)
+    | undefined;
   readonly selectedFoodId: Domain.Food["id"] | null;
 }): ListRenderItem<Domain.Food> {
   return ({ item }) => (
@@ -181,16 +472,6 @@ export function createFoodSearchRenderItem({
   );
 }
 
-export function FoodDefaultOriginDot({ food }: { readonly food: Domain.Food }) {
-  return food.origin === "app-default" ? (
-    <View
-      accessibilityLabel="Pre-installed food"
-      style={styles.defaultDot}
-      testID="food-default-origin-dot"
-    />
-  ) : null;
-}
-
 function FoodSearchResult({
   disabled,
   food,
@@ -206,19 +487,44 @@ function FoodSearchResult({
   readonly secondaryLabel?: string;
   readonly selected: boolean;
 }) {
-  const brandLabel = food.brand ?? "/";
+  const brandLabel =
+    food.brand === undefined || food.brand.trim() === "" ? null : food.brand;
   const per100gLabel = `${formatNumber({
     maximumFractionDigits: 0,
     value: food.energyKcalPer100g,
   })} kcal / 100 g`;
+  const dominantMacronutrient = Utils.findDominantMacronutrient({ food });
+  const dominantMacronutrientMeta =
+    dominantMacronutrient === null
+      ? undefined
+      : dominantMacronutrientIndicator[dominantMacronutrient];
+  const isDefaultFood = food.origin === "app-default";
+  const isUserFood = food.origin === "user";
+  const defaultFoodAccessibilityLabel = isDefaultFood
+    ? ", pre-installed food"
+    : "";
+  const accessibilityLabel = [
+    `${food.name}${defaultFoodAccessibilityLabel}`,
+    brandLabel,
+    dominantMacronutrientMeta?.accessibilityLabel,
+    primaryLabel ?? per100gLabel,
+    secondaryLabel,
+  ]
+    .filter(
+      (label): label is string =>
+        label !== null && label !== undefined && label !== ""
+    )
+    .join(", ");
 
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.result,
+        isUserFood ? styles.resultUser : null,
         selected ? styles.resultSelected : null,
         pressed && !disabled ? styles.resultPressed : null,
         disabled ? styles.resultDisabled : null,
@@ -226,24 +532,38 @@ function FoodSearchResult({
     >
       <View style={styles.resultCopy}>
         <View style={styles.titleRow}>
-          <FoodDefaultOriginDot food={food} />
-          <Text numberOfLines={1} style={styles.resultTitle}>
+          <Text numberOfLines={2} style={styles.resultTitle}>
             {food.name}
           </Text>
         </View>
-        <Text numberOfLines={1} style={styles.resultSummary}>
-          {brandLabel}
-        </Text>
+        <View style={styles.summaryRow}>
+          {dominantMacronutrientMeta === undefined ? null : (
+            <View
+              accessible={false}
+              style={[
+                styles.macronutrientDot,
+                { backgroundColor: dominantMacronutrientMeta.color },
+              ]}
+            />
+          )}
+          {brandLabel === null ? null : (
+            <Text numberOfLines={1} style={styles.resultSummary}>
+              {brandLabel}
+            </Text>
+          )}
+        </View>
       </View>
       <View style={styles.resultMetrics}>
         <Text numberOfLines={1} style={styles.primaryMetric}>
           {primaryLabel ?? per100gLabel}
         </Text>
-        {secondaryLabel === undefined ? null : (
-          <Text numberOfLines={1} style={styles.secondaryMetric}>
-            {secondaryLabel}
-          </Text>
-        )}
+        <Text
+          accessible={secondaryLabel !== undefined}
+          numberOfLines={1}
+          style={styles.secondaryMetric}
+        >
+          {secondaryLabel}
+        </Text>
       </View>
     </Pressable>
   );
@@ -255,6 +575,10 @@ function FoodSearchEmpty({ text }: { readonly text: string }) {
       <Text style={styles.emptyText}>{text}</Text>
     </View>
   );
+}
+
+function FoodSearchSeparator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
@@ -272,6 +596,77 @@ const styles = StyleSheet.create({
     backgroundColor: color.field,
   },
   searchInput: {
+    minWidth: 0,
+    flex: 1,
+    color: color.text,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
+  },
+  orderSelector: {
+    minWidth: 44,
+    height: 44,
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderRadius: radius.sm,
+  },
+  orderSelectorPressed: {
+    backgroundColor: color.surfaceRaised,
+  },
+  orderSelectorDisabled: {
+    opacity: 0.5,
+  },
+  orderSelectorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  orderDialogBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.xl,
+    backgroundColor: color.overlay,
+  },
+  orderDialog: {
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: color.sheetBorder,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: color.sheet,
+  },
+  orderDialogTitle: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    color: color.text,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
+  },
+  orderDialogOption: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+  },
+  orderDialogOptionSelected: {
+    backgroundColor: color.surfaceRaised,
+  },
+  orderDialogOptionPressed: {
+    opacity: 0.86,
+  },
+  orderDialogOptionDot: {
+    width: 10,
+    height: 10,
+    flexShrink: 0,
+    borderRadius: 5,
+  },
+  orderDialogOptionLabel: {
     minWidth: 0,
     flex: 1,
     color: color.text,
@@ -302,12 +697,15 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.sm,
   },
   result: {
-    minHeight: 64,
+    minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  resultUser: {
+    backgroundColor: color.surface,
   },
   resultSelected: {
     backgroundColor: color.dangerBg,
@@ -317,6 +715,10 @@ const styles = StyleSheet.create({
   },
   resultDisabled: {
     opacity: 0.58,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#4a4a50",
   },
   resultCopy: {
     minWidth: 0,
@@ -329,13 +731,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  defaultDot: {
-    width: 7,
-    height: 7,
-    flexShrink: 0,
-    borderRadius: radius.pill,
-    backgroundColor: "#d9bd6f",
-  },
   resultTitle: {
     minWidth: 0,
     flex: 1,
@@ -345,10 +740,25 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.md,
   },
   resultSummary: {
+    minWidth: 0,
+    flexShrink: 1,
     color: color.textMuted,
     fontSize: tokens.type.size.md,
     fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
+  },
+  summaryRow: {
+    minHeight: tokens.type.lineHeight.md,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  macronutrientDot: {
+    width: 6,
+    height: 6,
+    flexShrink: 0,
+    borderRadius: 3,
   },
   resultMetrics: {
     width: 112,
@@ -358,13 +768,14 @@ const styles = StyleSheet.create({
   },
   primaryMetric: {
     maxWidth: 112,
-    color: color.nutritionEnergy,
+    color: color.text,
     textAlign: "right",
     fontSize: tokens.type.size.lg,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.lg,
   },
   secondaryMetric: {
+    minHeight: tokens.type.lineHeight.md,
     maxWidth: 112,
     color: color.textMuted,
     textAlign: "right",

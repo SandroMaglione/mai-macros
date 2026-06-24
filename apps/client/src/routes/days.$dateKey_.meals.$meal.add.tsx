@@ -21,7 +21,6 @@ import {
 
 import { FoodNutrientOverview } from "../lib/components/food-nutrient-overview.tsx";
 import {
-  FoodDefaultOriginDot,
   FoodSearchField,
   FoodSearchResults,
 } from "../lib/components/food-search.tsx";
@@ -358,7 +357,7 @@ function Component() {
         });
   const selectedFoodQuantityLabel =
     selectedFoodUsage === undefined
-      ? "No previous"
+      ? undefined
       : `${_formatPreciseNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
@@ -440,7 +439,7 @@ function Component() {
               });
 
               return foodHistory === undefined
-                ? "No previous"
+                ? ""
                 : `${_formatPreciseNumber({
                     value: foodHistory.latestQuantityGrams,
                   })} g`;
@@ -473,7 +472,6 @@ function Component() {
                 <FoodNutrientOverview
                   brand={selectedFood.brand}
                   name={selectedFood.name}
-                  namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
                   nutrients={selectedFoodNutrients}
                   secondaryLabel={selectedFoodQuantityLabel}
                 />

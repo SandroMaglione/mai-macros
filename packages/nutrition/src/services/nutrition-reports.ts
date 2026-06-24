@@ -45,7 +45,7 @@ export type NutritionReportEntry = {
 
 export type NutritionReportDay = {
   readonly coverage: NutrientCoverage;
-  readonly dailyLog: DailyLog | null;
+  readonly dailyLog: DailyLog;
   readonly dateKey: DateKey;
   readonly entries: readonly NutritionReportEntry[];
   readonly isInsideExpectedPlanRange: boolean;
@@ -152,62 +152,65 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
             ),
             (mealEntry) => mealEntry.dateKey
           );
-          const days = dateKeys.map((dateKey) => {
-            const dailyLog = HashMap.get(dailyLogsByDateKey, dateKey).pipe(
-              Option.getOrNull
-            );
-            const plan =
-              dailyLog === null
-                ? activePlan
-                : HashMap.get(plansById, dailyLog.planId).pipe(
+          const days = dateKeys.flatMap((dateKey) =>
+            HashMap.get(dailyLogsByDateKey, dateKey).pipe(
+              Option.match({
+                onNone: () => [],
+                onSome: (dailyLog) => {
+                  const plan = HashMap.get(plansById, dailyLog.planId).pipe(
                     Option.match({
                       onNone: () => activePlan,
                       onSome: (plan) => plan,
                     })
                   );
-            const dayMealEntries = mealEntriesByDateKey[dateKey] ?? [];
-            const entries = dayMealEntries.flatMap((mealEntry) => {
-              return HashMap.get(foodsById, mealEntry.foodId).pipe(
-                Option.match({
-                  onNone: () => [],
-                  onSome: (food) => [
-                    {
-                      food,
-                      mealEntry,
-                      nutrients: calculateEntryNutrients({
-                        food,
-                        quantityGrams: mealEntry.quantityGrams,
-                      }),
-                    },
-                  ],
-                })
-              );
-            });
-            const aggregate = calculateEntriesNutrientTotals({
-              entries: entries.map((entry) => ({
-                food: entry.food,
-                quantityGrams: entry.mealEntry.quantityGrams,
-              })),
-            });
-            const targetStatuses = evaluatePlanNutrientTargets({
-              plan,
-              totals: aggregate.totals,
-            });
+                  const dayMealEntries = mealEntriesByDateKey[dateKey] ?? [];
+                  const entries = dayMealEntries.flatMap((mealEntry) => {
+                    return HashMap.get(foodsById, mealEntry.foodId).pipe(
+                      Option.match({
+                        onNone: () => [],
+                        onSome: (food) => [
+                          {
+                            food,
+                            mealEntry,
+                            nutrients: calculateEntryNutrients({
+                              food,
+                              quantityGrams: mealEntry.quantityGrams,
+                            }),
+                          },
+                        ],
+                      })
+                    );
+                  });
+                  const aggregate = calculateEntriesNutrientTotals({
+                    entries: entries.map((entry) => ({
+                      food: entry.food,
+                      quantityGrams: entry.mealEntry.quantityGrams,
+                    })),
+                  });
+                  const targetStatuses = evaluatePlanNutrientTargets({
+                    plan,
+                    totals: aggregate.totals,
+                  });
 
-            return {
-              coverage: aggregate.coverage,
-              dailyLog,
-              dateKey,
-              entries,
-              isInsideExpectedPlanRange: isInsideExpectedPlanRange({
-                statuses: targetStatuses,
-              }),
-              mealEntries: dayMealEntries,
-              plan,
-              targetStatuses,
-              totals: aggregate.totals,
-            };
-          });
+                  return [
+                    {
+                      coverage: aggregate.coverage,
+                      dailyLog,
+                      dateKey,
+                      entries,
+                      isInsideExpectedPlanRange: isInsideExpectedPlanRange({
+                        statuses: targetStatuses,
+                      }),
+                      mealEntries: dayMealEntries,
+                      plan,
+                      targetStatuses,
+                      totals: aggregate.totals,
+                    },
+                  ];
+                },
+              })
+            )
+          );
 
           return {
             activePlan,

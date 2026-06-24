@@ -34,55 +34,65 @@ type FoodNutrientOverviewProps = {
   readonly secondaryLabel?: string;
 };
 
+type NutrientRowEmphasis = "primary" | "secondary";
+
 const defaultNutrientOrder = [
-  "carbsGrams",
-  "proteinGrams",
-  "fatGrams",
-  "fiberGrams",
-  "sugarGrams",
-  "saturatedFatGrams",
-  "saltGrams",
   "energyKcal",
+  "fatGrams",
+  "saturatedFatGrams",
+  "carbsGrams",
+  "sugarGrams",
+  "fiberGrams",
+  "proteinGrams",
+  "saltGrams",
 ] as const satisfies readonly FoodNutrientOverviewNutrientName[];
 
 const nutrientRows = {
   carbsGrams: {
     color: color.nutritionCarbs,
+    emphasis: "primary",
     label: "Carbs",
     unit: "g",
   },
   energyKcal: {
     color: color.nutritionEnergy,
+    emphasis: "primary",
     label: "Calories",
     unit: "",
   },
   fatGrams: {
     color: color.nutritionFat,
+    emphasis: "primary",
     label: "Fat",
     unit: "g",
   },
   fiberGrams: {
     color: color.nutritionCarbs,
+    emphasis: "secondary",
     label: "Fiber",
     unit: "g",
   },
   proteinGrams: {
     color: color.nutritionEnergy,
+    emphasis: "primary",
     label: "Protein",
     unit: "g",
   },
   saltGrams: {
     color: color.nutritionSalt,
+    emphasis: "primary",
     label: "Salt",
     unit: "g",
   },
   saturatedFatGrams: {
     color: color.nutritionFat,
+    emphasis: "secondary",
     label: "Sat fat",
     unit: "g",
   },
   sugarGrams: {
     color: color.nutritionCarbs,
+    emphasis: "secondary",
     label: "Sugar",
     unit: "g",
   },
@@ -90,6 +100,7 @@ const nutrientRows = {
   FoodNutrientOverviewNutrientName,
   {
     readonly color: string;
+    readonly emphasis: NutrientRowEmphasis;
     readonly label: string;
     readonly unit: "" | "g";
   }
@@ -105,7 +116,7 @@ export function FoodNutrientOverview({
   secondaryLabel,
 }: FoodNutrientOverviewProps) {
   const displayedBrand =
-    brand === undefined || brand.trim() === "" ? "/" : brand;
+    brand === undefined || brand.trim() === "" ? undefined : brand;
   const displayedPrimaryLabel =
     primaryLabel ??
     (nutrients?.energyKcal === undefined
@@ -122,7 +133,11 @@ export function FoodNutrientOverview({
               {name}
             </Text>
           </View>
-          <Text numberOfLines={1} style={styles.subtitle}>
+          <Text
+            accessible={displayedBrand !== undefined}
+            numberOfLines={1}
+            style={styles.subtitle}
+          >
             {displayedBrand}
           </Text>
         </View>
@@ -130,11 +145,13 @@ export function FoodNutrientOverview({
           <Text numberOfLines={1} style={styles.primaryLabel}>
             {displayedPrimaryLabel}
           </Text>
-          {secondaryLabel === undefined ? null : (
-            <Text numberOfLines={1} style={styles.secondary}>
-              {secondaryLabel}
-            </Text>
-          )}
+          <Text
+            accessible={secondaryLabel !== undefined}
+            numberOfLines={1}
+            style={styles.secondary}
+          >
+            {secondaryLabel}
+          </Text>
         </View>
       </View>
 
@@ -146,6 +163,7 @@ export function FoodNutrientOverview({
             return (
               <NutrientRow
                 colorValue={row.color}
+                emphasis={row.emphasis}
                 key={nutrientName}
                 label={row.label}
                 unit={row.unit}
@@ -161,24 +179,44 @@ export function FoodNutrientOverview({
 
 function NutrientRow({
   colorValue,
+  emphasis,
   label,
   unit,
   value,
 }: {
   readonly colorValue: string;
+  readonly emphasis: NutrientRowEmphasis;
   readonly label: string;
   readonly unit: string;
   readonly value: number | undefined;
 }) {
+  const isSecondary = emphasis === "secondary";
+
   return (
-    <View style={styles.nutrientRow}>
-      <Text numberOfLines={1} style={[styles.rowText, { color: colorValue }]}>
+    <View
+      style={[
+        styles.nutrientRow,
+        isSecondary ? styles.nutrientRowSecondary : null,
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.rowText,
+          isSecondary ? styles.rowTextSecondary : null,
+          { color: colorValue },
+        ]}
+      >
         {label}
       </Text>
       <Text
         adjustsFontSizeToFit
         numberOfLines={1}
-        style={[styles.rowValue, { color: colorValue }]}
+        style={[
+          styles.rowValue,
+          isSecondary ? styles.rowValueSecondary : null,
+          { color: colorValue },
+        ]}
       >
         {value === undefined
           ? "n/a"
@@ -256,6 +294,7 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.lg,
   },
   subtitle: {
+    minHeight: tokens.type.lineHeight.md,
     color: color.textMuted,
     fontSize: tokens.type.size.md,
     fontWeight: tokens.type.weight.semibold,
@@ -267,12 +306,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   primaryLabel: {
-    color: color.nutritionEnergy,
+    color: color.text,
     fontSize: tokens.type.size.xl,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.xl,
   },
   secondary: {
+    minHeight: tokens.type.lineHeight.md,
     color: color.textMuted,
     fontSize: tokens.type.size.md,
     fontWeight: tokens.type.weight.semibold,
@@ -287,6 +327,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.sheetBorder,
   },
+  nutrientRowSecondary: {
+    minHeight: 42,
+    paddingLeft: spacing.md,
+  },
   rowText: {
     minWidth: 0,
     flex: 1,
@@ -294,11 +338,21 @@ const styles = StyleSheet.create({
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.lg,
   },
+  rowTextSecondary: {
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
+  },
   rowValue: {
     maxWidth: 140,
     textAlign: "right",
     fontSize: tokens.type.size.lg,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.lg,
+  },
+  rowValueSecondary: {
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
 });

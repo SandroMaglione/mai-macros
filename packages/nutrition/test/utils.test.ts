@@ -61,6 +61,67 @@ describe("nutrition utils", () => {
     assert.equal(result.validatedEnergyKcal, result.energyKcal);
   });
 
+  it("finds the dominant food macronutrient by calorie contribution", () => {
+    assert.equal(
+      Utils.findDominantMacronutrient({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 8,
+          carbsGramsPer100g: 6,
+          fatGramsPer100g: 5,
+        },
+      }),
+      "fat"
+    );
+    assert.equal(
+      Utils.findDominantMacronutrient({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 12,
+          carbsGramsPer100g: 5,
+          fatGramsPer100g: 1,
+        },
+      }),
+      "protein"
+    );
+    assert.equal(
+      Utils.findDominantMacronutrient({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 4,
+          carbsGramsPer100g: 16,
+          fatGramsPer100g: 2,
+        },
+      }),
+      "carbs"
+    );
+  });
+
+  it("does not pick a dominant food macronutrient when macros are empty or tied", () => {
+    assert.equal(
+      Utils.findDominantMacronutrient({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 0,
+          carbsGramsPer100g: 0,
+          fatGramsPer100g: 0,
+        },
+      }),
+      null
+    );
+    assert.equal(
+      Utils.findDominantMacronutrient({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 9,
+          carbsGramsPer100g: 9,
+          fatGramsPer100g: 4,
+        },
+      }),
+      null
+    );
+  });
+
   it("calculates entry nutrients and validates the result", async () => {
     const program = Effect.gen(function* () {
       const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);

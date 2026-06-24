@@ -10,13 +10,14 @@ import {
 } from "@/components/ui";
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
 import { MealPlanSummaryCard } from "@/components/nutrition";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { DailyLogs, Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Effect, Schema } from "effect";
-import { router, useLocalSearchParams } from "expo-router";
+import { Effect, Option, Schema } from "effect";
+import { Redirect, router } from "expo-router";
 import { ChevronLeft, Pencil } from "lucide-react-native";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
@@ -43,6 +44,10 @@ type PlansRouteLoadResult =
       readonly _tag: "Ready";
       readonly data: PlansRouteData;
     };
+
+const PlansSearchParams = Schema.Struct({
+  dateKey: Schema.optional(Domain.DateKey),
+});
 
 type PlansTabIndex = 0 | 1 | 2;
 
@@ -102,14 +107,14 @@ const plansRouteMachine = setup({
     context: {} as {
       readonly activeTab: PlansTabIndex;
       readonly data: PlansRouteData | null;
-      readonly dateKeyParam: string | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
       readonly editingPlan: Domain.Plan | null;
       readonly notice: string | null;
       readonly redirectDateKey: Domain.DateKey | null;
     },
     events: {} as PlansRouteEvent,
     input: {} as {
-      readonly dateKeyParam: string | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
     },
   },
   actors: {
@@ -133,13 +138,15 @@ const plansRouteMachine = setup({
         })
       )
     ),
-    loadRouteData: fromPromise<PlansRouteLoadResult, string | undefined>(
-      ({ input }) =>
-        RuntimeClient.runPromise(
-          loadPlansRouteData({
-            dateKeyParam: input,
-          })
-        )
+    loadRouteData: fromPromise<
+      PlansRouteLoadResult,
+      Domain.DateKey | undefined
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        loadPlansRouteData({
+          dateKey: input,
+        })
+      )
     ),
     savePlan: fromPromise<SavePlanResult, SavePlanInput>(({ input }) =>
       RuntimeClient.runPromise(savePlan({ input }))
@@ -149,7 +156,7 @@ const plansRouteMachine = setup({
   context: ({ input }) => ({
     activeTab: 0,
     data: null,
-    dateKeyParam: input.dateKeyParam,
+    dateKey: input.dateKey,
     editingPlan: null,
     notice: null,
     redirectDateKey: null,
@@ -159,7 +166,7 @@ const plansRouteMachine = setup({
     Loading: {
       invoke: {
         src: "loadRouteData",
-        input: ({ context }) => context.dateKeyParam,
+        input: ({ context }) => context.dateKey,
         onDone: [
           {
             guard: ({ event }) => event.output._tag === "InvalidRoute",
@@ -355,14 +362,15 @@ const plansRouteMachine = setup({
 });
 
 export default function PlansScreen() {
-  const params = useLocalSearchParams<{
-    readonly dateKey?: string | string[];
-  }>();
+  const search = useSchemaLocalSearchParams(PlansSearchParams);
+
+  if (Option.isNone(search)) {
+    return <Redirect href="/" />;
+  }
+
   const [snapshot, send] = useMachine(plansRouteMachine, {
     input: {
-      dateKeyParam: globalThis.Array.isArray(params.dateKey)
-        ? params.dateKey[0]
-        : params.dateKey,
+      dateKey: search.value.dateKey,
     },
   });
 
@@ -679,25 +687,24 @@ function PlanEditTab({
 }
 
 export function loadPlansRouteData({
-  dateKeyParam,
+  dateKey,
 }: {
-  readonly dateKeyParam: string | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey = yield* Schema.decodeEffect(Domain.DateKey)(
-      dateKeyParam ?? todayDateKey()
-    );
+    const targetDateKey =
+      dateKey ?? (yield* Schema.decodeEffect(Domain.DateKey)(todayDateKey()));
     const dailyLogs = yield* DailyLogs.DailyLogs;
     const day = yield* dailyLogs.open({
       input: {
-        dateKey,
+        dateKey: targetDateKey,
       },
     });
 
     return {
       _tag: "Ready" as const,
       data: {
-        dateKey,
+        dateKey: targetDateKey,
         day,
       },
     };

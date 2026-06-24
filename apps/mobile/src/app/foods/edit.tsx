@@ -18,14 +18,15 @@ import {
   foodNutrientOverviewFromFormValues,
   foodNutrientOverviewPrimaryLabel,
 } from "@/components/nutrition";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
 import { FoodFormMachine, FoodSearchMachine } from "@mai/machines";
 import { useMachine, useSelector } from "@xstate/react";
-import { Array as EffectArray, Effect, Schema } from "effect";
-import { type Href, router, useLocalSearchParams } from "expo-router";
+import { Array as EffectArray, Effect, Option, Schema } from "effect";
+import { type Href, Redirect, router } from "expo-router";
 import { ChevronLeft, Pencil, RotateCcw, Save } from "lucide-react-native";
 import {
   KeyboardAvoidingView,
@@ -52,14 +53,10 @@ type EditFoodsRouteData = {
 
 type EditFoodsLayout = "screen" | "embedded";
 
-type EditFoodsRouteLoadResult =
-  | {
-      readonly _tag: "InvalidRoute";
-    }
-  | {
-      readonly _tag: "Ready";
-      readonly data: EditFoodsRouteData;
-    };
+type EditFoodsRouteLoadResult = {
+  readonly _tag: "Ready";
+  readonly data: EditFoodsRouteData;
+};
 
 type ReviseFoodOutput =
   | {
@@ -358,32 +355,36 @@ const editFoodsRouteMachine = setup({
 
 type EditFoodsRouteActorRef = ActorRefFrom<typeof editFoodsRouteMachine>;
 
+const EditFoodsSearchParams = Schema.Struct({
+  dateKey: Schema.optional(Domain.DateKey),
+});
+
 const editFoodsRouteLoaderMachine = setup({
   types: {
     context: {} as {
       readonly data: EditFoodsRouteData | null;
-      readonly dateKeyParam: string | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
       readonly message: string | null;
     },
     events: {} as {
       readonly type: "retry";
     },
     input: {} as {
-      readonly dateKeyParam: string | undefined;
+      readonly dateKey: Domain.DateKey | undefined;
     },
   },
   actors: {
     loadRouteData: fromPromise<
       EditFoodsRouteLoadResult,
       {
-        readonly dateKeyParam: string | undefined;
+        readonly dateKey: Domain.DateKey | undefined;
       }
     >(({ input }) => RuntimeClient.runPromise(loadEditFoodsRouteData(input))),
   },
 }).createMachine({
   context: ({ input }) => ({
     data: null,
-    dateKeyParam: input.dateKeyParam,
+    dateKey: input.dateKey,
     message: null,
   }),
   initial: "Loading",
@@ -392,16 +393,9 @@ const editFoodsRouteLoaderMachine = setup({
       invoke: {
         src: "loadRouteData",
         input: ({ context }) => ({
-          dateKeyParam: context.dateKeyParam,
+          dateKey: context.dateKey,
         }),
         onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "InvalidRoute",
-            target: "Redirected",
-            actions: () => {
-              router.replace("/");
-            },
-          },
           {
             guard: ({ event }) => event.output._tag === "Ready",
             target: "Ready",
@@ -434,24 +428,27 @@ const editFoodsRouteLoaderMachine = setup({
 });
 
 export default function EditFoodsRoute() {
-  const params = useLocalSearchParams<{
-    readonly dateKey?: string | string[];
-  }>();
-  const dateKeyParam = firstParam(params.dateKey);
+  const search = useSchemaLocalSearchParams(EditFoodsSearchParams);
 
-  return <EditFoodsPanelLoader dateKeyParam={dateKeyParam} layout="screen" />;
+  if (Option.isNone(search)) {
+    return <Redirect href="/" />;
+  }
+
+  return (
+    <EditFoodsPanelLoader dateKey={search.value.dateKey} layout="screen" />
+  );
 }
 
 export function EditFoodsPanelLoader({
-  dateKeyParam,
+  dateKey,
   layout,
 }: {
-  readonly dateKeyParam: string | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly layout: EditFoodsLayout;
 }) {
   const [snapshot, send] = useMachine(editFoodsRouteLoaderMachine, {
     input: {
-      dateKeyParam,
+      dateKey,
     },
   });
 
@@ -932,15 +929,11 @@ export function getEditFoodsRouteData({
 }
 
 export function loadEditFoodsRouteData({
-  dateKeyParam,
+  dateKey,
 }: {
-  readonly dateKeyParam: string | undefined;
+  readonly dateKey: Domain.DateKey | undefined;
 }) {
   return Effect.gen(function* () {
-    const dateKey =
-      dateKeyParam === undefined
-        ? undefined
-        : yield* Schema.decodeEffect(Domain.DateKey)(dateKeyParam);
     const data = yield* _loadFoodLibraryData();
 
     return {
@@ -950,13 +943,7 @@ export function loadEditFoodsRouteData({
         ...data,
       },
     };
-  }).pipe(
-    Effect.catchTag("SchemaError", () =>
-      Effect.succeed({
-        _tag: "InvalidRoute" as const,
-      })
-    )
-  );
+  });
 }
 
 function _loadFoodLibraryData() {
@@ -1000,10 +987,6 @@ function _optionalTrimmedText(value: string) {
   const trimmedValue = value.trim();
 
   return trimmedValue === "" ? undefined : trimmedValue;
-}
-
-export function firstParam(param: string | string[] | undefined) {
-  return Array.isArray(param) ? param[0] : param;
 }
 
 export function backHrefForDateKey({
@@ -1051,6 +1034,7 @@ const styles = StyleSheet.create({
   },
   searchBody: {
     flex: 1,
+    marginHorizontal: -spacing.lg,
   },
   formLayout: {
     flex: 1,

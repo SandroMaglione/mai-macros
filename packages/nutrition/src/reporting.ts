@@ -1,6 +1,6 @@
 import { Array } from "effect";
 
-import type { Food, Plan, QuantityGrams } from "./domain.ts";
+import type { Food, MealEntry, Plan, QuantityGrams } from "./domain.ts";
 import { calculateEntryNutrients, calculatePlanEnergyKcal } from "./utils.ts";
 
 export const NutrientNames = [
@@ -193,6 +193,28 @@ export const calculateEntriesNutrientTotals = ({
       totals: emptyNutrientTotals(),
     }
   );
+
+export const calculateMealEntriesNutrientTotals = ({
+  foods,
+  mealEntries,
+}: {
+  readonly foods: readonly Food[];
+  readonly mealEntries: readonly MealEntry[];
+}): EntriesNutrientTotals =>
+  calculateEntriesNutrientTotals({
+    entries: mealEntries.flatMap((mealEntry) => {
+      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
+
+      return food === undefined
+        ? []
+        : [
+            {
+              food,
+              quantityGrams: mealEntry.quantityGrams,
+            },
+          ];
+    }),
+  });
 
 export const makeNutrientTarget = ({
   amount,

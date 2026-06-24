@@ -135,27 +135,24 @@ export function FoodNutrientOverview({
           {namePrefix}
           {name}
         </span>
-        <span className="text-right text-sm font-black leading-tight text-[#4c7dff]">
+        <span className="text-right text-sm font-black leading-tight text-[#f5f5f7]">
           {displayedPrimaryLabel}
         </span>
         <span className="grid min-w-0 gap-1 text-xs leading-tight text-[#aaaab1]">
-          {brand === undefined ? (
-            <span
-              aria-label="No brand"
-              className="min-w-0 text-[0.72rem] font-black leading-tight text-[#77777e]"
-            >
-              /
-            </span>
-          ) : (
-            <span className="min-w-0 font-normal wrap-anywhere">{brand}</span>
-          )}
+          <span
+            aria-hidden={brand === undefined || brand.trim() === ""}
+            className="min-h-[1em] min-w-0 font-normal wrap-anywhere"
+          >
+            {brand}
+          </span>
           {metadata}
         </span>
-        {secondaryLabel === undefined ? null : (
-          <span className="text-right text-xs font-medium leading-tight text-[#aaaab1]">
-            {secondaryLabel}
-          </span>
-        )}
+        <span
+          aria-hidden={secondaryLabel === undefined}
+          className="min-h-[1em] text-right text-xs font-medium leading-tight text-[#aaaab1]"
+        >
+          {secondaryLabel}
+        </span>
       </div>
 
       {nutrients === undefined ? null : (

@@ -132,8 +132,8 @@ export function RangeSummary({
 
       <section className="grid gap-4 border-t border-[#27272b] pt-7">
         <SectionTitle
-          description="Average daily intake across the last 7 days, compared with daily targets when available."
-          title="7-day average"
+          description="Average daily intake across recorded days in the last 7 days, compared with daily targets when available."
+          title="Recorded-day average"
         />
         <div className="grid grid-cols-2 gap-2.5">
           {reportTrackedNutrients.map((nutrientName) => (
@@ -149,7 +149,7 @@ export function RangeSummary({
 
       <section className="grid gap-4 border-t border-[#27272b] pt-7">
         <SectionTitle
-          description="Top foods contributing to each nutrient across the same 7-day range."
+          description="Top foods contributing to each nutrient across recorded days in this range."
           title="Foods"
         />
         <div className="grid gap-5">
@@ -219,7 +219,7 @@ function _getAverageTargetAmount({
     return amount === undefined ? [] : [amount];
   });
 
-  if (targetAmounts.length !== dayCount) {
+  if (dayCount === 0 || targetAmounts.length !== dayCount) {
     return null;
   }
 

@@ -1,17 +1,12 @@
 import { FoodForm } from "@/components/nutrition/food-form";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
-import {
-  type Href,
-  router,
-  useLocalSearchParams,
-  useRouter,
-} from "expo-router";
-import { useMemo } from "react";
+import { type Href, router, useRouter } from "expo-router";
 import { Alert } from "react-native";
 import {
   assertEvent,
@@ -217,24 +212,16 @@ const createFoodRouteMachine = setup({
 
 export default function NewFoodScreen() {
   const expoRouter = useRouter();
-  const params = useLocalSearchParams();
-  const dateKeyParam = globalThis.Array.isArray(params.dateKey)
-    ? params.dateKey[0]
-    : params.dateKey;
-  const search = useMemo(
-    () =>
-      Schema.decodeOption(SearchParams)({ dateKey: dateKeyParam }).pipe(
-        Option.match({
-          onNone: () => ({
-            _tag: "Invalid" as const,
-          }),
-          onSome: (decodedSearch) => ({
-            _tag: "Valid" as const,
-            dateKey: decodedSearch.dateKey,
-          }),
-        })
-      ),
-    [dateKeyParam]
+  const search = useSchemaLocalSearchParams(SearchParams).pipe(
+    Option.match({
+      onNone: () => ({
+        _tag: "Invalid" as const,
+      }),
+      onSome: (decodedSearch) => ({
+        _tag: "Valid" as const,
+        dateKey: decodedSearch.dateKey,
+      }),
+    })
   ) satisfies SearchDecodeResult;
   const dateKey = search._tag === "Valid" ? search.dateKey : undefined;
   return (

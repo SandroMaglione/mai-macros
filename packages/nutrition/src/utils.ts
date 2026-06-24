@@ -22,6 +22,8 @@ export class InvalidDateKey extends Data.TaggedError("InvalidDateKey")<{
   readonly dateKey: string;
 }> {}
 
+export type DominantMacronutrient = "carbs" | "fat" | "protein";
+
 type CalendarDate = {
   readonly dateKey: DateKey;
   readonly utcNoonEpochMilliseconds: number;
@@ -47,6 +49,50 @@ export const calculatePlanEnergyKcal = ({
     carbsGrams: plan.carbsTargetGrams,
     fatGrams: plan.fatTargetGrams,
   });
+
+export const findDominantMacronutrient = ({
+  food,
+}: {
+  readonly food: Pick<
+    Food,
+    "carbsGramsPer100g" | "fatGramsPer100g" | "proteinGramsPer100g"
+  >;
+}): DominantMacronutrient | null => {
+  const macronutrientEnergy = [
+    {
+      energyKcal: food.proteinGramsPer100g * 4,
+      macronutrient: "protein",
+    },
+    {
+      energyKcal: food.carbsGramsPer100g * 4,
+      macronutrient: "carbs",
+    },
+    {
+      energyKcal: food.fatGramsPer100g * 9,
+      macronutrient: "fat",
+    },
+  ] satisfies readonly {
+    readonly energyKcal: number;
+    readonly macronutrient: DominantMacronutrient;
+  }[];
+
+  const dominant = macronutrientEnergy.reduce((current, candidate) =>
+    candidate.energyKcal > current.energyKcal ? candidate : current
+  );
+
+  if (
+    dominant.energyKcal <= 0 ||
+    macronutrientEnergy.some(
+      (item) =>
+        item.macronutrient !== dominant.macronutrient &&
+        item.energyKcal === dominant.energyKcal
+    )
+  ) {
+    return null;
+  }
+
+  return dominant.macronutrient;
+};
 
 export const calculateEntryNutrients = ({
   food,

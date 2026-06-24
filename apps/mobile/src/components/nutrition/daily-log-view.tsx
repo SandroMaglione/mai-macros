@@ -20,7 +20,7 @@ import {
 } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
-import { Array as EffectArray, Effect, Schema } from "effect";
+import { Array as EffectArray, Effect, Option, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
@@ -41,7 +41,7 @@ export type DailyLogViewData = {
 };
 
 type DailyLogRouteProps = {
-  readonly dateKey: string;
+  readonly dateKey: Domain.DateKey;
 };
 
 type DailyLogLoadResult =
@@ -50,11 +50,8 @@ type DailyLogLoadResult =
       readonly data: DailyLogViewData;
     }
   | {
-      readonly _tag: "InvalidDateKey";
-    }
-  | {
       readonly _tag: "NoMealPlans";
-      readonly dateKey: string;
+      readonly dateKey: Domain.DateKey;
     };
 
 type MacroDisplayMode = "consumed" | "remaining";
@@ -100,18 +97,19 @@ const dailyLogRouteMachine = setup({
   types: {
     context: {} as {
       readonly data: DailyLogViewData | null;
-      readonly dateKey: string;
+      readonly dateKey: Domain.DateKey;
       readonly message: string | null;
     },
     events: {} as DailyLogRouteEvent,
     input: {} as {
-      readonly dateKey: string;
+      readonly dateKey: Domain.DateKey;
     },
   },
   actors: {
-    loadDailyLog: fromPromise<DailyLogLoadResult, { readonly dateKey: string }>(
-      ({ input }) => loadDailyLog({ dateKey: input.dateKey })
-    ),
+    loadDailyLog: fromPromise<
+      DailyLogLoadResult,
+      { readonly dateKey: Domain.DateKey }
+    >(({ input }) => loadDailyLog({ dateKey: input.dateKey })),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -128,13 +126,6 @@ const dailyLogRouteMachine = setup({
           dateKey: context.dateKey,
         }),
         onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "InvalidDateKey",
-            target: "Redirected",
-            actions: () => {
-              router.replace("/");
-            },
-          },
           {
             guard: ({ event }) => event.output._tag === "NoMealPlans",
             target: "Redirected",
@@ -154,10 +145,19 @@ const dailyLogRouteMachine = setup({
           {
             guard: ({ event }) => event.output._tag === "OpenedDay",
             target: "Ready",
-            actions: assign(({ event }) => ({
-              data: getDailyLogViewData({ result: event.output }),
-              message: null,
-            })),
+            actions: assign(({ event }) => {
+              if (event.output._tag !== "OpenedDay") {
+                return {
+                  data: null,
+                  message: "Could not load the daily log.",
+                };
+              }
+
+              return {
+                data: event.output.data,
+                message: null,
+              };
+            }),
           },
         ],
         onError: {
@@ -271,14 +271,27 @@ export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
 }
 
 export function DailyLogTodayRoute() {
-  return <DailyLogRoute dateKey={todayDateKey()} />;
+  return Schema.decodeOption(Domain.DateKey)(todayDateKey()).pipe(
+    Option.match({
+      onNone: () => (
+        <AppScreen contentStyle={styles.centeredContent}>
+          <Notice
+            message="Could not create a valid date for today."
+            title="Daily log unavailable"
+            tone="danger"
+          />
+        </AppScreen>
+      ),
+      onSome: (dateKey) => <DailyLogRoute dateKey={dateKey} />,
+    })
+  );
 }
 
 export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
-  const nutrients = _calculateEntriesNutrients({
+  const nutrients = Reporting.calculateMealEntriesNutrientTotals({
     foods: data.foods,
     mealEntries: data.mealEntries,
-  });
+  }).totals;
   const previousDateKey = shiftDateKey({
     dateKey: data.day.dailyLog.dateKey,
     days: -1,
@@ -386,6 +399,25 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
         />
 
         <DailyProgress day={data.day} nutrients={nutrients} />
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            router.push({
+              pathname: "/days/[dateKey]/details",
+              params: {
+                dateKey: data.day.dailyLog.dateKey,
+              },
+            });
+          }}
+          style={({ pressed }) => [
+            styles.dayDetailsAction,
+            pressed ? styles.pressed : null,
+          ]}
+        >
+          <Text style={styles.detailsText}>Details</Text>
+          <ChevronRight color={color.text} size={16} strokeWidth={3} />
+        </Pressable>
 
         <View style={styles.meals}>
           {mealOptions.map((mealOption) => (
@@ -698,12 +730,35 @@ function MealSection({
   readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
 }) {
-  const nutrients = _calculateEntriesNutrients({ foods, mealEntries });
+  const nutrients = Reporting.calculateMealEntriesNutrientTotals({
+    foods,
+    mealEntries,
+  }).totals;
 
   return (
     <View style={styles.mealCard}>
       <View style={styles.mealHeader}>
         <Text style={styles.mealTitle}>{mealLabel}</Text>
+        <Pressable
+          accessibilityLabel={`${mealLabel} details`}
+          accessibilityRole="button"
+          onPress={() => {
+            router.push({
+              pathname: "/days/[dateKey]/meals/[meal]/details",
+              params: {
+                dateKey,
+                meal,
+              },
+            });
+          }}
+          style={({ pressed }) => [
+            styles.mealDetailsButton,
+            pressed ? styles.pressed : null,
+          ]}
+        >
+          <Text style={styles.detailsText}>Details</Text>
+          <ChevronRight color={color.text} size={16} strokeWidth={3} />
+        </Pressable>
       </View>
 
       <MealMacroStripe nutrients={nutrients} />
@@ -711,10 +766,9 @@ function MealSection({
       {EffectArray.isReadonlyArrayNonEmpty(mealEntries) ? (
         <View style={styles.mealEntries}>
           {mealEntries.map((mealEntry) => {
-            const food = _findFoodById({
-              foodId: mealEntry.foodId,
-              foods,
-            });
+            const food = foods.find(
+              (candidate) => candidate.id === mealEntry.foodId
+            );
 
             return (
               <MealEntryRow
@@ -1042,34 +1096,19 @@ function BottomAction({
   );
 }
 
-export function getDailyLogViewData({
-  result,
-}: {
-  readonly result: DailyLogLoadResult;
-}): DailyLogViewData {
-  if (result._tag !== "OpenedDay") {
-    throw new Error("Expected opened daily log data.");
-  }
-
-  return result.data;
-}
-
 export function loadDailyLog({
   dateKey,
 }: {
-  readonly dateKey: string;
+  readonly dateKey: Domain.DateKey;
 }): Promise<DailyLogLoadResult> {
   return RuntimeClient.runPromise(
     Effect.gen(function* () {
-      const decodedDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
-        dateKey
-      );
       const dailyLogs = yield* DailyLogs.DailyLogs;
       const foodsService = yield* Foods.Foods;
       const mealEntriesService = yield* MealEntries.MealEntries;
       const day = yield* dailyLogs.open({
         input: {
-          dateKey: decodedDateKey,
+          dateKey,
         },
       });
       const foods = yield* foodsService.list();
@@ -1093,62 +1132,9 @@ export function loadDailyLog({
           _tag: "NoMealPlans" as const,
           dateKey: noPlanDateKey,
         })
-      ),
-      Effect.catchTag("SchemaError", () =>
-        Effect.succeed({
-          _tag: "InvalidDateKey" as const,
-        })
       )
     )
   );
-}
-
-function _calculateEntriesNutrients({
-  foods,
-  mealEntries,
-}: {
-  readonly foods: readonly Domain.Food[];
-  readonly mealEntries: readonly Domain.MealEntry[];
-}): Reporting.NutrientTotals {
-  return mealEntries.reduce((totals, mealEntry) => {
-    const food = _findFoodById({
-      foodId: mealEntry.foodId,
-      foods,
-    });
-
-    if (food === undefined) {
-      return totals;
-    }
-
-    const nutrients = Utils.calculateEntryNutrients({
-      food,
-      quantityGrams: mealEntry.quantityGrams,
-    });
-
-    return Reporting.addNutrientTotals({
-      left: totals,
-      right: {
-        carbsGrams: nutrients.carbsGrams,
-        energyKcal: nutrients.energyKcal,
-        fatGrams: nutrients.fatGrams,
-        fiberGrams: nutrients.fiberGrams ?? 0,
-        proteinGrams: nutrients.proteinGrams,
-        saltGrams: nutrients.saltGrams ?? 0,
-        saturatedFatGrams: nutrients.saturatedFatGrams ?? 0,
-        sugarGrams: nutrients.sugarGrams ?? 0,
-      },
-    });
-  }, Reporting.emptyNutrientTotals());
-}
-
-function _findFoodById({
-  foodId,
-  foods,
-}: {
-  readonly foodId: Domain.Food["id"];
-  readonly foods: readonly Domain.Food[];
-}) {
-  return foods.find((food) => food.id === foodId);
 }
 
 function _formatMacroValue({ value }: { readonly value: number }) {
@@ -1240,7 +1226,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   dailyProgress: {
-    gap: spacing.md,
+    gap: spacing.lg,
     marginHorizontal: -spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: "#222226",
@@ -1248,6 +1234,23 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
     backgroundColor: color.sheet,
+  },
+  dayDetailsAction: {
+    marginHorizontal: -spacing.lg,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: "#222226",
+    backgroundColor: color.sheet,
+  },
+  detailsText: {
+    color: color.text,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   macroGrid: {
     flexDirection: "row",
@@ -1257,7 +1260,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     alignItems: "center",
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   dailyMetricLabel: {
     fontSize: tokens.type.size.sm,
@@ -1307,7 +1310,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     alignItems: "center",
-    gap: 2,
+    gap: spacing.xs,
   },
   dailyNutrientLabel: {
     fontSize: tokens.type.size.xs,
@@ -1340,12 +1343,13 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   mealHeader: {
-    minHeight: 48,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
   },
   mealTitle: {
     minWidth: 0,
@@ -1354,6 +1358,19 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.size.lg,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.lg,
+  },
+  mealDetailsButton: {
+    minHeight: 32,
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: color.divider,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: color.surfaceRaised,
   },
   macroStripe: {
     height: 4,

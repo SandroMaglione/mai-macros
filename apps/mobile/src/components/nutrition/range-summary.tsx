@@ -135,8 +135,8 @@ export function RangeSummary({ report }: RangeSummaryProps) {
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle="Average daily intake across the last 7 days, compared with daily targets when available."
-          title="7-day average"
+          subtitle="Average daily intake across recorded days in the last 7 days, compared with daily targets when available."
+          title="Recorded-day average"
         />
         <View style={styles.nutrientGrid}>
           {trackedNutrients.map((nutrientName) => (
@@ -152,7 +152,7 @@ export function RangeSummary({ report }: RangeSummaryProps) {
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle="Top foods contributing to each nutrient across this range."
+          subtitle="Top foods contributing to each nutrient across recorded days in this range."
           title="Food contributors"
         />
         <View style={styles.foodGroups}>

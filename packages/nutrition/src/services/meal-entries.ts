@@ -8,6 +8,7 @@ import {
   Effect,
   Layer,
   Option,
+  Order,
   Schema,
 } from "effect";
 
@@ -37,6 +38,11 @@ const _ReviseMealEntryInput = Schema.Struct({
 const _DeleteMealEntryInput = Schema.Struct({
   mealEntryId: MealEntryId,
 });
+
+const _mealEntryCreatedAtOrder = Order.mapInput(
+  Order.Number,
+  (mealEntry: MealEntry) => mealEntry.createdAt.epochMilliseconds
+);
 
 export type CreateMealEntryInput = {
   readonly dateKey: string;
@@ -97,8 +103,11 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
         const decodedInput = yield* Schema.decodeEffect(
           _ListMealEntriesForDayInput
         )(input);
+        const mealEntries = yield* store.findMealEntriesByDate(
+          decodedInput.dateKey
+        );
 
-        return yield* store.findMealEntriesByDate(decodedInput.dateKey);
+        return Array.sortBy(_mealEntryCreatedAtOrder)(mealEntries);
       }),
 
       listFoodUsage: Effect.fn("MealEntries.listFoodUsage")(function* () {

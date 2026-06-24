@@ -31,8 +31,19 @@ export type FoodSearchSelectedEvent = {
   readonly selection: "explicit" | "firstMatching";
 };
 
+export type FoodSearchMacroOrder =
+  | "carbs"
+  | "energy"
+  | "fat"
+  | "fiber"
+  | "protein"
+  | "salt"
+  | "saturatedFat"
+  | "sugar";
+
 type FoodSearchContext = {
   readonly foods: readonly Domain.Food[];
+  readonly macroOrder: FoodSearchMacroOrder | null;
   readonly matchingFoods: readonly Domain.Food[];
   readonly query: string;
   readonly selectedFoodId: Domain.Food["id"] | null;
@@ -40,6 +51,7 @@ type FoodSearchContext = {
 
 type FoodSearchInput = {
   readonly foods: readonly Domain.Food[];
+  readonly macroOrder?: FoodSearchMacroOrder | null;
   readonly query?: string;
   readonly selectedFoodId?: Domain.Food["id"] | null;
 };
@@ -58,6 +70,10 @@ export type FoodSearchEvent =
   | {
       readonly type: "changeQuery";
       readonly query: string;
+    }
+  | {
+      readonly type: "changeMacroOrder";
+      readonly macroOrder: FoodSearchMacroOrder | null;
     }
   | {
       readonly type: "selectFirstMatchingFood";
@@ -82,6 +98,25 @@ const foodOriginThenNameOrder = Order.combineAll([
   foodUserOriginOrder,
   foodLowercaseNameOrder,
 ]);
+type FoodMacroValueKey =
+  | "carbsGramsPer100g"
+  | "energyKcalPer100g"
+  | "fatGramsPer100g"
+  | "fiberGramsPer100g"
+  | "proteinGramsPer100g"
+  | "saltGramsPer100g"
+  | "saturatedFatGramsPer100g"
+  | "sugarGramsPer100g";
+const foodMacroOrderValueKey = {
+  carbs: "carbsGramsPer100g",
+  energy: "energyKcalPer100g",
+  fat: "fatGramsPer100g",
+  fiber: "fiberGramsPer100g",
+  protein: "proteinGramsPer100g",
+  salt: "saltGramsPer100g",
+  saturatedFat: "saturatedFatGramsPer100g",
+  sugar: "sugarGramsPer100g",
+} satisfies Record<FoodSearchMacroOrder, FoodMacroValueKey>;
 
 export function getFoodCategoryLabel({
   category,
@@ -132,13 +167,41 @@ export function sortFoodsByOriginAndName({
   return Array.sort(foods, foodOriginThenNameOrder);
 }
 
+export function sortFoodsByMacroOrder({
+  foods,
+  macroOrder,
+}: {
+  readonly foods: readonly Domain.Food[];
+  readonly macroOrder: FoodSearchMacroOrder | null;
+}) {
+  return macroOrder === null
+    ? foods
+    : Array.sort(
+        foods,
+        Order.combineAll([
+          foodUserOriginOrder,
+          Order.mapInput(Order.flip(Order.Number), (food: Domain.Food) => {
+            const valueKey = foodMacroOrderValueKey[macroOrder];
+
+            return food[valueKey] ?? 0;
+          }),
+          foodLowercaseNameOrder,
+        ])
+      );
+}
+
 const _foodSearchContextFromInput = ({
   foods,
+  macroOrder = null,
   query = "",
   selectedFoodId = null,
 }: FoodSearchInput): FoodSearchContext => ({
   foods,
-  matchingFoods: filterFoodsByQuery({ foods, query }),
+  macroOrder,
+  matchingFoods: sortFoodsByMacroOrder({
+    foods: filterFoodsByQuery({ foods, query }),
+    macroOrder,
+  }),
   query,
   selectedFoodId:
     selectedFoodId === null
@@ -166,9 +229,26 @@ export const foodSearchMachine = setup({
 
             return _foodSearchContextFromInput({
               foods: event.foods,
+              macroOrder: context.macroOrder,
               query: context.query,
               selectedFoodId: context.selectedFoodId,
             });
+          }),
+        },
+        changeMacroOrder: {
+          actions: assign(({ context, event }) => {
+            assertEvent(event, "changeMacroOrder");
+
+            return {
+              macroOrder: event.macroOrder,
+              matchingFoods: sortFoodsByMacroOrder({
+                foods: filterFoodsByQuery({
+                  foods: context.foods,
+                  query: context.query,
+                }),
+                macroOrder: event.macroOrder,
+              }),
+            };
           }),
         },
         changeQuery: {
@@ -176,9 +256,12 @@ export const foodSearchMachine = setup({
             assertEvent(event, "changeQuery");
 
             return {
-              matchingFoods: filterFoodsByQuery({
-                foods: context.foods,
-                query: event.query,
+              matchingFoods: sortFoodsByMacroOrder({
+                foods: filterFoodsByQuery({
+                  foods: context.foods,
+                  query: event.query,
+                }),
+                macroOrder: context.macroOrder,
               }),
               query: event.query,
             };

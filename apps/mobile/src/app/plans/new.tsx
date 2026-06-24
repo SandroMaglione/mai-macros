@@ -1,12 +1,13 @@
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
 import { AppScreen, LoadingView, MaiHeader, Notice } from "@/components/ui";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
 import { Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Match, Option, Schema } from "effect";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
@@ -169,11 +170,21 @@ const newPlanRouteMachine = setup({
 
 export default function NewPlanScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const search = useSchemaLocalSearchParams(SearchParams).pipe(
+    Option.match({
+      onNone: () => ({
+        _tag: "Invalid" as const,
+      }),
+      onSome: (params) => ({
+        _tag: "Valid" as const,
+        dateKey: params.dateKey,
+      }),
+    })
+  );
   const [snapshot, send] = useMachine(newPlanRouteMachine, {
     input: {
       router,
-      search: decodeNewPlanSearchParams({ dateKey: params.dateKey }),
+      search,
     },
   });
 
@@ -219,61 +230,6 @@ export default function NewPlanScreen() {
       }}
     />
   );
-}
-
-export function decodeNewPlanSearchParams({
-  dateKey,
-}: {
-  readonly dateKey: unknown;
-}): SearchDecodeResult {
-  const dateKeyParam = optionalStringParam({ value: dateKey });
-
-  if (dateKeyParam._tag === "Invalid") {
-    return {
-      _tag: "Invalid",
-    };
-  }
-
-  return Schema.decodeOption(SearchParams)({
-    dateKey: dateKeyParam.value,
-  }).pipe(
-    Option.match({
-      onNone: () => ({
-        _tag: "Invalid" as const,
-      }),
-      onSome: (search) => ({
-        _tag: "Valid" as const,
-        dateKey: search.dateKey,
-      }),
-    })
-  );
-}
-
-export function optionalStringParam({ value }: { readonly value: unknown }):
-  | {
-      readonly _tag: "Valid";
-      readonly value: string | undefined;
-    }
-  | {
-      readonly _tag: "Invalid";
-    } {
-  if (value === undefined) {
-    return {
-      _tag: "Valid",
-      value: undefined,
-    };
-  }
-
-  if (typeof value === "string") {
-    return {
-      _tag: "Valid",
-      value,
-    };
-  }
-
-  return {
-    _tag: "Invalid",
-  };
 }
 
 export function submitErrorMessage({

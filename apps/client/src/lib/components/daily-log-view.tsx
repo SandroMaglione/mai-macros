@@ -33,11 +33,7 @@ import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
 import { FoodCatalogTransferControls } from "./food-catalog-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
-import {
-  FoodDefaultOriginDot,
-  FoodSearchField,
-  FoodSearchResults,
-} from "./food-search.tsx";
+import { FoodSearchField, FoodSearchResults } from "./food-search.tsx";
 import { dateKeyFromDate, shiftDateKey } from "../utils.ts";
 
 export type DailyLogViewData = {
@@ -1387,7 +1383,7 @@ function AddMealFoodDialog({
       ? undefined
       : `${_formatPreciseNumber({ value: mealEntry.quantityGrams })} g logged`
     : selectedFoodUsage === undefined
-      ? "No previous"
+      ? undefined
       : `${_formatPreciseNumber({
           value: selectedFoodUsage.latestQuantityGrams,
         })} g previous`;
@@ -1461,7 +1457,6 @@ function AddMealFoodDialog({
                     <FoodNutrientOverview
                       brand={selectedFood.brand}
                       name={selectedFood.name}
-                      namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
                       nutrients={selectedFoodNutrients}
                       secondaryLabel={selectedFoodQuantityLabel}
                     />
@@ -1476,7 +1471,6 @@ function AddMealFoodDialog({
                 <FoodNutrientOverview
                   brand={selectedFood.brand}
                   name={selectedFood.name}
-                  namePrefix={<FoodDefaultOriginDot food={selectedFood} />}
                   nutrients={selectedFoodNutrients}
                   secondaryLabel={selectedFoodQuantityLabel}
                 />
@@ -1526,7 +1520,7 @@ function AddMealFoodDialog({
                   });
 
                   return foodHistory === undefined
-                    ? "No previous"
+                    ? ""
                     : `${_formatPreciseNumber({
                         value: foodHistory.latestQuantityGrams,
                       })} g`;
