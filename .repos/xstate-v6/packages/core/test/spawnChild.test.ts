@@ -1,0 +1,147 @@
+import { interval } from 'rxjs';
+import {
+  ActorRefFrom,
+  createActor,
+  createMachine,
+  createObservableLogic,
+  createAsyncLogic
+} from '../src';
+import { z } from 'zod';
+
+// TODO: deprecate syncSnapshot
+describe('spawnChild action', () => {
+  it('can spawn', () => {
+    const actor = createActor(
+      createMachine({
+        entry: (_, enq) => {
+          enq.spawn(createAsyncLogic({ run: () => Promise.resolve(42) }), {
+            id: 'child'
+          });
+        }
+      })
+    );
+
+    actor.start();
+
+    expect(actor.getSnapshot().children.child).toBeDefined();
+  });
+
+  it('can spawn from named actor', () => {
+    const fetchNum = createAsyncLogic({
+      run: ({ input }: { input: number }) => Promise.resolve(input * 2)
+    });
+    const actor = createActor(
+      createMachine({
+        // types: {
+        //   actors: {} as {
+        //     src: 'fetchNum';
+        //     logic: typeof fetchNum;
+        //   }
+        // },
+        entry: (_, enq) => {
+          enq.spawn(fetchNum, { id: 'child', input: 21 });
+        }
+      }).provide({
+        actors: { fetchNum }
+      })
+    );
+
+    actor.start();
+
+    expect(actor.getSnapshot().children.child).toBeDefined();
+  });
+
+  it('should accept `syncSnapshot` option', async () => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const observableLogic = createObservableLogic(() => interval(10));
+    const observableMachine = createMachine({
+      schemas: {
+        context: z.object({
+          observableRef: z.custom<ActorRefFrom<typeof observableLogic>>()
+        })
+      },
+      id: 'observable',
+      initial: 'idle',
+      context: {
+        observableRef: undefined! as ActorRefFrom<typeof observableLogic>
+      },
+      states: {
+        idle: {
+          entry: (_: unknown, enq: any) => {
+            enq.spawn(observableLogic, {
+              id: 'int',
+              syncSnapshot: true
+            });
+          },
+          on: {
+            'xstate.snapshot.int': ({
+              event
+            }: {
+              event: { snapshot: { context: number } };
+            }) => {
+              if (event.snapshot.context === 5) {
+                return {
+                  target: 'success'
+                };
+              }
+            }
+          }
+        },
+        success: {
+          type: 'final'
+        }
+      } as any
+    });
+
+    const observableService = createActor(observableMachine);
+    observableService.subscribe({
+      complete: () => {
+        resolve();
+      }
+    });
+
+    observableService.start();
+    await promise;
+  });
+
+  it('should handle a dynamic id', () => {
+    const spy = vi.fn();
+
+    const childMachine = createMachine({
+      on: {
+        FOO: (_, enq) => {
+          enq(spy);
+        }
+      }
+    });
+
+    const machine = createMachine({
+      schemas: {
+        context: z.object({
+          childId: z.string()
+        })
+      },
+      context: {
+        childId: 'myChild'
+      },
+      entry: ({ context, self }, enq) => {
+        // TODO: This should all be abstracted in enq.spawn(…)
+        const child = createActor(childMachine, {
+          id: context.childId,
+          parent: self
+        });
+        enq(() => {
+          child.start();
+        });
+
+        enq.sendTo(child, {
+          type: 'FOO'
+        });
+      }
+    });
+
+    createActor(machine).start();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
