@@ -1,8 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 import "tsx/cjs";
 
-const primary700 = "#df5819";
-const iconBackground = "#f7f7f5";
+const iconBackground = "#111113";
 const appBackground = iconBackground;
 const appVersion = "1.0.0";
 
@@ -30,13 +29,14 @@ export default {
     },
     predictiveBackGestureEnabled: false,
   },
-  androidStatusBar: {
-    backgroundColor: primary700,
-    barStyle: "light-content",
-    translucent: false,
-  },
   plugins: [
     "expo-router",
+    [
+      "expo-status-bar",
+      {
+        style: "light",
+      },
+    ],
     [
       "expo-splash-screen",
       {
