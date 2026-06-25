@@ -44,9 +44,19 @@ export const QuantityGrams = PositiveNumber.pipe(Schema.brand("QuantityGrams"));
 
 export type QuantityGrams = typeof QuantityGrams.Type;
 
-export const Meal = Schema.Literals(["breakfast", "lunch", "dinner"]);
+export const LegacyMeal = Schema.Literals(["breakfast", "lunch", "dinner"]);
 
-export type Meal = typeof Meal.Type;
+export type LegacyMeal = typeof LegacyMeal.Type;
+
+export const MealId = NonEmptyString.pipe(Schema.brand("MealId"));
+
+export type MealId = typeof MealId.Type;
+
+export const MealPosition = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0)
+).pipe(Schema.brand("MealPosition"));
+
+export type MealPosition = typeof MealPosition.Type;
 
 export const FoodCategory = Schema.Literals([
   "bread-like",
@@ -67,13 +77,12 @@ export const FoodCategory = Schema.Literals([
 
 export type FoodCategory = typeof FoodCategory.Type;
 
-export const FoodOrigin = Schema.Literals(["app-default", "user"]);
+export const FoodOrigin = Schema.Literals(["import", "app-default", "user"]);
 
 export type FoodOrigin = typeof FoodOrigin.Type;
 
 export class Food extends Schema.Class<Food>("Food")({
   id: FoodId,
-  basedOnFoodId: Schema.optional(FoodId),
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
@@ -90,10 +99,17 @@ export class Food extends Schema.Class<Food>("Food")({
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+export class PlanMeal extends Schema.Class<PlanMeal>("PlanMeal")({
+  id: MealId,
+  name: NonEmptyString,
+  position: MealPosition,
+  createdAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
 export class Plan extends Schema.Class<Plan>("Plan")({
   id: PlanId,
-  basedOnPlanId: Schema.optional(PlanId),
   name: NonEmptyString,
+  meals: Schema.Array(PlanMeal).check(Schema.isNonEmpty()),
   proteinTargetGrams: NonNegativeNumber,
   carbsTargetGrams: NonNegativeNumber,
   fatTargetGrams: NonNegativeNumber,
@@ -122,7 +138,7 @@ export class ActiveMealPlanSelection extends Schema.Class<ActiveMealPlanSelectio
 export class MealEntry extends Schema.Class<MealEntry>("MealEntry")({
   id: MealEntryId,
   dateKey: DateKey,
-  meal: Meal,
+  mealId: MealId,
   foodId: FoodId,
   quantityGrams: QuantityGrams,
   createdAt: Schema.DateTimeUtcFromMillis,

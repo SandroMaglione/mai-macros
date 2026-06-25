@@ -1,8 +1,9 @@
 import type { BackupTransferMachine } from "@mai/machines";
 import type { Domain } from "@mai/nutrition";
 import { Link } from "@tanstack/react-router";
-import { useSelector } from "@xstate/react";
-import { ChevronLeft, Flame, Plus, Save } from "lucide-react";
+import { useMachine, useSelector } from "@xstate/react";
+import { ChevronLeft, Flame, Plus, Save, Trash2 } from "lucide-react";
+import { assign, setup } from "xstate";
 
 import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import {
@@ -16,6 +17,11 @@ type MealPlanFormAction = "create" | "edit";
 type MealPlanSubmitEvent = {
   readonly type: "submit";
   readonly formData: FormData;
+};
+
+type MealPlanFormMealRow = {
+  readonly id?: Domain.MealId;
+  readonly name: string;
 };
 
 type PlanTargetFieldName =
@@ -111,6 +117,77 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
   },
 ];
 
+const defaultMealRows = [
+  { name: "Breakfast" },
+  { name: "Lunch" },
+  { name: "Dinner" },
+] satisfies readonly MealPlanFormMealRow[];
+
+const mealPlanFormMealRowsMachine = setup({
+  types: {
+    context: {} as {
+      readonly mealRows: readonly MealPlanFormMealRow[];
+    },
+    events: {} as
+      | {
+          readonly type: "addMeal";
+        }
+      | {
+          readonly index: number;
+          readonly type: "changeMealName";
+          readonly value: string;
+        }
+      | {
+          readonly index: number;
+          readonly type: "removeMeal";
+        },
+    input: {} as {
+      readonly initialPlan: Domain.Plan | null;
+    },
+  },
+}).createMachine({
+  context: ({ input }) => ({
+    mealRows:
+      input.initialPlan === null
+        ? defaultMealRows
+        : [...input.initialPlan.meals]
+            .sort((left, right) => left.position - right.position)
+            .map((meal) => ({
+              id: meal.id,
+              name: meal.name,
+            })),
+  }),
+  on: {
+    addMeal: {
+      actions: assign(({ context }) => ({
+        mealRows: [...context.mealRows, { name: "" }],
+      })),
+    },
+    changeMealName: {
+      actions: assign(({ context, event }) => ({
+        mealRows: context.mealRows.map((meal, index) =>
+          index === event.index
+            ? {
+                ...meal,
+                name: event.value,
+              }
+            : meal
+        ),
+      })),
+    },
+    removeMeal: {
+      actions: assign(({ context, event }) => ({
+        mealRows:
+          context.mealRows.length <= 1
+            ? context.mealRows
+            : context.mealRows.flatMap((meal, index) =>
+                index === event.index ? [] : [meal]
+              ),
+      })),
+    },
+  },
+});
+
 export function MealPlanForm({
   action,
   actor,
@@ -128,15 +205,21 @@ export function MealPlanForm({
   readonly dateKey: string | undefined;
   readonly initialPlan: Domain.Plan | null;
 }) {
+  const [mealRowsSnapshot, sendMealRows] = useMachine(
+    mealPlanFormMealRowsMachine,
+    {
+      input: {
+        initialPlan,
+      },
+    }
+  );
+  const mealRows = mealRowsSnapshot.context.mealRows;
   const snapshot = useSelector(actor, (state) => state);
   const formDisabled =
     snapshot.value === "Submitting" ||
     snapshot.value === "Created" ||
     snapshot.value === "Revised";
-  const latestSubmitEvent = _mealPlanSubmitEvent({
-    formData: snapshot.context.latestFormData ?? new FormData(),
-  });
-  const submitDisabled = formDisabled || !snapshot.can(latestSubmitEvent);
+  const submitDisabled = formDisabled;
   const formattedEnergyKcal = new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 2,
   }).format(snapshot.context.energyKcal);
@@ -172,9 +255,10 @@ export function MealPlanForm({
           }}
           onSubmit={(event) => {
             event.preventDefault();
-            const submitEvent = _mealPlanSubmitEvent({
+            const submitEvent = {
+              type: "submit",
               formData: new FormData(event.currentTarget),
-            });
+            } satisfies MealPlanSubmitEvent;
 
             if (formDisabled || !snapshot.can(submitEvent)) {
               return;
@@ -195,6 +279,68 @@ export function MealPlanForm({
               required
             />
           </label>
+
+          <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
+            <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
+              Meals
+            </legend>
+            <div className="grid gap-3">
+              {mealRows.map((meal, index) => (
+                <label
+                  className={planFieldLabelClassName}
+                  key={meal.id ?? index}
+                >
+                  Meal {index + 1}
+                  <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                    <input name="mealId" type="hidden" value={meal.id ?? ""} />
+                    <input
+                      autoComplete="off"
+                      className={planFieldClassName}
+                      disabled={formDisabled}
+                      name="mealName"
+                      onChange={(event) => {
+                        sendMealRows({
+                          type: "changeMealName",
+                          index,
+                          value: event.currentTarget.value,
+                        });
+                      }}
+                      placeholder="Meal name"
+                      required
+                      value={meal.name}
+                    />
+                    <button
+                      aria-label={`Remove meal ${index + 1}`}
+                      className="inline-flex size-10 items-center justify-center rounded-md border border-[#37373b] bg-[#111113] text-[#aaaab1] transition hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={formDisabled || mealRows.length <= 1}
+                      onClick={() => {
+                        sendMealRows({
+                          type: "removeMeal",
+                          index,
+                        });
+                      }}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={16} strokeWidth={3} />
+                    </button>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              className="btn-secondary w-fit"
+              disabled={formDisabled}
+              onClick={() => {
+                sendMealRows({
+                  type: "addMeal",
+                });
+              }}
+              type="button"
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={3} />
+              Add meal
+            </button>
+          </fieldset>
 
           <fieldset className="grid gap-3 rounded-lg border-0 bg-[#1b1b1e] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]">
             <legend className="mb-3 text-sm font-black uppercase leading-tight tracking-normal text-[#aaaab1]">
@@ -303,17 +449,6 @@ function PlanTargetInput({
       </span>
     </label>
   );
-}
-
-function _mealPlanSubmitEvent({
-  formData,
-}: {
-  readonly formData: FormData;
-}): MealPlanSubmitEvent {
-  return {
-    type: "submit",
-    formData,
-  };
 }
 
 function BackToDayIconLink({

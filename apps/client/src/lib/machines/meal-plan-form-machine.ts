@@ -148,7 +148,7 @@ export const submitMealPlanMachine = setup({
           target: "Failure",
           actions: () => {
             globalThis.alert(
-              "Could not create the meal plan. Plan names must be unique."
+              "Could not create the meal plan. Plan and meal names must be unique."
             );
           },
         },
@@ -300,7 +300,7 @@ export const reviseMealPlanMachine = setup({
           target: "Failure",
           actions: () => {
             globalThis.alert(
-              "Could not update the meal plan. Plan names must be unique."
+              "Could not update the meal plan. Plan and meal names must be unique."
             );
           },
         },

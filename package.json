@@ -6,6 +6,7 @@
     "format": "oxfmt",
     "test": "pnpm -r test",
     "dev": "pnpm -r dev",
+    "catalog:open-food-facts": "pnpm --filter @mai/nutrition catalog:open-food-facts",
     "seed:nutrition": "pnpm --filter @mai/nutrition seed",
     "typecheck": "pnpm -r typecheck",
     "lint:all": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config",

@@ -143,18 +143,12 @@ export class Foods extends Context.Service<Foods>()("Foods", {
                 const hasMealEntries = mealEntryCount > 0;
                 const encodedPreviousFood =
                   yield* Schema.encodeEffect(Food)(previousFood);
-                const shouldCreateRevision =
-                  hasMealEntries || previousFood.origin === "app-default";
+                const shouldCreateRevision = hasMealEntries;
                 const foodId = shouldCreateRevision
                   ? yield* crypto.randomUUIDv4
                   : previousFood.id;
                 const food = yield* Schema.decodeEffect(Food)({
                   id: foodId,
-                  ...(shouldCreateRevision
-                    ? { basedOnFoodId: previousFood.id }
-                    : encodedPreviousFood.basedOnFoodId === undefined
-                      ? {}
-                      : { basedOnFoodId: encodedPreviousFood.basedOnFoodId }),
                   name: decodedInput.name,
                   brand: decodedInput.brand,
                   ...(encodedPreviousFood.category === undefined

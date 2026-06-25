@@ -14,8 +14,10 @@ import {
   ActiveMealPlanSelection,
   DailyLog,
   DateKey,
+  MealId,
   Plan,
   PlanId,
+  PlanMeal,
 } from "../domain.ts";
 import { NutritionStore } from "./store.ts";
 
@@ -26,8 +28,16 @@ const _FormNonNegativeNumber = Schema.NumberFromString.check(
 
 const _PlanName = Schema.Trim.check(Schema.isNonEmpty());
 
+const _PlanMealName = Schema.Trim.check(Schema.isNonEmpty());
+
+const _MealPlanMealInput = Schema.Struct({
+  id: Schema.optional(MealId),
+  name: _PlanMealName,
+});
+
 const mealPlanInputFields = {
   name: _PlanName,
+  meals: Schema.Array(_MealPlanMealInput).check(Schema.isNonEmpty()),
   proteinTargetGrams: _FormNonNegativeNumber,
   carbsTargetGrams: _FormNonNegativeNumber,
   fatTargetGrams: _FormNonNegativeNumber,
@@ -66,7 +76,7 @@ export class CreatedMealPlan extends Data.TaggedClass("CreatedMealPlan")<{
 }> {}
 
 export class RevisedMealPlan extends Data.TaggedClass("RevisedMealPlan")<{
-  readonly dailyLog: DailyLog;
+  readonly dailyLog: DailyLog | null;
   readonly plan: Plan;
   readonly previousPlan: Plan;
 }> {}
@@ -85,10 +95,66 @@ export class PlanNameAlreadyExists extends Data.TaggedError(
   readonly name: string;
 }> {}
 
+export class PlanMealNameAlreadyExists extends Data.TaggedError(
+  "PlanMealNameAlreadyExists"
+)<{
+  readonly name: string;
+}> {}
+
 export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
     const crypto = yield* Crypto.Crypto;
+    const makePlanMeals = Effect.fn("MealPlans.makePlanMeals")(function* ({
+      forkExistingMeals,
+      mealInputs,
+      now,
+      previousPlan,
+    }: {
+      readonly forkExistingMeals: boolean;
+      readonly mealInputs: readonly (typeof _MealPlanMealInput.Type)[];
+      readonly now: number;
+      readonly previousPlan: Plan | null;
+    }) {
+      const duplicateMealName = mealInputs.find(
+        (mealInput, index) =>
+          mealInputs.findIndex(
+            (candidate) => candidate.name === mealInput.name
+          ) !== index
+      );
+
+      if (duplicateMealName !== undefined) {
+        return yield* new PlanMealNameAlreadyExists({
+          name: duplicateMealName.name,
+        });
+      }
+
+      return yield* Effect.forEach(
+        mealInputs.map((mealInput, position) => ({ mealInput, position })),
+        ({ mealInput, position }) =>
+          Effect.gen(function* () {
+            const previousMeal =
+              mealInput.id === undefined || previousPlan === null
+                ? undefined
+                : previousPlan.meals.find((meal) => meal.id === mealInput.id);
+            const id =
+              forkExistingMeals || mealInput.id === undefined
+                ? yield* crypto.randomUUIDv4
+                : mealInput.id;
+            const createdAt =
+              previousMeal === undefined || forkExistingMeals
+                ? now
+                : DateTime.toEpochMillis(previousMeal.createdAt);
+
+            return yield* Schema.decodeEffect(PlanMeal)({
+              id,
+              name: mealInput.name,
+              position,
+              createdAt,
+            });
+          })
+      );
+    });
 
     return {
       list: Effect.fn("MealPlans.list")(function* () {
@@ -133,9 +199,19 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
         }
 
         const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const meals = yield* makePlanMeals({
+          forkExistingMeals: false,
+          mealInputs: decodedInput.meals,
+          now,
+          previousPlan: null,
+        });
+        const encodedMeals = yield* Schema.encodeEffect(Schema.Array(PlanMeal))(
+          meals
+        );
         const plan = yield* Schema.decodeEffect(Plan)({
           id: yield* crypto.randomUUIDv4,
           name: decodedInput.name,
+          meals: encodedMeals,
           proteinTargetGrams: decodedInput.proteinTargetGrams,
           carbsTargetGrams: decodedInput.carbsTargetGrams,
           fatTargetGrams: decodedInput.fatTargetGrams,
@@ -191,18 +267,18 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                 const dailyLogsForPlan = yield* store.findDailyLogsByPlan(
                   previousPlan.id
                 );
-                const mealEntryCounts = yield* Effect.forEach(
-                  dailyLogsForPlan,
-                  (dailyLog) => store.countMealEntriesByDate(dailyLog.dateKey)
-                );
-                const hasRecordedMeals = mealEntryCounts.some(
-                  (count) => count > 0
-                );
+                const mealEntryCountForPlanMeals =
+                  yield* store.countMealEntriesByMealIds(
+                    previousPlan.meals.map((meal) => meal.id)
+                  );
+                const planIsUsed =
+                  Array.isReadonlyArrayNonEmpty(dailyLogsForPlan) ||
+                  mealEntryCountForPlanMeals > 0;
                 const existingPlansWithName = yield* store.findPlansByName(
                   decodedInput.name
                 );
                 const hasNameConflict = existingPlansWithName.some((plan) =>
-                  hasRecordedMeals ? true : plan.id !== previousPlan.id
+                  planIsUsed ? true : plan.id !== previousPlan.id
                 );
 
                 if (hasNameConflict) {
@@ -213,18 +289,23 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
 
                 const encodedPreviousPlan =
                   yield* Schema.encodeEffect(Plan)(previousPlan);
-                const planIdEffect = hasRecordedMeals
+                const planIdEffect = planIsUsed
                   ? crypto.randomUUIDv4
                   : Effect.succeed(previousPlan.id);
                 const planId = yield* planIdEffect;
+                const meals = yield* makePlanMeals({
+                  forkExistingMeals: planIsUsed,
+                  mealInputs: decodedInput.meals,
+                  now,
+                  previousPlan,
+                });
+                const encodedMeals = yield* Schema.encodeEffect(
+                  Schema.Array(PlanMeal)
+                )(meals);
                 const plan = yield* Schema.decodeEffect(Plan)({
                   id: planId,
-                  ...(hasRecordedMeals
-                    ? { basedOnPlanId: previousPlan.id }
-                    : encodedPreviousPlan.basedOnPlanId === undefined
-                      ? {}
-                      : { basedOnPlanId: encodedPreviousPlan.basedOnPlanId }),
                   name: decodedInput.name,
+                  meals: encodedMeals,
                   proteinTargetGrams: decodedInput.proteinTargetGrams,
                   carbsTargetGrams: decodedInput.carbsTargetGrams,
                   fatTargetGrams: decodedInput.fatTargetGrams,
@@ -243,9 +324,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                         saturatedFatTargetGrams:
                           decodedInput.saturatedFatTargetGrams,
                       }),
-                  createdAt: hasRecordedMeals
-                    ? now
-                    : encodedPreviousPlan.createdAt,
+                  createdAt: planIsUsed ? now : encodedPreviousPlan.createdAt,
                 });
                 const selection = yield* Schema.decodeEffect(
                   ActiveMealPlanSelection
@@ -258,36 +337,61 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                   decodedInput.dateKey
                 );
                 const existingDailyLog = Array.head(dailyLogs);
-                const dailyLog = yield* existingDailyLog.pipe(
-                  Option.match({
-                    onNone: () =>
-                      Schema.decodeEffect(DailyLog)({
-                        dateKey: decodedInput.dateKey,
-                        planId: plan.id,
-                        createdAt: now,
-                        updatedAt: now,
-                      }),
-                    onSome: (dailyLog) =>
-                      Schema.encodeEffect(DailyLog)(dailyLog).pipe(
-                        Effect.flatMap((encodedDailyLog) =>
-                          Schema.decodeEffect(DailyLog)({
-                            ...encodedDailyLog,
-                            planId: plan.id,
-                            updatedAt: now,
-                          })
-                        )
-                      ),
-                  })
+                const dateMealEntryCount = yield* store.countMealEntriesByDate(
+                  decodedInput.dateKey
                 );
+                const dailyLog = yield* planIsUsed
+                  ? existingDailyLog.pipe(
+                      Option.match({
+                        onNone: () =>
+                          dateMealEntryCount > 0
+                            ? Effect.succeed(null)
+                            : Schema.decodeEffect(DailyLog)({
+                                dateKey: decodedInput.dateKey,
+                                planId: plan.id,
+                                createdAt: now,
+                                updatedAt: now,
+                              }),
+                        onSome: (dailyLog) => Effect.succeed(dailyLog),
+                      })
+                    )
+                  : existingDailyLog.pipe(
+                      Option.match({
+                        onNone: () =>
+                          Schema.decodeEffect(DailyLog)({
+                            dateKey: decodedInput.dateKey,
+                            planId: plan.id,
+                            createdAt: now,
+                            updatedAt: now,
+                          }),
+                        onSome: (dailyLog) =>
+                          Schema.encodeEffect(DailyLog)(dailyLog).pipe(
+                            Effect.flatMap((encodedDailyLog) =>
+                              Schema.decodeEffect(DailyLog)({
+                                ...encodedDailyLog,
+                                planId: plan.id,
+                                updatedAt: now,
+                              })
+                            )
+                          ),
+                      })
+                    );
 
-                if (hasRecordedMeals) {
+                if (planIsUsed) {
                   yield* store.insertPlan(plan);
                 } else {
                   yield* store.upsertPlans([plan]);
                 }
 
                 yield* store.upsertActiveMealPlanSelection(selection);
-                yield* store.upsertDailyLog(dailyLog);
+                if (dailyLog !== null) {
+                  const shouldWriteDailyLog =
+                    !planIsUsed || Option.isNone(existingDailyLog);
+
+                  if (shouldWriteDailyLog) {
+                    yield* store.upsertDailyLog(dailyLog);
+                  }
+                }
 
                 return new RevisedMealPlan({
                   dailyLog,

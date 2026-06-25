@@ -775,11 +775,18 @@ export function savePlan({ input }: { readonly input: SavePlanInput }) {
           "A plan with this name already exists. Choose a different name and try again.",
       })
     ),
+    Effect.catchTag("PlanMealNameAlreadyExists", () =>
+      Effect.succeed({
+        _tag: "Failed" as const,
+        notice:
+          "Meal names must be unique inside a plan. Rename the duplicate meal and try again.",
+      })
+    ),
     Effect.catchTag("SchemaError", () =>
       Effect.succeed({
         _tag: "Failed" as const,
         notice:
-          "Check that the name is filled and every target is a non-negative number.",
+          "Check that the plan name and meal names are filled, and every target is a non-negative number.",
       })
     ),
     Effect.catchTag("PlanNotFound", () =>

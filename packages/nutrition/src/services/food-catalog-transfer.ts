@@ -30,15 +30,39 @@ export const FoodCatalogCount = Schema.Int.check(
 
 export type FoodCatalogCount = typeof FoodCatalogCount.Type;
 
+export const FoodCatalogFoodOrigin = Schema.Literals(["import", "user"]);
+
+export type FoodCatalogFoodOrigin = typeof FoodCatalogFoodOrigin.Type;
+
 export class FoodCatalogFood extends Schema.Class<FoodCatalogFood>(
   "FoodCatalogFood"
+)({
+  id: FoodId,
+  name: NonEmptyString,
+  brand: Schema.optional(NonEmptyString),
+  category: Schema.optional(FoodCategory),
+  origin: FoodCatalogFoodOrigin,
+  energyKcalPer100g: NonNegativeNumber,
+  proteinGramsPer100g: NonNegativeNumber,
+  carbsGramsPer100g: NonNegativeNumber,
+  fatGramsPer100g: NonNegativeNumber,
+  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
+  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
+  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
+  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+class FoodCatalogImportFood extends Schema.Class<FoodCatalogImportFood>(
+  "FoodCatalogImportFood"
 )({
   id: FoodId,
   basedOnFoodId: Schema.optional(FoodId),
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
-  origin: Schema.Literal("user"),
+  origin: FoodCatalogFoodOrigin,
   energyKcalPer100g: NonNegativeNumber,
   proteinGramsPer100g: NonNegativeNumber,
   carbsGramsPer100g: NonNegativeNumber,
@@ -77,6 +101,12 @@ export class MaiFoodCatalogStores extends Schema.Class<MaiFoodCatalogStores>(
   foods: Schema.Array(FoodCatalogFood),
 }) {}
 
+class MaiFoodCatalogImportStores extends Schema.Class<MaiFoodCatalogImportStores>(
+  "MaiFoodCatalogImportStores"
+)({
+  foods: Schema.Array(FoodCatalogImportFood),
+}) {}
+
 export class MaiFoodCatalogV1 extends Schema.Class<MaiFoodCatalogV1>(
   "MaiFoodCatalogV1"
 )({
@@ -87,11 +117,23 @@ export class MaiFoodCatalogV1 extends Schema.Class<MaiFoodCatalogV1>(
   stores: MaiFoodCatalogStores,
 }) {}
 
+class MaiFoodCatalogV1Import extends Schema.Class<MaiFoodCatalogV1Import>(
+  "MaiFoodCatalogV1Import"
+)({
+  format: MaiFoodCatalogFormat,
+  formatVersion: MaiFoodCatalogFormatVersion,
+  integrity: MaiFoodCatalogIntegrity,
+  source: MaiFoodCatalogSource,
+  stores: MaiFoodCatalogImportStores,
+}) {}
+
 export type MaiFoodCatalog = typeof MaiFoodCatalogV1.Type;
 
 export type MaiFoodCatalogEncoded = typeof MaiFoodCatalogV1.Encoded;
 
 export const MaiFoodCatalogJson = Schema.fromJsonString(MaiFoodCatalogV1);
+
+const MaiFoodCatalogImportJson = Schema.fromJsonString(MaiFoodCatalogV1Import);
 
 const FoodCatalogJsonInputSchema = Schema.Struct({
   json: Schema.String,
@@ -113,18 +155,11 @@ export type FoodCatalogImportCandidateStatus =
   | "id-conflict"
   | "new";
 
-export type FoodCatalogBasedOnFoodIdStatus =
-  | "available-in-catalog"
-  | "available-locally"
-  | "missing"
-  | "none";
-
 export type FoodCatalogNameStatus = "same-name-local" | "unique";
 
 export type FoodCatalogImportSelectionReason =
   | "already-present"
   | "id-conflict"
-  | "missing-based-on-food-id"
   | "same-name-local";
 
 export type FoodCatalogImportCandidateSelection = {
@@ -134,7 +169,6 @@ export type FoodCatalogImportCandidateSelection = {
 };
 
 export type FoodCatalogImportCandidate = {
-  readonly basedOnFoodIdStatus: FoodCatalogBasedOnFoodIdStatus;
   readonly food: FoodCatalogFood;
   readonly nameStatus: FoodCatalogNameStatus;
   readonly sameNameLocalFoodIds: readonly FoodId[];
@@ -304,18 +338,11 @@ export class FoodCatalogTransfers extends Context.Service<FoodCatalogTransfers>(
             });
           }
 
-          const defaultFoodIds = yield* _defaultFoodIds;
           const importedFoods = yield* Effect.forEach(
             catalog.stores.foods.filter((food) =>
               selectedFoodIds.includes(food.id)
             ),
-            (food) =>
-              _normalizedFoodFromCatalogFood({
-                defaultFoodIds,
-                food,
-                localFoods,
-                selectedFoodIds,
-              })
+            (food) => _normalizedFoodFromCatalogFood({ food })
           );
 
           yield* store.upsertFoods(importedFoods);
@@ -366,7 +393,29 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
 }: {
   readonly json: string;
 }) {
-  const catalog = yield* Schema.decodeEffect(MaiFoodCatalogJson)(json);
+  const catalogImport = yield* Schema.decodeEffect(MaiFoodCatalogImportJson)(
+    json
+  );
+  const foods = yield* Effect.forEach(
+    catalogImport.stores.foods,
+    _foodCatalogFoodFromImportFood
+  );
+  const encodedFoods = yield* Schema.encodeEffect(
+    Schema.Array(FoodCatalogFood)
+  )(foods);
+  const catalog = yield* Schema.decodeEffect(MaiFoodCatalogV1)({
+    format: catalogImport.format,
+    formatVersion: catalogImport.formatVersion,
+    integrity: catalogImport.integrity,
+    source: {
+      databaseName: catalogImport.source.databaseName,
+      databaseVersion: catalogImport.source.databaseVersion,
+      exportedAt: DateTime.toEpochMillis(catalogImport.source.exportedAt),
+    },
+    stores: {
+      foods: encodedFoods,
+    },
+  });
 
   yield* validateFoodCatalog({ catalog });
 
@@ -381,6 +430,16 @@ const _foodCatalogFoodFromFood = Effect.fn("_foodCatalogFoodFromFood")(
   }
 );
 
+const _foodCatalogFoodFromImportFood = Effect.fn(
+  "_foodCatalogFoodFromImportFood"
+)(function* (food: FoodCatalogImportFood) {
+  const encodedFood = yield* Schema.encodeEffect(FoodCatalogImportFood)(food);
+  const { basedOnFoodId, ...foodWithoutLineage } = encodedFood;
+  void basedOnFoodId;
+
+  return yield* Schema.decodeEffect(FoodCatalogFood)(foodWithoutLineage);
+});
+
 const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
   function* ({
     catalog,
@@ -389,21 +448,8 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
     readonly catalog: MaiFoodCatalog;
     readonly localFoods: readonly Food[];
   }) {
-    const defaultFoodIds = yield* _defaultFoodIds;
-    const catalogFoodIds = catalog.stores.foods.map((food) => food.id);
-    const localFoodIds = localFoods.map((food) => food.id);
-
     return yield* Effect.forEach(catalog.stores.foods, (food) =>
       Effect.gen(function* () {
-        const basedOnFoodIdStatus =
-          food.basedOnFoodId === undefined
-            ? "none"
-            : localFoodIds.includes(food.basedOnFoodId) ||
-                defaultFoodIds.includes(food.basedOnFoodId)
-              ? "available-locally"
-              : catalogFoodIds.includes(food.basedOnFoodId)
-                ? "available-in-catalog"
-                : "missing";
         const sameNameLocalFoodIds = localFoods
           .filter(
             (localFood) =>
@@ -421,12 +467,10 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
         });
 
         return {
-          basedOnFoodIdStatus,
           food,
           nameStatus,
           sameNameLocalFoodIds,
           selection: _foodCatalogImportCandidateSelection({
-            basedOnFoodIdStatus,
             nameStatus,
             status,
           }),
@@ -461,11 +505,9 @@ const _foodCatalogImportCandidateStatus = Effect.fn(
 });
 
 function _foodCatalogImportCandidateSelection({
-  basedOnFoodIdStatus,
   nameStatus,
   status,
 }: {
-  readonly basedOnFoodIdStatus: FoodCatalogBasedOnFoodIdStatus;
   readonly nameStatus: FoodCatalogNameStatus;
   readonly status: FoodCatalogImportCandidateStatus;
 }): FoodCatalogImportCandidateSelection {
@@ -477,10 +519,6 @@ function _foodCatalogImportCandidateSelection({
 
   if (status === "id-conflict") {
     reasons.push("id-conflict");
-  }
-
-  if (basedOnFoodIdStatus === "missing") {
-    reasons.push("missing-based-on-food-id");
   }
 
   if (nameStatus === "same-name-local") {
@@ -529,31 +567,8 @@ const _makeFoodCatalog = Effect.fn("_makeFoodCatalog")(function* ({
 
 const _normalizedFoodFromCatalogFood = Effect.fn(
   "_normalizedFoodFromCatalogFood"
-)(function* ({
-  defaultFoodIds,
-  food,
-  localFoods,
-  selectedFoodIds,
-}: {
-  readonly defaultFoodIds: readonly FoodId[];
-  readonly food: FoodCatalogFood;
-  readonly localFoods: readonly Food[];
-  readonly selectedFoodIds: readonly FoodId[];
-}) {
+)(function* ({ food }: { readonly food: FoodCatalogFood }) {
   const encodedFood = yield* Schema.encodeEffect(FoodCatalogFood)(food);
-  const localFoodIds = localFoods.map((localFood) => localFood.id);
-  const shouldKeepBasedOnFoodId =
-    food.basedOnFoodId !== undefined &&
-    (localFoodIds.includes(food.basedOnFoodId) ||
-      selectedFoodIds.includes(food.basedOnFoodId) ||
-      defaultFoodIds.includes(food.basedOnFoodId));
 
-  return yield* Schema.decodeEffect(Food)(
-    shouldKeepBasedOnFoodId
-      ? encodedFood
-      : {
-          ...encodedFood,
-          basedOnFoodId: undefined,
-        }
-  );
+  return yield* Schema.decodeEffect(Food)(encodedFood);
 });

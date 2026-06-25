@@ -6,7 +6,7 @@ import { FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
-import { type Href, router, useRouter } from "expo-router";
+import { router, useRouter } from "expo-router";
 import { Alert } from "react-native";
 import {
   assertEvent,
@@ -151,11 +151,17 @@ const createFoodRouteMachine = setup({
               const today = todayDateKey();
               const targetDateKey = context.dateKey ?? today;
 
-              router.replace(
-                targetDateKey === today
-                  ? "/"
-                  : (`/days/${targetDateKey}` as Href)
-              );
+              if (targetDateKey === today) {
+                router.replace("/");
+                return;
+              }
+
+              router.replace({
+                pathname: "/days/[dateKey]",
+                params: {
+                  dateKey: targetDateKey,
+                },
+              });
             },
             guard: ({ context }) => context.mode === "screen",
             target: "Created",
@@ -234,9 +240,17 @@ export default function NewFoodScreen() {
       }
       mode="screen"
       onBack={() => {
-        expoRouter.replace(
-          dateKey === undefined ? "/" : (`/days/${dateKey}` as Href)
-        );
+        if (dateKey === undefined) {
+          expoRouter.replace("/");
+          return;
+        }
+
+        expoRouter.replace({
+          pathname: "/days/[dateKey]",
+          params: {
+            dateKey,
+          },
+        });
       }}
     />
   );

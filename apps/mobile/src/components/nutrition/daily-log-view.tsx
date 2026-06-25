@@ -60,15 +60,6 @@ type DailyLogRouteEvent = {
   readonly type: "reload";
 };
 
-const mealOptions: readonly {
-  readonly label: string;
-  readonly value: Domain.Meal;
-}[] = [
-  { label: "Breakfast", value: "breakfast" },
-  { label: "Lunch", value: "lunch" },
-  { label: "Dinner", value: "dinner" },
-];
-
 const macroProgress = [
   {
     color: color.nutritionCarbs,
@@ -288,6 +279,9 @@ export function DailyLogTodayRoute() {
 }
 
 export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
+  const mealOptions = [...data.day.selectedPlan.meals].sort(
+    (left, right) => left.position - right.position
+  );
   const nutrients = Reporting.calculateMealEntriesNutrientTotals({
     foods: data.foods,
     mealEntries: data.mealEntries,
@@ -424,12 +418,12 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
             <MealSection
               dateKey={data.day.dailyLog.dateKey}
               foods={data.foods}
-              key={mealOption.value}
-              meal={mealOption.value}
+              key={mealOption.id}
+              meal={mealOption.id}
               mealEntries={data.mealEntries.filter(
-                (mealEntry) => mealEntry.meal === mealOption.value
+                (mealEntry) => mealEntry.mealId === mealOption.id
               )}
-              mealLabel={mealOption.label}
+              mealLabel={mealOption.name}
             />
           ))}
         </View>
@@ -724,9 +718,9 @@ function MealSection({
   mealEntries,
   mealLabel,
 }: {
-  readonly dateKey: string;
+  readonly dateKey: Domain.DateKey;
   readonly foods: readonly Domain.Food[];
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
   readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
 }) {

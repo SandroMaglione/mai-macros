@@ -23,6 +23,14 @@ const foodInput: typeof Domain.Food.Encoded = {
 const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
+  meals: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+      name: "Breakfast",
+      position: 0,
+      createdAt: 0,
+    },
+  ],
   proteinTargetGrams: 160,
   carbsTargetGrams: 220,
   fatTargetGrams: 70,

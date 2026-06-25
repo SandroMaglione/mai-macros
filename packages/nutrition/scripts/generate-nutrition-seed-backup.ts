@@ -4,14 +4,16 @@ import { fileURLToPath } from "node:url";
 
 import { Effect, Schema } from "effect";
 
-import { Backup, DefaultFoods } from "../src/index.ts";
+import { Backup, DefaultFoods, Migrations } from "../src/index.ts";
+
+const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
 type FoodKey = string;
 type SeedFoodDefinition = readonly [
   foodKey: FoodKey,
   food: Omit<
     Backup.MaiBackupEncoded["stores"]["foods"][number],
-    "basedOnFoodId" | "createdAt" | "id" | "origin" | "updatedAt"
+    "createdAt" | "id" | "origin" | "updatedAt"
   >,
 ];
 type MealSeedEntry = Pick<
@@ -19,7 +21,7 @@ type MealSeedEntry = Pick<
   "foodId" | "quantityGrams"
 >;
 type MealSeedTemplate = Record<
-  Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"],
+  (typeof CustomPlanMealsMigration.mealsBeforeCustomPlanMeals)[number],
   readonly MealSeedEntry[]
 >;
 type DaySeedTemplate = {
@@ -75,6 +77,23 @@ const seedCreatedAt = timestampForDateKey({
   dateKey: shiftDateKey({ dateKey: todayDateKey, days: -(dayCount - 1) }),
   hour: 8,
 });
+
+const seedPlanMeals = ({
+  planId,
+}: {
+  readonly planId: Backup.MaiBackupEncoded["stores"]["plans"][number]["id"];
+}): Backup.MaiBackupEncoded["stores"]["plans"][number]["meals"] =>
+  CustomPlanMealsMigration.mealsBeforeCustomPlanMeals.map(
+    (mealName, position) => ({
+      id: CustomPlanMealsMigration.makeMigratedMealId({
+        meal: mealName,
+        planId,
+      }),
+      name: CustomPlanMealsMigration.mealLabelsBeforeCustomPlanMeals[mealName],
+      position,
+      createdAt: seedCreatedAt,
+    })
+  );
 
 const foodDefinitions = [
   [
@@ -653,7 +672,6 @@ const greekYogurtFood = requiredItem({
 const lowSugarYogurt: Backup.MaiBackupEncoded["stores"]["foods"][number] = {
   ...greekYogurtFood,
   id: foodId(foods.length + 1),
-  basedOnFoodId: greekYogurtFood.id,
   name: "Greek yogurt 2% low-sugar batch",
   sugarGramsPer100g: 2.1,
   updatedAt: timestampForDateKey({
@@ -692,6 +710,7 @@ const plans: Backup.MaiBackupEncoded["stores"]["plans"][number][] = [
   {
     id: planId(1),
     name: "Seed balanced 2000 kcal",
+    meals: seedPlanMeals({ planId: planId(1) }),
     proteinTargetGrams: 150,
     carbsTargetGrams: 225,
     fatTargetGrams: 60,
@@ -704,6 +723,7 @@ const plans: Backup.MaiBackupEncoded["stores"]["plans"][number][] = [
   {
     id: planId(2),
     name: "Seed rest day lower appetite",
+    meals: seedPlanMeals({ planId: planId(2) }),
     proteinTargetGrams: 125,
     carbsTargetGrams: 190,
     fatTargetGrams: 65,
@@ -716,6 +736,7 @@ const plans: Backup.MaiBackupEncoded["stores"]["plans"][number][] = [
   {
     id: planId(3),
     name: "Seed endurance high carb",
+    meals: seedPlanMeals({ planId: planId(3) }),
     proteinTargetGrams: 140,
     carbsTargetGrams: 285,
     fatTargetGrams: 55,
@@ -1035,11 +1056,7 @@ const schedule = [
   "overDay",
   "balancedA",
 ] satisfies readonly (keyof typeof templates)[];
-const mealNames = [
-  "breakfast",
-  "lunch",
-  "dinner",
-] satisfies readonly Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"][];
+const mealNames = CustomPlanMealsMigration.mealsBeforeCustomPlanMeals;
 
 const backup: Backup.MaiBackupEncoded = buildBackup();
 const json = `${JSON.stringify(backup, null, 2)}\n`;
@@ -1100,7 +1117,10 @@ function buildBackup(): Backup.MaiBackupEncoded {
         mealEntries.push({
           id: mealEntryId(nextMealEntry),
           dateKey,
-          meal: mealName,
+          mealId: CustomPlanMealsMigration.makeMigratedMealId({
+            meal: mealName,
+            planId: template.planId,
+          }),
           foodId: entry.foodId,
           quantityGrams: entry.quantityGrams,
           createdAt:
@@ -1129,7 +1149,7 @@ function buildBackup(): Backup.MaiBackupEncoded {
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 3,
+      databaseVersion: 4,
       exportedAt: timestampForDateKey({ dateKey: todayDateKey, hour: 12 }),
     },
     stores: {
@@ -1225,7 +1245,7 @@ function averageRounded({
 }
 
 function mealHour(
-  mealName: Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["meal"]
+  mealName: (typeof CustomPlanMealsMigration.mealsBeforeCustomPlanMeals)[number]
 ): number {
   return { breakfast: 7, dinner: 19, lunch: 12 }[mealName];
 }

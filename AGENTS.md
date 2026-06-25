@@ -4,6 +4,7 @@
 - Prefer strict domain types over broad primitives when the domain shape is known.
 - Prefer safe `effect` patterns over functions with `unsafe` in the name.
 - When validation is needed, use Effect Schema decoding or encoding APIs and handle failures explicitly.
+- Treat released local-first migrations as immutable distributed history. Put schema changes in a new/current migration instead of editing old migrations, unless the migration has not shipped yet.
 
 ## Project structure
 

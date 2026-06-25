@@ -6,7 +6,7 @@ import { Redirect } from "expo-router";
 
 const MealDetailsRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
-  meal: Domain.Meal,
+  meal: Domain.MealId,
 });
 
 export default function MealDetailsScreen() {

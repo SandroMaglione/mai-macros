@@ -44,10 +44,14 @@ type AddMealFoodRouteData = {
   readonly dateKey: Domain.DateKey;
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
   readonly foods: readonly Domain.Food[];
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
+  readonly mealLabel: string;
 };
 
 type AddMealFoodRouteLoadResult =
+  | {
+      readonly _tag: "InvalidRoute";
+    }
   | {
       readonly _tag: "NoMealPlans";
       readonly dateKey: Domain.DateKey;
@@ -79,21 +83,16 @@ type AddMealFoodRouteContext = {
     typeof FoodSearchMachine.foodSearchMachine
   >;
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
+  readonly mealLabel: string;
   readonly notice: string | null;
   readonly quantityGrams: string;
   readonly selectedFood: Domain.Food | null;
 };
 
-const mealLabels = {
-  breakfast: "Breakfast",
-  dinner: "Dinner",
-  lunch: "Lunch",
-} satisfies Record<Domain.Meal, string>;
-
 const AddMealFoodRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
-  meal: Domain.Meal,
+  meal: Domain.MealId,
 });
 
 const addMealFoodRouteMachine = setup({
@@ -120,6 +119,9 @@ const addMealFoodRouteMachine = setup({
         }).pipe(
           Effect.catchTag("FoodNotFound", () =>
             Effect.succeed("foodNotFound" as const)
+          ),
+          Effect.catchTag("MealNotFound", () =>
+            Effect.succeed("foodNotFound" as const)
           )
         )
       )
@@ -134,7 +136,7 @@ const addMealFoodRouteMachine = setup({
         _findFoodUsage({
           foodId: food.id,
           foodUsage: input.foodUsage,
-        })?.meals.find((usage) => usage.meal === input.meal)?.latestUsedAt
+        })?.meals.find((usage) => usage.mealId === input.meal)?.latestUsedAt
           .epochMilliseconds ?? Number.NEGATIVE_INFINITY
     );
 
@@ -152,6 +154,7 @@ const addMealFoodRouteMachine = setup({
       }),
       foodUsage: input.foodUsage,
       meal: input.meal,
+      mealLabel: input.mealLabel,
       notice: null,
       quantityGrams: "",
       selectedFood: null,
@@ -183,7 +186,9 @@ const addMealFoodRouteMachine = setup({
             const mealUsage =
               foodUsage === undefined
                 ? undefined
-                : foodUsage.meals.find((usage) => usage.meal === context.meal);
+                : foodUsage.meals.find(
+                    (usage) => usage.mealId === context.meal
+                  );
             const previousQuantityGrams = context.quantityGrams.trim();
             const recentQuantityGrams =
               foodUsage === undefined || mealUsage === undefined
@@ -253,7 +258,7 @@ const addMealFoodRouteMachine = setup({
             input: {
               dateKey: context.dateKey,
               foodId: context.selectedFood.id,
-              meal: context.meal,
+              mealId: context.meal,
               quantityGrams: context.quantityGrams,
             },
           };
@@ -272,9 +277,17 @@ const addMealFoodRouteMachine = setup({
             actions: ({ context }) => {
               const today = todayDateKey();
 
-              _replacePath(
-                context.dateKey === today ? "/" : `/days/${context.dateKey}`
-              );
+              if (context.dateKey === today) {
+                _replacePath("/");
+                return;
+              }
+
+              _replacePath({
+                pathname: "/days/[dateKey]",
+                params: {
+                  dateKey: context.dateKey,
+                },
+              });
             },
           },
         ],
@@ -298,12 +311,12 @@ const addMealFoodRouteLoaderMachine = setup({
     context: {} as {
       readonly data: AddMealFoodRouteData | null;
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
       readonly message: string | null;
     },
     input: {} as {
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
     },
   },
   actors: {
@@ -311,7 +324,7 @@ const addMealFoodRouteLoaderMachine = setup({
       AddMealFoodRouteLoadResult,
       {
         readonly dateKey: Domain.DateKey;
-        readonly meal: Domain.Meal;
+        readonly meal: Domain.MealId;
       }
     >(({ input }) => RuntimeClient.runPromise(loadAddMealFoodRouteData(input))),
   },
@@ -333,13 +346,25 @@ const addMealFoodRouteLoaderMachine = setup({
         }),
         onDone: [
           {
+            guard: ({ event }) => event.output._tag === "InvalidRoute",
+            target: "Failed",
+            actions: assign({
+              message: "Could not find this meal.",
+            }),
+          },
+          {
             guard: ({ event }) => event.output._tag === "NoMealPlans",
             target: "Redirected",
             actions: ({ event }) => {
               const output = event.output;
 
               if (output._tag === "NoMealPlans") {
-                _replacePath(`/plans/new?dateKey=${output.dateKey}`);
+                _replacePath({
+                  pathname: "/plans/new",
+                  params: {
+                    dateKey: output.dateKey,
+                  },
+                });
               }
             },
           },
@@ -423,8 +448,15 @@ function ReadyAddMealFoodRoute({
   const [snapshot, , actor] = useMachine(addMealFoodRouteMachine, {
     input: data,
   });
-  const { dateKey, foodSearchActor, foodUsage, meal, notice, quantityGrams } =
-    snapshot.context;
+  const {
+    dateKey,
+    foodSearchActor,
+    foodUsage,
+    meal,
+    mealLabel,
+    notice,
+    quantityGrams,
+  } = snapshot.context;
   const selectedFood = snapshot.context.selectedFood;
   const disabled =
     snapshot.matches("Submitting") || snapshot.matches("Submitted");
@@ -433,7 +465,6 @@ function ReadyAddMealFoodRoute({
   } satisfies AddMealFoodRouteEvent;
   const submitEvent = { type: "submit" } satisfies AddMealFoodRouteEvent;
   const submitDisabled = disabled || !snapshot.can(submitEvent);
-  const mealLabel = mealLabels[meal];
   const selectedFoodUsage =
     selectedFood === null
       ? undefined
@@ -442,7 +473,7 @@ function ReadyAddMealFoodRoute({
           foodUsage,
         });
   const selectedMealUsage = selectedFoodUsage?.meals.find(
-    (usage) => usage.meal === meal
+    (usage) => usage.mealId === meal
   );
   const selectedFoodQuantityLabel =
     selectedFoodUsage === undefined || selectedMealUsage === undefined
@@ -489,7 +520,12 @@ function ReadyAddMealFoodRoute({
                   return;
                 }
 
-                _replacePath(`/days/${dateKey}`);
+                _replacePath({
+                  pathname: "/days/[dateKey]",
+                  params: {
+                    dateKey,
+                  },
+                });
               }}
               variant="ghost"
             />
@@ -547,7 +583,7 @@ function ReadyAddMealFoodRoute({
                   foodUsage,
                 });
                 const mealHistory = foodHistory?.meals.find(
-                  (usage) => usage.meal === meal
+                  (usage) => usage.mealId === meal
                 );
                 const nutrients =
                   foodHistory === undefined || mealHistory === undefined
@@ -570,7 +606,7 @@ function ReadyAddMealFoodRoute({
                   foodUsage,
                 });
                 const mealHistory = foodHistory?.meals.find(
-                  (usage) => usage.meal === meal
+                  (usage) => usage.mealId === meal
                 );
 
                 return foodHistory === undefined || mealHistory === undefined
@@ -682,7 +718,7 @@ export function loadAddMealFoodRouteData({
   meal,
 }: {
   readonly dateKey: Domain.DateKey;
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
 }) {
   return Effect.gen(function* () {
     const dailyLogs = yield* DailyLogs.DailyLogs;
@@ -695,6 +731,15 @@ export function loadAddMealFoodRouteData({
     });
     const foods = yield* foodsService.list();
     const foodUsage = yield* mealEntriesService.listFoodUsage();
+    const planMeal = day.selectedPlan.meals.find(
+      (candidate) => candidate.id === meal
+    );
+
+    if (planMeal === undefined) {
+      return {
+        _tag: "InvalidRoute" as const,
+      };
+    }
 
     return {
       _tag: "Ready" as const,
@@ -703,6 +748,7 @@ export function loadAddMealFoodRouteData({
         foodUsage,
         foods,
         meal,
+        mealLabel: planMeal.name,
       },
     };
   }).pipe(
@@ -725,8 +771,8 @@ function _findFoodUsage({
   return foodUsage.find((usage) => usage.foodId === foodId);
 }
 
-function _replacePath(path: string) {
-  router.replace(path as Parameters<typeof router.replace>[0]);
+function _replacePath(path: Parameters<typeof router.replace>[0]) {
+  router.replace(path);
 }
 
 function _formatPreciseNumber({ value }: { readonly value: number }) {

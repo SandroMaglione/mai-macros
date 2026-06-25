@@ -1136,10 +1136,6 @@ function CatalogCandidateRow({
             label={CatalogCandidateStatusLabel[candidate.status]}
             tone={CatalogCandidateStatusTone[candidate.status]}
           />
-          <CatalogBadge
-            label={CatalogBasedOnStatusLabel[candidate.basedOnFoodIdStatus]}
-            tone={CatalogBasedOnStatusTone[candidate.basedOnFoodIdStatus]}
-          />
           {candidate.nameStatus === "same-name-local" ? (
             <CatalogBadge
               label={
@@ -1425,26 +1421,6 @@ const CatalogCandidateStatusTone: Record<
   "already-present": "neutral",
   "id-conflict": "danger",
   new: "success",
-};
-
-const CatalogBasedOnStatusLabel: Record<
-  FoodCatalogTransfer.FoodCatalogBasedOnFoodIdStatus,
-  string
-> = {
-  "available-in-catalog": "Based-on catalog",
-  "available-locally": "Based-on local",
-  missing: "Based-on missing",
-  none: "No base food",
-};
-
-const CatalogBasedOnStatusTone: Record<
-  FoodCatalogTransfer.FoodCatalogBasedOnFoodIdStatus,
-  "danger" | "neutral" | "success" | "warning"
-> = {
-  "available-in-catalog": "neutral",
-  "available-locally": "neutral",
-  missing: "warning",
-  none: "neutral",
 };
 
 export function backupFileName({

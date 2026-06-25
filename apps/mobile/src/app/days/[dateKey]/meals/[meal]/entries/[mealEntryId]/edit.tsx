@@ -12,7 +12,7 @@ import { FoodNutrientOverview } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
+import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
@@ -30,7 +30,8 @@ import { assertEvent, assign, fromPromise, setup } from "xstate";
 type EditMealEntryRouteData = {
   readonly dateKey: Domain.DateKey;
   readonly food: Domain.Food | undefined;
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
+  readonly mealLabel: string;
   readonly mealEntry: Domain.MealEntry;
 };
 
@@ -66,15 +67,9 @@ type EditMealEntryRouteEvent =
       readonly type: "submit";
     };
 
-const mealLabels = {
-  breakfast: "Breakfast",
-  dinner: "Dinner",
-  lunch: "Lunch",
-} satisfies Record<Domain.Meal, string>;
-
 const EditMealEntryRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
-  meal: Domain.Meal,
+  meal: Domain.MealId,
   mealEntryId: Domain.MealEntryId,
 });
 
@@ -83,12 +78,12 @@ const editMealEntryRouteLoaderMachine = setup({
     context: {} as {
       readonly data: EditMealEntryRouteData | null;
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
       readonly mealEntryId: Domain.MealEntryId;
     },
     input: {} as {
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
       readonly mealEntryId: Domain.MealEntryId;
     },
   },
@@ -97,7 +92,7 @@ const editMealEntryRouteLoaderMachine = setup({
       EditMealEntryRouteLoadResult,
       {
         readonly dateKey: Domain.DateKey;
-        readonly meal: Domain.Meal;
+        readonly meal: Domain.MealId;
         readonly mealEntryId: Domain.MealEntryId;
       }
     >(({ input }) =>
@@ -380,7 +375,7 @@ function ReadyEditMealEntryScreen({
               }),
           })
         );
-  const mealLabel = mealLabels[data.meal];
+  const mealLabel = data.mealLabel;
 
   return (
     <KeyboardAvoidingView
@@ -501,18 +496,34 @@ export function loadEditMealEntryRouteData({
 }: {
   readonly dateKey: Domain.DateKey;
   readonly mealEntryId: Domain.MealEntryId;
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
 }) {
   return Effect.gen(function* () {
+    const dailyLogs = yield* DailyLogs.DailyLogs;
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
+    const day = yield* dailyLogs.open({
+      input: {
+        dateKey,
+      },
+    });
+    const planMeal = day.selectedPlan.meals.find(
+      (candidate) => candidate.id === meal
+    );
+
+    if (planMeal === undefined) {
+      return {
+        _tag: "InvalidRoute" as const,
+      };
+    }
+
     const mealEntries = yield* mealEntriesService.listForDay({
       input: {
         dateKey,
       },
     });
     const mealEntry = mealEntries.find(
-      (entry) => entry.id === mealEntryId && entry.meal === meal
+      (entry) => entry.id === mealEntryId && entry.mealId === meal
     );
 
     if (mealEntry === undefined) {
@@ -529,6 +540,7 @@ export function loadEditMealEntryRouteData({
         dateKey,
         food: foods.find((food) => food.id === mealEntry.foodId),
         meal,
+        mealLabel: planMeal.name,
         mealEntry,
       },
     };

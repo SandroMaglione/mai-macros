@@ -35,7 +35,7 @@ type MacroDetailsScope =
     }
   | {
       readonly _tag: "Meal";
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
     };
 
 type MacroDetailsRouteData = {
@@ -47,6 +47,9 @@ type MacroDetailsRouteData = {
 };
 
 type MacroDetailsLoadResult =
+  | {
+      readonly _tag: "InvalidRoute";
+    }
   | {
       readonly _tag: "NoMealPlans";
       readonly dateKey: Domain.DateKey;
@@ -89,12 +92,6 @@ type FoodNutrientContribution = {
   readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
 };
-
-const mealLabels = {
-  breakfast: "Breakfast",
-  dinner: "Dinner",
-  lunch: "Lunch",
-} satisfies Record<Domain.Meal, string>;
 
 const nutrientDetails = [
   {
@@ -160,7 +157,7 @@ const macroDetailsRouteMachine = setup({
     context: {} as {
       readonly data: MacroDetailsRouteData | null;
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal | undefined;
+      readonly meal: Domain.MealId | undefined;
       readonly message: string | null;
     },
     events: {} as {
@@ -168,7 +165,7 @@ const macroDetailsRouteMachine = setup({
     },
     input: {} as {
       readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.Meal | undefined;
+      readonly meal: Domain.MealId | undefined;
     },
   },
   actors: {
@@ -176,7 +173,7 @@ const macroDetailsRouteMachine = setup({
       MacroDetailsLoadResult,
       {
         readonly dateKey: Domain.DateKey;
-        readonly meal: Domain.Meal | undefined;
+        readonly meal: Domain.MealId | undefined;
       }
     >(({ input }) =>
       RuntimeClient.runPromise(loadMacroDetailsRouteData(input))
@@ -199,6 +196,13 @@ const macroDetailsRouteMachine = setup({
           meal: context.meal,
         }),
         onDone: [
+          {
+            guard: ({ event }) => event.output._tag === "InvalidRoute",
+            target: "Failed",
+            actions: assign({
+              message: "Could not find this meal.",
+            }),
+          },
           {
             guard: ({ event }) => event.output._tag === "NoMealPlans",
             target: "Redirected",
@@ -304,7 +308,7 @@ export function MacroDetailsRoute({
   meal,
 }: {
   readonly dateKey: Domain.DateKey;
-  readonly meal: Domain.Meal | undefined;
+  readonly meal: Domain.MealId | undefined;
 }) {
   const [snapshot, send] = useMachine(macroDetailsRouteMachine, {
     input: {
@@ -358,7 +362,7 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
   const mealEntries =
     meal === null
       ? data.mealEntries
-      : data.mealEntries.filter((mealEntry) => mealEntry.meal === meal);
+      : data.mealEntries.filter((mealEntry) => mealEntry.mealId === meal);
   const totals = Reporting.calculateMealEntriesNutrientTotals({
     foods: data.foods,
     mealEntries,
@@ -381,7 +385,11 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
           },
         ];
   });
-  const title = meal === null ? "Day details" : mealLabels[meal];
+  const title =
+    meal === null
+      ? "Day details"
+      : (data.day.selectedPlan.meals.find((planMeal) => planMeal.id === meal)
+          ?.name ?? "Meal details");
   const subtitle = data.dateKey;
 
   return (
@@ -708,7 +716,7 @@ export function loadMacroDetailsRouteData({
   meal,
 }: {
   readonly dateKey: Domain.DateKey;
-  readonly meal: Domain.Meal | undefined;
+  readonly meal: Domain.MealId | undefined;
 }) {
   return Effect.gen(function* () {
     const dailyLogs = yield* DailyLogs.DailyLogs;
@@ -725,6 +733,16 @@ export function loadMacroDetailsRouteData({
         dateKey: day.dailyLog.dateKey,
       },
     });
+    const selectedMeal =
+      meal === undefined
+        ? undefined
+        : day.selectedPlan.meals.find((planMeal) => planMeal.id === meal);
+
+    if (meal !== undefined && selectedMeal === undefined) {
+      return {
+        _tag: "InvalidRoute" as const,
+      };
+    }
 
     return {
       _tag: "Ready" as const,

@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "catalog:open-food-facts": "NODE_OPTIONS='--experimental-strip-types' node scripts/import-open-food-facts-catalogs.ts",
     "seed": "NODE_OPTIONS='--experimental-strip-types' node scripts/generate-nutrition-seed-backup.ts",
     "test": "vitest run",
     "typecheck": "tsgo --noEmit"

@@ -95,6 +95,12 @@
       }
     },
     {
+      "files": ["apps/mobile/**/*.ts", "apps/mobile/**/*.tsx"],
+      "rules": {
+        "mai/no-react-component-event-handler-props": "off"
+      }
+    },
+    {
       "files": ["**/*.gen.ts"],
       "rules": {
         "mai/no-comments": "off",

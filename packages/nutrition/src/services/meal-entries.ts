@@ -1,4 +1,4 @@
-import { DateKey, FoodId, Meal, MealEntry, MealEntryId } from "../domain.ts";
+import { DateKey, FoodId, MealEntry, MealEntryId, MealId } from "../domain.ts";
 import {
   Array,
   Context,
@@ -21,7 +21,7 @@ const _FormPositiveNumber = Schema.NumberFromString.check(
 
 const _CreateMealEntryInputSchema = Schema.Struct({
   dateKey: DateKey,
-  meal: Meal,
+  mealId: MealId,
   foodId: FoodId,
   quantityGrams: _FormPositiveNumber,
 });
@@ -46,7 +46,7 @@ const _mealEntryCreatedAtOrder = Order.mapInput(
 
 export type CreateMealEntryInput = {
   readonly dateKey: string;
-  readonly meal: string;
+  readonly mealId: string;
   readonly foodId: string;
   readonly quantityGrams: string;
 };
@@ -64,7 +64,7 @@ export type MealFoodUsage = {
   readonly latestUsedAt: MealEntry["createdAt"];
   readonly meals: readonly {
     readonly latestUsedAt: MealEntry["createdAt"];
-    readonly meal: Meal;
+    readonly mealId: MealEntry["mealId"];
   }[];
 };
 
@@ -82,6 +82,10 @@ export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
 
 export class MealEntryNotFound extends Data.TaggedError("MealEntryNotFound")<{
   readonly mealEntryId: MealEntryId;
+}> {}
+
+export class MealNotFound extends Data.TaggedError("MealNotFound")<{
+  readonly mealId: MealId;
 }> {}
 
 export class RevisedMealEntry extends Data.TaggedClass("RevisedMealEntry")<{
@@ -129,7 +133,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   meals: [
                     {
                       latestUsedAt: mealEntry.createdAt,
-                      meal: mealEntry.meal,
+                      mealId: mealEntry.mealId,
                     },
                   ],
                 },
@@ -145,7 +149,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   }
                 : {};
             const existingMealUsage = existingFoodUsage.meals.find(
-              (usage) => usage.meal === mealEntry.meal
+              (usage) => usage.mealId === mealEntry.mealId
             );
             const meals =
               existingMealUsage === undefined
@@ -153,16 +157,16 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                     ...existingFoodUsage.meals,
                     {
                       latestUsedAt: mealEntry.createdAt,
-                      meal: mealEntry.meal,
+                      mealId: mealEntry.mealId,
                     },
                   ]
                 : existingFoodUsage.meals.map((usage) =>
-                    usage.meal === mealEntry.meal &&
+                    usage.mealId === mealEntry.mealId &&
                     mealEntry.createdAt.epochMilliseconds >=
                       usage.latestUsedAt.epochMilliseconds
                       ? {
                           latestUsedAt: mealEntry.createdAt,
-                          meal: mealEntry.meal,
+                          mealId: mealEntry.mealId,
                         }
                       : usage
                   );
@@ -186,7 +190,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
       }: {
         readonly input: CreateMealEntryInput;
       }) {
-        const decodedInput = yield* Schema.decodeUnknownEffect(
+        const decodedInput = yield* Schema.decodeEffect(
           _CreateMealEntryInputSchema
         )(input);
 
@@ -200,11 +204,42 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               }),
             onSome: () =>
               Effect.gen(function* () {
+                const dailyLogs = yield* store.findDailyLogByDateKey(
+                  decodedInput.dateKey
+                );
+                const dailyLog = yield* Array.head(dailyLogs).pipe(
+                  Option.match({
+                    onNone: () =>
+                      new MealNotFound({
+                        mealId: decodedInput.mealId,
+                      }),
+                    onSome: Effect.succeed,
+                  })
+                );
+                const plans = yield* store.findPlanById(dailyLog.planId);
+                const plan = yield* Array.head(plans).pipe(
+                  Option.match({
+                    onNone: () =>
+                      new MealNotFound({
+                        mealId: decodedInput.mealId,
+                      }),
+                    onSome: Effect.succeed,
+                  })
+                );
+
+                if (
+                  !plan.meals.some((meal) => meal.id === decodedInput.mealId)
+                ) {
+                  return yield* new MealNotFound({
+                    mealId: decodedInput.mealId,
+                  });
+                }
+
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
                 const mealEntry = yield* Schema.decodeEffect(MealEntry)({
                   id: yield* crypto.randomUUIDv4,
                   dateKey: decodedInput.dateKey,
-                  meal: decodedInput.meal,
+                  mealId: decodedInput.mealId,
                   foodId: decodedInput.foodId,
                   quantityGrams: decodedInput.quantityGrams,
                   createdAt: now,

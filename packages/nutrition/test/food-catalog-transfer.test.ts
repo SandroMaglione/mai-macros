@@ -110,8 +110,8 @@ describe("FoodCatalogTransfers", () => {
     });
   });
 
-  it("imports selected foods and detaches missing revision references", async () => {
-    const sourceFood = await Effect.runPromise(testFoodBasedOnMissingFood);
+  it("imports older catalog foods without preserving revision references", async () => {
+    const sourceFood = await Effect.runPromise(testFood);
     const exported = await Effect.runPromise(
       Effect.gen(function* () {
         const transfers = yield* FoodCatalogTransfers;
@@ -128,18 +128,22 @@ describe("FoodCatalogTransfers", () => {
         )
       )
     );
+    const legacyJson = exported.json.replace(
+      `"id":"${sourceFood.id}"`,
+      `"id":"${sourceFood.id}","basedOnFoodId":"90b81ef4-c6dd-4b43-8491-f795a8c974ff"`
+    );
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const targetStore = yield* Store.NutritionStore;
         const targetTransfers = yield* FoodCatalogTransfers;
         const preview = yield* targetTransfers.previewImportFromJson({
           input: {
-            json: exported.json,
+            json: legacyJson,
           },
         });
         const imported = yield* targetTransfers.importSelectedFromJson({
           input: {
-            json: exported.json,
+            json: legacyJson,
             selectedFoodIds: [sourceFood.id],
           },
         });
@@ -158,19 +162,20 @@ describe("FoodCatalogTransfers", () => {
       )
     );
 
-    assert.equal(result.preview.candidates[0]?.basedOnFoodIdStatus, "missing");
     assert.deepEqual(result.preview.candidates[0]?.selection, {
       defaultSelected: true,
-      reasons: ["missing-based-on-food-id"],
+      reasons: [],
       selectable: true,
     });
-    assert.equal(result.imported.importedFoods[0]?.name, "Detached yogurt");
-    assert.isUndefined(result.stores.foods[0]?.basedOnFoodId);
+    assert.equal(result.imported.importedFoods[0]?.name, "Greek yogurt");
+    assert.equal(
+      Object.keys(result.stores.foods[0] ?? {}).includes("basedOnFoodId"),
+      false
+    );
   });
 
-  it("keeps selected catalog revision references", async () => {
-    const baseFood = await Effect.runPromise(testFood);
-    const revisedFood = await Effect.runPromise(testFoodBasedOnUserFood);
+  it("imports external catalog foods", async () => {
+    const sourceFood = await Effect.runPromise(testFood);
     const exported = await Effect.runPromise(
       Effect.gen(function* () {
         const transfers = yield* FoodCatalogTransfers;
@@ -181,31 +186,34 @@ describe("FoodCatalogTransfers", () => {
           _foodCatalogTestLayer({
             stores: {
               ...emptyStores,
-              foods: [baseFood, revisedFood],
+              foods: [sourceFood],
             },
           })
         )
       )
+    );
+    const importJson = exported.json.replace(
+      '"origin":"user"',
+      '"origin":"import"'
     );
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const transfers = yield* FoodCatalogTransfers;
         const preview = yield* transfers.previewImportFromJson({
           input: {
-            json: exported.json,
+            json: importJson,
           },
         });
-
-        yield* transfers.importSelectedFromJson({
+        const imported = yield* transfers.importSelectedFromJson({
           input: {
-            json: exported.json,
-            selectedFoodIds: [baseFood.id, revisedFood.id],
+            json: importJson,
+            selectedFoodIds: [sourceFood.id],
           },
         });
 
         return {
+          imported,
           preview,
-          stores: yield* (yield* Store.NutritionStore).readStores,
         };
       }).pipe(
         Effect.provide(
@@ -216,62 +224,8 @@ describe("FoodCatalogTransfers", () => {
       )
     );
 
-    assert.equal(
-      result.preview.candidates.find(
-        (candidate) => candidate.food.name === "Revised yogurt"
-      )?.basedOnFoodIdStatus,
-      "available-in-catalog"
-    );
-    assert.equal(
-      result.stores.foods.find((food) => food.name === "Revised yogurt")
-        ?.basedOnFoodId,
-      "9535a059-a61f-42e1-a2e0-35ec87203c24"
-    );
-  });
-
-  it("keeps default-food revision references without exporting defaults", async () => {
-    const defaultBasedFood = await Effect.runPromise(
-      testFoodBasedOnDefaultFood
-    );
-    const exported = await Effect.runPromise(
-      Effect.gen(function* () {
-        const transfers = yield* FoodCatalogTransfers;
-
-        return yield* transfers.exportToJson();
-      }).pipe(
-        Effect.provide(
-          _foodCatalogTestLayer({
-            stores: {
-              ...emptyStores,
-              foods: [defaultBasedFood],
-            },
-          })
-        )
-      )
-    );
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const transfers = yield* FoodCatalogTransfers;
-
-        yield* transfers.importSelectedFromJson({
-          input: {
-            json: exported.json,
-            selectedFoodIds: [defaultBasedFood.id],
-          },
-        });
-
-        return yield* (yield* Store.NutritionStore).readStores;
-      }).pipe(
-        Effect.provide(
-          _foodCatalogTestLayer({
-            stores: emptyStores,
-          })
-        )
-      )
-    );
-
-    assert.equal(result.foods.length, 1);
-    assert.equal(result.foods[0]?.basedOnFoodId, defaultFoodId);
+    assert.equal(result.preview.candidates[0]?.food.origin, "import");
+    assert.equal(result.imported.importedFoods[0]?.origin, "import");
   });
 
   it("rejects selecting foods that conflict with local food ids", async () => {
@@ -401,6 +355,13 @@ function _foodCatalogTestLayer({
         () =>
           currentStores.mealEntries.filter(
             (mealEntry) => mealEntry.foodId === foodId
+          ).length
+      ),
+    countMealEntriesByMealIds: (mealIds) =>
+      Effect.sync(
+        () =>
+          currentStores.mealEntries.filter((mealEntry) =>
+            mealIds.includes(mealEntry.mealId)
           ).length
       ),
     deleteMealEntry: (mealEntryId) =>
@@ -612,43 +573,4 @@ const testSameNameLocalFood = Schema.decodeEffect(Domain.Food)({
   origin: "user",
   proteinGramsPer100g: 10,
   updatedAt: 0,
-});
-
-const testFoodBasedOnUserFood = Schema.decodeEffect(Domain.Food)({
-  basedOnFoodId: "9535a059-a61f-42e1-a2e0-35ec87203c24",
-  carbsGramsPer100g: 3.7,
-  createdAt: 1,
-  energyKcalPer100g: 60,
-  fatGramsPer100g: 0.4,
-  id: "af21f6d1-b5c4-410e-8f89-3c2bc8f40f28",
-  name: "Revised yogurt",
-  origin: "user",
-  proteinGramsPer100g: 11,
-  updatedAt: 1,
-});
-
-const testFoodBasedOnMissingFood = Schema.decodeEffect(Domain.Food)({
-  basedOnFoodId: "90b81ef4-c6dd-4b43-8491-f795a8c974ff",
-  carbsGramsPer100g: 3.7,
-  createdAt: 1,
-  energyKcalPer100g: 60,
-  fatGramsPer100g: 0.4,
-  id: "b6ecb344-6723-40e2-a4de-53cdf4ab2d84",
-  name: "Detached yogurt",
-  origin: "user",
-  proteinGramsPer100g: 11,
-  updatedAt: 1,
-});
-
-const testFoodBasedOnDefaultFood = Schema.decodeEffect(Domain.Food)({
-  basedOnFoodId: defaultFoodId,
-  carbsGramsPer100g: 10,
-  createdAt: 1,
-  energyKcalPer100g: 100,
-  fatGramsPer100g: 1,
-  id: "47327ced-b7bf-4e4c-baa1-239f85ad57bb",
-  name: "Custom apple",
-  origin: "user",
-  proteinGramsPer100g: 1,
-  updatedAt: 1,
 });

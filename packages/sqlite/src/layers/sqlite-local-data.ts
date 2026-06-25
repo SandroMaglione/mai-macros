@@ -14,6 +14,7 @@ export const makeSqliteLocalData = Effect.gen(function* () {
         yield* sql`DROP TABLE IF EXISTS meal_entries`;
         yield* sql`DROP TABLE IF EXISTS active_meal_plan_selections`;
         yield* sql`DROP TABLE IF EXISTS daily_logs`;
+        yield* sql`DROP TABLE IF EXISTS plan_meals`;
         yield* sql`DROP TABLE IF EXISTS foods`;
         yield* sql`DROP TABLE IF EXISTS plans`;
         yield* sql`DROP TABLE IF EXISTS mai_migrations`;

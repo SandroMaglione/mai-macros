@@ -1,0 +1,14 @@
+[
+  {
+    "name": "lidl-italy",
+    "store": "lidl",
+    "countryTag": "en:italy",
+    "output": "data/open-food-facts/catalogs/lidl-italy.food-catalog.json"
+  },
+  {
+    "name": "bennet-italy",
+    "store": "bennet",
+    "countryTag": "en:italy",
+    "output": "data/open-food-facts/catalogs/bennet-italy.food-catalog.json"
+  }
+]

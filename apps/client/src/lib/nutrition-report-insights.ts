@@ -22,13 +22,14 @@ export type NutritionReportInsight = {
 type FoodInsightContributor = {
   readonly daysByDateKey: Record<string, true>;
   readonly foodId: Domain.Food["id"];
-  readonly mealsByName: Record<Domain.Meal, Record<string, true>>;
+  readonly mealsByName: Record<string, Record<string, true>>;
   readonly name: string;
   readonly totals: Reporting.NutrientTotals;
 };
 
 type MealInsightContributor = {
-  readonly meal: Domain.Meal;
+  readonly mealId: Domain.MealId;
+  readonly mealLabel: string;
   readonly totals: Reporting.NutrientTotals;
 };
 
@@ -53,18 +54,6 @@ const nutrientInsightLabels = {
   saturatedFatGrams: "saturated fat",
   sugarGrams: "sugar",
 } satisfies Record<Reporting.NutrientName, string>;
-
-const mealInsightLabels = {
-  breakfast: "Breakfast",
-  dinner: "Dinner",
-  lunch: "Lunch",
-} satisfies Record<Domain.Meal, string>;
-
-const insightMeals = [
-  "breakfast",
-  "lunch",
-  "dinner",
-] as const satisfies readonly Domain.Meal[];
 
 export function getNutritionReportInsights({
   limit,
@@ -96,22 +85,31 @@ export function getNutritionReportInsights({
     saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
     sugarGrams: entry.nutrients.sugarGrams ?? 0,
   });
+  const mealLabelsById = report.days.reduce<Record<string, string>>(
+    (labels, day) =>
+      day.plan.meals.reduce<Record<string, string>>(
+        (nextLabels, meal) => ({
+          ...nextLabels,
+          [meal.id]: meal.name,
+        }),
+        labels
+      ),
+    {}
+  );
+  const mealLabel = ({ mealId }: { readonly mealId: string }) =>
+    mealLabelsById[mealId] ?? "Meal";
   const foodContributors = Object.values(
     report.days.reduce<Record<string, FoodInsightContributor>>(
       (contributors, day) =>
         day.entries.reduce<Record<string, FoodInsightContributor>>(
           (nextContributors, entry) => {
-            const meal = entry.mealEntry.meal;
+            const mealId = entry.mealEntry.mealId;
             const current =
               nextContributors[entry.food.id] ??
               ({
                 daysByDateKey: {},
                 foodId: entry.food.id,
-                mealsByName: {
-                  breakfast: {},
-                  dinner: {},
-                  lunch: {},
-                },
+                mealsByName: {},
                 name: entry.food.name,
                 totals: Reporting.emptyNutrientTotals(),
               } satisfies FoodInsightContributor);
@@ -126,8 +124,8 @@ export function getNutritionReportInsights({
                 },
                 mealsByName: {
                   ...current.mealsByName,
-                  [meal]: {
-                    ...current.mealsByName[meal],
+                  [mealId]: {
+                    ...current.mealsByName[mealId],
                     [day.dateKey]: true,
                   },
                 },
@@ -144,21 +142,22 @@ export function getNutritionReportInsights({
     )
   );
   const mealContributors = Object.values(
-    report.days.reduce<Record<Domain.Meal, MealInsightContributor>>(
+    report.days.reduce<Record<string, MealInsightContributor>>(
       (contributors, day) =>
-        day.entries.reduce<Record<Domain.Meal, MealInsightContributor>>(
+        day.entries.reduce<Record<string, MealInsightContributor>>(
           (nextContributors, entry) => {
-            const meal = entry.mealEntry.meal;
+            const mealId = entry.mealEntry.mealId;
             const current =
-              nextContributors[meal] ??
+              nextContributors[mealId] ??
               ({
-                meal,
+                mealId,
+                mealLabel: mealLabel({ mealId }),
                 totals: Reporting.emptyNutrientTotals(),
               } satisfies MealInsightContributor);
 
             return {
               ...nextContributors,
-              [meal]: {
+              [mealId]: {
                 ...current,
                 totals: Reporting.addNutrientTotals({
                   left: current.totals,
@@ -169,20 +168,7 @@ export function getNutritionReportInsights({
           },
           contributors
         ),
-      {
-        breakfast: {
-          meal: "breakfast",
-          totals: Reporting.emptyNutrientTotals(),
-        },
-        dinner: {
-          meal: "dinner",
-          totals: Reporting.emptyNutrientTotals(),
-        },
-        lunch: {
-          meal: "lunch",
-          totals: Reporting.emptyNutrientTotals(),
-        },
-      } satisfies Record<Domain.Meal, MealInsightContributor>
+      {}
     )
   );
   const formatPercent = ({ share }: { readonly share: number }) =>
@@ -282,29 +268,32 @@ export function getNutritionReportInsights({
   const repeatedFoodInsights = sortedByScore({
     insights: foodContributors.flatMap((food) => {
       const dayFrequency = Object.keys(food.daysByDateKey).length;
-      const mealFrequencyInsights = insightMeals.flatMap((meal) => {
-        const daysByDateKey = food.mealsByName[meal];
-        const mealDayFrequency = Object.keys(daysByDateKey).length;
+      const mealFrequencyInsights = Object.entries(food.mealsByName).flatMap(
+        ([mealId, daysByDateKey]) => {
+          const mealDayFrequency = Object.keys(daysByDateKey).length;
 
-        if (mealDayFrequency < repeatedFoodThreshold) {
-          return [];
+          if (mealDayFrequency < repeatedFoodThreshold) {
+            return [];
+          }
+
+          return [
+            {
+              id: `repeated-food-${food.foodId}-${mealId}`,
+              kind: "repeated-food",
+              parts: [
+                { text: food.name, tone: "food" },
+                {
+                  text: ` appeared at ${mealLabel({
+                    mealId,
+                  }).toLocaleLowerCase()} on ${mealDayFrequency} of ${dayCount} days.`,
+                  tone: "text",
+                },
+              ],
+              score: mealDayFrequency / dayCount + 0.05,
+            } satisfies NutritionReportInsight,
+          ];
         }
-
-        return [
-          {
-            id: `repeated-food-${food.foodId}-${meal}`,
-            kind: "repeated-food",
-            parts: [
-              { text: food.name, tone: "food" },
-              {
-                text: ` appeared at ${mealInsightLabels[meal].toLocaleLowerCase()} on ${mealDayFrequency} of ${dayCount} days.`,
-                tone: "text",
-              },
-            ],
-            score: mealDayFrequency / dayCount + 0.05,
-          } satisfies NutritionReportInsight,
-        ];
-      });
+      );
 
       if (dayFrequency < repeatedFoodThreshold) {
         return mealFrequencyInsights;
@@ -382,11 +371,11 @@ export function getNutritionReportInsights({
 
         return [
           {
-            id: `meal-calories-${meal.meal}`,
+            id: `meal-calories-${meal.mealId}`,
             kind: "meal-imbalance",
             parts: [
               {
-                text: `${mealInsightLabels[meal.meal]} made up ${formatPercent({
+                text: `${meal.mealLabel} made up ${formatPercent({
                   share,
                 })} of your weekly calories.`,
                 tone: "text",
@@ -398,7 +387,7 @@ export function getNutritionReportInsights({
       }),
       ...mealContributors.flatMap((meal) => {
         const otherMeals = mealContributors.filter(
-          (otherMeal) => otherMeal.meal !== meal.meal
+          (otherMeal) => otherMeal.mealId !== meal.mealId
         );
         const otherTotals = otherMeals.reduce<Reporting.NutrientTotals>(
           (currentTotals, otherMeal) =>
@@ -431,11 +420,11 @@ export function getNutritionReportInsights({
 
         return [
           {
-            id: `meal-protein-density-${meal.meal}`,
+            id: `meal-protein-density-${meal.mealId}`,
             kind: "meal-imbalance",
             parts: [
               {
-                text: `${mealInsightLabels[meal.meal]} had much less protein per calorie than your other meals.`,
+                text: `${meal.mealLabel} had much less protein per calorie than your other meals.`,
                 tone: "text",
               },
             ],

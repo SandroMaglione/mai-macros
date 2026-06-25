@@ -35,7 +35,8 @@ type AddMealFoodPageData = {
   readonly dateKey: Domain.DateKey;
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
   readonly foods: readonly Domain.Food[];
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
+  readonly mealLabel: string;
 };
 
 type AddMealFoodPageEvent =
@@ -57,7 +58,8 @@ type AddMealFoodPageContext = {
     typeof FoodSearchMachine.foodSearchMachine
   >;
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-  readonly meal: Domain.Meal;
+  readonly meal: Domain.MealId;
+  readonly mealLabel: string;
   readonly navigate: UseNavigateResult<string>;
   readonly quantityGrams: string;
   readonly selectedFood: Domain.Food | null;
@@ -66,12 +68,6 @@ type AddMealFoodPageContext = {
 type AddMealFoodPageInput = AddMealFoodPageData & {
   readonly navigate: UseNavigateResult<string>;
 };
-
-const mealLabels = {
-  breakfast: "Breakfast",
-  dinner: "Dinner",
-  lunch: "Lunch",
-} satisfies Record<Domain.Meal, string>;
 
 const darkFieldClassName =
   "min-h-10 w-full border border-[#37373b] bg-[#111113] px-3 text-sm font-bold text-[#f0f0f2] outline-none transition placeholder:text-[#77777e] focus:border-[#ff5a51] focus:ring-2 focus:ring-[#ff5a51]/25 disabled:cursor-not-allowed disabled:opacity-50";
@@ -85,9 +81,7 @@ export const Route = createFileRoute("/days/$dateKey_/meals/$meal/add")({
         const dateKey = yield* Schema.decodeEffect(Domain.DateKey)(
           params.dateKey
         );
-        const meal = yield* Schema.decodeUnknownEffect(Domain.Meal)(
-          params.meal
-        );
+        const meal = yield* Schema.decodeEffect(Domain.MealId)(params.meal);
         const dailyLogs = yield* DailyLogs.DailyLogs;
         const foodsService = yield* Foods.Foods;
         const mealEntriesService = yield* MealEntries.MealEntries;
@@ -98,6 +92,15 @@ export const Route = createFileRoute("/days/$dateKey_/meals/$meal/add")({
         });
         const foods = yield* foodsService.list();
         const foodUsage = yield* mealEntriesService.listFoodUsage();
+        const planMeal = day.selectedPlan.meals.find(
+          (candidate) => candidate.id === meal
+        );
+
+        if (planMeal === undefined) {
+          return {
+            _tag: "InvalidRoute" as const,
+          };
+        }
 
         return {
           _tag: "Ready" as const,
@@ -106,6 +109,7 @@ export const Route = createFileRoute("/days/$dateKey_/meals/$meal/add")({
             foodUsage,
             foods,
             meal,
+            mealLabel: planMeal.name,
           },
         };
       }).pipe(
@@ -164,6 +168,9 @@ const addMealFoodPageMachine = setup({
         }).pipe(
           Effect.catchTag("FoodNotFound", () =>
             Effect.succeed("foodNotFound" as const)
+          ),
+          Effect.catchTag("MealNotFound", () =>
+            Effect.succeed("foodNotFound" as const)
           )
         )
       )
@@ -178,7 +185,7 @@ const addMealFoodPageMachine = setup({
         _findFoodUsage({
           foodId: food.id,
           foodUsage: input.foodUsage,
-        })?.meals.find((usage) => usage.meal === input.meal)?.latestUsedAt
+        })?.meals.find((usage) => usage.mealId === input.meal)?.latestUsedAt
           .epochMilliseconds ?? Number.NEGATIVE_INFINITY
     );
 
@@ -196,6 +203,7 @@ const addMealFoodPageMachine = setup({
       }),
       foodUsage: input.foodUsage,
       meal: input.meal,
+      mealLabel: input.mealLabel,
       navigate: input.navigate,
       quantityGrams: "",
       selectedFood: null,
@@ -286,7 +294,7 @@ const addMealFoodPageMachine = setup({
             input: {
               dateKey: context.dateKey,
               foodId: context.selectedFood.id,
-              meal: context.meal,
+              mealId: context.meal,
               quantityGrams: context.quantityGrams,
             },
           };
@@ -341,13 +349,12 @@ function Component() {
       },
     }
   );
-  const { dateKey, foodSearchActor, foodUsage, meal, quantityGrams } =
+  const { dateKey, foodSearchActor, foodUsage, mealLabel, quantityGrams } =
     snapshot.context;
   const selectedFood = snapshot.context.selectedFood;
   const disabled =
     snapshot.matches("Submitting") || snapshot.matches("Submitted");
   const submitEvent = { type: "submit" } satisfies AddMealFoodPageEvent;
-  const mealLabel = mealLabels[meal];
   const selectedFoodUsage =
     selectedFood === null
       ? undefined

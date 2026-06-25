@@ -143,7 +143,7 @@ export default Effect.gen(function* () {
 
         yield* sql`
           INSERT INTO foods ${sql.insert({
-            based_on_food_id: encodedFood.basedOnFoodId ?? null,
+            based_on_food_id: null,
             brand: encodedFood.brand ?? null,
             carbs_grams_per_100g: encodedFood.carbsGramsPer100g,
             category: encodedFood.category ?? null,

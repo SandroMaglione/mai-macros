@@ -9,6 +9,7 @@ import type {
   FoodId,
   MealEntry,
   MealEntryId,
+  MealId,
   Plan,
   PlanId,
 } from "../domain.ts";
@@ -36,6 +37,10 @@ export class NutritionStore extends Context.Service<
     readonly countMealEntriesByDate: (dateKey: DateKey) => StoreEffect<number>;
 
     readonly countMealEntriesByFood: (foodId: FoodId) => StoreEffect<number>;
+
+    readonly countMealEntriesByMealIds: (
+      mealIds: readonly MealId[]
+    ) => StoreEffect<number>;
 
     readonly deleteMealEntry: (mealEntryId: MealEntryId) => StoreMutation;
 

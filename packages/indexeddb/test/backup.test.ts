@@ -7,6 +7,7 @@ import {
   Domain,
   LocalData as NutritionLocalData,
   Metadata,
+  Migrations,
   Store,
 } from "@mai/nutrition";
 import {
@@ -35,6 +36,8 @@ const localDataLayer = Layer.mergeAll(
 ).pipe(Layer.provide(databaseLayer));
 
 const BackupJsonString = Schema.fromJsonString(Schema.Unknown);
+
+const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
 afterEach(() =>
   Effect.runPromise(deleteFakeDatabase({ databaseName: Metadata.DatabaseName }))
@@ -72,6 +75,14 @@ const temporaryFoodInput: typeof Domain.Food.Encoded = {
 const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
+  meals: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+      name: "Breakfast",
+      position: 0,
+      createdAt: 0,
+    },
+  ],
   proteinTargetGrams: 160,
   carbsTargetGrams: 220,
   fatTargetGrams: 70,
@@ -85,11 +96,33 @@ const planInput: typeof Domain.Plan.Encoded = {
 const temporaryPlanInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
   name: "Temporary day",
+  meals: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c35:breakfast",
+      name: "Breakfast",
+      position: 0,
+      createdAt: 0,
+    },
+  ],
   proteinTargetGrams: 120,
   carbsTargetGrams: 180,
   fatTargetGrams: 60,
   createdAt: 0,
 };
+
+const legacyPlanInput: typeof CustomPlanMealsMigration.PlanBeforeCustomPlanMeals.Encoded =
+  {
+    id: planInput.id,
+    name: planInput.name,
+    proteinTargetGrams: planInput.proteinTargetGrams,
+    carbsTargetGrams: planInput.carbsTargetGrams,
+    fatTargetGrams: planInput.fatTargetGrams,
+    fiberTargetGrams: planInput.fiberTargetGrams,
+    sugarTargetGrams: planInput.sugarTargetGrams,
+    saltTargetGrams: planInput.saltTargetGrams,
+    saturatedFatTargetGrams: planInput.saturatedFatTargetGrams,
+    createdAt: planInput.createdAt,
+  };
 
 const dailyLogInput: typeof Domain.DailyLog.Encoded = {
   dateKey: "2026-06-18",
@@ -101,12 +134,23 @@ const dailyLogInput: typeof Domain.DailyLog.Encoded = {
 const mealEntryInput: typeof Domain.MealEntry.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   dateKey: dailyLogInput.dateKey,
-  meal: "breakfast",
+  mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
   foodId: foodInput.id,
   quantityGrams: 150,
   createdAt: 0,
   updatedAt: 0,
 };
+
+const legacyMealEntryInput: typeof CustomPlanMealsMigration.MealEntryBeforeCustomPlanMeals.Encoded =
+  {
+    id: mealEntryInput.id,
+    dateKey: mealEntryInput.dateKey,
+    meal: "breakfast",
+    foodId: mealEntryInput.foodId,
+    quantityGrams: mealEntryInput.quantityGrams,
+    createdAt: mealEntryInput.createdAt,
+    updatedAt: mealEntryInput.updatedAt,
+  };
 
 const activeMealPlanSelectionInput: typeof Domain.ActiveMealPlanSelection.Encoded =
   {
@@ -156,7 +200,10 @@ describe("Backups", () => {
       result.decodedFromJson.source.databaseName,
       Metadata.DatabaseName
     );
-    assert.equal(result.decodedFromJson.source.databaseVersion, 3);
+    assert.equal(
+      result.decodedFromJson.source.databaseVersion,
+      Metadata.CurrentDatabaseVersion
+    );
     assert.equal(result.decodedFromJson.stores.dailyLogs.length, 1);
     assert.equal(result.decodedFromJson.stores.mealEntries.length, 1);
     assert.equal(
@@ -216,8 +263,10 @@ describe("Backups", () => {
       const activeMealPlanSelections = yield* api
         .from("activeMealPlanSelections")
         .select();
-      const dateMealKey: [typeof Domain.DateKey.Type, typeof Domain.Meal.Type] =
-        [dailyLog.dateKey, mealEntry.meal];
+      const dateMealKey: [
+        typeof Domain.DateKey.Type,
+        typeof Domain.MealId.Type,
+      ] = [dailyLog.dateKey, mealEntry.mealId];
       const foodsByName = yield* api
         .from("foods")
         .select("byName")
@@ -236,7 +285,7 @@ describe("Backups", () => {
         .equals(dailyLog.dateKey);
       const mealEntriesByDateMeal = yield* api
         .from("mealEntries")
-        .select("byDateMeal")
+        .select("byDateMealId")
         .equals(dateMealKey);
       const mealEntriesByFood = yield* api
         .from("mealEntries")
@@ -314,8 +363,8 @@ describe("Backups", () => {
 
   it("imports database version 1 backups through plan-name migration", async () => {
     const program = Effect.gen(function* () {
-      const legacyPlanInput = {
-        ...planInput,
+      const duplicateLegacyPlanInput = {
+        ...legacyPlanInput,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
       };
       const legacyBackupInput = {
@@ -344,8 +393,8 @@ describe("Backups", () => {
               origin: undefined,
             },
           ],
-          mealEntries: [mealEntryInput],
-          plans: [planInput, legacyPlanInput],
+          mealEntries: [legacyMealEntryInput],
+          plans: [legacyPlanInput, duplicateLegacyPlanInput],
         },
       };
       const json =
@@ -409,8 +458,8 @@ describe("Backups", () => {
               origin: undefined,
             },
           ],
-          mealEntries: [mealEntryInput],
-          plans: [planInput],
+          mealEntries: [legacyMealEntryInput],
+          plans: [legacyPlanInput],
         },
       };
       const json =
@@ -441,6 +490,77 @@ describe("Backups", () => {
     );
   });
 
+  it("imports current backups with legacy lineage fields by stripping them", async () => {
+    const program = Effect.gen(function* () {
+      const backupInput = {
+        format: "mai.backup",
+        formatVersion: 1,
+        integrity: {
+          counts: {
+            activeMealPlanSelections: 0,
+            dailyLogs: 0,
+            foods: 1,
+            mealEntries: 0,
+            plans: 1,
+          },
+        },
+        source: {
+          databaseName: Metadata.DatabaseName,
+          databaseVersion: Metadata.CurrentDatabaseVersion,
+          exportedAt: 0,
+        },
+        stores: {
+          activeMealPlanSelections: [],
+          dailyLogs: [],
+          foods: [
+            {
+              ...foodInput,
+              basedOnFoodId: "9535a059-a61f-42e1-a2e0-35ec87203c33",
+            },
+          ],
+          mealEntries: [],
+          plans: [
+            {
+              ...planInput,
+              basedOnPlanId: "9535a059-a61f-42e1-a2e0-35ec87203c33",
+              meals: planInput.meals.map((meal) => ({
+                ...meal,
+                basedOnMealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
+              })),
+            },
+          ],
+        },
+      };
+      const json = yield* Schema.encodeEffect(BackupJsonString)(backupInput);
+      const backups = yield* Backup.Backups;
+
+      yield* backups.importFromJson({ input: { json } });
+
+      const api = yield* MaiDatabase.getQueryBuilder;
+      const foods = yield* api.from("foods").select();
+      const plans = yield* api.from("plans").select();
+      const food = foods.find((candidate) => candidate.id === foodInput.id);
+      const plan = plans.find((candidate) => candidate.id === planInput.id);
+
+      return { food, plan };
+    }).pipe(Effect.provide(backupsLayer));
+
+    const result = await Effect.runPromise(program);
+
+    assert.equal(
+      Object.keys(result.food ?? {}).includes("basedOnFoodId"),
+      false
+    );
+    assert.equal(
+      Object.keys(result.plan ?? {}).includes("basedOnPlanId"),
+      false
+    );
+    assert.equal(
+      Object.keys(result.plan?.meals[0] ?? {}).includes("basedOnMealId"),
+      false
+    );
+  });
+
   it("rejects invalid backups before replacing local data", async () => {
     const program = Effect.gen(function* () {
       const api = yield* MaiDatabase.getQueryBuilder;
@@ -462,7 +582,7 @@ describe("Backups", () => {
         },
         source: {
           databaseName: Metadata.DatabaseName,
-          databaseVersion: 3,
+          databaseVersion: Metadata.CurrentDatabaseVersion,
           exportedAt: 0,
         },
         stores: {

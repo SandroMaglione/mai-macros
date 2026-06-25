@@ -28,6 +28,9 @@ type SubmitResult =
       readonly _tag: "PlanNameAlreadyExists";
     }
   | {
+      readonly _tag: "PlanMealNameAlreadyExists";
+    }
+  | {
       readonly _tag: "SchemaError";
     }
   | {
@@ -71,6 +74,11 @@ const newPlanRouteMachine = setup({
             Effect.catchTag("PlanNameAlreadyExists", () =>
               Effect.succeed({
                 _tag: "PlanNameAlreadyExists" as const,
+              })
+            ),
+            Effect.catchTag("PlanMealNameAlreadyExists", () =>
+              Effect.succeed({
+                _tag: "PlanMealNameAlreadyExists" as const,
               })
             ),
             Effect.catchTag("SchemaError", () =>
@@ -244,9 +252,14 @@ export function submitErrorMessage({
         "A plan with this name already exists. Choose a different name and try again."
     ),
     Match.tag(
+      "PlanMealNameAlreadyExists",
+      () =>
+        "Meal names must be unique inside a plan. Rename the duplicate meal and try again."
+    ),
+    Match.tag(
       "SchemaError",
       () =>
-        "Check that the name is filled and every target is a non-negative number."
+        "Check that the plan name and meal names are filled, and every target is a non-negative number."
     ),
     Match.tag(
       "UnknownError",

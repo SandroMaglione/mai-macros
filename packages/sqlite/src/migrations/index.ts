@@ -3,6 +3,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import migration001 from "./001-initial.ts";
+import migration002 from "./002-custom-plan-meals.ts";
 
 const EmptyRequest = Schema.Struct({});
 
@@ -21,6 +22,11 @@ export const SqliteMigrationLoader: readonly SqliteMigration[] = [
     effect: migration001,
     id: 1,
     name: "initial",
+  },
+  {
+    effect: migration002,
+    id: 2,
+    name: "custom-plan-meals",
   },
 ];
 

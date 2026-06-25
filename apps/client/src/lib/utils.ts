@@ -164,6 +164,8 @@ export const createMealPlanInputFromFormData = ({
 }: {
   readonly formData: FormData;
 }): MealPlans.CreateMealPlanInput => {
+  const mealIds = formData.getAll("mealId");
+  const mealNames = formData.getAll("mealName");
   const fiberTargetGrams = _formOptionalString({
     formData,
     name: "fiberTargetGrams",
@@ -183,6 +185,28 @@ export const createMealPlanInputFromFormData = ({
 
   return {
     name: _formTrimmedString({ formData, name: "name" }),
+    meals: mealNames.flatMap((value, index) => {
+      if (typeof value !== "string") {
+        return [];
+      }
+
+      const name = value.trim();
+
+      if (name === "") {
+        return [];
+      }
+
+      const mealId = mealIds[index];
+
+      return [
+        {
+          ...(typeof mealId === "string" && mealId.trim() !== ""
+            ? { id: mealId.trim() }
+            : {}),
+          name,
+        },
+      ];
+    }),
     proteinTargetGrams: _formString({
       formData,
       name: "proteinTargetGrams",
@@ -218,6 +242,25 @@ export const mealPlanFormHasChangesFromPlan = ({
   }
 
   let hasChanges = input.name !== plan.name;
+  const planMeals = [...plan.meals].sort(
+    (left, right) => left.position - right.position
+  );
+
+  if (input.meals.length !== planMeals.length) {
+    hasChanges = true;
+  }
+
+  for (const [index, inputMeal] of input.meals.entries()) {
+    const planMeal = planMeals[index];
+
+    if (
+      planMeal === undefined ||
+      inputMeal.id !== planMeal.id ||
+      inputMeal.name !== planMeal.name
+    ) {
+      hasChanges = true;
+    }
+  }
 
   for (const fieldName of mealPlanRequiredNumberFieldNames) {
     const fieldValue = _parseFormNonNegativeNumber({
@@ -391,7 +434,7 @@ export const createMealEntryInputFromFormData = ({
 }): MealEntries.CreateMealEntryInput => {
   return {
     dateKey,
-    meal: _formString({
+    mealId: _formString({
       formData,
       name: "meal",
     }),

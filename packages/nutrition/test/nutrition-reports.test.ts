@@ -8,6 +8,14 @@ const planInput: typeof Domain.Plan.Encoded = {
   createdAt: 0,
   fatTargetGrams: 70,
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
+  meals: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
+      name: "Lunch",
+      position: 1,
+      createdAt: 0,
+    },
+  ],
   name: "Training day",
   proteinTargetGrams: 160,
 };
@@ -119,7 +127,7 @@ describe("NutritionReports", () => {
         dateKey: firstDailyLog.dateKey,
         foodId: food.id,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c23",
-        meal: "lunch",
+        mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
         quantityGrams: 100,
         updatedAt: 0,
       });
@@ -130,7 +138,7 @@ describe("NutritionReports", () => {
         dateKey: "2026-06-19",
         foodId: food.id,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c22",
-        meal: "lunch",
+        mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
         quantityGrams: 100,
         updatedAt: 0,
       });
@@ -196,6 +204,12 @@ function _getRange({
               Effect.succeed(
                 stores.mealEntries.filter(
                   (mealEntry) => mealEntry.foodId === foodId
+                ).length
+              ),
+            countMealEntriesByMealIds: (mealIds: readonly Domain.MealId[]) =>
+              Effect.succeed(
+                stores.mealEntries.filter((mealEntry) =>
+                  mealIds.includes(mealEntry.mealId)
                 ).length
               ),
             deleteMealEntry: () => Effect.void,

@@ -6,7 +6,13 @@ import {
 import { Effect, Layer, Schema } from "effect";
 import { afterEach, assert, describe, it } from "vitest";
 
-import { DefaultFoods, Domain, Metadata, Utils } from "@mai/nutrition";
+import {
+  DefaultFoods,
+  Domain,
+  Metadata,
+  Migrations,
+  Utils,
+} from "@mai/nutrition";
 import { MaiDatabase } from "../src/index.ts";
 import {
   deleteFakeDatabase,
@@ -16,6 +22,8 @@ import {
 const databaseLayer = MaiDatabase.layer(Metadata.DatabaseName).pipe(
   Layer.provide(layerFakeIndexedDb)
 );
+
+const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
 class LegacySeedFood extends Schema.Class<LegacySeedFood>("LegacySeedFood")({
   id: Domain.FoodId,
@@ -72,7 +80,7 @@ class LegacySeedMealEntry extends Schema.Class<LegacySeedMealEntry>(
 )({
   id: Domain.MealEntryId,
   dateKey: Domain.DateKey,
-  meal: Domain.Meal,
+  meal: Domain.LegacyMeal,
   foodId: Domain.FoodId,
   quantityGrams: Domain.QuantityGrams,
   createdAt: Schema.Number,
@@ -211,6 +219,14 @@ const foodInput: typeof Domain.Food.Encoded = {
 const planInput: typeof Domain.Plan.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   name: "Training day",
+  meals: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+      name: "Breakfast",
+      position: 0,
+      createdAt: 0,
+    },
+  ],
   proteinTargetGrams: 160,
   carbsTargetGrams: 220,
   fatTargetGrams: 70,
@@ -231,7 +247,7 @@ const dailyLogInput: typeof Domain.DailyLog.Encoded = {
 const mealEntryInput: typeof Domain.MealEntry.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   dateKey: dailyLogInput.dateKey,
-  meal: "breakfast",
+  mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
   foodId: foodInput.id,
   quantityGrams: 150,
   createdAt: 0,
@@ -281,7 +297,7 @@ describe("MaiDatabase", () => {
     const result = await Effect.runPromise(program);
 
     assert.equal(result.name, Metadata.DatabaseName);
-    assert.equal(result.version, 3);
+    assert.equal(result.version, 4);
     assert.equal(result.planNameIndexIsUnique, true);
     assert.deepStrictEqual(result.storeNames, [
       "activeMealPlanSelections",
@@ -293,8 +309,9 @@ describe("MaiDatabase", () => {
     assert.deepStrictEqual(result.foodIndexes, ["byName"]);
     assert.deepStrictEqual(result.entryIndexes, [
       "byDate",
-      "byDateMeal",
+      "byDateMealId",
       "byFood",
+      "byMeal",
     ]);
     assert.equal(result.seededFoodCount, DefaultFoods.DefaultFoods.length);
   });
@@ -324,11 +341,13 @@ describe("MaiDatabase", () => {
         .select()
         .equals(storedLog.planId)
         .first();
-      const dateMealKey: [typeof Domain.DateKey.Type, typeof Domain.Meal.Type] =
-        [storedLog.dateKey, "breakfast"];
+      const dateMealKey: [
+        typeof Domain.DateKey.Type,
+        typeof Domain.MealId.Type,
+      ] = [storedLog.dateKey, mealEntry.mealId];
       const storedEntries = yield* api
         .from("mealEntries")
-        .select("byDateMeal")
+        .select("byDateMealId")
         .equals(dateMealKey);
       const storedEntry = storedEntries.at(0);
       if (storedEntry === undefined) {
@@ -370,7 +389,7 @@ describe("MaiDatabase", () => {
     assert.equal(result.storedPlan.name, "Training day");
     assert.equal(result.storedEntry.dateKey, result.storedLog.dateKey);
     assert.equal(result.storedEntry.foodId, result.storedFood.id);
-    assert.equal(result.storedEntry.meal, "breakfast");
+    assert.equal(result.storedEntry.mealId, mealEntryInput.mealId);
     assert.equal(result.storedFood.name, "Greek yogurt");
     assert.equal(result.validatedNutrients.energyKcal, 88.5);
     assert.equal(result.validatedNutrients.proteinGrams, 15);
@@ -484,7 +503,7 @@ describe("MaiDatabase", () => {
     assert.equal(sparseFood.fiberGramsPer100g, undefined);
     assert.equal(sparseFood.saltGramsPer100g, undefined);
     assert.equal(derivedFood.origin, "user");
-    assert.equal(derivedFood.basedOnFoodId, baseLegacyFoodInput.id);
+    assert.equal(Object.keys(derivedFood).includes("basedOnFoodId"), false);
     assert.equal(derivedFood.sugarGramsPer100g, 0);
     assert.equal(apple.origin, "app-default");
     assert.equal(apple.category, "fruit");
@@ -501,20 +520,159 @@ describe("MaiDatabase", () => {
     }
   });
 
+  it("migrates legacy meal entries to plan-owned meals without losing rows", async () => {
+    const legacyPlanInput: typeof LegacySeedPlan.Encoded = {
+      carbsTargetGrams: planInput.carbsTargetGrams,
+      createdAt: planInput.createdAt,
+      fatTargetGrams: planInput.fatTargetGrams,
+      fiberTargetGrams: planInput.fiberTargetGrams,
+      id: planInput.id,
+      name: planInput.name,
+      proteinTargetGrams: planInput.proteinTargetGrams,
+      saltTargetGrams: planInput.saltTargetGrams,
+      saturatedFatTargetGrams: planInput.saturatedFatTargetGrams,
+      sugarTargetGrams: planInput.sugarTargetGrams,
+    };
+    const legacyMealEntryInput: typeof LegacySeedMealEntry.Encoded = {
+      id: mealEntryInput.id,
+      dateKey: dailyLogInput.dateKey,
+      meal: "dinner",
+      foodId: foodInput.id,
+      quantityGrams: mealEntryInput.quantityGrams,
+      createdAt: mealEntryInput.createdAt,
+      updatedAt: mealEntryInput.updatedAt,
+    };
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const api = yield* LegacyVersion2Database.getQueryBuilder;
+        const food = yield* Schema.decodeEffect(LegacySeedFood)(foodInput);
+        const plan =
+          yield* Schema.decodeEffect(LegacySeedPlan)(legacyPlanInput);
+        const selection = yield* Schema.decodeEffect(
+          LegacySeedActiveMealPlanSelection
+        )({
+          id: "active-meal-plan",
+          planId: legacyPlanInput.id,
+          updatedAt: 10,
+        });
+        const mealEntry =
+          yield* Schema.decodeEffect(LegacySeedMealEntry)(legacyMealEntryInput);
+
+        yield* api.from("foods").upsert(food);
+        yield* api.from("plans").upsert(plan);
+        yield* api.from("activeMealPlanSelections").upsert(selection);
+        yield* api.from("mealEntries").upsert(mealEntry);
+      }).pipe(Effect.provide(legacyVersion2DatabaseLayer))
+    );
+
+    const program = Effect.gen(function* () {
+      const api = yield* MaiDatabase.getQueryBuilder;
+      const plans = yield* api.from("plans").select();
+      const dailyLogs = yield* api.from("dailyLogs").select();
+      const dateMealKey: [
+        typeof Domain.DateKey.Type,
+        typeof Domain.MealId.Type,
+      ] = [
+        yield* Schema.decodeEffect(Domain.DateKey)(dailyLogInput.dateKey),
+        yield* Schema.decodeEffect(Domain.MealId)(
+          CustomPlanMealsMigration.makeMigratedMealId({
+            meal: "dinner",
+            planId: planInput.id,
+          })
+        ),
+      ];
+      const mealEntries = yield* api
+        .from("mealEntries")
+        .select("byDateMealId")
+        .equals(dateMealKey);
+
+      return {
+        dailyLogs,
+        mealEntries,
+        plans,
+      };
+    }).pipe(Effect.provide(databaseLayer));
+
+    const result = await Effect.runPromise(program);
+    const storedPlan = result.plans.find((plan) => plan.id === planInput.id);
+    const storedDailyLog = result.dailyLogs.find(
+      (dailyLog) => dailyLog.dateKey === dailyLogInput.dateKey
+    );
+    const storedMealEntry = result.mealEntries[0];
+
+    assert.isDefined(storedPlan);
+    assert.deepStrictEqual(
+      storedPlan?.meals.map((meal) => ({
+        id: meal.id,
+        name: meal.name,
+        position: meal.position,
+      })),
+      [
+        {
+          id: CustomPlanMealsMigration.makeMigratedMealId({
+            meal: "breakfast",
+            planId: planInput.id,
+          }),
+          name: "Breakfast",
+          position: 0,
+        },
+        {
+          id: CustomPlanMealsMigration.makeMigratedMealId({
+            meal: "lunch",
+            planId: planInput.id,
+          }),
+          name: "Lunch",
+          position: 1,
+        },
+        {
+          id: CustomPlanMealsMigration.makeMigratedMealId({
+            meal: "dinner",
+            planId: planInput.id,
+          }),
+          name: "Dinner",
+          position: 2,
+        },
+      ]
+    );
+    assert.equal(storedDailyLog?.planId, planInput.id);
+    assert.equal(storedMealEntry?.id, mealEntryInput.id);
+    assert.equal(
+      storedMealEntry?.mealId,
+      CustomPlanMealsMigration.makeMigratedMealId({
+        meal: "dinner",
+        planId: planInput.id,
+      })
+    );
+    assert.equal(storedMealEntry?.quantityGrams, mealEntryInput.quantityGrams);
+  });
+
   it("renames duplicate legacy plan names before making the index unique", async () => {
-    const legacyPlans: readonly (typeof Domain.Plan.Encoded)[] = [
-      planInput,
+    const legacyPlanInput: typeof LegacySeedPlan.Encoded = {
+      carbsTargetGrams: planInput.carbsTargetGrams,
+      createdAt: planInput.createdAt,
+      fatTargetGrams: planInput.fatTargetGrams,
+      fiberTargetGrams: planInput.fiberTargetGrams,
+      id: planInput.id,
+      name: planInput.name,
+      proteinTargetGrams: planInput.proteinTargetGrams,
+      saltTargetGrams: planInput.saltTargetGrams,
+      saturatedFatTargetGrams: planInput.saturatedFatTargetGrams,
+      sugarTargetGrams: planInput.sugarTargetGrams,
+    };
+    const legacyPlans: readonly (typeof LegacySeedPlan.Encoded)[] = [
+      legacyPlanInput,
       {
-        ...planInput,
+        ...legacyPlanInput,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
       },
       {
-        ...planInput,
+        ...legacyPlanInput,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c28",
         name: " Training day ",
       },
       {
-        ...planInput,
+        ...legacyPlanInput,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c29",
         name: "training day",
       },

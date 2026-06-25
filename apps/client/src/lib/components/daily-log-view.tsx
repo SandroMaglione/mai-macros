@@ -31,7 +31,12 @@ import { RuntimeClient } from "../runtime-client.ts";
 import { backupTransferMachine } from "../machines/backup-transfer-machine.ts";
 import { AppHeader, appHeaderActionClassName } from "./app-header.tsx";
 import { BackupTransferControls } from "./backup-transfer-controls.tsx";
-import { FoodCatalogTransferControls } from "./food-catalog-transfer-controls.tsx";
+import {
+  FoodCatalogTransferControls,
+  foodCatalogTransferMachine,
+  type FoodCatalogTransferActorRef,
+  type FoodCatalogTransferImportedEvent,
+} from "./food-catalog-transfer-controls.tsx";
 import { FoodNutrientOverview } from "./food-nutrient-overview.tsx";
 import { FoodSearchField, FoodSearchResults } from "./food-search.tsx";
 import { dateKeyFromDate, shiftDateKey } from "../utils.ts";
@@ -117,27 +122,20 @@ const darkFieldClassName =
 const darkFieldLabelClassName =
   "grid min-w-0 gap-1.5 text-sm font-black leading-tight text-[#d9d9de]";
 
-const mealOptions: readonly {
-  readonly value: Domain.Meal;
-  readonly label: string;
-}[] = [
-  { value: "breakfast", label: "Breakfast" },
-  { value: "lunch", label: "Lunch" },
-  { value: "dinner", label: "Dinner" },
-];
-
 type AddMealFoodDialogEvent =
   | {
       readonly type: "open";
       readonly dateKey: Domain.DateKey;
       readonly foodUsage: readonly MealEntries.MealFoodUsage[];
       readonly foods: readonly Domain.Food[];
-      readonly meal: Domain.Meal;
+      readonly meal: Domain.MealId;
+      readonly mealLabel: string;
     }
   | {
       readonly type: "openMealEntry";
       readonly foodUsage: readonly MealEntries.MealFoodUsage[];
       readonly foods: readonly Domain.Food[];
+      readonly mealLabel: string;
       readonly mealEntry: Domain.MealEntry;
     }
   | {
@@ -170,7 +168,8 @@ type AddMealFoodDialogContext = {
   readonly foodSearchActor: ActorRefFrom<
     typeof FoodSearchMachine.foodSearchMachine
   >;
-  readonly meal: Domain.Meal | null;
+  readonly meal: Domain.MealId | null;
+  readonly mealLabel: string | null;
   readonly mealEntry: Domain.MealEntry | null;
   readonly mode: AddMealFoodDialogMode;
   readonly quantityGrams: string;
@@ -194,12 +193,14 @@ type DailyLogEvent =
       readonly type: "changePlan";
       readonly input: DailyLogs.ChangeDayPlanInput;
     }
-  | BackupTransferMachine.BackupTransferImportedEvent;
+  | BackupTransferMachine.BackupTransferImportedEvent
+  | FoodCatalogTransferImportedEvent;
 
 const addMealFoodDialogClosedContext = {
   dateKey: null,
   foodUsage: [],
   meal: null,
+  mealLabel: null,
   mealEntry: null,
   mode: "create",
   quantityGrams: "",
@@ -272,6 +273,7 @@ const addMealFoodDialogMachine = setup({
             dateKey: event.dateKey,
             foodUsage: event.foodUsage,
             meal: event.meal,
+            mealLabel: event.mealLabel,
             mealEntry: null,
             mode: "create",
             quantityGrams: "",
@@ -288,7 +290,7 @@ const addMealFoodDialogMachine = setup({
                 _findFoodUsage({
                   foodId: food.id,
                   foodUsage: event.foodUsage,
-                })?.meals.find((usage) => usage.meal === event.meal)
+                })?.meals.find((usage) => usage.mealId === event.meal)
                   ?.latestUsedAt.epochMilliseconds ?? Number.NEGATIVE_INFINITY
             );
             const foods = Array.sortBy(
@@ -322,7 +324,8 @@ const addMealFoodDialogMachine = setup({
           return {
             dateKey: event.mealEntry.dateKey,
             foodUsage: event.foodUsage,
-            meal: event.mealEntry.meal,
+            meal: event.mealEntry.mealId,
+            mealLabel: event.mealLabel,
             mealEntry: event.mealEntry,
             mode: "revise",
             quantityGrams,
@@ -431,7 +434,7 @@ const addMealFoodDialogMachine = setup({
                 input: {
                   dateKey: context.dateKey,
                   foodId: context.selectedFood.id,
-                  meal: context.meal,
+                  mealId: context.meal,
                   quantityGrams: context.quantityGrams,
                 },
               } satisfies DailyLogEvent;
@@ -491,6 +494,7 @@ const dailyLogMachine = setup({
         typeof addMealFoodDialogMachine
       >;
       readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
+      readonly foodCatalogTransferActor: FoodCatalogTransferActorRef;
       readonly invalidate: () => Promise<void>;
     },
     events: {} as DailyLogEvent,
@@ -501,6 +505,7 @@ const dailyLogMachine = setup({
   actors: {
     addMealFoodDialog: addMealFoodDialogMachine,
     backupTransfer: backupTransferMachine,
+    foodCatalogTransfer: foodCatalogTransferMachine,
     addMealEntry: fromPromise<
       "added" | "foodNotFound",
       {
@@ -518,6 +523,9 @@ const dailyLogMachine = setup({
         }).pipe(
           Effect.tap(() => Effect.promise(() => input.invalidate())),
           Effect.catchTag("FoodNotFound", () =>
+            Effect.succeed("foodNotFound" as const)
+          ),
+          Effect.catchTag("MealNotFound", () =>
             Effect.succeed("foodNotFound" as const)
           )
         )
@@ -602,6 +610,9 @@ const dailyLogMachine = setup({
     backupTransferActor: spawn("backupTransfer", {
       id: "backupTransfer",
     }),
+    foodCatalogTransferActor: spawn("foodCatalogTransfer", {
+      id: "foodCatalogTransfer",
+    }),
     invalidate: input.invalidate,
   }),
   initial: "Idle",
@@ -610,6 +621,13 @@ const dailyLogMachine = setup({
       actions: ({ context }) => {
         void context.invalidate().catch(() => {
           globalThis.alert("Could not refresh the imported backup.");
+        });
+      },
+    },
+    foodCatalogImported: {
+      actions: ({ context }) => {
+        void context.invalidate().catch(() => {
+          globalThis.alert("Could not refresh the imported food catalog.");
         });
       },
     },
@@ -866,6 +884,9 @@ type DailyLogActorRef = ActorRefFrom<typeof dailyLogMachine>;
 
 export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
   const { day, foodUsage, foods, mealEntries } = data;
+  const mealOptions = [...day.selectedPlan.meals].sort(
+    (left, right) => left.position - right.position
+  );
   const router = useRouter();
   const [snapshot, , dailyLogActor] = useMachine(dailyLogMachine, {
     input: {
@@ -981,12 +1002,12 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
               disabled={isMealEntryMutationPending || !hasFoods}
               foodUsage={foodUsage}
               foods={foods}
-              key={mealOption.value}
+              key={mealOption.id}
               mealEntries={mealEntries.filter(
-                (mealEntry) => mealEntry.meal === mealOption.value
+                (mealEntry) => mealEntry.mealId === mealOption.id
               )}
-              mealLabel={mealOption.label}
-              mealValue={mealOption.value}
+              mealLabel={mealOption.name}
+              mealValue={mealOption.id}
             />
           ))}
         </div>
@@ -997,6 +1018,7 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
           day={day}
           dailyLogActor={dailyLogActor}
           disabled={isChangingPlan}
+          foodCatalogTransferActor={snapshot.context.foodCatalogTransferActor}
         />
       </section>
     </main>
@@ -1008,11 +1030,13 @@ function BottomActionNav({
   day,
   dailyLogActor,
   disabled,
+  foodCatalogTransferActor,
 }: {
   readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
   readonly day: DailyLogs.OpenedDay;
   readonly dailyLogActor: DailyLogActorRef;
   readonly disabled: boolean;
+  readonly foodCatalogTransferActor: FoodCatalogTransferActorRef;
 }) {
   return (
     <nav
@@ -1060,7 +1084,10 @@ function BottomActionNav({
             <Download aria-hidden="true" size={18} strokeWidth={3} />
             Backup
           </summary>
-          <BackupActionSheet backupTransferActor={backupTransferActor} />
+          <BackupActionSheet
+            backupTransferActor={backupTransferActor}
+            foodCatalogTransferActor={foodCatalogTransferActor}
+          />
         </details>
       </div>
     </nav>
@@ -1226,15 +1253,15 @@ function FoodsActionSheet({ dateKey }: { readonly dateKey: Domain.DateKey }) {
 
 function BackupActionSheet({
   backupTransferActor,
+  foodCatalogTransferActor,
 }: {
   readonly backupTransferActor: BackupTransferMachine.BackupTransferActorRef;
+  readonly foodCatalogTransferActor: FoodCatalogTransferActorRef;
 }) {
-  const router = useRouter();
-
   return (
     <ActionSheet eyebrow="Database" title="Backup">
       <BackupTransferControls actor={backupTransferActor} mode="full" />
-      <FoodCatalogTransferControls onImported={() => router.invalidate()} />
+      <FoodCatalogTransferControls actor={foodCatalogTransferActor} />
     </ActionSheet>
   );
 }
@@ -1256,7 +1283,7 @@ function MealSection({
   readonly foods: readonly Domain.Food[];
   readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
-  readonly mealValue: Domain.Meal;
+  readonly mealValue: Domain.MealId;
 }) {
   const mealNutrients = _calculateEntriesNutrients({
     foods,
@@ -1334,6 +1361,7 @@ function AddMealFoodDialog({
     foodSearchActor,
     meal,
     mealEntry,
+    mealLabel,
     mode,
     quantityGrams,
     selectedFood,
@@ -1345,9 +1373,7 @@ function AddMealFoodDialog({
 
   const disabled = snapshot.matches("Submitting");
   const submitEvent = { type: "submit" } satisfies AddMealFoodDialogEvent;
-  const mealLabel =
-    mealOptions.find((mealOption) => mealOption.value === meal)?.label ??
-    "Meal";
+  const displayMealLabel = mealLabel ?? "Meal";
   const isEditingMealEntry = mode === "revise" && mealEntry !== null;
   const selectedFoodUsage =
     selectedFood === null
@@ -1371,11 +1397,11 @@ function AddMealFoodDialog({
         );
   const submitLabel = isEditingMealEntry ? "Save" : "Add";
   const submitAriaLabel = isEditingMealEntry
-    ? `Save ${mealLabel} meal entry`
-    : `Add food to ${mealLabel}`;
+    ? `Save ${displayMealLabel} meal entry`
+    : `Add food to ${displayMealLabel}`;
   const dialogLabel = isEditingMealEntry
     ? "Edit food"
-    : `Add food to ${mealLabel}`;
+    : `Add food to ${displayMealLabel}`;
   const isSearchingFood = !isEditingMealEntry && selectedFood === null;
   const isAddingSelectedFood = !isEditingMealEntry && selectedFood !== null;
   const selectedFoodQuantityLabel = isEditingMealEntry
@@ -1392,7 +1418,7 @@ function AddMealFoodDialog({
       addMealFoodDialogActor={actor}
       autoFocus={true}
       disabled={disabled || (isEditingMealEntry && selectedFood === null)}
-      mealLabel={mealLabel}
+      mealLabel={displayMealLabel}
       quantityGrams={quantityGrams}
     />
   );
@@ -1481,7 +1507,7 @@ function AddMealFoodDialog({
               <FoodSearchField
                 actor={foodSearchActor}
                 ariaControls="add-food-results"
-                ariaLabel={`${mealLabel} food search`}
+                ariaLabel={`${displayMealLabel} food search`}
                 autoFocus={true}
                 disabled={disabled}
                 id="add-food-search"
@@ -1537,7 +1563,7 @@ function AddMealFoodDialog({
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      aria-label={`Delete ${mealLabel} meal entry`}
+                      aria-label={`Delete ${displayMealLabel} meal entry`}
                       className="btn-secondary-danger"
                       disabled={disabled}
                       onClick={() => {
@@ -2141,6 +2167,7 @@ function MealEntryItem({
               type: "openMealEntry",
               foodUsage,
               foods,
+              mealLabel,
               mealEntry,
             });
           }}
@@ -2180,6 +2207,7 @@ function MealEntryItem({
             type: "openMealEntry",
             foodUsage,
             foods,
+            mealLabel,
             mealEntry,
           });
         }}

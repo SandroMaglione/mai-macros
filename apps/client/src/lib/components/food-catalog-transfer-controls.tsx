@@ -1,7 +1,7 @@
 import { FoodCatalogTransfer } from "@mai/nutrition";
 import { FoodCatalogShare, QrCode as QrCodeService } from "@mai/services";
-import { useMachine } from "@xstate/react";
-import { Array as EffectArray, DateTime, Effect, Option, Schema } from "effect";
+import { useSelector } from "@xstate/react";
+import { DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import {
   AlertTriangle,
   Check,
@@ -15,7 +15,15 @@ import {
   Upload,
 } from "lucide-react";
 import { useRef, type ReactNode } from "react";
-import { assertEvent, assign, fromPromise, setup } from "xstate";
+import {
+  assertEvent,
+  assign,
+  fromPromise,
+  sendParent,
+  sendTo,
+  setup,
+  type ActorRefFrom,
+} from "xstate";
 
 import { RuntimeClient } from "../runtime-client.ts";
 
@@ -55,10 +63,10 @@ type FoodCatalogDownloadSource = {
   readonly text: string;
 };
 
-type FoodCatalogTransferEvent =
+type FoodCatalogExportEvent =
   | {
-      readonly importText: string;
-      readonly type: "changeImportText";
+      readonly result: FoodCatalogExportResult;
+      readonly type: "setResult";
     }
   | {
       readonly type: "copyJson";
@@ -71,6 +79,12 @@ type FoodCatalogTransferEvent =
     }
   | {
       readonly type: "downloadShareText";
+    };
+
+type FoodCatalogTransferEvent =
+  | {
+      readonly importText: string;
+      readonly type: "changeImportText";
     }
   | {
       readonly type: "exportCatalog";
@@ -97,6 +111,10 @@ type FoodCatalogTransferEvent =
       readonly type: "toggleCandidate";
     };
 
+export type FoodCatalogTransferImportedEvent = {
+  readonly type: "foodCatalogImported";
+};
+
 const panelClassName =
   "grid gap-3 rounded-lg border border-[#29292d] bg-[#161618] p-4 shadow-[0_12px_28px_rgb(0_0_0/0.26)]";
 const textareaClassName =
@@ -108,51 +126,195 @@ const FoodCatalogTransferErrorSchema = Schema.Struct({
   message: Schema.optional(Schema.String),
 });
 
-const foodCatalogTransferMachine = setup({
+const copyTextActor = fromPromise<FoodCatalogNotice, FoodCatalogCopySource>(
+  async ({ input }) => {
+    if (typeof navigator.clipboard?.writeText === "function") {
+      await navigator.clipboard.writeText(input.text);
+    } else {
+      const textarea = document.createElement("textarea");
+
+      textarea.value = input.text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.append(textarea);
+      textarea.focus();
+      textarea.select();
+
+      const copied = document.execCommand("copy");
+
+      textarea.remove();
+
+      if (!copied) {
+        throw new Error("Copy command was rejected.");
+      }
+    }
+
+    return {
+      message: `Copied ${input.label}.`,
+      tone: "success",
+    };
+  }
+);
+
+const foodCatalogExportMachine = setup({
   types: {
     context: {} as {
-      readonly exportResult: FoodCatalogExportResult | null;
+      readonly notice: FoodCatalogNotice | null;
+      readonly result: FoodCatalogExportResult | null;
+    },
+    events: {} as FoodCatalogExportEvent,
+    input: {} as {
+      readonly result: FoodCatalogExportResult | null;
+    },
+  },
+  actors: {
+    copyText: copyTextActor,
+  },
+}).createMachine({
+  context: ({ input }) => ({
+    notice: null,
+    result: input.result,
+  }),
+  initial: "Idle",
+  on: {
+    setResult: {
+      actions: assign(({ event }) => {
+        assertEvent(event, "setResult");
+
+        return {
+          notice: {
+            message: `Exported ${event.result.exported.catalog.integrity.counts.foods} catalog foods.`,
+            tone: "success",
+          },
+          result: event.result,
+        };
+      }),
+      target: ".Idle",
+    },
+  },
+  states: {
+    CopyingJson: {
+      invoke: {
+        src: "copyText",
+        input: ({ context }) => ({
+          label: "catalog JSON",
+          text: context.result?.exported.json ?? "",
+        }),
+        onDone: {
+          actions: assign(({ event }) => ({
+            notice: event.output,
+          })),
+          target: "Idle",
+        },
+        onError: {
+          actions: assign({
+            notice: {
+              message: "Could not copy catalog JSON.",
+              tone: "error",
+            },
+          }),
+          target: "Idle",
+        },
+      },
+    },
+    CopyingShareText: {
+      invoke: {
+        src: "copyText",
+        input: ({ context }) => ({
+          label: "catalog share text",
+          text: context.result?.shareText ?? "",
+        }),
+        onDone: {
+          actions: assign(({ event }) => ({
+            notice: event.output,
+          })),
+          target: "Idle",
+        },
+        onError: {
+          actions: assign({
+            notice: {
+              message: "Could not copy catalog share text.",
+              tone: "error",
+            },
+          }),
+          target: "Idle",
+        },
+      },
+    },
+    Idle: {
+      on: {
+        copyJson: {
+          guard: ({ context }) => context.result !== null,
+          target: "CopyingJson",
+        },
+        copyShareText: {
+          guard: ({ context }) => context.result !== null,
+          target: "CopyingShareText",
+        },
+        downloadJson: {
+          guard: ({ context }) => context.result !== null,
+          actions: [
+            ({ context }) => {
+              const result = context.result;
+
+              if (result !== null) {
+                _downloadTextFile({
+                  fileName: `${result.fileNameBase}.json`,
+                  text: result.exported.json,
+                  type: "application/json",
+                });
+              }
+            },
+            assign({
+              notice: {
+                message: "Downloaded catalog JSON.",
+                tone: "success",
+              },
+            }),
+          ],
+        },
+        downloadShareText: {
+          guard: ({ context }) => context.result !== null,
+          actions: [
+            ({ context }) => {
+              const result = context.result;
+
+              if (result !== null) {
+                _downloadTextFile({
+                  fileName: `${result.fileNameBase}.txt`,
+                  text: result.shareText,
+                  type: "text/plain",
+                });
+              }
+            },
+            assign({
+              notice: {
+                message: "Downloaded catalog share text.",
+                tone: "success",
+              },
+            }),
+          ],
+        },
+      },
+    },
+  },
+});
+
+type FoodCatalogExportActorRef = ActorRefFrom<typeof foodCatalogExportMachine>;
+
+export const foodCatalogTransferMachine = setup({
+  types: {
+    context: {} as {
+      readonly exportActor: FoodCatalogExportActorRef;
       readonly importText: string;
       readonly notice: FoodCatalogNotice | null;
-      readonly onImported: () => Promise<void>;
       readonly preview: FoodCatalogPreview | null;
       readonly selectedFoodIds: readonly FoodCatalogFoodId[];
     },
     events: {} as FoodCatalogTransferEvent,
-    input: {} as {
-      readonly onImported: () => Promise<void>;
-    },
   },
   actors: {
-    copyText: fromPromise<FoodCatalogNotice, FoodCatalogCopySource>(
-      async ({ input }) => {
-        if (typeof navigator.clipboard?.writeText === "function") {
-          await navigator.clipboard.writeText(input.text);
-        } else {
-          const textarea = document.createElement("textarea");
-
-          textarea.value = input.text;
-          textarea.style.position = "fixed";
-          textarea.style.left = "-9999px";
-          document.body.append(textarea);
-          textarea.focus();
-          textarea.select();
-
-          const copied = document.execCommand("copy");
-
-          textarea.remove();
-
-          if (!copied) {
-            throw new Error("Copy command was rejected.");
-          }
-        }
-
-        return {
-          message: `Copied ${input.label}.`,
-          tone: "success",
-        };
-      }
-    ),
+    foodCatalogExport: foodCatalogExportMachine,
     exportCatalog: fromPromise<FoodCatalogExportResult>(() =>
       RuntimeClient.runPromise(
         Effect.gen(function* () {
@@ -191,7 +353,6 @@ const foodCatalogTransferMachine = setup({
       },
       {
         readonly catalogJson: string;
-        readonly onImported: () => Promise<void>;
         readonly selectedFoodIds: readonly FoodCatalogFoodId[];
       }
     >(async ({ input }) => {
@@ -207,8 +368,6 @@ const foodCatalogTransferMachine = setup({
           });
         })
       );
-
-      await input.onImported();
 
       return {
         nextPreview: await RuntimeClient.runPromise(
@@ -268,11 +427,15 @@ const foodCatalogTransferMachine = setup({
     }),
   },
 }).createMachine({
-  context: ({ input }) => ({
-    exportResult: null,
+  context: ({ spawn }) => ({
+    exportActor: spawn("foodCatalogExport", {
+      id: "foodCatalogExport",
+      input: {
+        result: null,
+      },
+    }),
     importText: "",
     notice: null,
-    onImported: input.onImported,
     preview: null,
     selectedFoodIds: [],
   }),
@@ -312,66 +475,19 @@ const foodCatalogTransferMachine = setup({
     },
   },
   states: {
-    CopyingJson: {
-      invoke: {
-        src: "copyText",
-        input: ({ context }) => ({
-          label: "catalog JSON",
-          text: context.exportResult?.exported.json ?? "",
-        }),
-        onDone: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            notice: event.output,
-          })),
-        },
-        onError: {
-          target: "Idle",
-          actions: assign({
-            notice: {
-              message: "Could not copy catalog JSON.",
-              tone: "error",
-            },
-          }),
-        },
-      },
-    },
-    CopyingShareText: {
-      invoke: {
-        src: "copyText",
-        input: ({ context }) => ({
-          label: "catalog share text",
-          text: context.exportResult?.shareText ?? "",
-        }),
-        onDone: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            notice: event.output,
-          })),
-        },
-        onError: {
-          target: "Idle",
-          actions: assign({
-            notice: {
-              message: "Could not copy catalog share text.",
-              tone: "error",
-            },
-          }),
-        },
-      },
-    },
     Exporting: {
       invoke: {
         src: "exportCatalog",
         onDone: {
           target: "Idle",
-          actions: assign(({ event }) => ({
-            exportResult: event.output,
-            notice: {
-              message: `Exported ${event.output.exported.catalog.integrity.counts.foods} catalog foods.`,
-              tone: "success",
-            },
-          })),
+          actions: sendTo(
+            ({ context }) => context.exportActor,
+            ({ event }) =>
+              ({
+                result: event.output,
+                type: "setResult",
+              }) satisfies FoodCatalogExportEvent
+          ),
         },
         onError: {
           target: "Idle",
@@ -389,58 +505,6 @@ const foodCatalogTransferMachine = setup({
     },
     Idle: {
       on: {
-        copyJson: {
-          guard: ({ context }) => context.exportResult !== null,
-          target: "CopyingJson",
-        },
-        copyShareText: {
-          guard: ({ context }) => context.exportResult !== null,
-          target: "CopyingShareText",
-        },
-        downloadJson: {
-          guard: ({ context }) => context.exportResult !== null,
-          actions: [
-            ({ context }) => {
-              const exportResult = context.exportResult;
-
-              if (exportResult !== null) {
-                _downloadTextFile({
-                  fileName: `${exportResult.fileNameBase}.json`,
-                  text: exportResult.exported.json,
-                  type: "application/json",
-                });
-              }
-            },
-            assign({
-              notice: {
-                message: "Downloaded catalog JSON.",
-                tone: "success",
-              },
-            }),
-          ],
-        },
-        downloadShareText: {
-          guard: ({ context }) => context.exportResult !== null,
-          actions: [
-            ({ context }) => {
-              const exportResult = context.exportResult;
-
-              if (exportResult !== null) {
-                _downloadTextFile({
-                  fileName: `${exportResult.fileNameBase}.txt`,
-                  text: exportResult.shareText,
-                  type: "text/plain",
-                });
-              }
-            },
-            assign({
-              notice: {
-                message: "Downloaded catalog share text.",
-                tone: "success",
-              },
-            }),
-          ],
-        },
         exportCatalog: {
           target: "Exporting",
           actions: assign({
@@ -494,18 +558,22 @@ const foodCatalogTransferMachine = setup({
         src: "importSelected",
         input: ({ context }) => ({
           catalogJson: context.preview?.catalogJson ?? "",
-          onImported: context.onImported,
           selectedFoodIds: context.selectedFoodIds,
         }),
         onDone: {
           target: "Idle",
-          actions: assign(({ event }) => ({
-            notice: event.output.notice,
-            preview: event.output.nextPreview,
-            selectedFoodIds: _selectedFoodIdsFromPreview({
+          actions: [
+            assign(({ event }) => ({
+              notice: event.output.notice,
               preview: event.output.nextPreview,
-            }).selectedFoodIds,
-          })),
+              selectedFoodIds: _selectedFoodIdsFromPreview({
+                preview: event.output.nextPreview,
+              }).selectedFoodIds,
+            })),
+            sendParent({
+              type: "foodCatalogImported",
+            } satisfies FoodCatalogTransferImportedEvent),
+          ],
         },
         onError: {
           target: "Idle",
@@ -564,18 +632,18 @@ const foodCatalogTransferMachine = setup({
   },
 });
 
+export type FoodCatalogTransferActorRef = ActorRefFrom<
+  typeof foodCatalogTransferMachine
+>;
+
 export function FoodCatalogTransferControls({
-  onImported,
+  actor,
 }: {
-  readonly onImported: () => Promise<void>;
+  readonly actor: FoodCatalogTransferActorRef;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [snapshot, send] = useMachine(foodCatalogTransferMachine, {
-    input: {
-      onImported,
-    },
-  });
-  const { exportResult, importText, notice, preview, selectedFoodIds } =
+  const snapshot = useSelector(actor, (state) => state);
+  const { exportActor, importText, notice, preview, selectedFoodIds } =
     snapshot.context;
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
@@ -601,7 +669,7 @@ export function FoodCatalogTransferControls({
           className="btn-primary"
           disabled={disabled}
           onClick={() => {
-            send({ type: "exportCatalog" });
+            actor.send({ type: "exportCatalog" });
           }}
           type="button"
         >
@@ -618,23 +686,7 @@ export function FoodCatalogTransferControls({
           Export catalog
         </button>
 
-        {exportResult === null ? null : (
-          <FoodCatalogExportDetails
-            onCopyJson={() => {
-              send({ type: "copyJson" });
-            }}
-            onCopyShareText={() => {
-              send({ type: "copyShareText" });
-            }}
-            onDownloadJson={() => {
-              send({ type: "downloadJson" });
-            }}
-            onDownloadShareText={() => {
-              send({ type: "downloadShareText" });
-            }}
-            result={exportResult}
-          />
-        )}
+        <FoodCatalogExportDetails actor={exportActor} />
       </div>
 
       <div className="grid gap-3 border-t border-[#29292d] pt-3">
@@ -645,7 +697,7 @@ export function FoodCatalogTransferControls({
               className={textareaClassName}
               disabled={disabled}
               onChange={(event) => {
-                send({
+                actor.send({
                   importText: event.currentTarget.value,
                   type: "changeImportText",
                 });
@@ -664,7 +716,7 @@ export function FoodCatalogTransferControls({
               event.currentTarget.value = "";
 
               if (file !== null) {
-                send({
+                actor.send({
                   source: {
                     sourceLabel: file.name,
                     text: () => file.text(),
@@ -693,7 +745,7 @@ export function FoodCatalogTransferControls({
               className="btn-secondary"
               disabled={disabled || importText.trim() === ""}
               onClick={() => {
-                send({ type: "previewText" });
+                actor.send({ type: "previewText" });
               }}
               type="button"
             >
@@ -714,24 +766,9 @@ export function FoodCatalogTransferControls({
 
         {preview === null ? null : (
           <FoodCatalogPreviewDetails
+            actor={actor}
             canConfirmImport={canConfirmImport}
             isImporting={isImporting}
-            onConfirm={() => {
-              send({ type: "importSelected" });
-            }}
-            onSelectAllImportable={() => {
-              send({ type: "selectAllSafe" });
-            }}
-            onSelectDefaults={() => {
-              send({ type: "selectDefaults" });
-            }}
-            onToggleCandidate={({ candidate, checked }) => {
-              send({
-                checked,
-                foodId: candidate.food.id,
-                type: "toggleCandidate",
-              });
-            }}
             preview={preview}
             selectedCount={selectedCount}
             selectedFoodIds={selectedFoodIds}
@@ -745,18 +782,18 @@ export function FoodCatalogTransferControls({
 }
 
 function FoodCatalogExportDetails({
-  onCopyJson,
-  onCopyShareText,
-  onDownloadJson,
-  onDownloadShareText,
-  result,
+  actor,
 }: {
-  readonly onCopyJson: () => void;
-  readonly onCopyShareText: () => void;
-  readonly onDownloadJson: () => void;
-  readonly onDownloadShareText: () => void;
-  readonly result: FoodCatalogExportResult;
+  readonly actor: FoodCatalogExportActorRef;
 }) {
+  const snapshot = useSelector(actor, (state) => state);
+  const { notice, result } = snapshot.context;
+
+  if (result === null) {
+    return null;
+  }
+
+  const disabled = !snapshot.matches("Idle");
   const exportedAt = new Date(
     DateTime.toEpochMillis(result.exported.catalog.source.exportedAt)
   );
@@ -802,19 +839,32 @@ function FoodCatalogExportDetails({
       <div className="grid grid-cols-2 gap-2">
         <button
           className="btn-secondary"
-          onClick={onCopyShareText}
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "copyShareText" });
+          }}
           type="button"
         >
           <Copy aria-hidden="true" size={16} strokeWidth={3} />
           Copy text
         </button>
-        <button className="btn-secondary" onClick={onCopyJson} type="button">
+        <button
+          className="btn-secondary"
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "copyJson" });
+          }}
+          type="button"
+        >
           <Clipboard aria-hidden="true" size={16} strokeWidth={3} />
           Copy JSON
         </button>
         <button
           className="btn-secondary"
-          onClick={onDownloadShareText}
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "downloadShareText" });
+          }}
           type="button"
         >
           <Download aria-hidden="true" size={16} strokeWidth={3} />
@@ -822,40 +872,33 @@ function FoodCatalogExportDetails({
         </button>
         <button
           className="btn-secondary"
-          onClick={onDownloadJson}
+          disabled={disabled}
+          onClick={() => {
+            actor.send({ type: "downloadJson" });
+          }}
           type="button"
         >
           <FileJson aria-hidden="true" size={16} strokeWidth={3} />
           JSON file
         </button>
       </div>
+
+      {notice === null ? null : <FoodCatalogNoticeView notice={notice} />}
     </div>
   );
 }
 
 function FoodCatalogPreviewDetails({
+  actor,
   canConfirmImport,
   isImporting,
-  onConfirm,
-  onSelectAllImportable,
-  onSelectDefaults,
-  onToggleCandidate,
   preview,
   selectedCount,
   selectedFoodIds,
 }: {
+  readonly actor: FoodCatalogTransferActorRef;
   readonly canConfirmImport: boolean;
   readonly isImporting: boolean;
-  readonly onConfirm: () => void;
-  readonly onSelectAllImportable: () => void;
-  readonly onSelectDefaults: () => void;
-  readonly onToggleCandidate: ({
-    candidate,
-    checked,
-  }: {
-    readonly candidate: FoodCatalogCandidate;
-    readonly checked: boolean;
-  }) => void;
   readonly preview: FoodCatalogPreview;
   readonly selectedCount: number;
   readonly selectedFoodIds: readonly FoodCatalogFoodId[];
@@ -886,7 +929,9 @@ function FoodCatalogPreviewDetails({
         <button
           className="btn-secondary"
           disabled={isImporting}
-          onClick={onSelectDefaults}
+          onClick={() => {
+            actor.send({ type: "selectDefaults" });
+          }}
           type="button"
         >
           <Check aria-hidden="true" size={16} strokeWidth={3} />
@@ -895,7 +940,9 @@ function FoodCatalogPreviewDetails({
         <button
           className="btn-secondary"
           disabled={isImporting || bulkSelectableCount === 0}
-          onClick={onSelectAllImportable}
+          onClick={() => {
+            actor.send({ type: "selectAllSafe" });
+          }}
           type="button"
         >
           <Check aria-hidden="true" size={16} strokeWidth={3} />
@@ -906,12 +953,10 @@ function FoodCatalogPreviewDetails({
       <div className="grid max-h-[340px] gap-2 overflow-y-auto pr-1">
         {preview.candidates.map((candidate) => (
           <FoodCatalogCandidateRow
+            actor={actor}
             candidate={candidate}
             checked={selectedFoodIds.includes(candidate.food.id)}
             key={candidate.food.id}
-            onToggle={(checked) => {
-              onToggleCandidate({ candidate, checked });
-            }}
           />
         ))}
       </div>
@@ -919,7 +964,9 @@ function FoodCatalogPreviewDetails({
       <button
         className="btn-primary"
         disabled={!canConfirmImport}
-        onClick={onConfirm}
+        onClick={() => {
+          actor.send({ type: "importSelected" });
+        }}
         type="button"
       >
         {isImporting ? (
@@ -939,13 +986,13 @@ function FoodCatalogPreviewDetails({
 }
 
 function FoodCatalogCandidateRow({
+  actor,
   candidate,
   checked,
-  onToggle,
 }: {
+  readonly actor: FoodCatalogTransferActorRef;
   readonly candidate: FoodCatalogCandidate;
   readonly checked: boolean;
-  readonly onToggle: (checked: boolean) => void;
 }) {
   const disabled = !candidate.selection.selectable;
 
@@ -962,16 +1009,20 @@ function FoodCatalogCandidateRow({
         className="mt-1 size-4 accent-[#ff5a51]"
         disabled={disabled}
         onChange={(event) => {
-          onToggle(event.currentTarget.checked);
+          actor.send({
+            checked: event.currentTarget.checked,
+            foodId: candidate.food.id,
+            type: "toggleCandidate",
+          });
         }}
         type="checkbox"
       />
       <span className="grid min-w-0 gap-2">
         <span className="grid min-w-0 gap-1">
-          <span className="min-w-0 break-words text-sm font-black leading-tight text-[#f0f0f2]">
+          <span className="min-w-0 wrap-break-word text-sm font-black leading-tight text-[#f0f0f2]">
             {candidate.food.name}
           </span>
-          <span className="min-w-0 break-words text-xs font-bold leading-snug text-[#aaaab1]">
+          <span className="min-w-0 wrap-break-word text-xs font-bold leading-snug text-[#aaaab1]">
             {candidate.food.brand ?? candidate.food.category ?? "Food"} /{" "}
             {_formatNumber(candidate.food.energyKcalPer100g)} kcal /{" "}
             {_formatNumber(candidate.food.proteinGramsPer100g)}g protein /{" "}
@@ -982,11 +1033,6 @@ function FoodCatalogCandidateRow({
         <span className="flex min-w-0 flex-wrap gap-1.5">
           <FoodCatalogStatusBadge tone={candidateStatusTones[candidate.status]}>
             {candidateStatusLabels[candidate.status]}
-          </FoodCatalogStatusBadge>
-          <FoodCatalogStatusBadge
-            tone={basedOnFoodIdStatusTones[candidate.basedOnFoodIdStatus]}
-          >
-            {basedOnFoodIdStatusLabels[candidate.basedOnFoodIdStatus]}
           </FoodCatalogStatusBadge>
           {candidate.nameStatus === "same-name-local" ? (
             <FoodCatalogStatusBadge tone="warning">
@@ -1073,23 +1119,6 @@ const candidateStatusTones = {
   new: "success",
 } satisfies Record<
   FoodCatalogTransfer.FoodCatalogImportCandidateStatus,
-  "danger" | "neutral" | "success" | "warning"
->;
-
-const basedOnFoodIdStatusLabels = {
-  "available-in-catalog": "Base in import",
-  "available-locally": "Base local",
-  missing: "Base missing",
-  none: "No base",
-} satisfies Record<FoodCatalogTransfer.FoodCatalogBasedOnFoodIdStatus, string>;
-
-const basedOnFoodIdStatusTones = {
-  "available-in-catalog": "warning",
-  "available-locally": "success",
-  missing: "danger",
-  none: "neutral",
-} satisfies Record<
-  FoodCatalogTransfer.FoodCatalogBasedOnFoodIdStatus,
   "danger" | "neutral" | "success" | "warning"
 >;
 

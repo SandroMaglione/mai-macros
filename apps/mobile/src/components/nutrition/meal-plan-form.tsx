@@ -13,7 +13,7 @@ import {
   SectionCard,
 } from "@/components/ui";
 import { useMachine } from "@xstate/react";
-import { ChevronLeft, Plus, Save } from "lucide-react-native";
+import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { assign, setup } from "xstate";
 
@@ -30,8 +30,16 @@ type PlanTargetFieldName =
   | "saltTargetGrams";
 
 type MealPlanFormValues = {
+  readonly meals: readonly MealPlanFormMealValue[];
   readonly name: string;
 } & Record<PlanTargetFieldName, string>;
+
+type MealPlanFormMealValue = {
+  readonly id?: Domain.MealId;
+  readonly name: string;
+};
+
+type MealPlanFormTextFieldName = Exclude<keyof MealPlanFormValues, "meals">;
 
 type PlanTargetField = {
   readonly accentColor: string;
@@ -96,16 +104,35 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
   },
 ];
 
+const defaultMealValues = [
+  { name: "Breakfast" },
+  { name: "Lunch" },
+  { name: "Dinner" },
+] satisfies readonly MealPlanFormMealValue[];
+
 const mealPlanFormMachine = setup({
   types: {
     context: {} as {
       readonly values: MealPlanFormValues;
     },
-    events: {} as {
-      readonly name: keyof MealPlanFormValues;
-      readonly type: "changeField";
-      readonly value: string;
-    },
+    events: {} as
+      | {
+          readonly type: "addMeal";
+        }
+      | {
+          readonly index: number;
+          readonly type: "changeMealName";
+          readonly value: string;
+        }
+      | {
+          readonly name: MealPlanFormTextFieldName;
+          readonly type: "changeField";
+          readonly value: string;
+        }
+      | {
+          readonly index: number;
+          readonly type: "removeMeal";
+        },
     input: {} as {
       readonly initialPlan: Domain.Plan | null;
     },
@@ -113,6 +140,15 @@ const mealPlanFormMachine = setup({
 }).createMachine({
   context: ({ input }) => ({
     values: {
+      meals:
+        input.initialPlan === null
+          ? defaultMealValues
+          : [...input.initialPlan.meals]
+              .sort((left, right) => left.position - right.position)
+              .map((meal) => ({
+                id: meal.id,
+                name: meal.name,
+              })),
       name: input.initialPlan?.name ?? "",
       proteinTargetGrams: _stringFromOptionalNumber(
         input.initialPlan?.proteinTargetGrams
@@ -138,11 +174,47 @@ const mealPlanFormMachine = setup({
     },
   }),
   on: {
+    addMeal: {
+      actions: assign(({ context }) => ({
+        values: {
+          ...context.values,
+          meals: [...context.values.meals, { name: "" }],
+        },
+      })),
+    },
+    changeMealName: {
+      actions: assign(({ context, event }) => ({
+        values: {
+          ...context.values,
+          meals: context.values.meals.map((meal, index) =>
+            index === event.index
+              ? {
+                  ...meal,
+                  name: event.value,
+                }
+              : meal
+          ),
+        },
+      })),
+    },
     changeField: {
       actions: assign(({ context, event }) => ({
         values: {
           ...context.values,
           [event.name]: event.value,
+        },
+      })),
+    },
+    removeMeal: {
+      actions: assign(({ context, event }) => ({
+        values: {
+          ...context.values,
+          meals:
+            context.values.meals.length <= 1
+              ? context.values.meals
+              : context.values.meals.flatMap((meal, index) =>
+                  index === event.index ? [] : [meal]
+                ),
         },
       })),
     },
@@ -195,6 +267,56 @@ export function MealPlanForm({
         returnKeyType="next"
         value={values.name}
       />
+
+      <SectionCard style={styles.card} title="Meals">
+        <View style={styles.mealList}>
+          {values.meals.map((meal, index) => (
+            <Field
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!isSubmitting}
+              key={meal.id ?? index}
+              label={`Meal ${index + 1}`}
+              onChangeText={(value) =>
+                send({
+                  type: "changeMealName",
+                  index,
+                  value,
+                })
+              }
+              placeholder="Meal name"
+              rightElement={
+                values.meals.length <= 1 ? undefined : (
+                  <IconButton
+                    accessibilityLabel={`Remove meal ${index + 1}`}
+                    icon={Trash2}
+                    onPress={() => {
+                      send({
+                        type: "removeMeal",
+                        index,
+                      });
+                    }}
+                    variant="ghost"
+                  />
+                )
+              }
+              value={meal.name}
+            />
+          ))}
+        </View>
+        <Button
+          disabled={isSubmitting}
+          icon={Plus}
+          onPress={() => {
+            send({
+              type: "addMeal",
+            });
+          }}
+          variant="secondary"
+        >
+          Add meal
+        </Button>
+      </SectionCard>
 
       <SectionCard style={styles.card} title="Macros">
         <View style={styles.macroGrid}>
@@ -320,6 +442,10 @@ export function createMealPlanInputFromValues({
 
   return {
     name: values.name.trim(),
+    meals: values.meals.map((meal) => ({
+      ...(meal.id === undefined ? {} : { id: meal.id }),
+      name: meal.name.trim(),
+    })),
     proteinTargetGrams: values.proteinTargetGrams,
     carbsTargetGrams: values.carbsTargetGrams,
     fatTargetGrams: values.fatTargetGrams,
@@ -419,6 +545,10 @@ const styles = StyleSheet.create({
   },
   nutrientGrid: {
     gap: spacing.md,
+  },
+  mealList: {
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   targetField: {
     flex: 1,

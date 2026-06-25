@@ -49,6 +49,12 @@ export class NoMealPlans extends Data.TaggedError("NoMealPlans")<{
   readonly dateKey: DateKey;
 }> {}
 
+export class CannotChangeLoggedDayPlan extends Data.TaggedError(
+  "CannotChangeLoggedDayPlan"
+)<{
+  readonly dateKey: DateKey;
+}> {}
+
 export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
@@ -178,6 +184,22 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
                   decodedInput.dateKey
                 );
                 const existingDailyLog = Array.head(dailyLogs);
+                const mealEntryCount = yield* store.countMealEntriesByDate(
+                  decodedInput.dateKey
+                );
+                const changesExistingPlan = existingDailyLog.pipe(
+                  Option.match({
+                    onNone: () => false,
+                    onSome: (dailyLog) => dailyLog.planId !== selectedPlan.id,
+                  })
+                );
+
+                if (mealEntryCount > 0 && changesExistingPlan) {
+                  return yield* new CannotChangeLoggedDayPlan({
+                    dateKey: decodedInput.dateKey,
+                  });
+                }
+
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
                 const dailyLog = yield* existingDailyLog.pipe(
                   Option.match({
