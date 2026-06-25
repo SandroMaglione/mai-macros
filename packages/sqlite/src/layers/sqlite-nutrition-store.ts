@@ -572,6 +572,9 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     deleteMealEntry: (mealEntryId) =>
       _mapStoreError(sql`DELETE FROM meal_entries WHERE id = ${mealEntryId}`),
 
+    deleteDailyLog: (dateKey) =>
+      _mapStoreError(sql`DELETE FROM daily_logs WHERE date_key = ${dateKey}`),
+
     findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
       _mapStoreError(
         findActiveMealPlanSelectionRows(activeMealPlanSelectionId).pipe(

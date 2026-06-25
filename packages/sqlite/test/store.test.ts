@@ -111,6 +111,24 @@ describe("SqliteNutritionStore", () => {
     );
   });
 
+  it("deletes daily logs by date key", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const plan = yield* testPlan;
+        const dailyLog = yield* testDailyLog;
+
+        yield* store.insertPlan(plan);
+        yield* store.upsertDailyLog(dailyLog);
+        yield* store.deleteDailyLog(dailyLog.dateKey);
+
+        return yield* store.findDailyLogByDateKey(dailyLog.dateKey);
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    assert.equal(result.length, 0);
+  });
+
   it("migrates legacy meal entries to deterministic plan meals", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

@@ -35,12 +35,12 @@ const styles = StyleSheet.create({
     minHeight: 160,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.md,
+    gap: spacing.lg,
   },
   message: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.bold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   overlay: {

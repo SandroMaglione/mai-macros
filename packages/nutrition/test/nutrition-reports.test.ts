@@ -213,6 +213,7 @@ function _getRange({
                 ).length
               ),
             deleteMealEntry: () => Effect.void,
+            deleteDailyLog: () => Effect.void,
             findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
               Effect.succeed(
                 stores.activeMealPlanSelections.filter(

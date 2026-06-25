@@ -44,6 +44,8 @@ export class NutritionStore extends Context.Service<
 
     readonly deleteMealEntry: (mealEntryId: MealEntryId) => StoreMutation;
 
+    readonly deleteDailyLog: (dateKey: DateKey) => StoreMutation;
+
     readonly findActiveMealPlanSelectionById: (
       activeMealPlanSelectionId: ActiveMealPlanSelectionId
     ) => StoreEffect<readonly ActiveMealPlanSelection[]>;

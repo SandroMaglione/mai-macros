@@ -28,9 +28,15 @@ const _ChangeDayPlanInput = Schema.Struct({
   planId: PlanId,
 });
 
+const _RemoveDayInput = Schema.Struct({
+  dateKey: DateKey,
+});
+
 export type OpenDayInput = typeof _OpenDayInput.Encoded;
 
 export type ChangeDayPlanInput = typeof _ChangeDayPlanInput.Encoded;
+
+export type RemoveDayInput = typeof _RemoveDayInput.Encoded;
 
 export class OpenedDay extends Data.TaggedClass("OpenedDay")<{
   readonly dailyLog: DailyLog;
@@ -52,12 +58,23 @@ export class ChangedDayPlan extends Data.TaggedClass("ChangedDayPlan")<{
   readonly selectedPlan: Plan;
 }> {}
 
+export class RemovedDay extends Data.TaggedClass("RemovedDay")<{
+  readonly day: UnrecordedDay;
+  readonly dailyLog: DailyLog;
+}> {}
+
 export class NoMealPlans extends Data.TaggedError("NoMealPlans")<{
   readonly dateKey: DateKey;
 }> {}
 
 export class CannotChangeLoggedDayPlan extends Data.TaggedError(
   "CannotChangeLoggedDayPlan"
+)<{
+  readonly dateKey: DateKey;
+}> {}
+
+export class CannotRemoveLoggedDay extends Data.TaggedError(
+  "CannotRemoveLoggedDay"
 )<{
   readonly dateKey: DateKey;
 }> {}
@@ -213,6 +230,59 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
       open,
 
       create,
+
+      remove: Effect.fn("DailyLogs.remove")(function* ({
+        input,
+      }: {
+        readonly input: RemoveDayInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_RemoveDayInput)(input);
+        const dailyLogs = yield* store.findDailyLogByDateKey(
+          decodedInput.dateKey
+        );
+        const dailyLog = yield* Array.head(dailyLogs).pipe(
+          Option.match({
+            onNone: () =>
+              new DailyLogNotFound({
+                dateKey: decodedInput.dateKey,
+              }),
+            onSome: Effect.succeed,
+          })
+        );
+        const mealEntryCount = yield* store.countMealEntriesByDate(
+          decodedInput.dateKey
+        );
+
+        if (mealEntryCount > 0) {
+          return yield* new CannotRemoveLoggedDay({
+            dateKey: decodedInput.dateKey,
+          });
+        }
+
+        yield* store.deleteDailyLog(decodedInput.dateKey);
+
+        const plans = yield* store.listPlans;
+
+        if (!Array.isReadonlyArrayNonEmpty(plans)) {
+          return yield* new NoMealPlans({
+            dateKey: decodedInput.dateKey,
+          });
+        }
+
+        const selectedPlan = yield* findSelectedPlan({
+          dateKey: decodedInput.dateKey,
+          plans,
+        });
+
+        return new RemovedDay({
+          dailyLog,
+          day: new UnrecordedDay({
+            dateKey: decodedInput.dateKey,
+            plans,
+            selectedPlan,
+          }),
+        });
+      }),
 
       openOrCreate: Effect.fn("DailyLogs.openOrCreate")(function* ({
         input,

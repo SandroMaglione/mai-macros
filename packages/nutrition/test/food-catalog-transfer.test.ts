@@ -373,6 +373,15 @@ function _foodCatalogTestLayer({
           ),
         };
       }),
+    deleteDailyLog: (dateKey) =>
+      Effect.sync(() => {
+        currentStores = {
+          ...currentStores,
+          dailyLogs: currentStores.dailyLogs.filter(
+            (dailyLog) => dailyLog.dateKey !== dateKey
+          ),
+        };
+      }),
     findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
       Effect.sync(() =>
         currentStores.activeMealPlanSelections.filter(

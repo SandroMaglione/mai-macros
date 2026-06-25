@@ -31,6 +31,7 @@ import {
   ClipboardList,
   Download,
   Plus,
+  Trash2,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
@@ -70,6 +71,9 @@ type MacroDisplayMode = "consumed" | "remaining";
 type DailyLogRouteEvent =
   | {
       readonly type: "createDay";
+    }
+  | {
+      readonly type: "deleteDay";
     }
   | {
       readonly plan: Domain.Plan;
@@ -143,6 +147,26 @@ const dailyLogRouteMachine = setup({
             day,
             foods,
             mealEntries,
+          };
+        })
+      )
+    ),
+    deleteDailyLog: fromPromise<
+      DailyLogViewData,
+      {
+        readonly dateKey: Domain.DateKey;
+      }
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const removedDay = yield* dailyLogs.remove({
+            input,
+          });
+
+          return {
+            _tag: "UnrecordedDay" as const,
+            day: removedDay.day,
           };
         })
       )
@@ -228,6 +252,16 @@ const dailyLogRouteMachine = setup({
         createDay: {
           target: "Creating",
         },
+        deleteDay: {
+          guard: ({ context }) =>
+            context.data === null || context.data._tag !== "RecordedDay"
+              ? false
+              : !EffectArray.isReadonlyArrayNonEmpty(context.data.mealEntries),
+          target: "Deleting",
+          actions: assign({
+            message: null,
+          }),
+        },
         reload: {
           target: "Loading",
           actions: assign({
@@ -256,6 +290,33 @@ const dailyLogRouteMachine = setup({
               },
               message: null,
             };
+          }),
+        },
+      },
+    },
+    Deleting: {
+      invoke: {
+        src: "deleteDailyLog",
+        input: ({ context }) => {
+          if (context.data === null || context.data._tag !== "RecordedDay") {
+            throw new Error("Cannot delete a day before it loads.");
+          }
+
+          return {
+            dateKey: context.data.day.dailyLog.dateKey,
+          };
+        },
+        onDone: {
+          target: "Ready",
+          actions: assign(({ event }) => ({
+            data: event.output,
+            message: null,
+          })),
+        },
+        onError: {
+          target: "Ready",
+          actions: assign({
+            message: "Could not delete this day. Please try again.",
           }),
         },
       },
@@ -324,10 +385,13 @@ export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
       dateKey,
     },
   });
+  const deleteDayEvent = {
+    type: "deleteDay",
+  } satisfies DailyLogRouteEvent;
 
   if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
     return (
-      <AppScreen>
+      <AppScreen contentStyle={styles.loadingContent}>
         <LoadingView message="Loading daily log" />
       </AppScreen>
     );
@@ -357,18 +421,22 @@ export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
   }
 
   return snapshot.context.data === null ? (
-    <AppScreen>
+    <AppScreen contentStyle={styles.loadingContent}>
       <LoadingView message="Loading daily log" />
     </AppScreen>
   ) : (
     <DailyLogView
+      canDeleteDay={snapshot.can(deleteDayEvent)}
       data={snapshot.context.data}
-      disabled={snapshot.matches("Creating")}
+      disabled={snapshot.matches("Creating") || snapshot.matches("Deleting")}
       notice={snapshot.context.message}
       onCreateDay={() => {
         send({
           type: "createDay",
         });
+      }}
+      onDeleteDay={() => {
+        send(deleteDayEvent);
       }}
       onSelectPlan={(plan) => {
         send({
@@ -398,16 +466,20 @@ export function DailyLogTodayRoute() {
 }
 
 export function DailyLogView({
+  canDeleteDay,
   data,
   disabled,
   notice,
   onCreateDay,
+  onDeleteDay,
   onSelectPlan,
 }: {
+  readonly canDeleteDay: boolean;
   readonly data: DailyLogViewData;
   readonly disabled: boolean;
   readonly notice: string | null;
   readonly onCreateDay: () => void;
+  readonly onDeleteDay: () => void;
   readonly onSelectPlan: (plan: Domain.Plan) => void;
 }) {
   return data._tag === "UnrecordedDay" ? (
@@ -419,14 +491,25 @@ export function DailyLogView({
       onSelectPlan={onSelectPlan}
     />
   ) : (
-    <RecordedDailyLogView data={data} />
+    <RecordedDailyLogView
+      canDeleteDay={canDeleteDay}
+      data={data}
+      disabled={disabled}
+      onDeleteDay={onDeleteDay}
+    />
   );
 }
 
 function RecordedDailyLogView({
+  canDeleteDay,
   data,
+  disabled,
+  onDeleteDay,
 }: {
+  readonly canDeleteDay: boolean;
   readonly data: RecordedDailyLogViewData;
+  readonly disabled: boolean;
+  readonly onDeleteDay: () => void;
 }) {
   const mealOptions = [...data.day.selectedPlan.meals].sort(
     (left, right) => left.position - right.position
@@ -471,6 +554,10 @@ function RecordedDailyLogView({
           <ChevronRight color={color.text} size={16} strokeWidth={3} />
         </Pressable>
 
+        {canDeleteDay ? (
+          <EmptyDayDeleteAction disabled={disabled} onDeleteDay={onDeleteDay} />
+        ) : null}
+
         <View style={styles.meals}>
           {mealOptions.map((mealOption) => (
             <MealSection
@@ -488,6 +575,29 @@ function RecordedDailyLogView({
       </AppScreen>
 
       <DayBottomActionBar dateKey={dateKey} />
+    </View>
+  );
+}
+
+function EmptyDayDeleteAction({
+  disabled,
+  onDeleteDay,
+}: {
+  readonly disabled: boolean;
+  readonly onDeleteDay: () => void;
+}) {
+  return (
+    <View style={styles.emptyDayActions}>
+      <Button
+        disabled={disabled}
+        icon={Trash2}
+        loading={disabled}
+        onPress={onDeleteDay}
+        style={styles.emptyDayDeleteButton}
+        variant="danger"
+      >
+        Delete empty day
+      </Button>
     </View>
   );
 }
@@ -1460,7 +1570,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
+  emptyDayActions: {
+    marginHorizontal: -spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: "#222226",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: color.sheet,
+  },
+  emptyDayDeleteButton: {
+    width: "100%",
+  },
   centeredContent: {
+    justifyContent: "center",
+  },
+  loadingContent: {
+    alignItems: "center",
     justifyContent: "center",
   },
   retryButton: {

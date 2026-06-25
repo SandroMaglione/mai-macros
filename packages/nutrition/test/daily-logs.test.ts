@@ -212,6 +212,112 @@ describe("DailyLogs", () => {
     assert.equal(result.outcome, "DailyLogNotFound");
     assert.equal(result.stores.dailyLogs.length, 0);
   });
+
+  it("removes a recorded day when it has no meal entries", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+        const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+          dateKey: "2026-06-20",
+          planId: plan.id,
+          createdAt: 0,
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const store = yield* Store.NutritionStore;
+          const removed = yield* dailyLogs.remove({
+            input: {
+              dateKey: dailyLog.dateKey,
+            },
+          });
+          const stores = yield* store.readStores;
+
+          return {
+            removed,
+            stores,
+          };
+        }).pipe(
+          Effect.provide(
+            _dailyLogsTestLayer({
+              stores: {
+                ...emptyStores,
+                dailyLogs: [dailyLog],
+                plans: [plan],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.removed._tag, "RemovedDay");
+    assert.equal(result.removed.day._tag, "UnrecordedDay");
+    assert.equal(result.removed.day.dateKey, "2026-06-20");
+    assert.equal(result.stores.dailyLogs.length, 0);
+  });
+
+  it("does not remove a recorded day with meal entries", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+        const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+          dateKey: "2026-06-20",
+          planId: plan.id,
+          createdAt: 0,
+          updatedAt: 0,
+        });
+        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c45",
+          dateKey: dailyLog.dateKey,
+          mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+          foodId: "9535a059-a61f-42e1-a2e0-35ec87203c55",
+          quantityGrams: 100,
+          createdAt: 0,
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const store = yield* Store.NutritionStore;
+          const outcome = yield* dailyLogs
+            .remove({
+              input: {
+                dateKey: dailyLog.dateKey,
+              },
+            })
+            .pipe(
+              Effect.catchTag("CannotRemoveLoggedDay", () =>
+                Effect.succeed("CannotRemoveLoggedDay" as const)
+              )
+            );
+          const stores = yield* store.readStores;
+
+          return {
+            outcome,
+            stores,
+          };
+        }).pipe(
+          Effect.provide(
+            _dailyLogsTestLayer({
+              stores: {
+                ...emptyStores,
+                dailyLogs: [dailyLog],
+                mealEntries: [mealEntry],
+                plans: [plan],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.outcome, "CannotRemoveLoggedDay");
+    assert.equal(result.stores.dailyLogs.length, 1);
+    assert.equal(result.stores.dailyLogs[0]?.dateKey, "2026-06-20");
+    assert.equal(result.stores.mealEntries.length, 1);
+  });
 });
 
 function _dailyLogsTestLayer({
@@ -248,6 +354,15 @@ function _dailyLogsTestLayer({
           ...currentStores,
           mealEntries: currentStores.mealEntries.filter(
             (mealEntry) => mealEntry.id !== mealEntryId
+          ),
+        };
+      }),
+    deleteDailyLog: (dateKey) =>
+      Effect.sync(() => {
+        currentStores = {
+          ...currentStores,
+          dailyLogs: currentStores.dailyLogs.filter(
+            (dailyLog) => dailyLog.dateKey !== dateKey
           ),
         };
       }),
