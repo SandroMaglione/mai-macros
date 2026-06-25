@@ -6,7 +6,7 @@ import { useMachine } from "@xstate/react";
 import { Option, Schema } from "effect";
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { assertEvent, assign, setup } from "xstate";
 
 import { EditFoodsPanelLoader } from "./edit";
@@ -86,92 +86,87 @@ export default function FoodsScreen() {
   ] as const;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.screen}
-    >
-      <View style={styles.screen}>
-        <AppScreen
-          contentStyle={styles.content}
-          safeAreaEdges={["top", "bottom"]}
-        >
-          <AppHeader
-            embedded
-            leading={
-              <IconButton
-                accessibilityLabel="Back to day"
-                icon={ChevronLeft}
-                onPress={() => {
-                  if (dateKey === undefined) {
-                    router.replace("/");
-                    return;
+    <View style={styles.screen}>
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={["top", "bottom"]}
+      >
+        <AppHeader
+          embedded
+          leading={
+            <IconButton
+              accessibilityLabel="Back to day"
+              icon={ChevronLeft}
+              onPress={() => {
+                if (dateKey === undefined) {
+                  router.replace("/");
+                  return;
+                }
+
+                router.replace({
+                  pathname: "/days/[dateKey]",
+                  params: {
+                    dateKey,
+                  },
+                });
+              }}
+              variant="ghost"
+            />
+          }
+          shadow
+          title="Foods"
+        />
+
+        <PagerTabs
+          activeIndex={activeTab}
+          onActiveIndexChange={(index) => {
+            send({
+              index: index === 0 ? 0 : 1,
+              type: "selectTab",
+            });
+          }}
+          tabBarPosition="bottom"
+          tabs={[
+            {
+              ...tabs[0],
+              content: (
+                <CreateFoodPanel
+                  dateKey={dateKey}
+                  initialNotice={
+                    dateKeyResult._tag === "Invalid"
+                      ? "The target date was not valid. Saving will return to today."
+                      : null
                   }
-
-                  router.replace({
-                    pathname: "/days/[dateKey]",
-                    params: {
-                      dateKey,
-                    },
-                  });
-                }}
-                variant="ghost"
-              />
-            }
-            shadow
-            title="Foods"
-          />
-
-          <PagerTabs
-            activeIndex={activeTab}
-            onActiveIndexChange={(index) => {
-              send({
-                index: index === 0 ? 0 : 1,
-                type: "selectTab",
-              });
-            }}
-            tabBarPosition="bottom"
-            tabs={[
-              {
-                ...tabs[0],
-                content: (
-                  <CreateFoodPanel
-                    dateKey={dateKey}
-                    initialNotice={
-                      dateKeyResult._tag === "Invalid"
-                        ? "The target date was not valid. Saving will return to today."
-                        : null
+                  mode="embedded"
+                  onBack={() => {
+                    if (dateKey === undefined) {
+                      router.replace("/");
+                      return;
                     }
-                    mode="embedded"
-                    onBack={() => {
-                      if (dateKey === undefined) {
-                        router.replace("/");
-                        return;
-                      }
 
-                      router.replace({
-                        pathname: "/days/[dateKey]",
-                        params: {
-                          dateKey,
-                        },
-                      });
-                    }}
-                  />
-                ),
-              },
-              {
-                ...tabs[1],
-                content: (
-                  <EditFoodsPanelLoader
-                    dateKey={panelDateKeyParam}
-                    layout="embedded"
-                  />
-                ),
-              },
-            ]}
-          />
-        </AppScreen>
-      </View>
-    </KeyboardAvoidingView>
+                    router.replace({
+                      pathname: "/days/[dateKey]",
+                      params: {
+                        dateKey,
+                      },
+                    });
+                  }}
+                />
+              ),
+            },
+            {
+              ...tabs[1],
+              content: (
+                <EditFoodsPanelLoader
+                  dateKey={panelDateKeyParam}
+                  layout="embedded"
+                />
+              ),
+            },
+          ]}
+        />
+      </AppScreen>
+    </View>
   );
 }
 

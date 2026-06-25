@@ -6,7 +6,7 @@ const appBackground = iconBackground;
 const appVersion = "1.0.0";
 
 export default {
-  name: "Mai",
+  name: "Mai Macros",
   slug: "mai-mobile",
   version: appVersion,
   platforms: ["ios", "android"],

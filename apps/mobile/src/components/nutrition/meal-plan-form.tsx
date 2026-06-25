@@ -1,4 +1,5 @@
-import { MealPlans, Utils, type Domain } from "@mai/nutrition";
+import { MealPlanFormMachine } from "@mai/machines";
+import type { Domain, MealPlans } from "@mai/nutrition";
 import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
@@ -12,39 +13,18 @@ import {
   NumberField,
   SectionCard,
 } from "@/components/ui";
-import { useMachine } from "@xstate/react";
+import { useMachine, useSelector } from "@xstate/react";
 import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { assign, setup } from "xstate";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 type MealPlanFormAction = "create" | "edit";
 type MealPlanFormLayout = "screen" | "embedded";
 
-type PlanTargetFieldName =
-  | "proteinTargetGrams"
-  | "carbsTargetGrams"
-  | "fatTargetGrams"
-  | "fiberTargetGrams"
-  | "sugarTargetGrams"
-  | "saturatedFatTargetGrams"
-  | "saltTargetGrams";
-
-type MealPlanFormValues = {
-  readonly meals: readonly MealPlanFormMealValue[];
-  readonly name: string;
-} & Record<PlanTargetFieldName, string>;
-
-type MealPlanFormMealValue = {
-  readonly id?: Domain.MealId;
-  readonly name: string;
-};
-
-type MealPlanFormTextFieldName = Exclude<keyof MealPlanFormValues, "meals">;
-
 type PlanTargetField = {
   readonly accentColor: string;
   readonly label: string;
-  readonly name: PlanTargetFieldName;
+  readonly name: MealPlanFormMachine.MealPlanTargetFieldName;
   readonly placeholder: string;
   readonly required: boolean;
 };
@@ -104,123 +84,6 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
   },
 ];
 
-const defaultMealValues = [
-  { name: "Breakfast" },
-  { name: "Lunch" },
-  { name: "Dinner" },
-] satisfies readonly MealPlanFormMealValue[];
-
-const mealPlanFormMachine = setup({
-  types: {
-    context: {} as {
-      readonly values: MealPlanFormValues;
-    },
-    events: {} as
-      | {
-          readonly type: "addMeal";
-        }
-      | {
-          readonly index: number;
-          readonly type: "changeMealName";
-          readonly value: string;
-        }
-      | {
-          readonly name: MealPlanFormTextFieldName;
-          readonly type: "changeField";
-          readonly value: string;
-        }
-      | {
-          readonly index: number;
-          readonly type: "removeMeal";
-        },
-    input: {} as {
-      readonly initialPlan: Domain.Plan | null;
-    },
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    values: {
-      meals:
-        input.initialPlan === null
-          ? defaultMealValues
-          : [...input.initialPlan.meals]
-              .sort((left, right) => left.position - right.position)
-              .map((meal) => ({
-                id: meal.id,
-                name: meal.name,
-              })),
-      name: input.initialPlan?.name ?? "",
-      proteinTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.proteinTargetGrams
-      ),
-      carbsTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.carbsTargetGrams
-      ),
-      fatTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.fatTargetGrams
-      ),
-      fiberTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.fiberTargetGrams
-      ),
-      sugarTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.sugarTargetGrams
-      ),
-      saturatedFatTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.saturatedFatTargetGrams
-      ),
-      saltTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.saltTargetGrams
-      ),
-    },
-  }),
-  on: {
-    addMeal: {
-      actions: assign(({ context }) => ({
-        values: {
-          ...context.values,
-          meals: [...context.values.meals, { name: "" }],
-        },
-      })),
-    },
-    changeMealName: {
-      actions: assign(({ context, event }) => ({
-        values: {
-          ...context.values,
-          meals: context.values.meals.map((meal, index) =>
-            index === event.index
-              ? {
-                  ...meal,
-                  name: event.value,
-                }
-              : meal
-          ),
-        },
-      })),
-    },
-    changeField: {
-      actions: assign(({ context, event }) => ({
-        values: {
-          ...context.values,
-          [event.name]: event.value,
-        },
-      })),
-    },
-    removeMeal: {
-      actions: assign(({ context, event }) => ({
-        values: {
-          ...context.values,
-          meals:
-            context.values.meals.length <= 1
-              ? context.values.meals
-              : context.values.meals.flatMap((meal, index) =>
-                  index === event.index ? [] : [meal]
-                ),
-        },
-      })),
-    },
-  },
-});
-
 export function MealPlanForm({
   action,
   canNavigateBack = true,
@@ -240,15 +103,19 @@ export function MealPlanForm({
   readonly onBack: () => void;
   readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {
-  const [snapshot, send] = useMachine(mealPlanFormMachine, {
+  const [snapshot, send] = useMachine(MealPlanFormMachine.mealPlanFormMachine, {
     input: { initialPlan },
   });
   const { values } = snapshot.context;
+  const { mealsActor } = snapshot.context;
+  const meals = useSelector(mealsActor, (state) => state.context.meals);
   const isCreating = action === "create";
   const title = isCreating ? "Create plan" : "Edit plan";
   const submitText = isCreating ? "Create plan" : "Save revised plan";
   const SubmitIcon = isCreating ? Plus : Save;
-  const energyKcal = calculateMealPlanEnergyKcalFromValues({ values });
+  const energyKcal = MealPlanFormMachine.calculateMealPlanEnergyKcalFromValues({
+    values,
+  });
   const form = (
     <View style={styles.form}>
       {errorMessage === undefined ? null : (
@@ -267,56 +134,6 @@ export function MealPlanForm({
         returnKeyType="next"
         value={values.name}
       />
-
-      <SectionCard style={styles.card} title="Meals">
-        <View style={styles.mealList}>
-          {values.meals.map((meal, index) => (
-            <Field
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!isSubmitting}
-              key={meal.id ?? index}
-              label={`Meal ${index + 1}`}
-              onChangeText={(value) =>
-                send({
-                  type: "changeMealName",
-                  index,
-                  value,
-                })
-              }
-              placeholder="Meal name"
-              rightElement={
-                values.meals.length <= 1 ? undefined : (
-                  <IconButton
-                    accessibilityLabel={`Remove meal ${index + 1}`}
-                    icon={Trash2}
-                    onPress={() => {
-                      send({
-                        type: "removeMeal",
-                        index,
-                      });
-                    }}
-                    variant="ghost"
-                  />
-                )
-              }
-              value={meal.name}
-            />
-          ))}
-        </View>
-        <Button
-          disabled={isSubmitting}
-          icon={Plus}
-          onPress={() => {
-            send({
-              type: "addMeal",
-            });
-          }}
-          variant="secondary"
-        >
-          Add meal
-        </Button>
-      </SectionCard>
 
       <SectionCard style={styles.card} title="Macros">
         <View style={styles.macroGrid}>
@@ -366,6 +183,56 @@ export function MealPlanForm({
           ))}
         </View>
       </SectionCard>
+
+      <SectionCard style={styles.card} title="Meals">
+        <View style={styles.mealSection}>
+          {meals.map((meal, index) => (
+            <View key={meal.id ?? index} style={styles.mealItem}>
+              <View style={styles.mealRow}>
+                <Field
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                  onChangeText={(value) => {
+                    mealsActor.send({
+                      type: "changeMealName",
+                      index,
+                      value,
+                    });
+                  }}
+                  placeholder="Meal name"
+                  returnKeyType="next"
+                  style={styles.mealNameField}
+                  value={meal.name}
+                />
+                <MealRemoveButton
+                  disabled={isSubmitting}
+                  index={index}
+                  onPress={() => {
+                    mealsActor.send({
+                      type: "removeMeal",
+                      index,
+                    });
+                  }}
+                />
+              </View>
+              <View style={styles.mealDivider} />
+            </View>
+          ))}
+          <Button
+            disabled={isSubmitting}
+            icon={Plus}
+            onPress={() => {
+              mealsActor.send({
+                type: "addMeal",
+              });
+            }}
+            variant="secondary"
+          >
+            Add meal
+          </Button>
+        </View>
+      </SectionCard>
     </View>
   );
   const submitButton = (
@@ -374,7 +241,12 @@ export function MealPlanForm({
       icon={SubmitIcon}
       loading={isSubmitting}
       onPress={() => {
-        onSubmit(createMealPlanInputFromValues({ values }));
+        onSubmit(
+          MealPlanFormMachine.createMealPlanInputFromValues({
+            meals,
+            values,
+          })
+        );
       }}
       style={styles.footerButton}
     >
@@ -384,15 +256,16 @@ export function MealPlanForm({
 
   if (layout === "embedded") {
     return (
-      <ScrollView
+      <KeyboardAwareScrollView
         alwaysBounceVertical={false}
+        bottomOffset={spacing.lg}
         contentContainerStyle={styles.embeddedContent}
         keyboardShouldPersistTaps="handled"
         style={styles.embeddedScroll}
       >
         {form}
         <View style={styles.inlineSubmit}>{submitButton}</View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -428,36 +301,6 @@ export function MealPlanForm({
   );
 }
 
-export function createMealPlanInputFromValues({
-  values,
-}: {
-  readonly values: MealPlanFormValues;
-}): MealPlans.CreateMealPlanInput {
-  const fiberTargetGrams = _optionalFormString(values.fiberTargetGrams);
-  const sugarTargetGrams = _optionalFormString(values.sugarTargetGrams);
-  const saturatedFatTargetGrams = _optionalFormString(
-    values.saturatedFatTargetGrams
-  );
-  const saltTargetGrams = _optionalFormString(values.saltTargetGrams);
-
-  return {
-    name: values.name.trim(),
-    meals: values.meals.map((meal) => ({
-      ...(meal.id === undefined ? {} : { id: meal.id }),
-      name: meal.name.trim(),
-    })),
-    proteinTargetGrams: values.proteinTargetGrams,
-    carbsTargetGrams: values.carbsTargetGrams,
-    fatTargetGrams: values.fatTargetGrams,
-    ...(fiberTargetGrams === undefined ? {} : { fiberTargetGrams }),
-    ...(sugarTargetGrams === undefined ? {} : { sugarTargetGrams }),
-    ...(saturatedFatTargetGrams === undefined
-      ? {}
-      : { saturatedFatTargetGrams }),
-    ...(saltTargetGrams === undefined ? {} : { saltTargetGrams }),
-  };
-}
-
 function PlanTargetInput({
   field,
   isSubmitting,
@@ -485,32 +328,30 @@ function PlanTargetInput({
   );
 }
 
-export function calculateMealPlanEnergyKcalFromValues({
-  values,
+function MealRemoveButton({
+  disabled,
+  index,
+  onPress,
 }: {
-  readonly values: MealPlanFormValues;
+  readonly disabled: boolean;
+  readonly index: number;
+  readonly onPress: () => void;
 }) {
-  return Utils.calculateMacronutrientEnergyKcal({
-    carbsGrams: _formNonNegativeNumber(values.carbsTargetGrams),
-    fatGrams: _formNonNegativeNumber(values.fatTargetGrams),
-    proteinGrams: _formNonNegativeNumber(values.proteinTargetGrams),
-  });
-}
-
-function _stringFromOptionalNumber(value: number | undefined) {
-  return value === undefined ? "" : String(value);
-}
-
-function _optionalFormString(value: string) {
-  const trimmedValue = value.trim();
-
-  return trimmedValue === "" ? undefined : trimmedValue;
-}
-
-function _formNonNegativeNumber(value: string) {
-  const parsedValue = Number(value.replace(",", "."));
-
-  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+  return (
+    <Pressable
+      accessibilityLabel={`Remove meal ${index + 1}`}
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.mealRemoveButton,
+        pressed && !disabled ? styles.mealRemoveButtonPressed : null,
+        disabled ? styles.mealRemoveButtonDisabled : null,
+      ]}
+    >
+      <Trash2 color={color.dangerText} size={18} strokeWidth={2.6} />
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -546,9 +387,41 @@ const styles = StyleSheet.create({
   nutrientGrid: {
     gap: spacing.md,
   },
-  mealList: {
+  mealSection: {
     gap: spacing.md,
-    marginBottom: spacing.md,
+  },
+  mealItem: {
+    gap: spacing.md,
+  },
+  mealRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  mealNameField: {
+    minWidth: 0,
+    flex: 1,
+  },
+  mealRemoveButton: {
+    width: 36,
+    height: 36,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: color.dangerBorder,
+    borderRadius: radius.pill,
+    backgroundColor: color.dangerBg,
+  },
+  mealRemoveButtonPressed: {
+    opacity: 0.84,
+  },
+  mealRemoveButtonDisabled: {
+    opacity: 0.48,
+  },
+  mealDivider: {
+    height: 1,
+    backgroundColor: color.sheetBorder,
   },
   targetField: {
     flex: 1,

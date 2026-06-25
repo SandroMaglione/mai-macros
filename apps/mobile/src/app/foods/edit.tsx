@@ -28,14 +28,8 @@ import { useMachine, useSelector } from "@xstate/react";
 import { Array as EffectArray, Effect, Option, Schema } from "effect";
 import { type Href, Redirect, router } from "expo-router";
 import { ChevronLeft, Pencil, RotateCcw, Save } from "lucide-react-native";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import {
   assertEvent,
   assign,
@@ -496,18 +490,13 @@ export function EditFoodsPanelLoader({
     return layout === "embedded" ? (
       failure
     ) : (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.screen}
-      >
-        <AppScreen contentStyle={styles.content}>
-          <MaiHeader
-            action={<BackButton dateKey={undefined} />}
-            title="Edit foods"
-          />
-          {failure}
-        </AppScreen>
-      </KeyboardAvoidingView>
+      <AppScreen contentStyle={styles.content}>
+        <MaiHeader
+          action={<BackButton dateKey={undefined} />}
+          title="Edit foods"
+        />
+        {failure}
+      </AppScreen>
     );
   }
 
@@ -628,17 +617,12 @@ function ReadyEditFoodsRoute({
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.screen}
+    <AppScreen
+      contentStyle={styles.content}
+      safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
     >
-      <AppScreen
-        contentStyle={styles.content}
-        safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
-      >
-        {content}
-      </AppScreen>
-    </KeyboardAvoidingView>
+      {content}
+    </AppScreen>
   );
 }
 
@@ -705,8 +689,9 @@ function FoodEditForm({
         <View style={styles.stickyAction}>{changeFoodButton}</View>
       ) : null}
 
-      <ScrollView
+      <KeyboardAwareScrollView
         alwaysBounceVertical={false}
+        bottomOffset={spacing.lg}
         contentContainerStyle={styles.formContent}
         keyboardShouldPersistTaps="handled"
         style={styles.formScroll}
@@ -733,7 +718,7 @@ function FoodEditForm({
         {layout === "embedded" ? (
           <View style={styles.inlineActions}>{saveFoodButton}</View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {layout === "screen" ? (
         <BottomActionBar>

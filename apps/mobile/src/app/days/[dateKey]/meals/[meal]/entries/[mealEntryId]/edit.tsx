@@ -17,14 +17,8 @@ import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, Save, Trash2 } from "lucide-react-native";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 type EditMealEntryRouteData = {
@@ -378,10 +372,7 @@ function ReadyEditMealEntryScreen({
   const mealLabel = data.mealLabel;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.screen}
-    >
+    <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppScreen contentStyle={styles.content} safeAreaEdges={["top"]}>
         <AppHeader
           embedded

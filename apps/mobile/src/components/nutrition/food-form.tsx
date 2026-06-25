@@ -16,7 +16,8 @@ import type { FoodQuickInput } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
 import { Array as EffectArray } from "effect";
 import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import {
   FoodNutrientOverview,
@@ -183,15 +184,16 @@ export function FoodForm({
 
   if (layout === "embedded") {
     return (
-      <ScrollView
+      <KeyboardAwareScrollView
         alwaysBounceVertical={false}
+        bottomOffset={spacing.lg}
         contentContainerStyle={styles.embeddedContent}
         keyboardShouldPersistTaps="handled"
         style={styles.embeddedScroll}
       >
         {form}
         <View style={styles.inlineSubmit}>{submitButton}</View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 

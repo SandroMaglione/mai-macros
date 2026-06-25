@@ -24,13 +24,8 @@ import { useMachine } from "@xstate/react";
 import { Array as EffectArray, Effect, Option, Order, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { Check, ChevronLeft, Plus } from "lucide-react-native";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import {
   assertEvent,
   assign,
@@ -496,10 +491,7 @@ function ReadyAddMealFoodRoute({
         );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.screen}
-    >
+    <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppScreen
         contentStyle={styles.content}
         safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}

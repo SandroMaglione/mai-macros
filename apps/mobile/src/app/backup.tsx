@@ -34,15 +34,8 @@ import {
   Upload,
   X,
 } from "lucide-react-native";
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
 type BackupRouteEvent =
@@ -727,8 +720,9 @@ function ExportBackupTab({
   readonly onExport: () => void;
 }) {
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       alwaysBounceVertical={false}
+      bottomOffset={spacing.lg}
       contentContainerStyle={styles.tabScrollContent}
       keyboardShouldPersistTaps="handled"
       style={styles.tabScroll}
@@ -762,7 +756,7 @@ function ExportBackupTab({
           </Button>
         </View>
       </SectionCard>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -778,8 +772,9 @@ function ImportBackupTab({
   readonly onImport: () => void;
 }) {
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       alwaysBounceVertical={false}
+      bottomOffset={spacing.lg}
       contentContainerStyle={styles.tabScrollContent}
       keyboardShouldPersistTaps="handled"
       style={styles.tabScroll}
@@ -807,7 +802,7 @@ function ImportBackupTab({
           </Button>
         </View>
       </SectionCard>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -831,8 +826,9 @@ function CatalogTransferTab({ disabled }: { readonly disabled: boolean }) {
   } = snapshot.context;
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       alwaysBounceVertical={false}
+      bottomOffset={spacing.lg}
       contentContainerStyle={styles.tabScrollContent}
       keyboardShouldPersistTaps="handled"
       style={styles.tabScroll}
@@ -943,7 +939,7 @@ function CatalogTransferTab({ disabled }: { readonly disabled: boolean }) {
         }
         visible={isBusy}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -1182,8 +1178,9 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
     NutritionLocalData.LocalDataResetConfirmationText;
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       alwaysBounceVertical={false}
+      bottomOffset={spacing.lg}
       contentContainerStyle={styles.tabScrollContent}
       keyboardShouldPersistTaps="handled"
       style={styles.tabScroll}
@@ -1265,7 +1262,7 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
       </SectionCard>
 
       <LoadingOverlay message="Deleting local data" visible={isResetting} />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
