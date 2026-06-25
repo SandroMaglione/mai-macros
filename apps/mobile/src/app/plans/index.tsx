@@ -22,10 +22,10 @@ import { ChevronLeft, Pencil } from "lucide-react-native";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
-type PlansDay = Pick<
-  DailyLogs.OpenedDay,
-  "dailyLog" | "plans" | "selectedPlan"
->;
+type PlansDay =
+  | DailyLogs.ChangedDayPlan
+  | DailyLogs.OpenedDay
+  | DailyLogs.UnrecordedDay;
 
 type PlansRouteData = {
   readonly dateKey: Domain.DateKey;
@@ -55,11 +55,13 @@ type SavePlanInput =
   | {
       readonly action: "create";
       readonly dateKey: Domain.DateKey;
+      readonly day: PlansDay;
       readonly input: MealPlans.CreateMealPlanInput;
     }
   | {
       readonly action: "revise";
       readonly dateKey: Domain.DateKey;
+      readonly day: PlansDay;
       readonly input: MealPlans.CreateMealPlanInput;
       readonly planId: Domain.Plan["id"];
     };
@@ -198,12 +200,41 @@ const plansRouteMachine = setup({
     },
     Ready: {
       on: {
-        changePlan: {
-          target: "ChangingPlan",
-          actions: assign({
-            notice: null,
-          }),
-        },
+        changePlan: [
+          {
+            guard: ({ context }) => context.data?.day._tag === "UnrecordedDay",
+            actions: assign(({ context, event }) => {
+              assertEvent(event, "changePlan");
+
+              if (
+                context.data === null ||
+                context.data.day._tag !== "UnrecordedDay"
+              ) {
+                return {
+                  notice: null,
+                };
+              }
+
+              return {
+                data: {
+                  ...context.data,
+                  day: new DailyLogs.UnrecordedDay({
+                    dateKey: context.data.day.dateKey,
+                    plans: context.data.day.plans,
+                    selectedPlan: event.plan,
+                  }),
+                },
+                notice: null,
+              };
+            }),
+          },
+          {
+            target: "ChangingPlan",
+            actions: assign({
+              notice: null,
+            }),
+          },
+        ],
         clearEditPlan: {
           actions: assign({
             editingPlan: null,
@@ -296,6 +327,7 @@ const plansRouteMachine = setup({
             return {
               action: "create",
               dateKey: context.data.dateKey,
+              day: context.data.day,
               input: event.input,
             };
           }
@@ -305,6 +337,7 @@ const plansRouteMachine = setup({
           return {
             action: "revise",
             dateKey: context.data.dateKey,
+            day: context.data.day,
             input: event.input,
             planId: event.plan.id,
           };
@@ -695,11 +728,17 @@ export function loadPlansRouteData({
     const targetDateKey =
       dateKey ?? (yield* Schema.decodeEffect(Domain.DateKey)(todayDateKey()));
     const dailyLogs = yield* DailyLogs.DailyLogs;
-    const day = yield* dailyLogs.open({
-      input: {
-        dateKey: targetDateKey,
-      },
-    });
+    const day = yield* targetDateKey === todayDateKey()
+      ? dailyLogs.openOrCreate({
+          input: {
+            dateKey: targetDateKey,
+          },
+        })
+      : dailyLogs.open({
+          input: {
+            dateKey: targetDateKey,
+          },
+        });
 
     return {
       _tag: "Ready" as const,
@@ -732,6 +771,23 @@ export function savePlan({ input }: { readonly input: SavePlanInput }) {
       const created = yield* mealPlans.create({
         input: input.input,
       });
+
+      if (input.day._tag === "UnrecordedDay") {
+        const plans = yield* mealPlans.list();
+        const day = new DailyLogs.UnrecordedDay({
+          dateKey: input.dateKey,
+          plans,
+          selectedPlan: created.plan,
+        });
+
+        return {
+          _tag: "Saved" as const,
+          day,
+          editingPlan: created.plan,
+          notice: "Plan created.",
+        };
+      }
+
       const day = yield* dailyLogs.changePlan({
         input: {
           dateKey: input.dateKey,
@@ -747,13 +803,29 @@ export function savePlan({ input }: { readonly input: SavePlanInput }) {
       };
     }
 
-    yield* mealPlans.revise({
+    const revised = yield* mealPlans.revise({
       input: {
         ...input.input,
         dateKey: input.dateKey,
         planId: input.planId,
       },
     });
+
+    if (input.day._tag === "UnrecordedDay") {
+      const plans = yield* mealPlans.list();
+      const day = new DailyLogs.UnrecordedDay({
+        dateKey: input.dateKey,
+        plans,
+        selectedPlan: revised.plan,
+      });
+
+      return {
+        _tag: "Saved" as const,
+        day,
+        editingPlan: revised.plan,
+        notice: "Plan saved.",
+      };
+    }
 
     const day = yield* dailyLogs.open({
       input: {
@@ -764,7 +836,8 @@ export function savePlan({ input }: { readonly input: SavePlanInput }) {
     return {
       _tag: "Saved" as const,
       day,
-      editingPlan: day.selectedPlan,
+      editingPlan:
+        day._tag === "UnrecordedDay" ? revised.plan : day.selectedPlan,
       notice: "Plan saved.",
     };
   }).pipe(

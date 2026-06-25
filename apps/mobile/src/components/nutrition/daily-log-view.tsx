@@ -6,6 +6,7 @@ import {
   LoadingView,
   Notice,
 } from "@/components/ui";
+import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
@@ -34,11 +35,21 @@ import {
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
-export type DailyLogViewData = {
+export type RecordedDailyLogViewData = {
+  readonly _tag: "RecordedDay";
   readonly day: DailyLogs.OpenedDay;
   readonly foods: readonly Domain.Food[];
   readonly mealEntries: readonly Domain.MealEntry[];
 };
+
+export type UnrecordedDailyLogViewData = {
+  readonly _tag: "UnrecordedDay";
+  readonly day: DailyLogs.UnrecordedDay;
+};
+
+export type DailyLogViewData =
+  | RecordedDailyLogViewData
+  | UnrecordedDailyLogViewData;
 
 type DailyLogRouteProps = {
   readonly dateKey: Domain.DateKey;
@@ -46,7 +57,7 @@ type DailyLogRouteProps = {
 
 type DailyLogLoadResult =
   | {
-      readonly _tag: "OpenedDay";
+      readonly _tag: "Ready";
       readonly data: DailyLogViewData;
     }
   | {
@@ -56,9 +67,17 @@ type DailyLogLoadResult =
 
 type MacroDisplayMode = "consumed" | "remaining";
 
-type DailyLogRouteEvent = {
-  readonly type: "reload";
-};
+type DailyLogRouteEvent =
+  | {
+      readonly type: "createDay";
+    }
+  | {
+      readonly plan: Domain.Plan;
+      readonly type: "selectPlan";
+    }
+  | {
+      readonly type: "reload";
+    };
 
 const macroProgress = [
   {
@@ -97,6 +116,37 @@ const dailyLogRouteMachine = setup({
     },
   },
   actors: {
+    createDailyLog: fromPromise<
+      DailyLogViewData,
+      {
+        readonly dateKey: Domain.DateKey;
+        readonly planId: Domain.PlanId;
+      }
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const foodsService = yield* Foods.Foods;
+          const mealEntriesService = yield* MealEntries.MealEntries;
+          const day = yield* dailyLogs.create({
+            input,
+          });
+          const foods = yield* foodsService.list();
+          const mealEntries = yield* mealEntriesService.listForDay({
+            input: {
+              dateKey: day.dailyLog.dateKey,
+            },
+          });
+
+          return {
+            _tag: "RecordedDay" as const,
+            day,
+            foods,
+            mealEntries,
+          };
+        })
+      )
+    ),
     loadDailyLog: fromPromise<
       DailyLogLoadResult,
       { readonly dateKey: Domain.DateKey }
@@ -134,10 +184,10 @@ const dailyLogRouteMachine = setup({
             },
           },
           {
-            guard: ({ event }) => event.output._tag === "OpenedDay",
+            guard: ({ event }) => event.output._tag === "Ready",
             target: "Ready",
             actions: assign(({ event }) => {
-              if (event.output._tag !== "OpenedDay") {
+              if (event.output._tag !== "Ready") {
                 return {
                   data: null,
                   message: "Could not load the daily log.",
@@ -175,11 +225,65 @@ const dailyLogRouteMachine = setup({
     },
     Ready: {
       on: {
+        createDay: {
+          target: "Creating",
+        },
         reload: {
           target: "Loading",
           actions: assign({
             data: null,
             message: null,
+          }),
+        },
+        selectPlan: {
+          actions: assign(({ context, event }) => {
+            if (
+              context.data === null ||
+              context.data._tag !== "UnrecordedDay" ||
+              event.type !== "selectPlan"
+            ) {
+              return {};
+            }
+
+            return {
+              data: {
+                _tag: "UnrecordedDay" as const,
+                day: new DailyLogs.UnrecordedDay({
+                  dateKey: context.data.day.dateKey,
+                  plans: context.data.day.plans,
+                  selectedPlan: event.plan,
+                }),
+              },
+              message: null,
+            };
+          }),
+        },
+      },
+    },
+    Creating: {
+      invoke: {
+        src: "createDailyLog",
+        input: ({ context }) => {
+          if (context.data === null || context.data._tag !== "UnrecordedDay") {
+            throw new Error("Cannot create a day before it loads.");
+          }
+
+          return {
+            dateKey: context.data.day.dateKey,
+            planId: context.data.day.selectedPlan.id,
+          };
+        },
+        onDone: {
+          target: "Ready",
+          actions: assign(({ event }) => ({
+            data: event.output,
+            message: null,
+          })),
+        },
+        onError: {
+          target: "Ready",
+          actions: assign({
+            message: "Could not create this day. Please try again.",
           }),
         },
       },
@@ -257,7 +361,22 @@ export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
       <LoadingView message="Loading daily log" />
     </AppScreen>
   ) : (
-    <DailyLogView data={snapshot.context.data} />
+    <DailyLogView
+      data={snapshot.context.data}
+      disabled={snapshot.matches("Creating")}
+      notice={snapshot.context.message}
+      onCreateDay={() => {
+        send({
+          type: "createDay",
+        });
+      }}
+      onSelectPlan={(plan) => {
+        send({
+          plan,
+          type: "selectPlan",
+        });
+      }}
+    />
   );
 }
 
@@ -278,7 +397,37 @@ export function DailyLogTodayRoute() {
   );
 }
 
-export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
+export function DailyLogView({
+  data,
+  disabled,
+  notice,
+  onCreateDay,
+  onSelectPlan,
+}: {
+  readonly data: DailyLogViewData;
+  readonly disabled: boolean;
+  readonly notice: string | null;
+  readonly onCreateDay: () => void;
+  readonly onSelectPlan: (plan: Domain.Plan) => void;
+}) {
+  return data._tag === "UnrecordedDay" ? (
+    <UnrecordedDailyLogView
+      data={data}
+      disabled={disabled}
+      notice={notice}
+      onCreateDay={onCreateDay}
+      onSelectPlan={onSelectPlan}
+    />
+  ) : (
+    <RecordedDailyLogView data={data} />
+  );
+}
+
+function RecordedDailyLogView({
+  data,
+}: {
+  readonly data: RecordedDailyLogViewData;
+}) {
   const mealOptions = [...data.day.selectedPlan.meals].sort(
     (left, right) => left.position - right.position
   );
@@ -286,32 +435,168 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
     foods: data.foods,
     mealEntries: data.mealEntries,
   }).totals;
+  const dateKey = data.day.dailyLog.dateKey;
+
+  return (
+    <View style={styles.screen}>
+      <AppScreen
+        contentStyle={styles.content}
+        safeAreaEdges={["top"]}
+        scroll
+        scrollProps={{
+          contentInsetAdjustmentBehavior: "never",
+        }}
+        style={styles.headerSafeArea}
+      >
+        <DayNavigationHeader dateKey={dateKey} />
+
+        <DailyProgress day={data.day} nutrients={nutrients} />
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            router.push({
+              pathname: "/days/[dateKey]/details",
+              params: {
+                dateKey,
+              },
+            });
+          }}
+          style={({ pressed }) => [
+            styles.dayDetailsAction,
+            pressed ? styles.pressed : null,
+          ]}
+        >
+          <Text style={styles.detailsText}>Details</Text>
+          <ChevronRight color={color.text} size={16} strokeWidth={3} />
+        </Pressable>
+
+        <View style={styles.meals}>
+          {mealOptions.map((mealOption) => (
+            <MealSection
+              dateKey={dateKey}
+              foods={data.foods}
+              key={mealOption.id}
+              meal={mealOption.id}
+              mealEntries={data.mealEntries.filter(
+                (mealEntry) => mealEntry.mealId === mealOption.id
+              )}
+              mealLabel={mealOption.name}
+            />
+          ))}
+        </View>
+      </AppScreen>
+
+      <DayBottomActionBar dateKey={dateKey} />
+    </View>
+  );
+}
+
+function UnrecordedDailyLogView({
+  data,
+  disabled,
+  notice,
+  onCreateDay,
+  onSelectPlan,
+}: {
+  readonly data: UnrecordedDailyLogViewData;
+  readonly disabled: boolean;
+  readonly notice: string | null;
+  readonly onCreateDay: () => void;
+  readonly onSelectPlan: (plan: Domain.Plan) => void;
+}) {
+  const dateKey = data.day.dateKey;
+
+  return (
+    <View style={styles.screen}>
+      <AppScreen
+        contentStyle={styles.unrecordedContent}
+        safeAreaEdges={["top"]}
+        scroll
+        scrollProps={{
+          contentInsetAdjustmentBehavior: "never",
+        }}
+        style={styles.headerSafeArea}
+      >
+        <DayNavigationHeader dateKey={dateKey} />
+
+        <View style={styles.unrecordedBody}>
+          <Notice
+            message="This day has not been recorded."
+            title="No day log"
+            tone="neutral"
+          />
+
+          {notice === null ? null : <Notice message={notice} tone="danger" />}
+
+          <View style={styles.unrecordedPlans}>
+            {data.day.plans.map((plan) => {
+              const selected = plan.id === data.day.selectedPlan.id;
+
+              return (
+                <MealPlanSummaryCard
+                  disabled={disabled || selected}
+                  isActive={selected}
+                  key={plan.id}
+                  onPress={() => {
+                    onSelectPlan(plan);
+                  }}
+                  plan={plan}
+                />
+              );
+            })}
+          </View>
+        </View>
+      </AppScreen>
+
+      <View style={styles.createDayActionBar}>
+        <Button
+          disabled={disabled}
+          icon={Plus}
+          loading={disabled}
+          onPress={onCreateDay}
+          style={styles.createDayButton}
+        >
+          Create day
+        </Button>
+      </View>
+
+      <DayBottomActionBar dateKey={dateKey} />
+    </View>
+  );
+}
+
+function DayNavigationHeader({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey;
+}) {
   const previousDateKey = shiftDateKey({
-    dateKey: data.day.dailyLog.dateKey,
+    dateKey,
     days: -1,
   });
   const nextDateKey = shiftDateKey({
-    dateKey: data.day.dailyLog.dateKey,
+    dateKey,
     days: 1,
   });
   const currentDateKey = todayDateKey();
   const displayedDateRelativeLabel =
-    data.day.dailyLog.dateKey === currentDateKey
+    dateKey === currentDateKey
       ? "Today"
-      : data.day.dailyLog.dateKey ===
+      : dateKey ===
           shiftDateKey({
             dateKey: currentDateKey,
             days: -1,
           })
         ? "Yesterday"
-        : data.day.dailyLog.dateKey ===
+        : dateKey ===
             shiftDateKey({
               dateKey: currentDateKey,
               days: 1,
             })
           ? "Tomorrow"
           : null;
-  const displayedDateValue = new Date(`${data.day.dailyLog.dateKey}T00:00:00`);
+  const displayedDateValue = new Date(`${dateKey}T00:00:00`);
   const displayedDate =
     displayedDateRelativeLabel === null
       ? {
@@ -329,147 +614,103 @@ export function DailyLogView({ data }: { readonly data: DailyLogViewData }) {
         };
 
   return (
-    <View style={styles.screen}>
-      <AppScreen
-        contentStyle={styles.content}
-        safeAreaEdges={["top"]}
-        scroll
-        scrollProps={{
-          contentInsetAdjustmentBehavior: "never",
-        }}
-        style={styles.headerSafeArea}
-      >
-        <AppHeader
-          center={
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                router.push("/");
-              }}
-              style={({ pressed }) => [
-                styles.dateButton,
-                pressed ? styles.headerPressed : null,
-              ]}
-            >
-              {displayedDate.eyebrow === null ? null : (
-                <Text style={styles.dateEyebrow}>{displayedDate.eyebrow}</Text>
-              )}
-              <Text adjustsFontSizeToFit numberOfLines={1} style={styles.date}>
-                {displayedDate.label}
-              </Text>
-            </Pressable>
-          }
-          embedded
-          leading={
-            <HeaderIconButton
-              accessibilityLabel="Previous day"
-              icon={ChevronLeft}
-              onPress={() => {
-                router.push({
-                  pathname: "/days/[dateKey]",
-                  params: {
-                    dateKey: previousDateKey,
-                  },
-                });
-              }}
-            />
-          }
-          shadow
-          style={styles.dayHeader}
-          trailing={
-            <HeaderIconButton
-              accessibilityLabel="Next day"
-              icon={ChevronRight}
-              onPress={() => {
-                router.push({
-                  pathname: "/days/[dateKey]",
-                  params: {
-                    dateKey: nextDateKey,
-                  },
-                });
-              }}
-            />
-          }
-        />
-
-        <DailyProgress day={data.day} nutrients={nutrients} />
-
+    <AppHeader
+      center={
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            router.push({
-              pathname: "/days/[dateKey]/details",
-              params: {
-                dateKey: data.day.dailyLog.dateKey,
-              },
-            });
+            router.push("/");
           }}
           style={({ pressed }) => [
-            styles.dayDetailsAction,
-            pressed ? styles.pressed : null,
+            styles.dateButton,
+            pressed ? styles.headerPressed : null,
           ]}
         >
-          <Text style={styles.detailsText}>Details</Text>
-          <ChevronRight color={color.text} size={16} strokeWidth={3} />
+          {displayedDate.eyebrow === null ? null : (
+            <Text style={styles.dateEyebrow}>{displayedDate.eyebrow}</Text>
+          )}
+          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.date}>
+            {displayedDate.label}
+          </Text>
         </Pressable>
-
-        <View style={styles.meals}>
-          {mealOptions.map((mealOption) => (
-            <MealSection
-              dateKey={data.day.dailyLog.dateKey}
-              foods={data.foods}
-              key={mealOption.id}
-              meal={mealOption.id}
-              mealEntries={data.mealEntries.filter(
-                (mealEntry) => mealEntry.mealId === mealOption.id
-              )}
-              mealLabel={mealOption.name}
-            />
-          ))}
-        </View>
-      </AppScreen>
-
-      <BottomActionBar variant="tab">
-        <BottomAction
-          icon={Activity}
-          label="Stats"
-          onPress={() => {
-            router.push("/insights");
-          }}
-        />
-        <BottomAction
-          icon={ClipboardList}
-          label="Plans"
+      }
+      embedded
+      leading={
+        <HeaderIconButton
+          accessibilityLabel="Previous day"
+          icon={ChevronLeft}
           onPress={() => {
             router.push({
-              pathname: "/plans",
+              pathname: "/days/[dateKey]",
               params: {
-                dateKey: data.day.dailyLog.dateKey,
+                dateKey: previousDateKey,
               },
             });
           }}
         />
-        <BottomAction
-          icon={Apple}
-          label="Foods"
+      }
+      shadow
+      style={styles.dayHeader}
+      trailing={
+        <HeaderIconButton
+          accessibilityLabel="Next day"
+          icon={ChevronRight}
           onPress={() => {
             router.push({
-              pathname: "/foods",
+              pathname: "/days/[dateKey]",
               params: {
-                dateKey: data.day.dailyLog.dateKey,
+                dateKey: nextDateKey,
               },
             });
           }}
         />
-        <BottomAction
-          icon={Download}
-          label="Backup"
-          onPress={() => {
-            router.push("/backup");
-          }}
-        />
-      </BottomActionBar>
-    </View>
+      }
+    />
+  );
+}
+
+function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
+  return (
+    <BottomActionBar variant="tab">
+      <BottomAction
+        icon={Activity}
+        label="Stats"
+        onPress={() => {
+          router.push("/insights");
+        }}
+      />
+      <BottomAction
+        icon={ClipboardList}
+        label="Plans"
+        onPress={() => {
+          router.push({
+            pathname: "/plans",
+            params: {
+              dateKey,
+            },
+          });
+        }}
+      />
+      <BottomAction
+        icon={Apple}
+        label="Foods"
+        onPress={() => {
+          router.push({
+            pathname: "/foods",
+            params: {
+              dateKey,
+            },
+          });
+        }}
+      />
+      <BottomAction
+        icon={Download}
+        label="Backup"
+        onPress={() => {
+          router.push("/backup");
+        }}
+      />
+    </BottomActionBar>
   );
 }
 
@@ -1100,11 +1341,28 @@ export function loadDailyLog({
       const dailyLogs = yield* DailyLogs.DailyLogs;
       const foodsService = yield* Foods.Foods;
       const mealEntriesService = yield* MealEntries.MealEntries;
-      const day = yield* dailyLogs.open({
-        input: {
-          dateKey,
-        },
-      });
+      const day = yield* dateKey === todayDateKey()
+        ? dailyLogs.openOrCreate({
+            input: {
+              dateKey,
+            },
+          })
+        : dailyLogs.open({
+            input: {
+              dateKey,
+            },
+          });
+
+      if (day._tag === "UnrecordedDay") {
+        return {
+          _tag: "Ready" as const,
+          data: {
+            _tag: "UnrecordedDay" as const,
+            day,
+          },
+        };
+      }
+
       const foods = yield* foodsService.list();
       const mealEntries = yield* mealEntriesService.listForDay({
         input: {
@@ -1113,8 +1371,9 @@ export function loadDailyLog({
       });
 
       return {
-        _tag: "OpenedDay" as const,
+        _tag: "Ready" as const,
         data: {
+          _tag: "RecordedDay" as const,
           day,
           foods,
           mealEntries,
@@ -1175,8 +1434,31 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     backgroundColor: color.bg,
   },
+  unrecordedContent: {
+    gap: 0,
+    paddingBottom: spacing.xl,
+    backgroundColor: color.bg,
+  },
   headerSafeArea: {
     backgroundColor: color.primary,
+  },
+  unrecordedBody: {
+    gap: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  unrecordedPlans: {
+    gap: spacing.md,
+  },
+  createDayButton: {
+    width: "100%",
+  },
+  createDayActionBar: {
+    backgroundColor: color.surfaceRaised,
+    borderTopColor: color.sheetBorder,
+    borderTopWidth: 1,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   centeredContent: {
     justifyContent: "center",

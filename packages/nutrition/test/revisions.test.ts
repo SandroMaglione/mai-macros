@@ -140,7 +140,7 @@ describe("nutrition revisions", () => {
     assert.equal(Object.keys(encodedFood).includes("basedOnFoodId"), false);
   });
 
-  it("updates unused plans in place and keeps the current date on the same plan", async () => {
+  it("updates unused plans in place without creating a daily log", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
@@ -197,7 +197,8 @@ describe("nutrition revisions", () => {
         },
       ]
     );
-    assert.equal(result.stores.dailyLogs[0]?.planId, planInput.id);
+    assert.equal(result.revised.dailyLog, null);
+    assert.equal(result.stores.dailyLogs.length, 0);
   });
 
   it("creates a new active plan when a daily log references the old plan", async () => {
@@ -328,7 +329,7 @@ describe("nutrition revisions", () => {
     );
   });
 
-  it("creates a current-date daily log for a revised used plan only when the date is empty", async () => {
+  it("does not create a current-date daily log for a revised used plan", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
@@ -371,7 +372,8 @@ describe("nutrition revisions", () => {
       })
     );
 
-    assert.equal(result.stores.dailyLogs.length, 2);
+    assert.equal(result.revised.dailyLog, null);
+    assert.equal(result.stores.dailyLogs.length, 1);
     assert.equal(
       result.stores.dailyLogs.find(
         (dailyLog) => dailyLog.dateKey === "2026-06-20"
@@ -381,8 +383,8 @@ describe("nutrition revisions", () => {
     assert.equal(
       result.stores.dailyLogs.find(
         (dailyLog) => dailyLog.dateKey === "2026-06-21"
-      )?.planId,
-      result.revised.plan.id
+      ),
+      undefined
     );
   });
 });

@@ -52,6 +52,10 @@ type AddMealFoodRouteLoadResult =
       readonly dateKey: Domain.DateKey;
     }
   | {
+      readonly _tag: "UnrecordedDay";
+      readonly dateKey: Domain.DateKey;
+    }
+  | {
       readonly _tag: "Ready";
       readonly data: AddMealFoodRouteData;
     };
@@ -345,6 +349,13 @@ const addMealFoodRouteLoaderMachine = setup({
             target: "Failed",
             actions: assign({
               message: "Could not find this meal.",
+            }),
+          },
+          {
+            guard: ({ event }) => event.output._tag === "UnrecordedDay",
+            target: "Failed",
+            actions: assign({
+              message: "Create this day before adding food.",
             }),
           },
           {
@@ -716,11 +727,25 @@ export function loadAddMealFoodRouteData({
     const dailyLogs = yield* DailyLogs.DailyLogs;
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
-    const day = yield* dailyLogs.open({
-      input: {
-        dateKey,
-      },
-    });
+    const day = yield* dateKey === todayDateKey()
+      ? dailyLogs.openOrCreate({
+          input: {
+            dateKey,
+          },
+        })
+      : dailyLogs.open({
+          input: {
+            dateKey,
+          },
+        });
+
+    if (day._tag === "UnrecordedDay") {
+      return {
+        _tag: "UnrecordedDay" as const,
+        dateKey: day.dateKey,
+      };
+    }
+
     const foods = yield* foodsService.list();
     const foodUsage = yield* mealEntriesService.listFoodUsage();
     const planMeal = day.selectedPlan.meals.find(

@@ -337,33 +337,16 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                   decodedInput.dateKey
                 );
                 const existingDailyLog = Array.head(dailyLogs);
-                const dateMealEntryCount = yield* store.countMealEntriesByDate(
-                  decodedInput.dateKey
-                );
                 const dailyLog = yield* planIsUsed
                   ? existingDailyLog.pipe(
                       Option.match({
-                        onNone: () =>
-                          dateMealEntryCount > 0
-                            ? Effect.succeed(null)
-                            : Schema.decodeEffect(DailyLog)({
-                                dateKey: decodedInput.dateKey,
-                                planId: plan.id,
-                                createdAt: now,
-                                updatedAt: now,
-                              }),
+                        onNone: () => Effect.succeed(null),
                         onSome: (dailyLog) => Effect.succeed(dailyLog),
                       })
                     )
                   : existingDailyLog.pipe(
                       Option.match({
-                        onNone: () =>
-                          Schema.decodeEffect(DailyLog)({
-                            dateKey: decodedInput.dateKey,
-                            planId: plan.id,
-                            createdAt: now,
-                            updatedAt: now,
-                          }),
+                        onNone: () => Effect.succeed(null),
                         onSome: (dailyLog) =>
                           Schema.encodeEffect(DailyLog)(dailyLog).pipe(
                             Effect.flatMap((encodedDailyLog) =>

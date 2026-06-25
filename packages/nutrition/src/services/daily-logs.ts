@@ -1,5 +1,4 @@
 import {
-  ActiveMealPlanSelection,
   DailyLog,
   DateKey,
   PlanId,
@@ -39,6 +38,14 @@ export class OpenedDay extends Data.TaggedClass("OpenedDay")<{
   readonly selectedPlan: Plan;
 }> {}
 
+export class UnrecordedDay extends Data.TaggedClass("UnrecordedDay")<{
+  readonly dateKey: DateKey;
+  readonly plans: readonly Plan[];
+  readonly selectedPlan: Plan;
+}> {}
+
+export type Day = OpenedDay | UnrecordedDay;
+
 export class ChangedDayPlan extends Data.TaggedClass("ChangedDayPlan")<{
   readonly dailyLog: DailyLog;
   readonly plans: readonly Plan[];
@@ -55,55 +62,26 @@ export class CannotChangeLoggedDayPlan extends Data.TaggedError(
   readonly dateKey: DateKey;
 }> {}
 
+export class DailyLogNotFound extends Data.TaggedError("DailyLogNotFound")<{
+  readonly dateKey: DateKey;
+}> {}
+
 export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
-
-    return {
-      open: Effect.fn("DailyLogs.open")(function* ({
-        input,
+    const findSelectedPlan = Effect.fn("DailyLogs.findSelectedPlan")(
+      function* ({
+        dateKey,
+        plans,
       }: {
-        readonly input: OpenDayInput;
+        readonly dateKey: DateKey;
+        readonly plans: readonly Plan[];
       }) {
-        const decodedInput = yield* Schema.decodeEffect(_OpenDayInput)(input);
-        const plans = yield* store.listPlans;
-
-        if (!Array.isReadonlyArrayNonEmpty(plans)) {
-          return yield* new NoMealPlans({
-            dateKey: decodedInput.dateKey,
-          });
-        }
-
-        const dailyLogs = yield* store.findDailyLogByDateKey(
-          decodedInput.dateKey
-        );
-        const existingDailyLog = Array.head(dailyLogs);
-
-        const openedDay = existingDailyLog.pipe(
-          Option.flatMap((dailyLog) =>
-            Array.findFirst(plans, (plan) => plan.id === dailyLog.planId).pipe(
-              Option.map(
-                (selectedPlan) =>
-                  new OpenedDay({
-                    dailyLog,
-                    plans,
-                    selectedPlan,
-                  })
-              )
-            )
-          ),
-          Option.getOrNull
-        );
-
-        if (openedDay !== null) {
-          return openedDay;
-        }
-
         const selections = yield* store.findActiveMealPlanSelectionById(
           "active-meal-plan" satisfies ActiveMealPlanSelectionId
         );
 
-        const activePlan = yield* Array.head(selections).pipe(
+        return yield* Array.head(selections).pipe(
           Option.flatMap((selection) =>
             Array.findFirst(plans, (plan) => plan.id === selection.planId)
           ),
@@ -111,54 +89,150 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
           Option.match({
             onNone: () =>
               new NoMealPlans({
-                dateKey: decodedInput.dateKey,
+                dateKey,
               }),
-            onSome: (selectedPlan) =>
-              Effect.gen(function* () {
-                const now = DateTime.toEpochMillis(yield* DateTime.now);
-                const activeSelection = yield* Schema.decodeEffect(
-                  ActiveMealPlanSelection
-                )({
-                  id: "active-meal-plan",
-                  planId: selectedPlan.id,
-                  updatedAt: now,
-                });
+            onSome: Effect.succeed,
+          })
+        );
+      }
+    );
+    const open = Effect.fn("DailyLogs.open")(function* ({
+      input,
+    }: {
+      readonly input: OpenDayInput;
+    }) {
+      const decodedInput = yield* Schema.decodeEffect(_OpenDayInput)(input);
+      const plans = yield* store.listPlans;
 
-                const dailyLog = yield* existingDailyLog.pipe(
-                  Option.match({
-                    onNone: () =>
-                      Schema.decodeEffect(DailyLog)({
+      if (!Array.isReadonlyArrayNonEmpty(plans)) {
+        return yield* new NoMealPlans({
+          dateKey: decodedInput.dateKey,
+        });
+      }
+
+      const dailyLogs = yield* store.findDailyLogByDateKey(
+        decodedInput.dateKey
+      );
+      const existingDailyLog = Array.head(dailyLogs);
+
+      const openedDay = existingDailyLog.pipe(
+        Option.flatMap((dailyLog) =>
+          Array.findFirst(plans, (plan) => plan.id === dailyLog.planId).pipe(
+            Option.map(
+              (selectedPlan) =>
+                new OpenedDay({
+                  dailyLog,
+                  plans,
+                  selectedPlan,
+                })
+            )
+          )
+        ),
+        Option.getOrNull
+      );
+
+      if (openedDay !== null) {
+        return openedDay;
+      }
+
+      const selectedPlan = yield* findSelectedPlan({
+        dateKey: decodedInput.dateKey,
+        plans,
+      });
+
+      return new UnrecordedDay({
+        dateKey: decodedInput.dateKey,
+        plans,
+        selectedPlan,
+      });
+    });
+    const create = Effect.fn("DailyLogs.create")(function* ({
+      input,
+    }: {
+      readonly input: ChangeDayPlanInput;
+    }) {
+      const decodedInput =
+        yield* Schema.decodeEffect(_ChangeDayPlanInput)(input);
+      const plans = yield* store.findPlanById(decodedInput.planId);
+
+      return yield* Array.head(plans).pipe(
+        Option.match({
+          onNone: () =>
+            new PlanNotFound({
+              planId: decodedInput.planId,
+            }),
+          onSome: (selectedPlan) =>
+            Effect.gen(function* () {
+              const allPlans = yield* store.listPlans;
+              const dailyLogs = yield* store.findDailyLogByDateKey(
+                decodedInput.dateKey
+              );
+              const existingDailyLog = Array.head(dailyLogs);
+              const dailyLog = yield* existingDailyLog.pipe(
+                Option.match({
+                  onNone: () =>
+                    Effect.gen(function* () {
+                      const now = DateTime.toEpochMillis(yield* DateTime.now);
+
+                      return yield* Schema.decodeEffect(DailyLog)({
                         dateKey: decodedInput.dateKey,
                         planId: selectedPlan.id,
                         createdAt: now,
                         updatedAt: now,
-                      }),
-                    onSome: (dailyLog) =>
-                      Schema.encodeEffect(DailyLog)(dailyLog).pipe(
-                        Effect.flatMap((encodedDailyLog) =>
-                          Schema.decodeEffect(DailyLog)({
-                            ...encodedDailyLog,
-                            planId: selectedPlan.id,
-                            updatedAt: now,
-                          })
-                        )
-                      ),
-                  })
-                );
+                      });
+                    }),
+                  onSome: Effect.succeed,
+                })
+              );
+              const openedPlan = yield* Array.findFirst(
+                allPlans,
+                (plan) => plan.id === dailyLog.planId
+              ).pipe(
+                Option.match({
+                  onNone: () =>
+                    new PlanNotFound({
+                      planId: dailyLog.planId,
+                    }),
+                  onSome: Effect.succeed,
+                })
+              );
 
-                yield* store.upsertActiveMealPlanSelection(activeSelection);
-                yield* store.upsertDailyLog(dailyLog);
+              yield* store.upsertDailyLog(dailyLog);
 
-                return new OpenedDay({
-                  dailyLog,
-                  plans,
-                  selectedPlan,
-                });
-              }),
-          })
-        );
+              return new OpenedDay({
+                dailyLog,
+                plans: allPlans,
+                selectedPlan: openedPlan,
+              });
+            }),
+        })
+      );
+    });
 
-        return activePlan;
+    return {
+      open,
+
+      create,
+
+      openOrCreate: Effect.fn("DailyLogs.openOrCreate")(function* ({
+        input,
+      }: {
+        readonly input: OpenDayInput;
+      }) {
+        const day = yield* open({
+          input,
+        });
+
+        if (day._tag === "OpenedDay") {
+          return day;
+        }
+
+        return yield* create({
+          input: {
+            dateKey: day.dateKey,
+            planId: day.selectedPlan.id,
+          },
+        });
       }),
 
       changePlan: Effect.fn("DailyLogs.changePlan")(function* ({
@@ -184,15 +258,19 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
                   decodedInput.dateKey
                 );
                 const existingDailyLog = Array.head(dailyLogs);
+                const dailyLog = yield* existingDailyLog.pipe(
+                  Option.match({
+                    onNone: () =>
+                      new DailyLogNotFound({
+                        dateKey: decodedInput.dateKey,
+                      }),
+                    onSome: Effect.succeed,
+                  })
+                );
                 const mealEntryCount = yield* store.countMealEntriesByDate(
                   decodedInput.dateKey
                 );
-                const changesExistingPlan = existingDailyLog.pipe(
-                  Option.match({
-                    onNone: () => false,
-                    onSome: (dailyLog) => dailyLog.planId !== selectedPlan.id,
-                  })
-                );
+                const changesExistingPlan = dailyLog.planId !== selectedPlan.id;
 
                 if (mealEntryCount > 0 && changesExistingPlan) {
                   return yield* new CannotChangeLoggedDayPlan({
@@ -201,32 +279,22 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
                 }
 
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
-                const dailyLog = yield* existingDailyLog.pipe(
-                  Option.match({
-                    onNone: () =>
-                      Schema.decodeEffect(DailyLog)({
-                        dateKey: decodedInput.dateKey,
-                        planId: selectedPlan.id,
-                        createdAt: now,
-                        updatedAt: now,
-                      }),
-                    onSome: (dailyLog) =>
-                      Schema.encodeEffect(DailyLog)(dailyLog).pipe(
-                        Effect.flatMap((encodedDailyLog) =>
-                          Schema.decodeEffect(DailyLog)({
-                            ...encodedDailyLog,
-                            planId: selectedPlan.id,
-                            updatedAt: now,
-                          })
-                        )
-                      ),
-                  })
+                const updatedDailyLog = yield* Schema.encodeEffect(DailyLog)(
+                  dailyLog
+                ).pipe(
+                  Effect.flatMap((encodedDailyLog) =>
+                    Schema.decodeEffect(DailyLog)({
+                      ...encodedDailyLog,
+                      planId: selectedPlan.id,
+                      updatedAt: now,
+                    })
+                  )
                 );
 
-                yield* store.upsertDailyLog(dailyLog);
+                yield* store.upsertDailyLog(updatedDailyLog);
 
                 return new ChangedDayPlan({
-                  dailyLog,
+                  dailyLog: updatedDailyLog,
                   plans: allPlans,
                   selectedPlan,
                 });

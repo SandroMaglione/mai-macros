@@ -10,6 +10,7 @@ import {
 } from "@/components/ui";
 import { FoodNutrientOverview } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
+import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
@@ -493,11 +494,24 @@ export function loadEditMealEntryRouteData({
     const dailyLogs = yield* DailyLogs.DailyLogs;
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
-    const day = yield* dailyLogs.open({
-      input: {
-        dateKey,
-      },
-    });
+    const day = yield* dateKey === todayDateKey()
+      ? dailyLogs.openOrCreate({
+          input: {
+            dateKey,
+          },
+        })
+      : dailyLogs.open({
+          input: {
+            dateKey,
+          },
+        });
+
+    if (day._tag === "UnrecordedDay") {
+      return {
+        _tag: "InvalidRoute" as const,
+      };
+    }
+
     const planMeal = day.selectedPlan.meals.find(
       (candidate) => candidate.id === meal
     );

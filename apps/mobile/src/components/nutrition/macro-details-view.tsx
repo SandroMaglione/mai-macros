@@ -6,6 +6,7 @@ import {
   LoadingView,
   Notice,
 } from "@/components/ui";
+import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
@@ -52,6 +53,10 @@ type MacroDetailsLoadResult =
     }
   | {
       readonly _tag: "NoMealPlans";
+      readonly dateKey: Domain.DateKey;
+    }
+  | {
+      readonly _tag: "UnrecordedDay";
       readonly dateKey: Domain.DateKey;
     }
   | {
@@ -201,6 +206,13 @@ const macroDetailsRouteMachine = setup({
             target: "Failed",
             actions: assign({
               message: "Could not find this meal.",
+            }),
+          },
+          {
+            guard: ({ event }) => event.output._tag === "UnrecordedDay",
+            target: "Failed",
+            actions: assign({
+              message: "Create this day before viewing details.",
             }),
           },
           {
@@ -722,11 +734,25 @@ export function loadMacroDetailsRouteData({
     const dailyLogs = yield* DailyLogs.DailyLogs;
     const foodsService = yield* Foods.Foods;
     const mealEntriesService = yield* MealEntries.MealEntries;
-    const day = yield* dailyLogs.open({
-      input: {
-        dateKey,
-      },
-    });
+    const day = yield* dateKey === todayDateKey()
+      ? dailyLogs.openOrCreate({
+          input: {
+            dateKey,
+          },
+        })
+      : dailyLogs.open({
+          input: {
+            dateKey,
+          },
+        });
+
+    if (day._tag === "UnrecordedDay") {
+      return {
+        _tag: "UnrecordedDay" as const,
+        dateKey: day.dateKey,
+      };
+    }
+
     const foods = yield* foodsService.list();
     const mealEntries = yield* mealEntriesService.listForDay({
       input: {
