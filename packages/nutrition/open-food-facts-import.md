@@ -42,3 +42,22 @@ pnpm run catalog:open-food-facts -- --limit 50000
 pnpm run catalog:open-food-facts -- --log-every 10000
 pnpm run catalog:open-food-facts -- --pause-at before-write
 ```
+
+Build a filtered candidate cache from the full Open Food Facts export:
+
+```sh
+nice -n 19 pnpm run catalog:open-food-facts -- --build-cache --yield-every 10000 --sleep-ms 20
+```
+
+Generate catalogs from the candidate cache without rescanning the full export:
+
+```sh
+pnpm run catalog:open-food-facts -- --from-cache
+```
+
+Tune cleanup rules on a smaller matched slice:
+
+```sh
+pnpm run catalog:open-food-facts -- --build-cache --max-matches-per-catalog 200
+pnpm run catalog:open-food-facts -- --from-cache --max-matches-per-catalog 200 --dry-run
+```
