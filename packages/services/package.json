@@ -13,6 +13,7 @@
   "dependencies": {
     "@mai/nutrition": "workspace:^",
     "effect": "4.0.0-beta.84",
+    "fflate": "0.8.3",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

@@ -7,10 +7,11 @@ import {
   MealPlans,
   NutritionReports,
 } from "@mai/nutrition";
-import { QrCode } from "@mai/services";
+import { Gzip, QrCode } from "@mai/services";
 import { ReactNativeSqlite } from "@mai/sqlite";
 import { Layer, ManagedRuntime } from "effect";
 
+import { ExpoBackupFileTransferLayer } from "./expo-backup-file-transfer.ts";
 import { ReactNativeCryptoLayer } from "./react-native-crypto.ts";
 
 const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
@@ -25,6 +26,8 @@ const MobileServicesLayer = Layer.mergeAll(
   FoodCatalogTransfer.FoodCatalogTransfers.layer,
   MealEntries.MealEntries.layer,
   NutritionReports.NutritionReports.layer,
+  ExpoBackupFileTransferLayer,
+  Gzip.Gzip.Default,
   QrCode.QrCode.Default
 );
 

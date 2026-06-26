@@ -18,7 +18,12 @@ import {
   FoodCatalogTransfer,
   LocalData as NutritionLocalData,
 } from "@mai/nutrition";
-import { FoodCatalogShare, QrCode as QrCodeService } from "@mai/services";
+import {
+  BackupFileTransfer,
+  FoodCatalogShare,
+  Gzip,
+  QrCode as QrCodeService,
+} from "@mai/services";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, DateTime, Effect } from "effect";
 import { router } from "expo-router";
@@ -56,6 +61,9 @@ type BackupRouteEvent =
     }
   | {
       readonly type: "import";
+    }
+  | {
+      readonly type: "importFile";
     };
 
 type BackupTabIndex = 0 | 1 | 2 | 3;
@@ -67,13 +75,18 @@ type FoodCatalogFoodId = FoodCatalogImportCandidate["food"]["id"];
 
 type MobileBackupExportResult = {
   readonly fileName: string;
-  readonly json: string;
   readonly message: string;
 };
 
-type MobileBackupImportResult = {
-  readonly message: string;
-};
+type MobileBackupImportResult =
+  | {
+      readonly message: string;
+      readonly status: "imported";
+    }
+  | {
+      readonly message: null;
+      readonly status: "canceled";
+    };
 
 type CatalogTransferRouteEvent =
   | {
@@ -143,8 +156,6 @@ const backupRouteMachine = setup({
       readonly activeTab: BackupTabIndex;
       readonly backupName: string;
       readonly errorMessage: string | null;
-      readonly exportedFileName: string | null;
-      readonly exportedJson: string;
       readonly importJson: string;
       readonly successMessage: string | null;
     },
@@ -157,14 +168,15 @@ const backupRouteMachine = setup({
     importBackup: fromPromise<MobileBackupImportResult, string>(({ input }) =>
       RuntimeClient.runPromise(importMobileBackup({ json: input }))
     ),
+    importBackupFile: fromPromise<MobileBackupImportResult>(() =>
+      RuntimeClient.runPromise(importMobileBackupFile)
+    ),
   },
 }).createMachine({
   context: () => ({
     activeTab: 0,
     backupName: "Mai backup",
     errorMessage: null,
-    exportedFileName: null,
-    exportedJson: "",
     importJson: "",
     successMessage: null,
   }),
@@ -216,6 +228,13 @@ const backupRouteMachine = setup({
             successMessage: null,
           }),
         },
+        importFile: {
+          target: "ImportingFile",
+          actions: assign({
+            errorMessage: null,
+            successMessage: null,
+          }),
+        },
       },
     },
     Exported: {
@@ -235,6 +254,13 @@ const backupRouteMachine = setup({
             successMessage: null,
           }),
         },
+        importFile: {
+          target: "ImportingFile",
+          actions: assign({
+            errorMessage: null,
+            successMessage: null,
+          }),
+        },
       },
     },
     Exporting: {
@@ -245,8 +271,6 @@ const backupRouteMachine = setup({
           target: "Exported",
           actions: assign(({ event }) => ({
             errorMessage: null,
-            exportedFileName: event.output.fileName,
-            exportedJson: event.output.json,
             successMessage: event.output.message,
           })),
         },
@@ -276,6 +300,13 @@ const backupRouteMachine = setup({
             successMessage: null,
           }),
         },
+        importFile: {
+          target: "ImportingFile",
+          actions: assign({
+            errorMessage: null,
+            successMessage: null,
+          }),
+        },
       },
     },
     Imported: {
@@ -295,6 +326,13 @@ const backupRouteMachine = setup({
             successMessage: null,
           }),
         },
+        importFile: {
+          target: "ImportingFile",
+          actions: assign({
+            errorMessage: null,
+            successMessage: null,
+          }),
+        },
       },
     },
     Importing: {
@@ -306,6 +344,25 @@ const backupRouteMachine = setup({
           actions: assign(({ event }) => ({
             errorMessage: null,
             importJson: "",
+            successMessage: event.output.message,
+          })),
+        },
+        onError: {
+          target: "Failure",
+          actions: assign(({ event }) => ({
+            errorMessage: backupErrorMessage({ error: event.error }),
+            successMessage: null,
+          })),
+        },
+      },
+    },
+    ImportingFile: {
+      invoke: {
+        src: "importBackupFile",
+        onDone: {
+          target: "Imported",
+          actions: assign(({ event }) => ({
+            errorMessage: null,
             successMessage: event.output.message,
           })),
         },
@@ -337,7 +394,7 @@ const catalogTransferMachine = setup({
   },
   actors: {
     exportCatalog: fromPromise<MobileCatalogExportResult>(() =>
-      RuntimeClient.runPromise(exportMobileFoodCatalog())
+      RuntimeClient.runPromise(exportMobileFoodCatalog)
     ),
     importSelectedCatalogFoods: fromPromise<
       MobileCatalogImportResult,
@@ -566,15 +623,9 @@ export default function BackupScreen() {
   const [snapshot, send] = useMachine(backupRouteMachine);
   const isExporting = snapshot.matches("Exporting");
   const isImporting = snapshot.matches("Importing");
-  const disabled = isExporting || isImporting;
-  const {
-    activeTab,
-    backupName,
-    errorMessage,
-    exportedFileName,
-    exportedJson,
-    importJson,
-  } = snapshot.context;
+  const isImportingFile = snapshot.matches("ImportingFile");
+  const disabled = isExporting || isImporting || isImportingFile;
+  const { activeTab, backupName, errorMessage, importJson } = snapshot.context;
   const tabs = [
     {
       accessibilityLabel: "Export backup",
@@ -648,8 +699,6 @@ export default function BackupScreen() {
                 <ExportBackupTab
                   backupName={backupName}
                   disabled={disabled}
-                  exportedFileName={exportedFileName}
-                  exportedJson={exportedJson}
                   onChangeBackupName={(value) => {
                     send({
                       backupName: value,
@@ -670,6 +719,8 @@ export default function BackupScreen() {
                 <ImportBackupTab
                   disabled={disabled}
                   importJson={importJson}
+                  importingFile={isImportingFile}
+                  importingJson={isImporting}
                   onChangeImportJson={(json) => {
                     send({
                       json,
@@ -679,6 +730,11 @@ export default function BackupScreen() {
                   onImport={() => {
                     send({
                       type: "import",
+                    });
+                  }}
+                  onImportFile={() => {
+                    send({
+                      type: "importFile",
                     });
                   }}
                 />
@@ -697,7 +753,13 @@ export default function BackupScreen() {
       </AppScreen>
 
       <LoadingOverlay
-        message={isImporting ? "Importing backup" : "Exporting backup"}
+        message={
+          isImporting
+            ? "Importing backup"
+            : isImportingFile
+              ? "Opening backup file"
+              : "Exporting backup"
+        }
         visible={disabled}
       />
     </View>
@@ -707,15 +769,11 @@ export default function BackupScreen() {
 function ExportBackupTab({
   backupName,
   disabled,
-  exportedFileName,
-  exportedJson,
   onChangeBackupName,
   onExport,
 }: {
   readonly backupName: string;
   readonly disabled: boolean;
-  readonly exportedFileName: string | null;
-  readonly exportedJson: string;
   readonly onChangeBackupName: (value: string) => void;
   readonly onExport: () => void;
 }) {
@@ -738,21 +796,13 @@ function ExportBackupTab({
             placeholder="Mai backup"
             value={backupName}
           />
-          {exportedJson === "" ? null : (
-            <TextArea
-              editable={false}
-              label={exportedFileName ?? "Exported JSON"}
-              selectTextOnFocus
-              value={exportedJson}
-            />
-          )}
           <Button
             disabled={disabled}
             icon={Download}
             loading={disabled}
             onPress={onExport}
           >
-            Export JSON
+            Export backup
           </Button>
         </View>
       </SectionCard>
@@ -763,13 +813,19 @@ function ExportBackupTab({
 function ImportBackupTab({
   disabled,
   importJson,
+  importingFile,
+  importingJson,
   onChangeImportJson,
   onImport,
+  onImportFile,
 }: {
   readonly disabled: boolean;
   readonly importJson: string;
+  readonly importingFile: boolean;
+  readonly importingJson: boolean;
   readonly onChangeImportJson: (json: string) => void;
   readonly onImport: () => void;
+  readonly onImportFile: () => void;
 }) {
   return (
     <KeyboardAwareScrollView
@@ -784,6 +840,15 @@ function ImportBackupTab({
           <Text style={styles.warningText}>
             Import replaces the current data on this device.
           </Text>
+          <Button
+            disabled={disabled}
+            icon={Upload}
+            loading={importingFile}
+            onPress={onImportFile}
+            variant="danger"
+          >
+            Choose backup file
+          </Button>
           <TextArea
             editable={!disabled}
             label="Backup JSON"
@@ -794,11 +859,11 @@ function ImportBackupTab({
           <Button
             disabled={disabled || importJson.trim() === ""}
             icon={Upload}
-            loading={disabled}
+            loading={importingJson}
             onPress={onImport}
             variant="danger"
           >
-            Import JSON
+            Import pasted JSON
           </Button>
         </View>
       </SectionCard>
@@ -1266,6 +1331,17 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
   );
 }
 
+const BackupImportMimeTypes = [
+  "application/gzip",
+  "application/json",
+  "application/octet-stream",
+  "application/x-gzip",
+  "text/plain",
+] as const;
+
+const GzipBackupMimeType = "application/gzip";
+const GzipBackupUti = "org.gnu.gnu-zip-archive";
+
 export function exportMobileBackup({
   backupName,
 }: {
@@ -1273,16 +1349,29 @@ export function exportMobileBackup({
 }) {
   return Effect.gen(function* () {
     const backups = yield* Backup.Backups;
+    const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+    const gzip = yield* Gzip.Gzip;
     const exportedBackup = yield* backups.exportToJson();
     const fileName = backupFileName({
       backup: exportedBackup.backup,
       backupName,
+      extension: "json.gz",
+    });
+    const bytes = yield* gzip.gzipText({
+      text: exportedBackup.json,
+    });
+
+    yield* fileTransfers.shareFile({
+      bytes,
+      dialogTitle: "Export backup",
+      fileName,
+      mimeType: GzipBackupMimeType,
+      uti: GzipBackupUti,
     });
 
     return {
       fileName,
-      json: exportedBackup.json,
-      message: `Exported ${fileName}. Select the JSON field to copy it.`,
+      message: `Opened share options for ${fileName}.`,
     } satisfies MobileBackupExportResult;
   });
 }
@@ -1298,51 +1387,81 @@ export function importMobileBackup({ json }: { readonly json: string }) {
 
     return {
       message: backupImportMessage({ backup: importedBackup.backup }),
+      status: "imported",
     } satisfies MobileBackupImportResult;
   });
 }
 
-export function exportMobileFoodCatalog() {
-  return Effect.gen(function* () {
-    const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const qrCodes = yield* QrCodeService.QrCode;
-    const exportedCatalog = yield* transfers.exportToJson();
-    const encodedShare = yield* FoodCatalogShare.encodeCatalogJson({
-      catalogJson: exportedCatalog.json,
-    });
-    const shareText = encodedShare.shareText;
-
-    const qr = encodedShare.size.tooLargeForSingleQr
-      ? ({
-          byteLength: encodedShare.size.encodedTextByteLength,
-          maxBytes: encodedShare.size.singleQrTextByteLimit,
-          status: "too-large",
-        } satisfies MobileCatalogQrResult)
-      : yield* Effect.matchEffect(qrCodes.generate(shareText), {
-          onFailure: (error) =>
-            Effect.succeed({
-              byteLength: encodedShare.size.encodedTextByteLength,
-              maxBytes: encodedShare.size.singleQrTextByteLimit,
-              reason: backupErrorMessage({ error }),
-              status: "unavailable",
-            } satisfies MobileCatalogQrResult),
-          onSuccess: (dataUrl) =>
-            Effect.succeed({
-              byteLength: encodedShare.size.encodedTextByteLength,
-              dataUrl,
-              maxBytes: encodedShare.size.singleQrTextByteLimit,
-              status: "ready",
-            } satisfies MobileCatalogQrResult),
-        });
-
-    return {
-      foodCount: exportedCatalog.catalog.integrity.counts.foods,
-      message: `Exported ${exportedCatalog.catalog.integrity.counts.foods} custom foods.`,
-      qr,
-      shareText,
-    } satisfies MobileCatalogExportResult;
+const importMobileBackupFile = Effect.gen(function* () {
+  const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+  const gzip = yield* Gzip.Gzip;
+  const pickedFile = yield* fileTransfers.pickFile({
+    mimeTypes: BackupImportMimeTypes,
   });
-}
+
+  if (pickedFile._tag === "BackupFilePickCanceled") {
+    return {
+      message: null,
+      status: "canceled",
+    } satisfies MobileBackupImportResult;
+  }
+
+  const json =
+    pickedFile.fileName.toLowerCase().endsWith(".gz") ||
+    Gzip.isGzipBytes({ bytes: pickedFile.bytes })
+      ? yield* gzip.gunzipText({
+          bytes: pickedFile.bytes,
+        })
+      : yield* gzip.bytesToText({
+          bytes: pickedFile.bytes,
+        });
+  const importedBackup = yield* importMobileBackup({ json });
+
+  return {
+    message: `Imported ${pickedFile.fileName}. ${importedBackup.message}`,
+    status: "imported",
+  } satisfies MobileBackupImportResult;
+});
+
+const exportMobileFoodCatalog = Effect.gen(function* () {
+  const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
+  const qrCodes = yield* QrCodeService.QrCode;
+  const exportedCatalog = yield* transfers.exportToJson();
+  const encodedShare = yield* FoodCatalogShare.encodeCatalogJson({
+    catalogJson: exportedCatalog.json,
+  });
+  const shareText = encodedShare.shareText;
+
+  const qr = encodedShare.size.tooLargeForSingleQr
+    ? ({
+        byteLength: encodedShare.size.encodedTextByteLength,
+        maxBytes: encodedShare.size.singleQrTextByteLimit,
+        status: "too-large",
+      } satisfies MobileCatalogQrResult)
+    : yield* Effect.matchEffect(qrCodes.generate(shareText), {
+        onFailure: (error) =>
+          Effect.succeed({
+            byteLength: encodedShare.size.encodedTextByteLength,
+            maxBytes: encodedShare.size.singleQrTextByteLimit,
+            reason: backupErrorMessage({ error }),
+            status: "unavailable",
+          } satisfies MobileCatalogQrResult),
+        onSuccess: (dataUrl) =>
+          Effect.succeed({
+            byteLength: encodedShare.size.encodedTextByteLength,
+            dataUrl,
+            maxBytes: encodedShare.size.singleQrTextByteLimit,
+            status: "ready",
+          } satisfies MobileCatalogQrResult),
+      });
+
+  return {
+    foodCount: exportedCatalog.catalog.integrity.counts.foods,
+    message: `Exported ${exportedCatalog.catalog.integrity.counts.foods} custom foods.`,
+    qr,
+    shareText,
+  } satisfies MobileCatalogExportResult;
+});
 
 export function previewMobileFoodCatalogImport({
   shareText,
@@ -1423,9 +1542,11 @@ const CatalogCandidateStatusTone: Record<
 export function backupFileName({
   backup,
   backupName,
+  extension = "json",
 }: {
   readonly backup: Backup.MaiBackup;
   readonly backupName: string;
+  readonly extension?: BackupFileExtension;
 }) {
   const exportedAt = new Date(DateTime.toEpochMillis(backup.source.exportedAt));
   const baseName = backupName.trim() === "" ? "mai-backup" : backupName.trim();
@@ -1436,8 +1557,10 @@ export function backupFileName({
   const fileNamePrefix =
     sanitizedName.trim() === "" ? "mai-backup" : sanitizedName;
 
-  return `${fileNamePrefix}-format-v${backup.formatVersion}-db-v${backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.json`;
+  return `${fileNamePrefix}-format-v${backup.formatVersion}-db-v${backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.${extension}`;
 }
+
+type BackupFileExtension = "json" | "json.gz";
 
 export function backupImportMessage({
   backup,
@@ -1454,6 +1577,14 @@ export function backupImportMessage({
 }
 
 export function backupErrorMessage({ error }: { readonly error: unknown }) {
+  if (error instanceof BackupFileTransfer.BackupFileTransferError) {
+    return error.detail;
+  }
+
+  if (error instanceof Gzip.GzipError) {
+    return error.detail;
+  }
+
   return error instanceof Error
     ? error.message
     : "The backup action could not finish.";
