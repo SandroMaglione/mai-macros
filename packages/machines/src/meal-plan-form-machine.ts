@@ -21,39 +21,24 @@ export type MealPlanFormMealValue = {
 
 export type MealPlanFormTextFieldName = keyof MealPlanFormValues;
 
-type MealPlanMealsMachineContext = {
-  readonly meals: readonly MealPlanFormMealValue[];
-};
-
-type MealPlanMealsMachineEvent =
-  | {
-      readonly type: "addMeal";
-    }
-  | {
-      readonly index: number;
-      readonly type: "changeMealName";
-      readonly value: string;
-    }
-  | {
-      readonly index: number;
-      readonly type: "removeMeal";
-    };
-
-type MealPlanFormMachineContext = {
-  readonly mealsActor: MealPlanMealsActorRef;
-  readonly values: MealPlanFormValues;
-};
-
-type MealPlanFormMachineEvent = {
-  readonly name: MealPlanFormTextFieldName;
-  readonly type: "changeField";
-  readonly value: string;
-};
-
 export const mealPlanMealsMachine = setup({
   types: {
-    context: {} as MealPlanMealsMachineContext,
-    events: {} as MealPlanMealsMachineEvent,
+    context: {} as {
+      readonly meals: readonly MealPlanFormMealValue[];
+    },
+    events: {} as
+      | {
+          readonly type: "addMeal";
+        }
+      | {
+          readonly index: number;
+          readonly type: "changeMealName";
+          readonly value: string;
+        }
+      | {
+          readonly index: number;
+          readonly type: "removeMeal";
+        },
     input: {} as {
       readonly initialPlan: Domain.Plan | null;
     },
@@ -100,8 +85,15 @@ export const mealPlanMealsMachine = setup({
 
 export const mealPlanFormMachine = setup({
   types: {
-    context: {} as MealPlanFormMachineContext,
-    events: {} as MealPlanFormMachineEvent,
+    context: {} as {
+      readonly mealsActor: MealPlanMealsActorRef;
+      readonly values: MealPlanFormValues;
+    },
+    events: {} as {
+      readonly name: MealPlanFormTextFieldName;
+      readonly type: "changeField";
+      readonly value: string;
+    },
     input: {} as {
       readonly initialPlan: Domain.Plan | null;
     },

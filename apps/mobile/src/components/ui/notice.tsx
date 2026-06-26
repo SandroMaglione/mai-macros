@@ -9,19 +9,17 @@ import {
 
 type NoticeTone = "neutral" | "success" | "danger" | "warning";
 
-type NoticeProps = {
-  readonly message: string;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly title?: string;
-  readonly tone?: NoticeTone;
-};
-
 export function Notice({
   message,
   style,
   title,
   tone = "neutral",
-}: NoticeProps) {
+}: {
+  readonly message: string;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly title?: string;
+  readonly tone?: NoticeTone;
+}) {
   return (
     <View style={[styles.root, toneStyles[tone], style]}>
       {title === undefined ? null : (

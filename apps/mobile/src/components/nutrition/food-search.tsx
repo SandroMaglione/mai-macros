@@ -19,16 +19,6 @@ import {
 } from "react-native";
 import { setup } from "xstate";
 
-type FoodSearchProps = {
-  readonly actor: FoodSearchMachine.FoodSearchActorRef;
-  readonly disabled?: boolean;
-  readonly emptyFoodsText?: string;
-  readonly emptySearchText?: string;
-  readonly getPrimaryLabel?: (food: Domain.Food) => string;
-  readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
-  readonly placeholder?: string;
-};
-
 const dominantMacronutrientIndicator = {
   carbs: {
     accessibilityLabel: "mostly carbs",
@@ -166,7 +156,15 @@ export function FoodSearch({
   getPrimaryLabel,
   getSecondaryLabel,
   placeholder = "Search food or brand",
-}: FoodSearchProps) {
+}: {
+  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly disabled?: boolean;
+  readonly emptyFoodsText?: string;
+  readonly emptySearchText?: string;
+  readonly getPrimaryLabel?: (food: Domain.Food) => string;
+  readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
+  readonly placeholder?: string;
+}) {
   return (
     <View style={styles.root}>
       <FoodSearchField

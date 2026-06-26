@@ -259,37 +259,6 @@ const isCurrentMaiBackupImportV1 = Schema.is(CurrentMaiBackupImportV1);
 
 const isLegacyMaiBackupImportV1 = Schema.is(LegacyMaiBackupImportV1);
 
-const _decodeMaiBackupImportJson = Effect.fn("_decodeMaiBackupImportJson")(
-  function* ({ json }: { readonly json: string }) {
-    const rawBackup = yield* Schema.decodeEffect(MaiBackupUnknownJson)(json);
-    const versionProbe = yield* Schema.decodeUnknownEffect(
-      MaiBackupImportVersionProbe
-    )(rawBackup);
-
-    if (versionProbe.source.databaseVersion === 1) {
-      return yield* Schema.decodeUnknownEffect(
-        LegacyMaiBackupV1DatabaseVersion1
-      )(rawBackup);
-    }
-
-    if (versionProbe.source.databaseVersion === 2) {
-      return yield* Schema.decodeUnknownEffect(
-        LegacyMaiBackupV1DatabaseVersion2
-      )(rawBackup);
-    }
-
-    if (versionProbe.source.databaseVersion === 3) {
-      return yield* Schema.decodeUnknownEffect(
-        LegacyMaiBackupV1DatabaseVersion3
-      )(rawBackup);
-    }
-
-    return yield* Schema.decodeUnknownEffect(CurrentMaiBackupImportV1)(
-      rawBackup
-    );
-  }
-);
-
 const ImportBackupJsonInputSchema = Schema.Struct({
   json: Schema.String,
 });
@@ -337,8 +306,37 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       const foods = yield* Effect.forEach(currentBackup.stores.foods, (food) =>
         _foodFromBackupImport({ food, originFallback: "user" })
       );
-      const plans = yield* Effect.forEach(currentBackup.stores.plans, (plan) =>
-        _planFromBackupImport({ plan })
+      const plans = yield* Effect.forEach(
+        currentBackup.stores.plans,
+        Effect.fn("_planFromBackupImport")(function* (plan: BackupImportPlan) {
+          const encodedPlan =
+            yield* Schema.encodeEffect(BackupImportPlan)(plan);
+          const {
+            basedOnPlanId,
+            meals: encodedMeals,
+            ...planWithoutLineage
+          } = encodedPlan;
+          void basedOnPlanId;
+          const meals = yield* Effect.forEach(encodedMeals, (meal) => {
+            const { basedOnMealId, order, position, ...mealWithoutLineage } =
+              meal;
+            void basedOnMealId;
+            const mealPosition = position ?? order;
+
+            return Schema.decodeUnknownEffect(PlanMeal)({
+              ...mealWithoutLineage,
+              ...(mealPosition === undefined ? {} : { position: mealPosition }),
+            });
+          });
+          const encodedCurrentMeals = yield* Schema.encodeEffect(
+            Schema.Array(PlanMeal)
+          )(meals);
+
+          return yield* Schema.decodeEffect(Plan)({
+            ...planWithoutLineage,
+            meals: encodedCurrentMeals,
+          });
+        })
       );
       const activeMealPlanSelections = yield* Schema.encodeEffect(
         Schema.Array(ActiveMealPlanSelection)
@@ -487,38 +485,6 @@ const _foodFromBackupImport = Effect.fn("_foodFromBackupImport")(function* ({
   return yield* Schema.decodeEffect(Food)({
     ...foodWithoutLineage,
     origin: foodWithoutLineage.origin ?? originFallback,
-  });
-});
-
-const _planFromBackupImport = Effect.fn("_planFromBackupImport")(function* ({
-  plan,
-}: {
-  readonly plan: BackupImportPlan;
-}) {
-  const encodedPlan = yield* Schema.encodeEffect(BackupImportPlan)(plan);
-  const {
-    basedOnPlanId,
-    meals: encodedMeals,
-    ...planWithoutLineage
-  } = encodedPlan;
-  void basedOnPlanId;
-  const meals = yield* Effect.forEach(encodedMeals, (meal) => {
-    const { basedOnMealId, order, position, ...mealWithoutLineage } = meal;
-    void basedOnMealId;
-    const mealPosition = position ?? order;
-
-    return Schema.decodeUnknownEffect(PlanMeal)({
-      ...mealWithoutLineage,
-      ...(mealPosition === undefined ? {} : { position: mealPosition }),
-    });
-  });
-  const encodedCurrentMeals = yield* Schema.encodeEffect(
-    Schema.Array(PlanMeal)
-  )(meals);
-
-  return yield* Schema.decodeEffect(Plan)({
-    ...planWithoutLineage,
-    meals: encodedCurrentMeals,
   });
 });
 
@@ -746,9 +712,28 @@ export class Backups extends Context.Service<Backups>()("Backups", {
         const decodedInput = yield* Schema.decodeEffect(
           ImportBackupJsonInputSchema
         )(input);
-        const importBackup = yield* _decodeMaiBackupImportJson({
-          json: decodedInput.json,
-        });
+        const rawBackup = yield* Schema.decodeEffect(MaiBackupUnknownJson)(
+          decodedInput.json
+        );
+        const versionProbe = yield* Schema.decodeUnknownEffect(
+          MaiBackupImportVersionProbe
+        )(rawBackup);
+        const importBackup =
+          versionProbe.source.databaseVersion === 1
+            ? yield* Schema.decodeUnknownEffect(
+                LegacyMaiBackupV1DatabaseVersion1
+              )(rawBackup)
+            : versionProbe.source.databaseVersion === 2
+              ? yield* Schema.decodeUnknownEffect(
+                  LegacyMaiBackupV1DatabaseVersion2
+                )(rawBackup)
+              : versionProbe.source.databaseVersion === 3
+                ? yield* Schema.decodeUnknownEffect(
+                    LegacyMaiBackupV1DatabaseVersion3
+                  )(rawBackup)
+                : yield* Schema.decodeUnknownEffect(CurrentMaiBackupImportV1)(
+                    rawBackup
+                  );
         const backup = yield* migrateBackupToCurrent({ backup: importBackup });
 
         yield* validateBackup({ backup });

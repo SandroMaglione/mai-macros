@@ -26,8 +26,6 @@ export type LocalDataResetEvent =
       readonly type: "reset";
     };
 
-type RestartApp = () => Promise<void> | void;
-
 const ResetLocalData = Effect.gen(function* () {
   const localData = yield* NutritionLocalData.LocalData;
 
@@ -41,7 +39,7 @@ export const makeLocalDataResetMachine = ({
   restartApp,
   runtime,
 }: {
-  readonly restartApp: RestartApp;
+  readonly restartApp: () => Promise<void> | void;
   readonly runtime: MachineRuntime<NutritionLocalData.LocalData>;
 }) =>
   setup({

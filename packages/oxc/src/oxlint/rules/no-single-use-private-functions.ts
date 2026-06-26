@@ -1,5 +1,7 @@
 type Node = {
+  arguments?: Array<Node>;
   body?: Array<Node>;
+  callee?: Node;
   declaration?: Node | null;
   declarations?: Array<Node>;
   expression?: Node;
@@ -8,11 +10,14 @@ type Node = {
   init?: Node | null;
   local?: Node | null;
   name?: string;
+  object?: Node;
   parent?: Node;
+  property?: Node;
   right?: Node;
   source?: Node | null;
   specifiers?: Array<Node>;
   type: string;
+  value?: string;
 };
 
 type Reference = {
@@ -30,6 +35,7 @@ type SourceCode = {
 };
 
 type Candidate = {
+  kind: "effect-function" | "effect-program" | "function" | "type";
   name: string;
   node: Node;
   variable: ScopeVariable;
@@ -45,11 +51,91 @@ const _isFunctionExpression = ({ node }: { node: Node | null | undefined }) =>
 
 const _isPascalCase = ({ name }: { name: string }) => /^[A-Z]/.test(name);
 
-const _isTopLevelFunctionVariable = ({ node }: { node: Node }) =>
+const _memberPropertyName = ({ node }: { node: Node }) => {
+  if (node.property?.type === "Identifier") {
+    return node.property.name;
+  }
+
+  if (typeof node.property?.value === "string") {
+    return node.property.value;
+  }
+
+  return undefined;
+};
+
+const _effectCalleeName = ({ node }: { node: Node }) => {
+  if (
+    node.type !== "MemberExpression" ||
+    node.object?.type !== "Identifier" ||
+    node.object.name !== "Effect"
+  ) {
+    return undefined;
+  }
+
+  return _memberPropertyName({ node });
+};
+
+const _isEffectCall = ({
+  name,
+  node,
+}: {
+  name: "fn" | "fnUntraced" | "gen";
+  node: Node | null | undefined;
+}) =>
+  node?.type === "CallExpression" &&
+  node.callee !== undefined &&
+  _effectCalleeName({ node: node.callee }) === name;
+
+const _isEffectFunctionInitializer = ({
+  node,
+}: {
+  node: Node | null | undefined;
+}) =>
+  _isEffectCall({ name: "fnUntraced", node }) ||
+  _isEffectCall({ name: "fn", node }) ||
+  (node?.type === "CallExpression" &&
+    node.callee !== undefined &&
+    _isEffectCall({ name: "fn", node: node.callee }));
+
+const _isEffectProgramInitializer = ({
+  node,
+}: {
+  node: Node | null | undefined;
+}) => _isEffectCall({ name: "gen", node });
+
+const _topLevelVariableKind = ({
+  node,
+}: {
+  node: Node;
+}): Candidate["kind"] | undefined => {
+  if (
+    node.id?.type !== "Identifier" ||
+    node.parent?.type !== "VariableDeclaration" ||
+    node.parent.parent?.type !== "Program"
+  ) {
+    return undefined;
+  }
+
+  if (_isFunctionExpression({ node: node.init })) {
+    return "function";
+  }
+
+  if (_isEffectFunctionInitializer({ node: node.init })) {
+    return "effect-function";
+  }
+
+  if (_isEffectProgramInitializer({ node: node.init })) {
+    return "effect-program";
+  }
+
+  return undefined;
+};
+
+const _isTopLevelTypeDeclaration = ({ node }: { node: Node }) =>
+  (node.type === "TSTypeAliasDeclaration" ||
+    node.type === "TSInterfaceDeclaration") &&
   node.id?.type === "Identifier" &&
-  _isFunctionExpression({ node: node.init }) &&
-  node.parent?.type === "VariableDeclaration" &&
-  node.parent.parent?.type === "Program";
+  node.parent?.type === "Program";
 
 const _addIdentifierName = ({
   names,
@@ -79,6 +165,13 @@ const _addDeclarationNames = ({
     for (const variable of declaration.declarations ?? []) {
       _addIdentifierName({ names, node: variable.id });
     }
+  }
+
+  if (
+    declaration?.type === "TSTypeAliasDeclaration" ||
+    declaration?.type === "TSInterfaceDeclaration"
+  ) {
+    _addIdentifierName({ names, node: declaration.id });
   }
 };
 
@@ -144,7 +237,9 @@ const _functionDeclarationCandidate = ({
 
   const variable = _declaredVariable({ name, node, sourceCode });
 
-  return variable === undefined ? [] : [{ name, node, variable }];
+  return variable === undefined
+    ? []
+    : [{ kind: "function", name, node, variable }];
 };
 
 const _variableDeclarationCandidate = ({
@@ -157,19 +252,44 @@ const _variableDeclarationCandidate = ({
   sourceCode: SourceCode;
 }): Array<Candidate> => {
   const name = node.id?.name;
+  const kind = _topLevelVariableKind({ node });
 
   if (
     name === undefined ||
+    kind === undefined ||
     _isPascalCase({ name }) ||
-    exportedNames.has(name) ||
-    !_isTopLevelFunctionVariable({ node })
+    exportedNames.has(name)
   ) {
     return [];
   }
 
   const variable = _declaredVariable({ name, node, sourceCode });
 
-  return variable === undefined ? [] : [{ name, node, variable }];
+  return variable === undefined ? [] : [{ kind, name, node, variable }];
+};
+
+const _typeDeclarationCandidate = ({
+  exportedNames,
+  node,
+  sourceCode,
+}: {
+  exportedNames: Set<string>;
+  node: Node;
+  sourceCode: SourceCode;
+}): Array<Candidate> => {
+  const name = node.id?.name;
+
+  if (
+    name === undefined ||
+    exportedNames.has(name) ||
+    !_isTopLevelTypeDeclaration({ node })
+  ) {
+    return [];
+  }
+
+  const variable = _declaredVariable({ name, node, sourceCode });
+
+  return variable === undefined ? [] : [{ kind: "type", name, node, variable }];
 };
 
 const _topLevelCandidates = ({
@@ -190,17 +310,28 @@ const _topLevelCandidates = ({
       });
     }
 
-    if (statement.type !== "VariableDeclaration") {
-      return [];
+    if (
+      statement.type === "TSTypeAliasDeclaration" ||
+      statement.type === "TSInterfaceDeclaration"
+    ) {
+      return _typeDeclarationCandidate({
+        exportedNames,
+        node: statement,
+        sourceCode,
+      });
     }
 
-    return (statement.declarations ?? []).flatMap((declaration) =>
-      _variableDeclarationCandidate({
-        exportedNames,
-        node: declaration,
-        sourceCode,
-      })
-    );
+    if (statement.type === "VariableDeclaration") {
+      return (statement.declarations ?? []).flatMap((declaration) =>
+        _variableDeclarationCandidate({
+          exportedNames,
+          node: declaration,
+          sourceCode,
+        })
+      );
+    }
+
+    return [];
   });
 
 const _hasTypeAncestor = ({ node }: { node: Node }) => {
@@ -257,8 +388,41 @@ const _runtimeReadCount = ({ variable }: { variable: ScopeVariable }) =>
     _isRuntimeReadReference({ reference })
   ).length;
 
-const _message = ({ name }: { name: string }) =>
-  `Inline the private function "${name}" at its only usage site instead of defining it as a top-level function.`;
+const _isTypeReadReference = ({ reference }: { reference: Reference }) =>
+  reference.isRead() &&
+  _hasTypeAncestor({ node: reference.identifier }) &&
+  !_hasExportAncestor({ node: reference.identifier });
+
+const _typeReadCount = ({ variable }: { variable: ScopeVariable }) =>
+  variable.references.filter((reference) => _isTypeReadReference({ reference }))
+    .length;
+
+const _singleUseCount = ({ candidate }: { candidate: Candidate }) =>
+  candidate.kind === "type"
+    ? _typeReadCount({ variable: candidate.variable })
+    : _runtimeReadCount({ variable: candidate.variable });
+
+const _message = ({
+  kind,
+  name,
+}: {
+  kind: Candidate["kind"];
+  name: string;
+}) => {
+  if (kind === "effect-function") {
+    return `Inline the private Effect function "${name}" at its only usage site instead of defining it as a top-level function.`;
+  }
+
+  if (kind === "effect-program") {
+    return `Inline the private Effect program "${name}" at its only usage site instead of defining it as a top-level value.`;
+  }
+
+  if (kind === "type") {
+    return `Inline the private type "${name}" at its only usage site instead of defining it as a top-level type.`;
+  }
+
+  return `Inline the private function "${name}" at its only usage site instead of defining it as a top-level function.`;
+};
 
 const rule = {
   meta: {
@@ -281,13 +445,16 @@ const rule = {
         });
 
         for (const candidate of candidates) {
-          if (_runtimeReadCount({ variable: candidate.variable }) !== 1) {
+          if (_singleUseCount({ candidate }) !== 1) {
             continue;
           }
 
           context.report({
             node: candidate.node,
-            message: _message({ name: candidate.name }),
+            message: _message({
+              kind: candidate.kind,
+              name: candidate.name,
+            }),
           });
         }
       },

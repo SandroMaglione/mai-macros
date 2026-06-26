@@ -11,7 +11,15 @@ import {
   type Edges,
 } from "react-native-safe-area-context";
 
-type AppScreenProps = {
+export function AppScreen({
+  children,
+  contentStyle,
+  safeAreaEdges = ["top", "bottom"],
+  scroll = false,
+  scrollProps,
+  style,
+  topSafeAreaColor,
+}: {
   readonly children: ReactNode;
   readonly contentStyle?: StyleProp<ViewStyle>;
   readonly safeAreaEdges?: Edges;
@@ -22,17 +30,7 @@ type AppScreenProps = {
   >;
   readonly style?: StyleProp<ViewStyle>;
   readonly topSafeAreaColor?: string;
-};
-
-export function AppScreen({
-  children,
-  contentStyle,
-  safeAreaEdges = ["top", "bottom"],
-  scroll = false,
-  scrollProps,
-  style,
-  topSafeAreaColor,
-}: AppScreenProps) {
+}) {
   const insets = useSafeAreaInsets();
 
   return (

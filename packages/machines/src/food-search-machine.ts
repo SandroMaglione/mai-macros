@@ -98,15 +98,6 @@ const foodOriginThenNameOrder = Order.combineAll([
   foodUserOriginOrder,
   foodLowercaseNameOrder,
 ]);
-type FoodMacroValueKey =
-  | "carbsGramsPer100g"
-  | "energyKcalPer100g"
-  | "fatGramsPer100g"
-  | "fiberGramsPer100g"
-  | "proteinGramsPer100g"
-  | "saltGramsPer100g"
-  | "saturatedFatGramsPer100g"
-  | "sugarGramsPer100g";
 const foodMacroOrderValueKey = {
   carbs: "carbsGramsPer100g",
   energy: "energyKcalPer100g",
@@ -116,7 +107,17 @@ const foodMacroOrderValueKey = {
   salt: "saltGramsPer100g",
   saturatedFat: "saturatedFatGramsPer100g",
   sugar: "sugarGramsPer100g",
-} satisfies Record<FoodSearchMacroOrder, FoodMacroValueKey>;
+} satisfies Record<
+  FoodSearchMacroOrder,
+  | "carbsGramsPer100g"
+  | "energyKcalPer100g"
+  | "fatGramsPer100g"
+  | "fiberGramsPer100g"
+  | "proteinGramsPer100g"
+  | "saltGramsPer100g"
+  | "saturatedFatGramsPer100g"
+  | "sugarGramsPer100g"
+>;
 
 export function getFoodCategoryLabel({
   category,

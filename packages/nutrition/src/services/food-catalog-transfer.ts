@@ -277,9 +277,37 @@ export class FoodCatalogTransfers extends Context.Service<FoodCatalogTransfers>(
             const foods = yield* store.listFoods;
             const catalogFoods = yield* Effect.forEach(
               foods.filter((food) => food.origin === "user"),
-              _foodCatalogFoodFromFood
+              Effect.fn("_foodCatalogFoodFromFood")(function* (food: Food) {
+                const encodedFood = yield* Schema.encodeEffect(Food)(food);
+
+                return yield* Schema.decodeUnknownEffect(FoodCatalogFood)(
+                  encodedFood
+                );
+              })
             );
-            const catalog = yield* _makeFoodCatalog({ foods: catalogFoods });
+            const encodedFoods = yield* Schema.encodeEffect(
+              Schema.Array(FoodCatalogFood)
+            )(catalogFoods);
+            const catalog = yield* Schema.decodeEffect(MaiFoodCatalogV1)({
+              format: "mai.food-catalog",
+              formatVersion: 1,
+              integrity: {
+                counts: {
+                  foods: encodedFoods.length,
+                },
+              },
+              source: {
+                databaseName: DatabaseName,
+                databaseVersion: CurrentDatabaseVersion,
+                exportedAt: DateTime.toEpochMillis(yield* DateTime.now),
+              },
+              stores: {
+                foods: encodedFoods,
+              },
+            } satisfies MaiFoodCatalogEncoded);
+
+            yield* validateFoodCatalog({ catalog });
+
             const json =
               yield* Schema.encodeEffect(MaiFoodCatalogJson)(catalog);
 
@@ -342,7 +370,14 @@ export class FoodCatalogTransfers extends Context.Service<FoodCatalogTransfers>(
             catalog.stores.foods.filter((food) =>
               selectedFoodIds.includes(food.id)
             ),
-            (food) => _normalizedFoodFromCatalogFood({ food })
+            Effect.fn("_normalizedFoodFromCatalogFood")(function* (
+              food: FoodCatalogFood
+            ) {
+              const encodedFood =
+                yield* Schema.encodeEffect(FoodCatalogFood)(food);
+
+              return yield* Schema.decodeEffect(Food)(encodedFood);
+            })
           );
 
           yield* store.upsertFoods(importedFoods);
@@ -398,7 +433,17 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
   );
   const foods = yield* Effect.forEach(
     catalogImport.stores.foods,
-    _foodCatalogFoodFromImportFood
+    Effect.fn("_foodCatalogFoodFromImportFood")(function* (
+      food: FoodCatalogImportFood
+    ) {
+      const encodedFood = yield* Schema.encodeEffect(FoodCatalogImportFood)(
+        food
+      );
+      const { basedOnFoodId, ...foodWithoutLineage } = encodedFood;
+      void basedOnFoodId;
+
+      return yield* Schema.decodeEffect(FoodCatalogFood)(foodWithoutLineage);
+    })
   );
   const encodedFoods = yield* Schema.encodeEffect(
     Schema.Array(FoodCatalogFood)
@@ -422,24 +467,6 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
   return catalog;
 });
 
-const _foodCatalogFoodFromFood = Effect.fn("_foodCatalogFoodFromFood")(
-  function* (food: Food) {
-    const encodedFood = yield* Schema.encodeEffect(Food)(food);
-
-    return yield* Schema.decodeUnknownEffect(FoodCatalogFood)(encodedFood);
-  }
-);
-
-const _foodCatalogFoodFromImportFood = Effect.fn(
-  "_foodCatalogFoodFromImportFood"
-)(function* (food: FoodCatalogImportFood) {
-  const encodedFood = yield* Schema.encodeEffect(FoodCatalogImportFood)(food);
-  const { basedOnFoodId, ...foodWithoutLineage } = encodedFood;
-  void basedOnFoodId;
-
-  return yield* Schema.decodeEffect(FoodCatalogFood)(foodWithoutLineage);
-});
-
 const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
   function* ({
     catalog,
@@ -461,10 +488,18 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
         )
           ? "same-name-local"
           : "unique";
-        const status = yield* _foodCatalogImportCandidateStatus({
-          food,
-          localFoods,
-        });
+        const localFood = localFoods.find(
+          (candidate) => candidate.id === food.id
+        );
+        const status =
+          localFood === undefined
+            ? ("new" satisfies FoodCatalogImportCandidateStatus)
+            : Equal.equals(
+                  yield* Schema.encodeEffect(FoodCatalogFood)(food),
+                  yield* Schema.encodeEffect(Food)(localFood)
+                )
+              ? ("already-present" satisfies FoodCatalogImportCandidateStatus)
+              : ("id-conflict" satisfies FoodCatalogImportCandidateStatus);
 
         return {
           food,
@@ -480,29 +515,6 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
     );
   }
 );
-
-const _foodCatalogImportCandidateStatus = Effect.fn(
-  "_foodCatalogImportCandidateStatus"
-)(function* ({
-  food,
-  localFoods,
-}: {
-  readonly food: FoodCatalogFood;
-  readonly localFoods: readonly Food[];
-}) {
-  const localFood = localFoods.find((candidate) => candidate.id === food.id);
-
-  if (localFood === undefined) {
-    return "new" satisfies FoodCatalogImportCandidateStatus;
-  }
-
-  const encodedFood = yield* Schema.encodeEffect(FoodCatalogFood)(food);
-  const encodedLocalFood = yield* Schema.encodeEffect(Food)(localFood);
-
-  return Equal.equals(encodedFood, encodedLocalFood)
-    ? ("already-present" satisfies FoodCatalogImportCandidateStatus)
-    : ("id-conflict" satisfies FoodCatalogImportCandidateStatus);
-});
 
 function _foodCatalogImportCandidateSelection({
   nameStatus,
@@ -533,42 +545,3 @@ function _foodCatalogImportCandidateSelection({
     selectable,
   };
 }
-
-const _makeFoodCatalog = Effect.fn("_makeFoodCatalog")(function* ({
-  foods,
-}: {
-  readonly foods: readonly FoodCatalogFood[];
-}) {
-  const encodedFoods = yield* Schema.encodeEffect(
-    Schema.Array(FoodCatalogFood)
-  )(foods);
-  const catalog = yield* Schema.decodeEffect(MaiFoodCatalogV1)({
-    format: "mai.food-catalog",
-    formatVersion: 1,
-    integrity: {
-      counts: {
-        foods: encodedFoods.length,
-      },
-    },
-    source: {
-      databaseName: DatabaseName,
-      databaseVersion: CurrentDatabaseVersion,
-      exportedAt: DateTime.toEpochMillis(yield* DateTime.now),
-    },
-    stores: {
-      foods: encodedFoods,
-    },
-  } satisfies MaiFoodCatalogEncoded);
-
-  yield* validateFoodCatalog({ catalog });
-
-  return catalog;
-});
-
-const _normalizedFoodFromCatalogFood = Effect.fn(
-  "_normalizedFoodFromCatalogFood"
-)(function* ({ food }: { readonly food: FoodCatalogFood }) {
-  const encodedFood = yield* Schema.encodeEffect(FoodCatalogFood)(food);
-
-  return yield* Schema.decodeEffect(Food)(encodedFood);
-});

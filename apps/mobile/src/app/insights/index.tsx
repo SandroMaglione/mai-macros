@@ -34,25 +34,23 @@ type LoadResult =
 
 type InsightsRouter = ReturnType<typeof useRouter>;
 
-type InsightsRouteContext =
-  | {
-      readonly _tag: "Failure";
-      readonly message: string;
-      readonly router: InsightsRouter;
-    }
-  | {
-      readonly _tag: "Loaded";
-      readonly report: NutritionReports.NutritionReportRange;
-      readonly router: InsightsRouter;
-    }
-  | {
-      readonly _tag: "Loading";
-      readonly router: InsightsRouter;
-    };
-
 const insightsRouteMachine = setup({
   types: {
-    context: {} as InsightsRouteContext,
+    context: {} as
+      | {
+          readonly _tag: "Failure";
+          readonly message: string;
+          readonly router: InsightsRouter;
+        }
+      | {
+          readonly _tag: "Loaded";
+          readonly report: NutritionReports.NutritionReportRange;
+          readonly router: InsightsRouter;
+        }
+      | {
+          readonly _tag: "Loading";
+          readonly router: InsightsRouter;
+        },
     events: {} as {
       readonly type: "retry";
     },

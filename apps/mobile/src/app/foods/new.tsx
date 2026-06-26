@@ -16,23 +16,6 @@ import {
   type ActorRefFrom,
 } from "xstate";
 
-type SearchDecodeResult =
-  | {
-      readonly _tag: "Valid";
-      readonly dateKey: Domain.DateKey | undefined;
-    }
-  | {
-      readonly _tag: "Invalid";
-    };
-
-type SubmitResult =
-  | {
-      readonly _tag: "Created";
-    }
-  | {
-      readonly _tag: "SchemaError";
-    };
-
 type CreateFoodRouteMode = "screen" | "embedded";
 
 const SearchParams = Schema.Struct({
@@ -63,7 +46,12 @@ const createFoodRouteMachine = setup({
   actors: {
     foodForm: FoodFormMachine.foodFormMachine,
     submitFood: fromPromise<
-      SubmitResult,
+      | {
+          readonly _tag: "Created";
+        }
+      | {
+          readonly _tag: "SchemaError";
+        },
       {
         readonly input: Foods.CreateFoodInput;
       }
@@ -228,7 +216,14 @@ export default function NewFoodScreen() {
         dateKey: decodedSearch.dateKey,
       }),
     })
-  ) satisfies SearchDecodeResult;
+  ) satisfies
+    | {
+        readonly _tag: "Valid";
+        readonly dateKey: Domain.DateKey | undefined;
+      }
+    | {
+        readonly _tag: "Invalid";
+      };
   const dateKey = search._tag === "Valid" ? search.dateKey : undefined;
   return (
     <CreateFoodPanel

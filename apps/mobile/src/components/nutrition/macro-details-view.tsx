@@ -30,48 +30,20 @@ import {
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 
-type MacroDetailsScope =
-  | {
-      readonly _tag: "Day";
-    }
-  | {
-      readonly _tag: "Meal";
-      readonly meal: Domain.MealId;
-    };
-
 type MacroDetailsRouteData = {
   readonly dateKey: Domain.DateKey;
   readonly day: DailyLogs.OpenedDay;
   readonly foods: readonly Domain.Food[];
   readonly mealEntries: readonly Domain.MealEntry[];
-  readonly scope: MacroDetailsScope;
+  readonly scope:
+    | {
+        readonly _tag: "Day";
+      }
+    | {
+        readonly _tag: "Meal";
+        readonly meal: Domain.MealId;
+      };
 };
-
-type MacroDetailsLoadResult =
-  | {
-      readonly _tag: "InvalidRoute";
-    }
-  | {
-      readonly _tag: "NoMealPlans";
-      readonly dateKey: Domain.DateKey;
-    }
-  | {
-      readonly _tag: "UnrecordedDay";
-      readonly dateKey: Domain.DateKey;
-    }
-  | {
-      readonly _tag: "Ready";
-      readonly data: MacroDetailsRouteData;
-    };
-
-type MacroDetailsSelectionEvent =
-  | {
-      readonly nutrientName: Reporting.NutrientName;
-      readonly type: "selectNutrient";
-    }
-  | {
-      readonly type: "clearSelection";
-    };
 
 type NutrientUnit = "g" | "kcal";
 
@@ -83,12 +55,10 @@ type NutrientDetail = {
   readonly unit: NutrientUnit;
 };
 
-type MealEntryNutrients = ReturnType<typeof Utils.calculateEntryNutrients>;
-
 type FoodMealEntry = {
   readonly food: Domain.Food;
   readonly mealEntry: Domain.MealEntry;
-  readonly nutrients: MealEntryNutrients;
+  readonly nutrients: ReturnType<typeof Utils.calculateEntryNutrients>;
 };
 
 type FoodNutrientContribution = {
@@ -175,7 +145,21 @@ const macroDetailsRouteMachine = setup({
   },
   actors: {
     loadMacroDetails: fromPromise<
-      MacroDetailsLoadResult,
+      | {
+          readonly _tag: "InvalidRoute";
+        }
+      | {
+          readonly _tag: "NoMealPlans";
+          readonly dateKey: Domain.DateKey;
+        }
+      | {
+          readonly _tag: "UnrecordedDay";
+          readonly dateKey: Domain.DateKey;
+        }
+      | {
+          readonly _tag: "Ready";
+          readonly data: MacroDetailsRouteData;
+        },
       {
         readonly dateKey: Domain.DateKey;
         readonly meal: Domain.MealId | undefined;
@@ -288,7 +272,14 @@ const macroDetailsSelectionMachine = setup({
     context: {} as {
       readonly selectedNutrientName: Reporting.NutrientName | null;
     },
-    events: {} as MacroDetailsSelectionEvent,
+    events: {} as
+      | {
+          readonly nutrientName: Reporting.NutrientName;
+          readonly type: "selectNutrient";
+        }
+      | {
+          readonly type: "clearSelection";
+        },
   },
 }).createMachine({
   context: {

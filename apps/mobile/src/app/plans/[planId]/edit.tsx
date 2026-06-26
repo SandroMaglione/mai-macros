@@ -11,16 +11,6 @@ import { useRouter } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
-type RouteDecodeResult =
-  | {
-      readonly _tag: "Valid";
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly planId: Domain.PlanId;
-    }
-  | {
-      readonly _tag: "Invalid";
-    };
-
 type SubmitResult =
   | {
       readonly _tag: "Revised";
@@ -61,7 +51,15 @@ const editPlanRouteMachine = setup({
       readonly type: "submit";
     },
     input: {} as {
-      readonly routeParams: RouteDecodeResult;
+      readonly routeParams:
+        | {
+            readonly _tag: "Valid";
+            readonly dateKey: Domain.DateKey | undefined;
+            readonly planId: Domain.PlanId;
+          }
+        | {
+            readonly _tag: "Invalid";
+          };
       readonly router: ReturnType<typeof useRouter>;
     },
   },

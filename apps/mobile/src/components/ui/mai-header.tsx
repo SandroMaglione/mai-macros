@@ -9,20 +9,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type AppHeaderProps = {
-  readonly children?: ReactNode;
-  readonly center?: ReactNode;
-  readonly embedded?: boolean;
-  readonly eyebrow?: string;
-  readonly leading?: ReactNode;
-  readonly safeAreaTop?: boolean;
-  readonly shadow?: boolean;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly subtitle?: string;
-  readonly title?: string;
-  readonly trailing?: ReactNode;
-};
-
 export function AppHeader({
   children,
   center,
@@ -35,7 +21,19 @@ export function AppHeader({
   subtitle,
   title,
   trailing,
-}: AppHeaderProps) {
+}: {
+  readonly children?: ReactNode;
+  readonly center?: ReactNode;
+  readonly embedded?: boolean;
+  readonly eyebrow?: string;
+  readonly leading?: ReactNode;
+  readonly safeAreaTop?: boolean;
+  readonly shadow?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly subtitle?: string;
+  readonly title?: string;
+  readonly trailing?: ReactNode;
+}) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -94,19 +92,17 @@ export function AppHeader({
   );
 }
 
-type MaiHeaderProps = {
-  readonly action?: ReactNode;
-  readonly eyebrow?: string;
-  readonly subtitle?: string;
-  readonly title: string;
-};
-
 export function MaiHeader({
   action,
   eyebrow,
   subtitle,
   title,
-}: MaiHeaderProps) {
+}: {
+  readonly action?: ReactNode;
+  readonly eyebrow?: string;
+  readonly subtitle?: string;
+  readonly title: string;
+}) {
   return (
     <AppHeader
       embedded

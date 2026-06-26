@@ -14,14 +14,6 @@ import {
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
-type ButtonProps = Omit<PressableProps, "children" | "style"> & {
-  readonly children: ReactNode;
-  readonly icon?: LucideIcon;
-  readonly loading?: boolean;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly variant?: ButtonVariant;
-};
-
 export function Button({
   children,
   disabled,
@@ -30,7 +22,13 @@ export function Button({
   style,
   variant = "primary",
   ...pressableProps
-}: ButtonProps) {
+}: Omit<PressableProps, "children" | "style"> & {
+  readonly children: ReactNode;
+  readonly icon?: LucideIcon;
+  readonly loading?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly variant?: ButtonVariant;
+}) {
   const isDisabled = disabled === true || loading;
 
   return (

@@ -76,19 +76,6 @@ type AddMealFoodRouteEvent =
       readonly type: "submit";
     };
 
-type AddMealFoodRouteContext = {
-  readonly dateKey: Domain.DateKey;
-  readonly foodSearchActor: ActorRefFrom<
-    typeof FoodSearchMachine.foodSearchMachine
-  >;
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-  readonly meal: Domain.MealId;
-  readonly mealLabel: string;
-  readonly notice: string | null;
-  readonly quantityGrams: string;
-  readonly selectedFood: Domain.Food | null;
-};
-
 const AddMealFoodRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
   meal: Domain.MealId,
@@ -96,7 +83,18 @@ const AddMealFoodRouteParams = Schema.Struct({
 
 const addMealFoodRouteMachine = setup({
   types: {
-    context: {} as AddMealFoodRouteContext,
+    context: {} as {
+      readonly dateKey: Domain.DateKey;
+      readonly foodSearchActor: ActorRefFrom<
+        typeof FoodSearchMachine.foodSearchMachine
+      >;
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+      readonly meal: Domain.MealId;
+      readonly mealLabel: string;
+      readonly notice: string | null;
+      readonly quantityGrams: string;
+      readonly selectedFood: Domain.Food | null;
+    },
     events: {} as AddMealFoodRouteEvent,
     input: {} as AddMealFoodRouteData,
   },
@@ -302,8 +300,6 @@ const addMealFoodRouteMachine = setup({
     Submitted: {},
   },
 });
-
-type AddMealFoodRouteActorRef = ActorRefFrom<typeof addMealFoodRouteMachine>;
 
 const addMealFoodRouteLoaderMachine = setup({
   types: {
@@ -647,7 +643,7 @@ function QuantityEntry({
   selectedFoodQuantityLabel,
   submitDisabled,
 }: {
-  readonly actor: AddMealFoodRouteActorRef;
+  readonly actor: ActorRefFrom<typeof addMealFoodRouteMachine>;
   readonly disabled: boolean;
   readonly mealLabel: string;
   readonly quantityGrams: string;

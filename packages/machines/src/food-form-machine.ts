@@ -36,23 +36,6 @@ type FoodFormMachineContext = {
   readonly syncQuickInputFromFields: boolean;
 };
 
-type FoodFormMachineEvent =
-  | {
-      readonly input: string;
-      readonly type: "changeQuickInput";
-    }
-  | {
-      readonly name: keyof FoodFormValues;
-      readonly type: "changeFormValue";
-      readonly value: string;
-    }
-  | {
-      readonly type: "reset";
-    }
-  | {
-      readonly type: "submit";
-    };
-
 export type FoodFormSubmitEvent = {
   readonly input: Foods.CreateFoodInput;
   readonly type: "submit";
@@ -61,7 +44,22 @@ export type FoodFormSubmitEvent = {
 export const foodFormMachine = setup({
   types: {
     context: {} as FoodFormMachineContext,
-    events: {} as FoodFormMachineEvent,
+    events: {} as
+      | {
+          readonly input: string;
+          readonly type: "changeQuickInput";
+        }
+      | {
+          readonly name: keyof FoodFormValues;
+          readonly type: "changeFormValue";
+          readonly value: string;
+        }
+      | {
+          readonly type: "reset";
+        }
+      | {
+          readonly type: "submit";
+        },
     input: {} as {
       readonly initialFood: Domain.Food | null;
       readonly syncQuickInputFromFields: boolean;

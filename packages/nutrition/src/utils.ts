@@ -24,11 +24,6 @@ export class InvalidDateKey extends Data.TaggedError("InvalidDateKey")<{
 
 export type DominantMacronutrient = "carbs" | "fat" | "protein";
 
-type CalendarDate = {
-  readonly dateKey: DateKey;
-  readonly utcNoonEpochMilliseconds: number;
-};
-
 export const calculateMacronutrientEnergyKcal = ({
   proteinGrams,
   carbsGrams,
@@ -182,7 +177,13 @@ function _parseDateKey({
 }: {
   readonly boundary: Exclude<DateKeyRangeBoundary, "generatedDateKey">;
   readonly dateKey: DateKey | string;
-}): Effect.Effect<CalendarDate, InvalidDateKey> {
+}): Effect.Effect<
+  {
+    readonly dateKey: DateKey;
+    readonly utcNoonEpochMilliseconds: number;
+  },
+  InvalidDateKey
+> {
   return Effect.gen(function* () {
     const decodedDateKey = yield* Schema.decodeEffect(DateKeySchema)(
       dateKey

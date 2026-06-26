@@ -14,15 +14,6 @@ import { CreateFoodPanel } from "./new";
 
 type FoodsTabIndex = 0 | 1;
 
-type FoodsDateKeyDecodeResult =
-  | {
-      readonly _tag: "Valid";
-      readonly dateKey: Domain.DateKey | undefined;
-    }
-  | {
-      readonly _tag: "Invalid";
-    };
-
 const FoodsSearchParams = Schema.Struct({
   dateKey: Schema.optional(Domain.DateKey),
 });
@@ -65,7 +56,14 @@ export default function FoodsScreen() {
         dateKey,
       }),
     })
-  ) satisfies FoodsDateKeyDecodeResult;
+  ) satisfies
+    | {
+        readonly _tag: "Valid";
+        readonly dateKey: Domain.DateKey | undefined;
+      }
+    | {
+        readonly _tag: "Invalid";
+      };
   const dateKey =
     dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
   const panelDateKeyParam =

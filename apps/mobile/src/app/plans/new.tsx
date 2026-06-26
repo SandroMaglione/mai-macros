@@ -11,15 +11,6 @@ import { useRouter } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
 import { assign, fromPromise, setup } from "xstate";
 
-type SearchDecodeResult =
-  | {
-      readonly _tag: "Valid";
-      readonly dateKey: Domain.DateKey | undefined;
-    }
-  | {
-      readonly _tag: "Invalid";
-    };
-
 type SubmitResult =
   | {
       readonly _tag: "Created";
@@ -55,7 +46,14 @@ const newPlanRouteMachine = setup({
     },
     input: {} as {
       readonly router: ReturnType<typeof useRouter>;
-      readonly search: SearchDecodeResult;
+      readonly search:
+        | {
+            readonly _tag: "Valid";
+            readonly dateKey: Domain.DateKey | undefined;
+          }
+        | {
+            readonly _tag: "Invalid";
+          };
     },
   },
   actors: {

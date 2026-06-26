@@ -52,10 +52,6 @@ export type DailyLogViewData =
   | RecordedDailyLogViewData
   | UnrecordedDailyLogViewData;
 
-type DailyLogRouteProps = {
-  readonly dateKey: Domain.DateKey;
-};
-
 type DailyLogLoadResult =
   | {
       readonly _tag: "Ready";
@@ -379,7 +375,11 @@ const macroDisplayModeMachine = setup({
   },
 });
 
-export function DailyLogRoute({ dateKey }: DailyLogRouteProps) {
+export function DailyLogRoute({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey;
+}) {
   const [snapshot, send] = useMachine(dailyLogRouteMachine, {
     input: {
       dateKey,

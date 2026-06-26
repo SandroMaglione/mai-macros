@@ -6,9 +6,7 @@ import {
   IconButton,
   LoadingOverlay,
   Notice,
-  PagerTabs,
   SectionCard,
-  TextArea,
 } from "@/components/ui";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
@@ -18,55 +16,30 @@ import {
   FoodCatalogTransfer,
   LocalData as NutritionLocalData,
 } from "@mai/nutrition";
-import {
-  BackupFileTransfer,
-  FoodCatalogShare,
-  Gzip,
-  QrCode as QrCodeService,
-} from "@mai/services";
+import { BackupFileTransfer, FoodCatalogShare, Gzip } from "@mai/services";
 import { useMachine } from "@xstate/react";
 import { Array as EffectArray, DateTime, Effect } from "effect";
 import { router } from "expo-router";
 import {
   ChevronLeft,
   Download,
-  Eye,
-  QrCode,
-  Share2,
   Square,
   SquareCheckBig,
   Trash2,
   Upload,
   X,
 } from "lucide-react-native";
-import { Image, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { assertEvent, assign, fromPromise, setup } from "xstate";
-
-type BackupRouteEvent =
-  | {
-      readonly index: BackupTabIndex;
-      readonly type: "selectTab";
-    }
-  | {
-      readonly backupName: string;
-      readonly type: "changeBackupName";
-    }
-  | {
-      readonly json: string;
-      readonly type: "changeImportJson";
-    }
-  | {
-      readonly type: "export";
-    }
-  | {
-      readonly type: "import";
-    }
-  | {
-      readonly type: "importFile";
-    };
-
-type BackupTabIndex = 0 | 1 | 2 | 3;
+import {
+  assertEvent,
+  assign,
+  cancel,
+  fromPromise,
+  sendTo,
+  setup,
+} from "xstate";
+import type { ReactNode } from "react";
 
 type FoodCatalogImportCandidate =
   FoodCatalogTransfer.FoodCatalogImportCandidate;
@@ -88,125 +61,87 @@ type MobileBackupImportResult =
       readonly status: "canceled";
     };
 
-type CatalogTransferRouteEvent =
-  | {
-      readonly type: "changeCatalogImportText";
-      readonly text: string;
-    }
-  | {
-      readonly type: "exportCatalog";
-    }
-  | {
-      readonly type: "previewCatalogImport";
-    }
-  | {
-      readonly foodId: FoodCatalogFoodId;
-      readonly type: "toggleCatalogFood";
-    }
-  | {
-      readonly type: "importSelectedCatalogFoods";
-    }
-  | {
-      readonly type: "shareCatalogText";
-    };
-
-type MobileCatalogQrResult =
-  | {
-      readonly byteLength: number;
-      readonly dataUrl: string;
-      readonly maxBytes: number;
-      readonly status: "ready";
-    }
-  | {
-      readonly byteLength: number;
-      readonly maxBytes: number;
-      readonly status: "too-large";
-    }
-  | {
-      readonly byteLength: number;
-      readonly maxBytes: number;
-      readonly reason: string;
-      readonly status: "unavailable";
-    };
-
 type MobileCatalogExportResult = {
+  readonly fileName: string;
   readonly foodCount: number;
   readonly message: string;
-  readonly qr: MobileCatalogQrResult;
-  readonly shareText: string;
 };
 
 type MobileCatalogPreviewResult = {
+  readonly catalogJson: string;
   readonly candidates: readonly FoodCatalogImportCandidate[];
   readonly message: string;
   readonly selectedFoodIds: readonly FoodCatalogFoodId[];
 };
 
+type MobileCatalogFilePreviewResult =
+  | (MobileCatalogPreviewResult & {
+      readonly status: "previewed";
+    })
+  | {
+      readonly message: null;
+      readonly status: "canceled";
+    };
+
 type MobileCatalogImportResult = {
   readonly message: string;
 };
 
-type MobileCatalogShareResult = {
-  readonly message: string;
-};
+const SuccessNoticeDurationMs = 5000;
+const ExportBackupSuccessDismissId = "backup.export.success.dismiss";
+const ImportBackupSuccessDismissId = "backup.import.success.dismiss";
+const CatalogExportSuccessDismissId = "catalog.export.success.dismiss";
+const CatalogImportSuccessDismissId = "catalog.import.success.dismiss";
 
-const backupRouteMachine = setup({
+const exportBackupMachine = setup({
   types: {
     context: {} as {
-      readonly activeTab: BackupTabIndex;
       readonly backupName: string;
       readonly errorMessage: string | null;
-      readonly importJson: string;
       readonly successMessage: string | null;
     },
-    events: {} as BackupRouteEvent,
+    events: {} as
+      | {
+          readonly backupName: string;
+          readonly type: "changeBackupName";
+        }
+      | {
+          readonly type: "dismissExportBackupSuccess";
+        }
+      | {
+          readonly type: "export";
+        },
   },
   actors: {
     exportBackup: fromPromise<MobileBackupExportResult, string>(({ input }) =>
       RuntimeClient.runPromise(exportMobileBackup({ backupName: input }))
     ),
-    importBackup: fromPromise<MobileBackupImportResult, string>(({ input }) =>
-      RuntimeClient.runPromise(importMobileBackup({ json: input }))
-    ),
-    importBackupFile: fromPromise<MobileBackupImportResult>(() =>
-      RuntimeClient.runPromise(importMobileBackupFile)
-    ),
   },
 }).createMachine({
   context: () => ({
-    activeTab: 0,
     backupName: "Mai backup",
     errorMessage: null,
-    importJson: "",
     successMessage: null,
   }),
   initial: "Idle",
   on: {
     changeBackupName: {
-      actions: assign(({ event }) => {
-        assertEvent(event, "changeBackupName");
+      actions: [
+        cancel(ExportBackupSuccessDismissId),
+        assign(({ event }) => {
+          assertEvent(event, "changeBackupName");
 
-        return {
-          backupName: event.backupName,
-        };
-      }),
+          return {
+            backupName: event.backupName,
+            errorMessage: null,
+            successMessage: null,
+          };
+        }),
+      ],
     },
-    changeImportJson: {
-      actions: assign(({ event }) => {
-        assertEvent(event, "changeImportJson");
-
-        return {
-          importJson: event.json,
-        };
-      }),
-    },
-    selectTab: {
-      actions: assign(({ event }) => {
-        assertEvent(event, "selectTab");
-
-        return {
-          activeTab: event.index,
-        };
+    dismissExportBackupSuccess: {
+      actions: assign({
+        successMessage: null,
       }),
     },
   },
@@ -215,51 +150,13 @@ const backupRouteMachine = setup({
       on: {
         export: {
           target: "Exporting",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        import: {
-          guard: ({ context }) => context.importJson.trim() !== "",
-          target: "Importing",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        importFile: {
-          target: "ImportingFile",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-      },
-    },
-    Exported: {
-      on: {
-        export: {
-          target: "Exporting",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        import: {
-          guard: ({ context }) => context.importJson.trim() !== "",
-          target: "Importing",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        importFile: {
-          target: "ImportingFile",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
+          actions: [
+            cancel(ExportBackupSuccessDismissId),
+            assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          ],
         },
       },
     },
@@ -268,106 +165,29 @@ const backupRouteMachine = setup({
         src: "exportBackup",
         input: ({ context }) => context.backupName,
         onDone: {
-          target: "Exported",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            successMessage: event.output.message,
-          })),
+          target: "Idle",
+          actions: [
+            assign(({ event }) => ({
+              errorMessage: null,
+              successMessage: event.output.message,
+            })),
+            sendTo(
+              ({ self }) => self,
+              () =>
+                ({
+                  type: "dismissExportBackupSuccess",
+                }) satisfies {
+                  readonly type: "dismissExportBackupSuccess";
+                },
+              {
+                delay: SuccessNoticeDurationMs,
+                id: ExportBackupSuccessDismissId,
+              }
+            ),
+          ],
         },
         onError: {
-          target: "Failure",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
-            successMessage: null,
-          })),
-        },
-      },
-    },
-    Failure: {
-      on: {
-        export: {
-          target: "Exporting",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        import: {
-          guard: ({ context }) => context.importJson.trim() !== "",
-          target: "Importing",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        importFile: {
-          target: "ImportingFile",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-      },
-    },
-    Imported: {
-      on: {
-        export: {
-          target: "Exporting",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        import: {
-          guard: ({ context }) => context.importJson.trim() !== "",
-          target: "Importing",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-        importFile: {
-          target: "ImportingFile",
-          actions: assign({
-            errorMessage: null,
-            successMessage: null,
-          }),
-        },
-      },
-    },
-    Importing: {
-      invoke: {
-        src: "importBackup",
-        input: ({ context }) => context.importJson,
-        onDone: {
-          target: "Imported",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            importJson: "",
-            successMessage: event.output.message,
-          })),
-        },
-        onError: {
-          target: "Failure",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
-            successMessage: null,
-          })),
-        },
-      },
-    },
-    ImportingFile: {
-      invoke: {
-        src: "importBackupFile",
-        onDone: {
-          target: "Imported",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            successMessage: event.output.message,
-          })),
-        },
-        onError: {
-          target: "Failure",
+          target: "Idle",
           actions: assign(({ event }) => ({
             errorMessage: backupErrorMessage({ error: event.error }),
             successMessage: null,
@@ -378,109 +198,295 @@ const backupRouteMachine = setup({
   },
 });
 
-const catalogTransferMachine = setup({
+const importBackupMachine = setup({
   types: {
     context: {} as {
-      readonly catalogImportText: string;
-      readonly catalogShareText: string;
       readonly errorMessage: string | null;
-      readonly exportedFoodCount: number | null;
-      readonly previewCandidates: readonly FoodCatalogImportCandidate[];
-      readonly qr: MobileCatalogQrResult | null;
-      readonly selectedFoodIds: readonly FoodCatalogFoodId[];
       readonly successMessage: string | null;
     },
-    events: {} as CatalogTransferRouteEvent,
+    events: {} as
+      | {
+          readonly type: "dismissImportBackupSuccess";
+        }
+      | {
+          readonly type: "importFile";
+        },
   },
   actors: {
-    exportCatalog: fromPromise<MobileCatalogExportResult>(() =>
-      RuntimeClient.runPromise(exportMobileFoodCatalog)
-    ),
-    importSelectedCatalogFoods: fromPromise<
-      MobileCatalogImportResult,
-      {
-        readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-        readonly shareText: string;
-      }
-    >(({ input }) =>
+    importBackupFile: fromPromise<MobileBackupImportResult>(() =>
       RuntimeClient.runPromise(
-        importSelectedMobileFoodCatalog({
-          selectedFoodIds: input.selectedFoodIds,
-          shareText: input.shareText,
+        Effect.gen(function* () {
+          const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+          const pickedFile = yield* fileTransfers.pickFile({
+            mimeTypes: BackupImportMimeTypes,
+          });
+
+          if (pickedFile._tag === "BackupFilePickCanceled") {
+            return {
+              message: null,
+              status: "canceled",
+            } satisfies MobileBackupImportResult;
+          }
+
+          const json = yield* decodeMobileJsonFile({
+            bytes: pickedFile.bytes,
+            fileName: pickedFile.fileName,
+          });
+          const importedBackup = yield* importMobileBackup({ json });
+
+          return {
+            message:
+              "Imported " + pickedFile.fileName + ". " + importedBackup.message,
+            status: "imported",
+          } satisfies MobileBackupImportResult;
         })
       )
-    ),
-    previewCatalogImport: fromPromise<MobileCatalogPreviewResult, string>(
-      ({ input }) =>
-        RuntimeClient.runPromise(
-          previewMobileFoodCatalogImport({ shareText: input })
-        )
-    ),
-    shareCatalogText: fromPromise<MobileCatalogShareResult, string>(
-      async ({ input }) => {
-        await Share.share({
-          message: input,
-        });
-
-        return {
-          message: "Opened the system share sheet.",
-        };
-      }
     ),
   },
 }).createMachine({
   context: () => ({
-    catalogImportText: "",
-    catalogShareText: "",
     errorMessage: null,
-    exportedFoodCount: null,
+    successMessage: null,
+  }),
+  initial: "Idle",
+  on: {
+    dismissImportBackupSuccess: {
+      actions: assign({
+        successMessage: null,
+      }),
+    },
+  },
+  states: {
+    Idle: {
+      on: {
+        importFile: {
+          target: "ImportingFile",
+          actions: [
+            cancel(ImportBackupSuccessDismissId),
+            assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          ],
+        },
+      },
+    },
+    ImportingFile: {
+      invoke: {
+        src: "importBackupFile",
+        onDone: [
+          {
+            guard: ({ event }) => event.output.status === "canceled",
+            target: "Idle",
+            actions: assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          },
+          {
+            target: "Idle",
+            actions: [
+              assign(({ event }) => ({
+                errorMessage: null,
+                successMessage: event.output.message,
+              })),
+              sendTo(
+                ({ self }) => self,
+                () =>
+                  ({
+                    type: "dismissImportBackupSuccess",
+                  }) satisfies {
+                    readonly type: "dismissImportBackupSuccess";
+                  },
+                {
+                  delay: SuccessNoticeDurationMs,
+                  id: ImportBackupSuccessDismissId,
+                }
+              ),
+            ],
+          },
+        ],
+        onError: {
+          target: "Idle",
+          actions: assign(({ event }) => ({
+            errorMessage: backupErrorMessage({ error: event.error }),
+            successMessage: null,
+          })),
+        },
+      },
+    },
+  },
+});
+
+const catalogExportMachine = setup({
+  types: {
+    context: {} as {
+      readonly errorMessage: string | null;
+      readonly successMessage: string | null;
+    },
+    events: {} as
+      | {
+          readonly type: "dismissCatalogExportSuccess";
+        }
+      | {
+          readonly type: "exportCatalog";
+        },
+  },
+  actors: {
+    exportCatalog: fromPromise<MobileCatalogExportResult>(() =>
+      RuntimeClient.runPromise(exportMobileFoodCatalogFile())
+    ),
+  },
+}).createMachine({
+  context: () => ({
+    errorMessage: null,
+    successMessage: null,
+  }),
+  initial: "Idle",
+  on: {
+    dismissCatalogExportSuccess: {
+      actions: assign({
+        successMessage: null,
+      }),
+    },
+  },
+  states: {
+    Idle: {
+      on: {
+        exportCatalog: {
+          target: "Exporting",
+          actions: [
+            cancel(CatalogExportSuccessDismissId),
+            assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          ],
+        },
+      },
+    },
+    Exporting: {
+      invoke: {
+        src: "exportCatalog",
+        onDone: {
+          target: "Idle",
+          actions: [
+            assign(({ event }) => ({
+              errorMessage: null,
+              successMessage: event.output.message,
+            })),
+            sendTo(
+              ({ self }) => self,
+              () =>
+                ({
+                  type: "dismissCatalogExportSuccess",
+                }) satisfies {
+                  readonly type: "dismissCatalogExportSuccess";
+                },
+              {
+                delay: SuccessNoticeDurationMs,
+                id: CatalogExportSuccessDismissId,
+              }
+            ),
+          ],
+        },
+        onError: {
+          target: "Idle",
+          actions: assign(({ event }) => ({
+            errorMessage: backupErrorMessage({
+              error: event.error,
+            }),
+            successMessage: null,
+          })),
+        },
+      },
+    },
+  },
+});
+
+const catalogImportMachine = setup({
+  types: {
+    context: {} as {
+      readonly catalogJson: string | null;
+      readonly errorMessage: string | null;
+      readonly previewCandidates: readonly FoodCatalogImportCandidate[];
+      readonly selectedFoodIds: readonly FoodCatalogFoodId[];
+      readonly successMessage: string | null;
+    },
+    events: {} as
+      | {
+          readonly type: "dismissCatalogImportSuccess";
+        }
+      | {
+          readonly type: "previewCatalogImportFile";
+        }
+      | {
+          readonly foodId: FoodCatalogFoodId;
+          readonly type: "toggleCatalogFood";
+        }
+      | {
+          readonly type: "importSelectedCatalogFoods";
+        },
+  },
+  actors: {
+    importSelectedCatalogFoods: fromPromise<
+      MobileCatalogImportResult,
+      {
+        readonly catalogJson: string;
+        readonly selectedFoodIds: readonly FoodCatalogFoodId[];
+      }
+    >(({ input }) =>
+      RuntimeClient.runPromise(
+        importSelectedMobileFoodCatalog({
+          catalogJson: input.catalogJson,
+          selectedFoodIds: input.selectedFoodIds,
+        })
+      )
+    ),
+    previewCatalogImportFile: fromPromise<MobileCatalogFilePreviewResult>(() =>
+      RuntimeClient.runPromise(
+        Effect.gen(function* () {
+          const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+          const pickedFile = yield* fileTransfers.pickFile({
+            mimeTypes: BackupImportMimeTypes,
+          });
+
+          if (pickedFile._tag === "BackupFilePickCanceled") {
+            return {
+              message: null,
+              status: "canceled",
+            } satisfies MobileCatalogFilePreviewResult;
+          }
+
+          const json = yield* decodeMobileJsonFile({
+            bytes: pickedFile.bytes,
+            fileName: pickedFile.fileName,
+          });
+          const preview = yield* previewMobileFoodCatalogImport({
+            json,
+          });
+
+          return {
+            ...preview,
+            message: `Previewed ${pickedFile.fileName}. ${preview.message}`,
+            status: "previewed",
+          } satisfies MobileCatalogFilePreviewResult;
+        })
+      )
+    ),
+  },
+}).createMachine({
+  context: () => ({
+    catalogJson: null,
+    errorMessage: null,
     previewCandidates: [],
-    qr: null,
     selectedFoodIds: [],
     successMessage: null,
   }),
   initial: "Idle",
   on: {
-    changeCatalogImportText: {
-      actions: assign(({ event }) => {
-        assertEvent(event, "changeCatalogImportText");
-
-        return {
-          catalogImportText: event.text,
-          errorMessage: null,
-          successMessage: null,
-        };
-      }),
-    },
-    exportCatalog: {
-      target: ".Exporting",
+    dismissCatalogImportSuccess: {
       actions: assign({
-        errorMessage: null,
-        successMessage: null,
-      }),
-    },
-    importSelectedCatalogFoods: {
-      guard: ({ context }) =>
-        EffectArray.isReadonlyArrayNonEmpty(context.selectedFoodIds),
-      target: ".Importing",
-      actions: assign({
-        errorMessage: null,
-        successMessage: null,
-      }),
-    },
-    previewCatalogImport: {
-      guard: ({ context }) => context.catalogImportText.trim() !== "",
-      target: ".Previewing",
-      actions: assign({
-        errorMessage: null,
-        successMessage: null,
-      }),
-    },
-    shareCatalogText: {
-      guard: ({ context }) => context.catalogShareText !== "",
-      target: ".Sharing",
-      actions: assign({
-        errorMessage: null,
         successMessage: null,
       }),
     },
@@ -509,97 +515,129 @@ const catalogTransferMachine = setup({
     },
   },
   states: {
-    Exported: {},
-    Exporting: {
-      invoke: {
-        src: "exportCatalog",
-        onDone: {
-          target: "Exported",
-          actions: assign(({ event }) => ({
-            catalogShareText: event.output.shareText,
-            errorMessage: null,
-            exportedFoodCount: event.output.foodCount,
-            qr: event.output.qr,
-            successMessage: event.output.message,
-          })),
+    Idle: {
+      on: {
+        importSelectedCatalogFoods: {
+          guard: ({ context }) =>
+            context.catalogJson !== null &&
+            EffectArray.isReadonlyArrayNonEmpty(context.selectedFoodIds),
+          target: "Importing",
+          actions: [
+            cancel(CatalogImportSuccessDismissId),
+            assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          ],
         },
-        onError: {
-          target: "Failure",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
-            successMessage: null,
-          })),
+        previewCatalogImportFile: {
+          target: "PreviewingFile",
+          actions: [
+            cancel(CatalogImportSuccessDismissId),
+            assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          ],
         },
       },
     },
-    Failure: {},
-    Idle: {},
-    Imported: {},
     Importing: {
       invoke: {
         src: "importSelectedCatalogFoods",
         input: ({ context }) => ({
+          catalogJson: context.catalogJson ?? "",
           selectedFoodIds: context.selectedFoodIds,
-          shareText: context.catalogImportText,
         }),
         onDone: {
-          target: "Imported",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            previewCandidates: [],
-            selectedFoodIds: [],
-            successMessage: event.output.message,
-          })),
+          target: "Idle",
+          actions: [
+            assign(({ event }) => ({
+              catalogJson: null,
+              errorMessage: null,
+              previewCandidates: [],
+              selectedFoodIds: [],
+              successMessage: event.output.message,
+            })),
+            sendTo(
+              ({ self }) => self,
+              () =>
+                ({
+                  type: "dismissCatalogImportSuccess",
+                }) satisfies {
+                  readonly type: "dismissCatalogImportSuccess";
+                },
+              {
+                delay: SuccessNoticeDurationMs,
+                id: CatalogImportSuccessDismissId,
+              }
+            ),
+          ],
         },
         onError: {
-          target: "Failure",
+          target: "Idle",
           actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
+            errorMessage: backupErrorMessage({
+              error: event.error,
+            }),
             successMessage: null,
           })),
         },
       },
     },
-    Previewed: {},
-    Previewing: {
+    PreviewingFile: {
       invoke: {
-        src: "previewCatalogImport",
-        input: ({ context }) => context.catalogImportText,
-        onDone: {
-          target: "Previewed",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            previewCandidates: event.output.candidates,
-            selectedFoodIds: event.output.selectedFoodIds,
-            successMessage: event.output.message,
-          })),
-        },
+        src: "previewCatalogImportFile",
+        onDone: [
+          {
+            guard: ({ event }) => event.output.status === "canceled",
+            target: "Idle",
+            actions: assign({
+              errorMessage: null,
+              successMessage: null,
+            }),
+          },
+          {
+            target: "Idle",
+            actions: [
+              assign(({ event }) => {
+                if (event.output.status === "canceled") {
+                  return {};
+                }
+
+                return {
+                  catalogJson: event.output.catalogJson,
+                  errorMessage: null,
+                  previewCandidates: event.output.candidates,
+                  selectedFoodIds: event.output.selectedFoodIds,
+                  successMessage: event.output.message,
+                };
+              }),
+              sendTo(
+                ({ self }) => self,
+                () =>
+                  ({
+                    type: "dismissCatalogImportSuccess",
+                  }) satisfies {
+                    readonly type: "dismissCatalogImportSuccess";
+                  },
+                {
+                  delay: SuccessNoticeDurationMs,
+                  id: CatalogImportSuccessDismissId,
+                }
+              ),
+            ],
+          },
+        ],
         onError: {
-          target: "Failure",
+          target: "Idle",
           actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
+            catalogJson: null,
+            errorMessage: backupErrorMessage({
+              error: event.error,
+            }),
             previewCandidates: [],
             selectedFoodIds: [],
-            successMessage: null,
-          })),
-        },
-      },
-    },
-    Sharing: {
-      invoke: {
-        src: "shareCatalogText",
-        input: ({ context }) => context.catalogShareText,
-        onDone: {
-          target: "Exported",
-          actions: assign(({ event }) => ({
-            errorMessage: null,
-            successMessage: event.output.message,
-          })),
-        },
-        onError: {
-          target: "Failure",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
             successMessage: null,
           })),
         },
@@ -620,35 +658,6 @@ const localDataResetMachine = LocalDataResetMachine.makeLocalDataResetMachine({
 });
 
 export default function BackupScreen() {
-  const [snapshot, send] = useMachine(backupRouteMachine);
-  const isExporting = snapshot.matches("Exporting");
-  const isImporting = snapshot.matches("Importing");
-  const isImportingFile = snapshot.matches("ImportingFile");
-  const disabled = isExporting || isImporting || isImportingFile;
-  const { activeTab, backupName, errorMessage, importJson } = snapshot.context;
-  const tabs = [
-    {
-      accessibilityLabel: "Export backup",
-      key: "export",
-      label: "Export",
-    },
-    {
-      accessibilityLabel: "Import backup",
-      key: "import",
-      label: "Import",
-    },
-    {
-      accessibilityLabel: "Share food catalog",
-      key: "catalog",
-      label: "Catalog",
-    },
-    {
-      accessibilityLabel: "Reset local data",
-      key: "reset",
-      label: "Reset",
-    },
-  ] as const;
-
   return (
     <View style={styles.screen}>
       <AppScreen
@@ -672,247 +681,131 @@ export default function BackupScreen() {
           title="Backup"
         />
 
-        {snapshot.context.successMessage === null ? null : (
-          <Notice message={snapshot.context.successMessage} tone="success" />
-        )}
-        {errorMessage === null ? null : (
-          <Notice
-            message={errorMessage}
-            title="Backup action failed"
-            tone="danger"
-          />
-        )}
-
-        <PagerTabs
-          activeIndex={activeTab}
-          onActiveIndexChange={(index) => {
-            send({
-              index: index === 0 ? 0 : index === 1 ? 1 : index === 2 ? 2 : 3,
-              type: "selectTab",
-            });
-          }}
-          tabBarPosition="bottom"
-          tabs={[
-            {
-              ...tabs[0],
-              content: (
-                <ExportBackupTab
-                  backupName={backupName}
-                  disabled={disabled}
-                  onChangeBackupName={(value) => {
-                    send({
-                      backupName: value,
-                      type: "changeBackupName",
-                    });
-                  }}
-                  onExport={() => {
-                    send({
-                      type: "export",
-                    });
-                  }}
-                />
-              ),
-            },
-            {
-              ...tabs[1],
-              content: (
-                <ImportBackupTab
-                  disabled={disabled}
-                  importJson={importJson}
-                  importingFile={isImportingFile}
-                  importingJson={isImporting}
-                  onChangeImportJson={(json) => {
-                    send({
-                      json,
-                      type: "changeImportJson",
-                    });
-                  }}
-                  onImport={() => {
-                    send({
-                      type: "import",
-                    });
-                  }}
-                  onImportFile={() => {
-                    send({
-                      type: "importFile",
-                    });
-                  }}
-                />
-              ),
-            },
-            {
-              ...tabs[2],
-              content: <CatalogTransferTab disabled={disabled} />,
-            },
-            {
-              ...tabs[3],
-              content: <ResetDataTab disabled={disabled} />,
-            },
-          ]}
-        />
+        <KeyboardAwareScrollView
+          alwaysBounceVertical={false}
+          bottomOffset={spacing.lg}
+          contentContainerStyle={styles.settingsScrollContent}
+          keyboardShouldPersistTaps="handled"
+          style={styles.settingsScroll}
+        >
+          <ExportBackupSection />
+          <ImportBackupSection />
+          <CatalogExportSection />
+          <CatalogImportSection />
+          <ResetDataSection />
+        </KeyboardAwareScrollView>
       </AppScreen>
-
-      <LoadingOverlay
-        message={
-          isImporting
-            ? "Importing backup"
-            : isImportingFile
-              ? "Opening backup file"
-              : "Exporting backup"
-        }
-        visible={disabled}
-      />
     </View>
   );
 }
 
-function ExportBackupTab({
-  backupName,
-  disabled,
-  onChangeBackupName,
-  onExport,
-}: {
-  readonly backupName: string;
-  readonly disabled: boolean;
-  readonly onChangeBackupName: (value: string) => void;
-  readonly onExport: () => void;
-}) {
+function ExportBackupSection() {
+  const [snapshot, send] = useMachine(exportBackupMachine);
+  const exporting = snapshot.matches("Exporting");
+  const { backupName, errorMessage, successMessage } = snapshot.context;
+
   return (
-    <KeyboardAwareScrollView
-      alwaysBounceVertical={false}
-      bottomOffset={spacing.lg}
-      contentContainerStyle={styles.tabScrollContent}
-      keyboardShouldPersistTaps="handled"
-      style={styles.tabScroll}
-    >
-      <SectionCard style={styles.card} title="Export">
+    <>
+      <BackupSettingsSection divider={false} title="Export">
         <View style={styles.sectionBody}>
           <Field
             autoCapitalize="words"
             autoCorrect={false}
-            editable={!disabled}
+            editable={!exporting}
             label="Name"
-            onChangeText={onChangeBackupName}
+            onChangeText={(value) => {
+              send({
+                backupName: value,
+                type: "changeBackupName",
+              });
+            }}
             placeholder="Mai backup"
             value={backupName}
           />
           <Button
-            disabled={disabled}
+            disabled={exporting}
             icon={Download}
-            loading={disabled}
-            onPress={onExport}
+            loading={exporting}
+            onPress={() => {
+              send({
+                type: "export",
+              });
+            }}
           >
             Export backup
           </Button>
+          {successMessage === null ? null : (
+            <Notice message={successMessage} tone="success" />
+          )}
+          {errorMessage === null ? null : (
+            <Notice
+              message={errorMessage}
+              title="Export failed"
+              tone="danger"
+            />
+          )}
         </View>
-      </SectionCard>
-    </KeyboardAwareScrollView>
+      </BackupSettingsSection>
+
+      <LoadingOverlay message="Exporting backup" visible={exporting} />
+    </>
   );
 }
 
-function ImportBackupTab({
-  disabled,
-  importJson,
-  importingFile,
-  importingJson,
-  onChangeImportJson,
-  onImport,
-  onImportFile,
-}: {
-  readonly disabled: boolean;
-  readonly importJson: string;
-  readonly importingFile: boolean;
-  readonly importingJson: boolean;
-  readonly onChangeImportJson: (json: string) => void;
-  readonly onImport: () => void;
-  readonly onImportFile: () => void;
-}) {
+function ImportBackupSection() {
+  const [snapshot, send] = useMachine(importBackupMachine);
+  const isImporting = snapshot.matches("ImportingFile");
+  const { errorMessage, successMessage } = snapshot.context;
+
   return (
-    <KeyboardAwareScrollView
-      alwaysBounceVertical={false}
-      bottomOffset={spacing.lg}
-      contentContainerStyle={styles.tabScrollContent}
-      keyboardShouldPersistTaps="handled"
-      style={styles.tabScroll}
-    >
-      <SectionCard style={styles.card} title="Import">
+    <>
+      <BackupSettingsSection divider title="Import">
         <View style={styles.sectionBody}>
           <Text style={styles.warningText}>
             Import replaces the current data on this device.
           </Text>
           <Button
-            disabled={disabled}
+            disabled={isImporting}
             icon={Upload}
-            loading={importingFile}
-            onPress={onImportFile}
+            loading={isImporting}
+            onPress={() => {
+              send({
+                type: "importFile",
+              });
+            }}
             variant="danger"
           >
             Choose backup file
           </Button>
-          <TextArea
-            editable={!disabled}
-            label="Backup JSON"
-            onChangeText={onChangeImportJson}
-            placeholder='{"format":"mai.backup"...}'
-            value={importJson}
-          />
-          <Button
-            disabled={disabled || importJson.trim() === ""}
-            icon={Upload}
-            loading={importingJson}
-            onPress={onImport}
-            variant="danger"
-          >
-            Import pasted JSON
-          </Button>
+          {successMessage === null ? null : (
+            <Notice message={successMessage} tone="success" />
+          )}
+          {errorMessage === null ? null : (
+            <Notice
+              message={errorMessage}
+              title="Import failed"
+              tone="danger"
+            />
+          )}
         </View>
-      </SectionCard>
-    </KeyboardAwareScrollView>
+      </BackupSettingsSection>
+
+      <LoadingOverlay message="Opening backup file" visible={isImporting} />
+    </>
   );
 }
 
-function CatalogTransferTab({ disabled }: { readonly disabled: boolean }) {
-  const [snapshot, send] = useMachine(catalogTransferMachine);
+function CatalogExportSection() {
+  const [snapshot, send] = useMachine(catalogExportMachine);
   const isExporting = snapshot.matches("Exporting");
-  const isImporting = snapshot.matches("Importing");
-  const isPreviewing = snapshot.matches("Previewing");
-  const isSharing = snapshot.matches("Sharing");
-  const isBusy = isExporting || isImporting || isPreviewing || isSharing;
-  const transferDisabled = disabled || isBusy;
-  const {
-    catalogImportText,
-    catalogShareText,
-    errorMessage,
-    exportedFoodCount,
-    previewCandidates,
-    qr,
-    selectedFoodIds,
-    successMessage,
-  } = snapshot.context;
+  const { errorMessage, successMessage } = snapshot.context;
 
   return (
-    <KeyboardAwareScrollView
-      alwaysBounceVertical={false}
-      bottomOffset={spacing.lg}
-      contentContainerStyle={styles.tabScrollContent}
-      keyboardShouldPersistTaps="handled"
-      style={styles.tabScroll}
-    >
-      {successMessage === null ? null : (
-        <Notice message={successMessage} tone="success" />
-      )}
-      {errorMessage === null ? null : (
-        <Notice
-          message={errorMessage}
-          title="Catalog action failed"
-          tone="danger"
-        />
-      )}
-
-      <SectionCard style={styles.card} title="Share catalog">
+    <>
+      <BackupSettingsSection divider title="Export catalog">
         <View style={styles.sectionBody}>
           <Button
-            disabled={transferDisabled}
+            disabled={isExporting}
             icon={Download}
             loading={isExporting}
             onPress={() => {
@@ -921,61 +814,68 @@ function CatalogTransferTab({ disabled }: { readonly disabled: boolean }) {
               });
             }}
           >
-            Export catalog
+            Export catalog file
           </Button>
 
-          {catalogShareText === "" || qr === null ? null : (
-            <CatalogShareResult
-              disabled={transferDisabled}
-              foodCount={exportedFoodCount}
-              onShare={() => {
-                send({
-                  type: "shareCatalogText",
-                });
-              }}
-              qr={qr}
-              shareText={catalogShareText}
-              sharing={isSharing}
+          {successMessage === null ? null : (
+            <Notice message={successMessage} tone="success" />
+          )}
+          {errorMessage === null ? null : (
+            <Notice
+              message={errorMessage}
+              title="Export catalog failed"
+              tone="danger"
             />
           )}
         </View>
-      </SectionCard>
+      </BackupSettingsSection>
 
-      <SectionCard style={styles.card} title="Import catalog">
+      <LoadingOverlay message="Exporting catalog" visible={isExporting} />
+    </>
+  );
+}
+
+function CatalogImportSection() {
+  const [snapshot, send] = useMachine(catalogImportMachine);
+  const isImporting = snapshot.matches("Importing");
+  const isPreviewing = snapshot.matches("PreviewingFile");
+  const isBusy = isImporting || isPreviewing;
+  const { errorMessage, previewCandidates, selectedFoodIds, successMessage } =
+    snapshot.context;
+
+  return (
+    <>
+      <BackupSettingsSection divider title="Import catalog">
         <View style={styles.sectionBody}>
-          <TextArea
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!transferDisabled}
-            label="Catalog share text"
-            onChangeText={(text) => {
-              send({
-                text,
-                type: "changeCatalogImportText",
-              });
-            }}
-            placeholder='{"format":"mai.food-catalog-share"...}'
-            value={catalogImportText}
-          />
           <Button
-            disabled={transferDisabled || catalogImportText.trim() === ""}
-            icon={Eye}
+            disabled={isBusy}
+            icon={Upload}
             loading={isPreviewing}
             onPress={() => {
               send({
-                type: "previewCatalogImport",
+                type: "previewCatalogImportFile",
               });
             }}
           >
-            Preview import
+            Choose catalog file
           </Button>
+          {successMessage === null ? null : (
+            <Notice message={successMessage} tone="success" />
+          )}
+          {errorMessage === null ? null : (
+            <Notice
+              message={errorMessage}
+              title="Import catalog failed"
+              tone="danger"
+            />
+          )}
         </View>
-      </SectionCard>
+      </BackupSettingsSection>
 
       {!EffectArray.isReadonlyArrayNonEmpty(previewCandidates) ? null : (
         <CatalogPreviewSection
           candidates={previewCandidates}
-          disabled={transferDisabled}
+          disabled={isBusy}
           importing={isImporting}
           onImport={() => {
             send({
@@ -993,100 +893,10 @@ function CatalogTransferTab({ disabled }: { readonly disabled: boolean }) {
       )}
 
       <LoadingOverlay
-        message={
-          isImporting
-            ? "Importing catalog"
-            : isPreviewing
-              ? "Previewing catalog"
-              : isSharing
-                ? "Opening share sheet"
-                : "Exporting catalog"
-        }
+        message={isImporting ? "Importing catalog" : "Opening catalog file"}
         visible={isBusy}
       />
-    </KeyboardAwareScrollView>
-  );
-}
-
-function CatalogShareResult({
-  disabled,
-  foodCount,
-  onShare,
-  qr,
-  shareText,
-  sharing,
-}: {
-  readonly disabled: boolean;
-  readonly foodCount: number | null;
-  readonly onShare: () => void;
-  readonly qr: MobileCatalogQrResult;
-  readonly shareText: string;
-  readonly sharing: boolean;
-}) {
-  return (
-    <View style={styles.sectionBody}>
-      <View style={styles.catalogMetricRow}>
-        <Text style={styles.catalogMetricText}>{foodCount ?? 0} foods</Text>
-        <Text style={styles.catalogMetricText}>{qr.byteLength} bytes</Text>
-      </View>
-
-      <CatalogQrPanel qr={qr} />
-
-      <TextArea
-        editable={false}
-        label="Share text"
-        selectTextOnFocus
-        value={shareText}
-      />
-      <Button
-        disabled={disabled}
-        icon={Share2}
-        loading={sharing}
-        onPress={onShare}
-        variant="secondary"
-      >
-        Share text
-      </Button>
-    </View>
-  );
-}
-
-function CatalogQrPanel({ qr }: { readonly qr: MobileCatalogQrResult }) {
-  if (qr.status === "ready") {
-    return (
-      <View style={styles.qrPanel}>
-        <View style={styles.qrPanelHeader}>
-          <QrCode color={color.textMuted} size={17} strokeWidth={3} />
-          <Text style={styles.qrPanelTitle}>Single QR</Text>
-        </View>
-        <FoodCatalogQrCode dataUrl={qr.dataUrl} />
-      </View>
-    );
-  }
-
-  return (
-    <Notice
-      message={
-        qr.status === "too-large"
-          ? `Share text is ${qr.byteLength} bytes. Single QR limit is ${qr.maxBytes} bytes.`
-          : qr.reason
-      }
-      title="Share text fallback"
-      tone="warning"
-    />
-  );
-}
-
-function FoodCatalogQrCode({ dataUrl }: { readonly dataUrl: string }) {
-  return (
-    <View style={styles.qrCodeFrame}>
-      <Image
-        accessibilityLabel="Food catalog share QR"
-        resizeMode="contain"
-        source={{ uri: dataUrl }}
-        style={styles.qrCodeImage}
-      />
-    </View>
+    </>
   );
 }
 
@@ -1106,7 +916,7 @@ function CatalogPreviewSection({
   readonly selectedFoodIds: readonly FoodCatalogFoodId[];
 }) {
   return (
-    <SectionCard style={styles.card} title="Preview">
+    <BackupSettingsSection divider title="Preview">
       <View style={styles.sectionBody}>
         <View style={styles.catalogMetricRow}>
           <Text style={styles.catalogMetricText}>
@@ -1142,7 +952,7 @@ function CatalogPreviewSection({
           Import selected
         </Button>
       </View>
-    </SectionCard>
+    </BackupSettingsSection>
   );
 }
 
@@ -1231,26 +1041,20 @@ function CatalogBadge({
   );
 }
 
-function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
+function ResetDataSection() {
   const [snapshot, send] = useMachine(localDataResetMachine);
   const isIdle = snapshot.matches("Idle");
   const isConfirming =
     snapshot.matches("Confirming") || snapshot.matches("Failure");
   const isResetting = snapshot.matches("Resetting");
-  const resetDisabled = disabled || isResetting;
+  const resetDisabled = isResetting;
   const canReset =
     snapshot.context.confirmationText ===
     NutritionLocalData.LocalDataResetConfirmationText;
 
   return (
-    <KeyboardAwareScrollView
-      alwaysBounceVertical={false}
-      bottomOffset={spacing.lg}
-      contentContainerStyle={styles.tabScrollContent}
-      keyboardShouldPersistTaps="handled"
-      style={styles.tabScroll}
-    >
-      <SectionCard style={styles.card} title="Reset">
+    <>
+      <BackupSettingsSection divider title="Reset">
         <View style={styles.sectionBody}>
           <Text style={styles.warningText}>
             Delete every plan, food, daily log, and meal entry on this device.
@@ -1324,10 +1128,32 @@ function ResetDataTab({ disabled }: { readonly disabled: boolean }) {
             </View>
           ) : null}
         </View>
-      </SectionCard>
+      </BackupSettingsSection>
 
       <LoadingOverlay message="Deleting local data" visible={isResetting} />
-    </KeyboardAwareScrollView>
+    </>
+  );
+}
+
+function BackupSettingsSection({
+  children,
+  divider,
+  title,
+}: {
+  readonly children: ReactNode;
+  readonly divider: boolean;
+  readonly title: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.settingsSection,
+        divider ? null : styles.settingsSectionWithoutDivider,
+      ]}
+    >
+      <Text style={styles.settingsSectionTitle}>{title}</Text>
+      <SectionCard style={styles.card}>{children}</SectionCard>
+    </View>
   );
 }
 
@@ -1339,8 +1165,28 @@ const BackupImportMimeTypes = [
   "text/plain",
 ] as const;
 
-const GzipBackupMimeType = "application/gzip";
-const GzipBackupUti = "org.gnu.gnu-zip-archive";
+const GzipFileMimeType = "application/gzip";
+const GzipFileUti = "org.gnu.gnu-zip-archive";
+
+export function decodeMobileJsonFile({
+  bytes,
+  fileName,
+}: {
+  readonly bytes: Uint8Array;
+  readonly fileName: string;
+}) {
+  return Effect.gen(function* () {
+    const gzip = yield* Gzip.Gzip;
+
+    return fileName.toLowerCase().endsWith(".gz") || Gzip.isGzipBytes({ bytes })
+      ? yield* gzip.gunzipText({
+          bytes,
+        })
+      : yield* gzip.bytesToText({
+          bytes,
+        });
+  });
+}
 
 export function exportMobileBackup({
   backupName,
@@ -1365,14 +1211,44 @@ export function exportMobileBackup({
       bytes,
       dialogTitle: "Export backup",
       fileName,
-      mimeType: GzipBackupMimeType,
-      uti: GzipBackupUti,
+      mimeType: GzipFileMimeType,
+      uti: GzipFileUti,
     });
 
     return {
       fileName,
       message: `Opened share options for ${fileName}.`,
     } satisfies MobileBackupExportResult;
+  });
+}
+
+export function exportMobileFoodCatalogFile() {
+  return Effect.gen(function* () {
+    const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+    const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
+    const gzip = yield* Gzip.Gzip;
+    const exportedCatalog = yield* transfers.exportToJson();
+    const fileName = foodCatalogFileName({
+      catalog: exportedCatalog.catalog,
+      extension: "json.gz",
+    });
+    const bytes = yield* gzip.gzipText({
+      text: exportedCatalog.json,
+    });
+
+    yield* fileTransfers.shareFile({
+      bytes,
+      dialogTitle: "Export food catalog",
+      fileName,
+      mimeType: GzipFileMimeType,
+      uti: GzipFileUti,
+    });
+
+    return {
+      fileName,
+      foodCount: exportedCatalog.catalog.integrity.counts.foods,
+      message: `Opened share options for ${fileName}.`,
+    } satisfies MobileCatalogExportResult;
   });
 }
 
@@ -1392,90 +1268,19 @@ export function importMobileBackup({ json }: { readonly json: string }) {
   });
 }
 
-const importMobileBackupFile = Effect.gen(function* () {
-  const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-  const gzip = yield* Gzip.Gzip;
-  const pickedFile = yield* fileTransfers.pickFile({
-    mimeTypes: BackupImportMimeTypes,
-  });
-
-  if (pickedFile._tag === "BackupFilePickCanceled") {
-    return {
-      message: null,
-      status: "canceled",
-    } satisfies MobileBackupImportResult;
-  }
-
-  const json =
-    pickedFile.fileName.toLowerCase().endsWith(".gz") ||
-    Gzip.isGzipBytes({ bytes: pickedFile.bytes })
-      ? yield* gzip.gunzipText({
-          bytes: pickedFile.bytes,
-        })
-      : yield* gzip.bytesToText({
-          bytes: pickedFile.bytes,
-        });
-  const importedBackup = yield* importMobileBackup({ json });
-
-  return {
-    message: `Imported ${pickedFile.fileName}. ${importedBackup.message}`,
-    status: "imported",
-  } satisfies MobileBackupImportResult;
-});
-
-const exportMobileFoodCatalog = Effect.gen(function* () {
-  const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-  const qrCodes = yield* QrCodeService.QrCode;
-  const exportedCatalog = yield* transfers.exportToJson();
-  const encodedShare = yield* FoodCatalogShare.encodeCatalogJson({
-    catalogJson: exportedCatalog.json,
-  });
-  const shareText = encodedShare.shareText;
-
-  const qr = encodedShare.size.tooLargeForSingleQr
-    ? ({
-        byteLength: encodedShare.size.encodedTextByteLength,
-        maxBytes: encodedShare.size.singleQrTextByteLimit,
-        status: "too-large",
-      } satisfies MobileCatalogQrResult)
-    : yield* Effect.matchEffect(qrCodes.generate(shareText), {
-        onFailure: (error) =>
-          Effect.succeed({
-            byteLength: encodedShare.size.encodedTextByteLength,
-            maxBytes: encodedShare.size.singleQrTextByteLimit,
-            reason: backupErrorMessage({ error }),
-            status: "unavailable",
-          } satisfies MobileCatalogQrResult),
-        onSuccess: (dataUrl) =>
-          Effect.succeed({
-            byteLength: encodedShare.size.encodedTextByteLength,
-            dataUrl,
-            maxBytes: encodedShare.size.singleQrTextByteLimit,
-            status: "ready",
-          } satisfies MobileCatalogQrResult),
-      });
-
-  return {
-    foodCount: exportedCatalog.catalog.integrity.counts.foods,
-    message: `Exported ${exportedCatalog.catalog.integrity.counts.foods} custom foods.`,
-    qr,
-    shareText,
-  } satisfies MobileCatalogExportResult;
-});
-
 export function previewMobileFoodCatalogImport({
-  shareText,
+  json,
 }: {
-  readonly shareText: string;
+  readonly json: string;
 }) {
   return Effect.gen(function* () {
     const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const decodedShare = yield* FoodCatalogShare.decodeShareText({
-      text: shareText,
+    const decodedCatalog = yield* FoodCatalogShare.decodeShareText({
+      text: json,
     });
     const preview = yield* transfers.previewImportFromJson({
       input: {
-        json: decodedShare.catalogJson,
+        json: decodedCatalog.catalogJson,
       },
     });
     const selectedFoodIds = preview.candidates
@@ -1489,6 +1294,7 @@ export function previewMobileFoodCatalogImport({
       .map((candidate) => candidate.food.id);
 
     return {
+      catalogJson: decodedCatalog.catalogJson,
       candidates: preview.candidates,
       message: `Previewed ${preview.candidates.length} foods. ${selectedFoodIds.length} selected by default.`,
       selectedFoodIds,
@@ -1497,20 +1303,17 @@ export function previewMobileFoodCatalogImport({
 }
 
 export function importSelectedMobileFoodCatalog({
+  catalogJson,
   selectedFoodIds,
-  shareText,
 }: {
+  readonly catalogJson: string;
   readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-  readonly shareText: string;
 }) {
   return Effect.gen(function* () {
     const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const decodedShare = yield* FoodCatalogShare.decodeShareText({
-      text: shareText,
-    });
     const importedCatalog = yield* transfers.importSelectedFromJson({
       input: {
-        json: decodedShare.catalogJson,
+        json: catalogJson,
         selectedFoodIds,
       },
     });
@@ -1546,7 +1349,7 @@ export function backupFileName({
 }: {
   readonly backup: Backup.MaiBackup;
   readonly backupName: string;
-  readonly extension?: BackupFileExtension;
+  readonly extension?: "json" | "json.gz";
 }) {
   const exportedAt = new Date(DateTime.toEpochMillis(backup.source.exportedAt));
   const baseName = backupName.trim() === "" ? "mai-backup" : backupName.trim();
@@ -1560,7 +1363,19 @@ export function backupFileName({
   return `${fileNamePrefix}-format-v${backup.formatVersion}-db-v${backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.${extension}`;
 }
 
-type BackupFileExtension = "json" | "json.gz";
+export function foodCatalogFileName({
+  catalog,
+  extension = "json",
+}: {
+  readonly catalog: FoodCatalogTransfer.MaiFoodCatalog;
+  readonly extension?: "json" | "json.gz";
+}) {
+  const exportedAt = new Date(
+    DateTime.toEpochMillis(catalog.source.exportedAt)
+  );
+
+  return `mai-food-catalog-format-v${catalog.formatVersion}-db-v${catalog.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.${extension}`;
+}
 
 export function backupImportMessage({
   backup,
@@ -1585,6 +1400,18 @@ export function backupErrorMessage({ error }: { readonly error: unknown }) {
     return error.detail;
   }
 
+  if (error instanceof FoodCatalogShare.FoodCatalogShareDecodeError) {
+    return error.detail;
+  }
+
+  if (error instanceof FoodCatalogTransfer.FoodCatalogImportSelectionError) {
+    return error.detail;
+  }
+
+  if (error instanceof FoodCatalogTransfer.FoodCatalogIntegrityError) {
+    return error.detail;
+  }
+
   return error instanceof Error
     ? error.message
     : "The backup action could not finish.";
@@ -1603,12 +1430,28 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: color.surface,
   },
-  tabScroll: {
+  settingsScroll: {
     flex: 1,
   },
-  tabScrollContent: {
-    gap: spacing.md,
+  settingsScrollContent: {
+    gap: spacing.xxl,
     paddingBottom: spacing.xxl,
+  },
+  settingsSection: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: color.divider,
+    paddingTop: spacing.xl,
+  },
+  settingsSectionWithoutDivider: {
+    borderTopWidth: 0,
+    paddingTop: 0,
+  },
+  settingsSectionTitle: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   sectionBody: {
     gap: spacing.md,
@@ -1623,38 +1466,6 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.size.sm,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.sm,
-  },
-  qrPanel: {
-    alignItems: "center",
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: color.divider,
-    borderRadius: 6,
-    padding: spacing.md,
-    backgroundColor: color.field,
-  },
-  qrPanelHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  qrPanelTitle: {
-    color: color.textMuted,
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  qrCodeFrame: {
-    width: "100%",
-    maxWidth: 260,
-    aspectRatio: 1,
-    overflow: "hidden",
-    borderRadius: 4,
-    backgroundColor: color.white,
-  },
-  qrCodeImage: {
-    width: "100%",
-    height: "100%",
   },
   catalogCandidateList: {
     gap: spacing.sm,

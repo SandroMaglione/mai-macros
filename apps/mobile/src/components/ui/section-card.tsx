@@ -8,21 +8,19 @@ import {
   type ViewStyle,
 } from "react-native";
 
-type SectionCardProps = {
-  readonly children: ReactNode;
-  readonly footer?: ReactNode;
-  readonly subtitle?: string;
-  readonly title?: string;
-  readonly style?: StyleProp<ViewStyle>;
-};
-
 export function SectionCard({
   children,
   footer,
   style,
   subtitle,
   title,
-}: SectionCardProps) {
+}: {
+  readonly children: ReactNode;
+  readonly footer?: ReactNode;
+  readonly subtitle?: string;
+  readonly title?: string;
+  readonly style?: StyleProp<ViewStyle>;
+}) {
   const hasHeader = title !== undefined || subtitle !== undefined;
 
   return (

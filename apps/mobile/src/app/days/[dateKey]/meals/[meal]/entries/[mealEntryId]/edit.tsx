@@ -30,15 +30,6 @@ type EditMealEntryRouteData = {
   readonly mealEntry: Domain.MealEntry;
 };
 
-type EditMealEntryRouteLoadResult =
-  | {
-      readonly _tag: "InvalidRoute";
-    }
-  | {
-      readonly _tag: "Ready";
-      readonly data: EditMealEntryRouteData;
-    };
-
 type MealEntryMutationResult =
   | {
       readonly _tag: "MealEntryNotFound";
@@ -48,18 +39,6 @@ type MealEntryMutationResult =
     }
   | {
       readonly _tag: "Success";
-    };
-
-type EditMealEntryRouteEvent =
-  | {
-      readonly quantityGrams: string;
-      readonly type: "changeQuantity";
-    }
-  | {
-      readonly type: "delete";
-    }
-  | {
-      readonly type: "submit";
     };
 
 const EditMealEntryRouteParams = Schema.Struct({
@@ -84,7 +63,13 @@ const editMealEntryRouteLoaderMachine = setup({
   },
   actors: {
     loadRouteData: fromPromise<
-      EditMealEntryRouteLoadResult,
+      | {
+          readonly _tag: "InvalidRoute";
+        }
+      | {
+          readonly _tag: "Ready";
+          readonly data: EditMealEntryRouteData;
+        },
       {
         readonly dateKey: Domain.DateKey;
         readonly meal: Domain.MealId;
@@ -145,7 +130,17 @@ const editMealEntryRouteMachine = setup({
       readonly notice: string | null;
       readonly quantityGrams: string;
     },
-    events: {} as EditMealEntryRouteEvent,
+    events: {} as
+      | {
+          readonly quantityGrams: string;
+          readonly type: "changeQuantity";
+        }
+      | {
+          readonly type: "delete";
+        }
+      | {
+          readonly type: "submit";
+        },
     input: {} as EditMealEntryRouteData,
   },
   actors: {

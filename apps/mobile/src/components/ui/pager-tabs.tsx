@@ -12,7 +12,6 @@ export type PagerTab = {
 };
 
 type PagerTabBarVariant = "surface" | "header";
-type PagerTabBarPosition = "top" | "bottom";
 
 export function PagerTabBar({
   activeIndex,
@@ -88,7 +87,7 @@ export function PagerTabs({
 }: {
   readonly activeIndex: number;
   readonly onActiveIndexChange: (index: number) => void;
-  readonly tabBarPosition?: PagerTabBarPosition;
+  readonly tabBarPosition?: "top" | "bottom";
   readonly tabBarVariant?: PagerTabBarVariant;
   readonly tabs: readonly PagerTab[];
 }) {

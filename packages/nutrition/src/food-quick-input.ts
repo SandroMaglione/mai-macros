@@ -35,7 +35,13 @@ const requiredNutrients = [
     label: "protein",
   },
 ] satisfies readonly {
-  readonly field: FoodQuickInputRequiredNutrientFieldName;
+  readonly field: Extract<
+    FoodQuickInputNutrientFieldName,
+    | "carbsGramsPer100g"
+    | "energyKcalPer100g"
+    | "fatGramsPer100g"
+    | "proteinGramsPer100g"
+  >;
   readonly label: string;
 }[];
 
@@ -126,37 +132,6 @@ type FoodQuickInputNutrientFieldName = Exclude<
   "brand" | "name"
 >;
 
-type FoodQuickInputRequiredNutrientFieldName = Extract<
-  FoodQuickInputNutrientFieldName,
-  | "carbsGramsPer100g"
-  | "energyKcalPer100g"
-  | "fatGramsPer100g"
-  | "proteinGramsPer100g"
->;
-
-type FoodQuickInputMutablePartial = {
-  name?: string;
-  brand?: string;
-  energyKcalPer100g?: number;
-  proteinGramsPer100g?: number;
-  carbsGramsPer100g?: number;
-  fatGramsPer100g?: number;
-  fiberGramsPer100g?: number;
-  sugarGramsPer100g?: number;
-  saturatedFatGramsPer100g?: number;
-  saltGramsPer100g?: number;
-};
-
-type FoodQuickInputNutrientNumberParseResult =
-  | {
-      readonly issue: FoodQuickInputParseIssue;
-      readonly status: "failure";
-    }
-  | {
-      readonly status: "success";
-      readonly value: number;
-    };
-
 export const FoodQuickInput = Schema.Struct({
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
@@ -180,7 +155,18 @@ export const parseFoodQuickInput = Effect.fn("parseFoodQuickInput")(function* ({
   readonly input: string;
 }) {
   const fields = input.split(",");
-  const partial: FoodQuickInputMutablePartial = {};
+  const partial: {
+    name?: string;
+    brand?: string;
+    energyKcalPer100g?: number;
+    proteinGramsPer100g?: number;
+    carbsGramsPer100g?: number;
+    fatGramsPer100g?: number;
+    fiberGramsPer100g?: number;
+    sugarGramsPer100g?: number;
+    saturatedFatGramsPer100g?: number;
+    saltGramsPer100g?: number;
+  } = {};
   const issues: FoodQuickInputParseIssue[] = [];
 
   if (input.trim() === "") {
@@ -394,7 +380,15 @@ function _parseNutrientNumber({
   readonly field: FoodQuickInputNutrientFieldName;
   readonly input: string;
   readonly value: string | undefined;
-}): FoodQuickInputNutrientNumberParseResult {
+}):
+  | {
+      readonly issue: FoodQuickInputParseIssue;
+      readonly status: "failure";
+    }
+  | {
+      readonly status: "success";
+      readonly value: number;
+    } {
   const trimmedValue = value?.trim() ?? "";
   const parsedValue = Number(trimmedValue);
 

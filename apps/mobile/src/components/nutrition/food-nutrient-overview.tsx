@@ -24,16 +24,6 @@ type FoodNutrientOverviewNutrientName =
   | "saturatedFatGrams"
   | "sugarGrams";
 
-type FoodNutrientOverviewProps = {
-  readonly brand?: string;
-  readonly name: string;
-  readonly namePrefix?: ReactNode;
-  readonly nutrients?: FoodNutrientOverviewNutrients;
-  readonly nutrientOrder?: readonly FoodNutrientOverviewNutrientName[];
-  readonly primaryLabel?: string;
-  readonly secondaryLabel?: string;
-};
-
 type NutrientRowEmphasis = "primary" | "secondary";
 
 const defaultNutrientOrder = [
@@ -114,7 +104,15 @@ export function FoodNutrientOverview({
   nutrientOrder = defaultNutrientOrder,
   primaryLabel,
   secondaryLabel,
-}: FoodNutrientOverviewProps) {
+}: {
+  readonly brand?: string;
+  readonly name: string;
+  readonly namePrefix?: ReactNode;
+  readonly nutrients?: FoodNutrientOverviewNutrients;
+  readonly nutrientOrder?: readonly FoodNutrientOverviewNutrientName[];
+  readonly primaryLabel?: string;
+  readonly secondaryLabel?: string;
+}) {
   const displayedBrand =
     brand === undefined || brand.trim() === "" ? undefined : brand;
   const displayedPrimaryLabel =

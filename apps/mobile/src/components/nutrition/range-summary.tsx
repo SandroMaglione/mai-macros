@@ -11,10 +11,6 @@ import {
   type NutritionReportInsight,
 } from "./nutrition-report-insights.ts";
 
-type RangeSummaryProps = {
-  readonly report: NutritionReports.NutritionReportRange;
-};
-
 type FoodContributor = {
   readonly foodId: string;
   readonly name: string;
@@ -54,7 +50,11 @@ const nutrientColors = {
   sugarGrams: color.nutritionSugar,
 } satisfies Record<Reporting.NutrientName, string>;
 
-export function RangeSummary({ report }: RangeSummaryProps) {
+export function RangeSummary({
+  report,
+}: {
+  readonly report: NutritionReports.NutritionReportRange;
+}) {
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
   const totals = report.days.reduce<Reporting.NutrientTotals>(

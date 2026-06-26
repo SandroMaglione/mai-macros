@@ -11,14 +11,6 @@ import {
   type ViewStyle,
 } from "react-native";
 
-type MealPlanSummaryCardProps = {
-  readonly disabled: boolean;
-  readonly isActive: boolean;
-  readonly onPress: () => void;
-  readonly plan: Domain.Plan;
-  readonly style?: StyleProp<ViewStyle>;
-};
-
 type MealPlanSummaryRow = {
   readonly colorValue: string;
   readonly label: string;
@@ -31,7 +23,13 @@ export function MealPlanSummaryCard({
   onPress,
   plan,
   style,
-}: MealPlanSummaryCardProps) {
+}: {
+  readonly disabled: boolean;
+  readonly isActive: boolean;
+  readonly onPress: () => void;
+  readonly plan: Domain.Plan;
+  readonly style?: StyleProp<ViewStyle>;
+}) {
   const StatusIcon = isActive ? CircleCheck : Circle;
   const rows: readonly MealPlanSummaryRow[] = [
     {

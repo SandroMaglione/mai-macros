@@ -18,9 +18,6 @@ import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
-type MealPlanFormAction = "create" | "edit";
-type MealPlanFormLayout = "screen" | "embedded";
-
 type PlanTargetField = {
   readonly accentColor: string;
   readonly label: string;
@@ -94,12 +91,12 @@ export function MealPlanForm({
   onBack,
   onSubmit,
 }: {
-  readonly action: MealPlanFormAction;
+  readonly action: "create" | "edit";
   readonly canNavigateBack?: boolean;
   readonly errorMessage?: string;
   readonly initialPlan: Domain.Plan | null;
   readonly isSubmitting: boolean;
-  readonly layout?: MealPlanFormLayout;
+  readonly layout?: "screen" | "embedded";
   readonly onBack: () => void;
   readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {

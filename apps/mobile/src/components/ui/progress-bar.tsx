@@ -1,17 +1,15 @@
 import { color, radius } from "@/theme/tokens";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 
-type ProgressBarProps = {
-  readonly accessibilityLabel?: string;
-  readonly progress: number;
-  readonly style?: StyleProp<ViewStyle>;
-};
-
 export function ProgressBar({
   accessibilityLabel,
   progress,
   style,
-}: ProgressBarProps) {
+}: {
+  readonly accessibilityLabel?: string;
+  readonly progress: number;
+  readonly style?: StyleProp<ViewStyle>;
+}) {
   const clampedProgress = Math.max(0, Math.min(1, progress));
 
   return (

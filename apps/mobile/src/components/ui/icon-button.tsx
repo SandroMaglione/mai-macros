@@ -10,15 +10,6 @@ import {
 
 type IconButtonVariant = "primary" | "secondary" | "ghost";
 
-type IconButtonProps = Omit<PressableProps, "children" | "style"> & {
-  readonly accessibilityLabel: string;
-  readonly icon: LucideIcon;
-  readonly iconSize?: number;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly strokeWidth?: number;
-  readonly variant?: IconButtonVariant;
-};
-
 export function IconButton({
   disabled,
   icon: Icon,
@@ -27,7 +18,14 @@ export function IconButton({
   strokeWidth = 2.8,
   variant = "secondary",
   ...pressableProps
-}: IconButtonProps) {
+}: Omit<PressableProps, "children" | "style"> & {
+  readonly accessibilityLabel: string;
+  readonly icon: LucideIcon;
+  readonly iconSize?: number;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly strokeWidth?: number;
+  readonly variant?: IconButtonVariant;
+}) {
   return (
     <Pressable
       accessibilityRole="button"

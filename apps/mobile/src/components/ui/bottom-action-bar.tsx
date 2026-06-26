@@ -3,19 +3,15 @@ import type { ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type BottomActionBarVariant = "footer" | "floating" | "tab";
-
-type BottomActionBarProps = {
-  readonly children: ReactNode;
-  readonly style?: StyleProp<ViewStyle>;
-  readonly variant?: BottomActionBarVariant;
-};
-
 export function BottomActionBar({
   children,
   style,
   variant = "footer",
-}: BottomActionBarProps) {
+}: {
+  readonly children: ReactNode;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly variant?: "footer" | "floating" | "tab";
+}) {
   const insets = useSafeAreaInsets();
   const isFloating = variant === "floating";
   const isTab = variant === "tab";

@@ -70,30 +70,6 @@ type FoodLibraryData = {
   readonly foodUsage: readonly MealEntries.MealFoodUsage[];
 };
 
-type EditFoodsRouteEvent =
-  | FoodSearchMachine.FoodSearchSelectedEvent
-  | {
-      readonly input: Foods.ReviseFoodInput;
-      readonly type: "reviseFood";
-    }
-  | {
-      readonly type: "clearNotice";
-    }
-  | {
-      readonly type: "clearSelectedFood";
-    };
-
-type EditFoodsRouteContext = {
-  readonly dateKey: Domain.DateKey | undefined;
-  readonly foods: readonly Domain.Food[];
-  readonly foodSearchActor: ActorRefFrom<
-    typeof FoodSearchMachine.foodSearchMachine
-  >;
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-  readonly notice: string | null;
-  readonly selectedFood: Domain.Food | null;
-};
-
 type FoodNutrientField = {
   readonly accentColor: string;
   readonly label: string;
@@ -166,8 +142,28 @@ const nutrientFields: readonly FoodNutrientField[] = [
 
 const editFoodsRouteMachine = setup({
   types: {
-    context: {} as EditFoodsRouteContext,
-    events: {} as EditFoodsRouteEvent,
+    context: {} as {
+      readonly dateKey: Domain.DateKey | undefined;
+      readonly foods: readonly Domain.Food[];
+      readonly foodSearchActor: ActorRefFrom<
+        typeof FoodSearchMachine.foodSearchMachine
+      >;
+      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
+      readonly notice: string | null;
+      readonly selectedFood: Domain.Food | null;
+    },
+    events: {} as
+      | FoodSearchMachine.FoodSearchSelectedEvent
+      | {
+          readonly input: Foods.ReviseFoodInput;
+          readonly type: "reviseFood";
+        }
+      | {
+          readonly type: "clearNotice";
+        }
+      | {
+          readonly type: "clearSelectedFood";
+        },
     input: {} as EditFoodsRouteData,
   },
   actors: {
@@ -346,8 +342,6 @@ const editFoodsRouteMachine = setup({
     },
   },
 });
-
-type EditFoodsRouteActorRef = ActorRefFrom<typeof editFoodsRouteMachine>;
 
 const EditFoodsSearchParams = Schema.Struct({
   dateKey: Schema.optional(Domain.DateKey),
@@ -634,7 +628,7 @@ function FoodEditForm({
   selectedFood,
   submitLabel,
 }: {
-  readonly actor: EditFoodsRouteActorRef;
+  readonly actor: ActorRefFrom<typeof editFoodsRouteMachine>;
   readonly disabled: boolean;
   readonly layout: EditFoodsLayout;
   readonly revisionMessage: string;

@@ -598,6 +598,15 @@ run("no-single-use-private-functions", noSingleUsePrivateFunctions, {
     "function _format(value: string) { return value.trim(); }\nexport { _format };",
     "function _format(value: string) { return value.trim(); }\nexport { _format as format };",
     "const _format = (value: string) => value.trim();\nexport default _format;",
+    "const _load = Effect.fn('_load')(function* (value: string) { return value; });\nconst first = _load(input);\nconst second = _load(other);",
+    "const _program = Effect.gen(function* () { return value; });\nruntime.runPromise(_program);\nruntime.runPromise(_program);",
+    "const _load = CustomEffect.fn('_load')(function* () { return value; });\nconst value = _load();",
+    "export const load = Effect.fn('load')(function* () { return value; });\nconst value = load();",
+    "type Input = { readonly value: string };\nconst first: Input = input;\nconst second: Input = other;",
+    "interface Input { readonly value: string }\nconst first: Input = input;\nconst second: Input = other;",
+    "export type Input = { readonly value: string };\nconst value: Input = input;",
+    "type Input = { readonly value: string };\nexport type { Input };",
+    "type Input = { readonly value: string };",
     "function Component() { return null; }\nexport default Component;",
     "const result = values.map((value) => value.trim());",
     "function _unused(value: string) { return value.trim(); }",
@@ -622,6 +631,34 @@ run("no-single-use-private-functions", noSingleUsePrivateFunctions, {
     {
       code: "function _format(value: string) { return value.trim(); }\nexport const value = _format(input);",
       errors: [/Inline the private function "_format"/],
+    },
+    {
+      code: "const _load = Effect.fn('_load')(function* (value: string) { return value; });\nconst value = _load(input);",
+      errors: [/Inline the private Effect function "_load"/],
+    },
+    {
+      code: "const _load = Effect.fn(function* (value: string) { return value; });\nconst value = _load(input);",
+      errors: [/Inline the private Effect function "_load"/],
+    },
+    {
+      code: "const _load = Effect.fnUntraced(function* (value: string) { return value; });\nconst value = _load(input);",
+      errors: [/Inline the private Effect function "_load"/],
+    },
+    {
+      code: "const _program = Effect.gen(function* () { return value; });\nruntime.runPromise(_program);",
+      errors: [/Inline the private Effect program "_program"/],
+    },
+    {
+      code: "type Input = { readonly value: string };\nconst value: Input = input;",
+      errors: [/Inline the private type "Input"/],
+    },
+    {
+      code: "interface Input { readonly value: string }\nconst value: Input = input;",
+      errors: [/Inline the private type "Input"/],
+    },
+    {
+      code: "type Input = { readonly value: string };\nexport const value: Input = input;",
+      errors: [/Inline the private type "Input"/],
     },
   ],
 });

@@ -25,9 +25,6 @@ import {
   type FoodNutrientOverviewNutrients,
 } from "./food-nutrient-overview";
 
-type FoodFormAction = "create" | "edit";
-type FoodFormLayout = "screen" | "embedded";
-
 type FoodNutrientField = {
   readonly accentColor: string;
   readonly label: string;
@@ -116,12 +113,12 @@ export function FoodForm({
   layout = "screen",
   onBack,
 }: {
-  readonly action: FoodFormAction;
+  readonly action: "create" | "edit";
   readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly errorMessage?: string;
   readonly hasFailed: boolean;
-  readonly layout?: FoodFormLayout;
+  readonly layout?: "screen" | "embedded";
   readonly onBack: () => void;
 }) {
   const snapshot = useSelector(

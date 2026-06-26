@@ -11,13 +11,11 @@ const LatestMigrationRow = Schema.Struct({
   migrationId: Schema.Number,
 });
 
-type SqliteMigration = {
+export const SqliteMigrationLoader: readonly {
   readonly effect: Effect.Effect<void, unknown, SqlClient.SqlClient>;
   readonly id: number;
   readonly name: string;
-};
-
-export const SqliteMigrationLoader: readonly SqliteMigration[] = [
+}[] = [
   {
     effect: migration001,
     id: 1,

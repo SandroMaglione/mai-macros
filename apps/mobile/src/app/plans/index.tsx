@@ -32,19 +32,6 @@ type PlansRouteData = {
   readonly day: PlansDay;
 };
 
-type PlansRouteLoadResult =
-  | {
-      readonly _tag: "InvalidRoute";
-    }
-  | {
-      readonly _tag: "NoMealPlans";
-      readonly dateKey: Domain.DateKey;
-    }
-  | {
-      readonly _tag: "Ready";
-      readonly data: PlansRouteData;
-    };
-
 const PlansSearchParams = Schema.Struct({
   dateKey: Schema.optional(Domain.DateKey),
 });
@@ -66,44 +53,6 @@ type SavePlanInput =
       readonly planId: Domain.Plan["id"];
     };
 
-type SavePlanResult =
-  | {
-      readonly _tag: "Saved";
-      readonly day: PlansDay;
-      readonly editingPlan: Domain.Plan;
-      readonly notice: string;
-    }
-  | {
-      readonly _tag: "Failed";
-      readonly notice: string;
-    };
-
-type PlansRouteEvent =
-  | {
-      readonly index: PlansTabIndex;
-      readonly type: "selectTab";
-    }
-  | {
-      readonly plan: Domain.Plan;
-      readonly type: "changePlan";
-    }
-  | {
-      readonly input: MealPlans.CreateMealPlanInput;
-      readonly type: "createPlan";
-    }
-  | {
-      readonly input: MealPlans.CreateMealPlanInput;
-      readonly plan: Domain.Plan;
-      readonly type: "revisePlan";
-    }
-  | {
-      readonly plan: Domain.Plan;
-      readonly type: "selectEditPlan";
-    }
-  | {
-      readonly type: "clearEditPlan";
-    };
-
 const plansRouteMachine = setup({
   types: {
     context: {} as {
@@ -114,7 +63,31 @@ const plansRouteMachine = setup({
       readonly notice: string | null;
       readonly redirectDateKey: Domain.DateKey | null;
     },
-    events: {} as PlansRouteEvent,
+    events: {} as
+      | {
+          readonly index: PlansTabIndex;
+          readonly type: "selectTab";
+        }
+      | {
+          readonly plan: Domain.Plan;
+          readonly type: "changePlan";
+        }
+      | {
+          readonly input: MealPlans.CreateMealPlanInput;
+          readonly type: "createPlan";
+        }
+      | {
+          readonly input: MealPlans.CreateMealPlanInput;
+          readonly plan: Domain.Plan;
+          readonly type: "revisePlan";
+        }
+      | {
+          readonly plan: Domain.Plan;
+          readonly type: "selectEditPlan";
+        }
+      | {
+          readonly type: "clearEditPlan";
+        },
     input: {} as {
       readonly dateKey: Domain.DateKey | undefined;
     },
@@ -141,7 +114,17 @@ const plansRouteMachine = setup({
       )
     ),
     loadRouteData: fromPromise<
-      PlansRouteLoadResult,
+      | {
+          readonly _tag: "InvalidRoute";
+        }
+      | {
+          readonly _tag: "NoMealPlans";
+          readonly dateKey: Domain.DateKey;
+        }
+      | {
+          readonly _tag: "Ready";
+          readonly data: PlansRouteData;
+        },
       Domain.DateKey | undefined
     >(({ input }) =>
       RuntimeClient.runPromise(
@@ -150,9 +133,19 @@ const plansRouteMachine = setup({
         })
       )
     ),
-    savePlan: fromPromise<SavePlanResult, SavePlanInput>(({ input }) =>
-      RuntimeClient.runPromise(savePlan({ input }))
-    ),
+    savePlan: fromPromise<
+      | {
+          readonly _tag: "Saved";
+          readonly day: PlansDay;
+          readonly editingPlan: Domain.Plan;
+          readonly notice: string;
+        }
+      | {
+          readonly _tag: "Failed";
+          readonly notice: string;
+        },
+      SavePlanInput
+    >(({ input }) => RuntimeClient.runPromise(savePlan({ input }))),
   },
 }).createMachine({
   context: ({ input }) => ({

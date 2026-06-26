@@ -5,10 +5,6 @@ type LoadingViewProps = {
   readonly message?: string;
 };
 
-type LoadingOverlayProps = LoadingViewProps & {
-  readonly visible: boolean;
-};
-
 export function LoadingView({ message = "Loading" }: LoadingViewProps) {
   return (
     <View accessibilityRole="progressbar" style={styles.view}>
@@ -18,7 +14,12 @@ export function LoadingView({ message = "Loading" }: LoadingViewProps) {
   );
 }
 
-export function LoadingOverlay({ message, visible }: LoadingOverlayProps) {
+export function LoadingOverlay({
+  message,
+  visible,
+}: LoadingViewProps & {
+  readonly visible: boolean;
+}) {
   return (
     <Modal animationType="fade" transparent visible={visible}>
       <View style={styles.overlay}>
