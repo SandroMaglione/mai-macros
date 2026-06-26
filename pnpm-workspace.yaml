@@ -3,3 +3,17 @@ packages:
   - "packages/*"
 
 nodeLinker: hoisted
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+
+ignoredBuiltDependencies:
+  - dtrace-provider
+  - msgpackr-extract
+
+allowBuilds:
+  better-sqlite3: true
+  dtrace-provider: false
+  esbuild: true
+  msgpackr-extract: false
