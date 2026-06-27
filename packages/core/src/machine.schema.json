@@ -67,6 +67,7 @@
           ]
         },
         "actions": { "$ref": "#/$defs/actionList" },
+        "context": { "type": "object" },
         "guard": {
           "oneOf": [
             { "$ref": "#/$defs/guardObject" },
@@ -104,7 +105,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "systemId": { "type": "string" },
+        "registryKey": { "type": "string" },
         "src": {
           "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/unserializable" }]
         },
@@ -245,7 +246,7 @@
         "schemas": { "type": "object" },
         "actions": { "$ref": "#/$defs/implementationMap" },
         "guards": { "$ref": "#/$defs/implementationMap" },
-        "actors": { "$ref": "#/$defs/implementationMap" },
+        "actorSources": { "$ref": "#/$defs/implementationMap" },
         "delays": { "$ref": "#/$defs/implementationMap" }
       },
       "additionalProperties": true
