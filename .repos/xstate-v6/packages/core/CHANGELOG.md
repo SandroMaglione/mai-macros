@@ -1,5 +1,110 @@
 # xstate
 
+## 6.0.0-alpha.10
+
+### Patch Changes
+
+- 86b43ea: Export setup system helper types used by public machine types.
+
+  This avoids inferred machine types referring to internal declaration paths when
+  `setup(...)` includes a typed system registry.
+
+## 6.0.0-alpha.9
+
+### Minor Changes
+
+- 54205cc: Export setup helper types for libraries that return or decorate setup-bound objects while preserving native `setup(...).createMachine(...)` typing.
+
+  ```ts
+  import {
+    setup,
+    type AnySetupConfig,
+    type SetupReturnFromConfig
+  } from 'xstate';
+
+  function decorateSetup<const TConfig extends AnySetupConfig>(
+    config: TConfig
+  ): SetupReturnFromConfig<TConfig> & { extra: true } {
+    const s = setup(config) as SetupReturnFromConfig<TConfig>;
+
+    return Object.assign(s, { extra: true as const });
+  }
+  ```
+
+### Patch Changes
+
+- 54205cc: Empty Standard Schema event objects now infer as type-only events, so `{ type: 'SEND' }` is accepted for an empty `SEND` payload schema while non-empty schemas still require their payload fields.
+- 54205cc: Registered invoke `onDone` callbacks now receive the invoked actor's output type, and `machine.provide({ actorSources })` accepts compatible actor implementations with sound input/output variance.
+
+## 6.0.0-alpha.8
+
+### Patch Changes
+
+- 667d1c7: Done transitions now receive `output` directly in callback arguments.
+
+  ```ts
+  invoke: {
+    src: fetchUser,
+    onDone: ({ output }) => {
+      output.name;
+    }
+  }
+  ```
+
+  The direct `output` value is only provided for XState done events, such as
+  `xstate.done.actor.*` and `xstate.done.state.*`.
+
+## 6.0.0-alpha.7
+
+### Major Changes
+
+- 89895f9: Add `createSystem({ registry })` for declaring typed actor registry keys and creating actors in that system.
+
+  Registry keys are assigned with `registryKey` on invokes, spawned actors, and root actors created from the system. Registry keys are checked against the declared registry when using `createSystem`.
+
+  ```ts
+  const system = createSystem({
+    registry: {
+      receiver: receiverLogic
+    }
+  });
+
+  const machine = system.setup().createMachine({
+    invoke: {
+      src: receiverLogic,
+      registryKey: 'receiver'
+    }
+  });
+
+  const actor = system.createActor(machine).start();
+
+  system.get('receiver')?.send({ type: 'HELLO' });
+  ```
+
+### Patch Changes
+
+- 89895f9: Static transition config objects may now include a shallow `context` patch.
+
+  ```ts
+  createMachine({
+    context: { draftAnyway: false, count: 0 },
+    initial: 'idle',
+    states: {
+      idle: {
+        on: {
+          DRAFT_ANYWAY: {
+            target: 'drafting',
+            context: { draftAnyway: true }
+          }
+        }
+      },
+      drafting: {}
+    }
+  });
+  ```
+
+  The patch is shallow-merged with the current context, just like `context` returned from a transition function. Setup-typed machines still require any keys needed by the target state's narrowed context.
+
 ## 6.0.0-alpha.6
 
 ### Patch Changes

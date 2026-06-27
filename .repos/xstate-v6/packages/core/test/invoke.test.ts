@@ -25,6 +25,26 @@ import z from 'zod';
 const user = { name: 'David' };
 
 describe('invoke', () => {
+  it('should not provide output directly for arbitrary output events', () => {
+    let receivedOutput: unknown = 'unset';
+    const machine = createMachine({
+      on: {
+        CUSTOM: ({ output }) => {
+          receivedOutput = output;
+        }
+      }
+    });
+
+    createActor(machine)
+      .start()
+      .send({
+        type: 'CUSTOM',
+        output: 'not a done event output'
+      } as AnyEventObject);
+
+    expect(receivedOutput).toBeUndefined();
+  });
+
   it('child can immediately respond to the parent with multiple events', () => {
     const childMachine = createMachine({
       // types: {} as {
@@ -50,7 +70,7 @@ describe('invoke', () => {
         id: 'parent',
         // types: {} as {
         //   context: { count: number };
-        //   actors: {
+        //   actorSources: {
         //     src: 'child';
         //     id: 'someService';
         //     logic: typeof childMachine;
@@ -91,7 +111,7 @@ describe('invoke', () => {
         }
       }
       // {
-      //   actors: {
+      //   actorSources: {
       //     child: childMachine
       //   }
       // }
@@ -416,7 +436,7 @@ describe('invoke', () => {
 
     const actor = createActor(
       someParentMachine.provide({
-        actors: {
+        actorSources: {
           child: createMachine({
             id: 'child',
             initial: 'init',
@@ -579,7 +599,7 @@ describe('invoke', () => {
       const pingMachine = createMachine({
         id: 'ping',
         type: 'parallel',
-        actors: {
+        actorSources: {
           pongMachine
         },
         states: {
@@ -1049,7 +1069,7 @@ describe('invoke', () => {
             }
           }
           // {
-          //   actors: {
+          //   actorSources: {
           //     somePromise: createAsyncLogic(() =>
           //       createPromise((resolve) => resolve())
           //     )
@@ -1103,6 +1123,42 @@ describe('invoke', () => {
         await promise;
       });
 
+      it('should provide resolved output directly to onDone', async () => {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        const promiseMachine = createMachine({
+          context: { userName: undefined as string | undefined },
+          initial: 'pending',
+          states: {
+            pending: {
+              invoke: {
+                src: createAsyncLogic({
+                  run: async () => ({ name: 'David' })
+                }),
+                onDone: ({ output }) => ({
+                  context: {
+                    userName: output.name
+                  },
+                  target: 'success'
+                })
+              }
+            },
+            success: {
+              type: 'final'
+            }
+          }
+        });
+
+        const actor = createActor(promiseMachine);
+        actor.subscribe({
+          complete: () => {
+            expect(actor.getSnapshot().context.userName).toBe('David');
+            resolve();
+          }
+        });
+        actor.start();
+        await promise;
+      });
+
       it('should assign the resolved data when invoked with a promise service', async () => {
         const { promise, resolve } = Promise.withResolvers<void>();
         const somePromise = createAsyncLogic({
@@ -1136,7 +1192,7 @@ describe('invoke', () => {
             }
           }
           // {
-          //   actors: {
+          //   actorSources: {
           //     somePromise: createAsyncLogic(() =>
           //       createPromise((resolve) => resolve({ count: 1 }))
           //     )
@@ -1233,7 +1289,7 @@ describe('invoke', () => {
             }
           }
           // {
-          //   actors: {
+          //   actorSources: {
           //     somePromise: createAsyncLogic(() =>
           //       createPromise((resolve) => resolve({ count: 1 }))
           //     )
@@ -1307,7 +1363,7 @@ describe('invoke', () => {
             }
           }
           // {
-          //   actors: {
+          //   actorSources: {
           //     somePromise: promiseActor
           //   }
           // }
@@ -1336,7 +1392,7 @@ describe('invoke', () => {
             //     result1: number | null;
             //     result2: number | null;
             //   };
-            //   actors: {
+            //   actorSources: {
             //     src: 'getRandomNumber';
             //     logic: AsyncActorLogic<{ result: number }>;
             //   };
@@ -1408,7 +1464,7 @@ describe('invoke', () => {
             }
           }
           // {
-          //   actors: {
+          //   actorSources: {
           //     // it's important for this actor to be reused, this test shouldn't use a factory or anything like that
           //     getRandomNumber: createAsyncLogic(() => {
           //       return createPromise((resolve) =>
@@ -1518,7 +1574,7 @@ describe('invoke', () => {
           // types: {} as {
           //   context: { foo: boolean };
           //   events: BeginEvent | CallbackEvent;
-          //   actors: {
+          //   actorSources: {
           //     src: 'someCallback';
           //     logic: typeof someCallback;
           //   };
@@ -1565,7 +1621,7 @@ describe('invoke', () => {
           }
         }
         // {
-        //   actors: {
+        //   actorSources: {
         //     someCallback
         //   }
         // }
@@ -1699,7 +1755,7 @@ describe('invoke', () => {
           }
         }
         // {
-        //   actors: {
+        //   actorSources: {
         //     someCallback: createCallbackLogic(({ sendBack }) => {
         //       sendBack({ type: 'CALLBACK' });
         //     })
@@ -2817,12 +2873,12 @@ describe('invoke', () => {
           }
         }),
 
-        TWO: ({ context }) => ({
+        TWO: {
           context: {
             two: 'two'
           },
           target: '.three'
-        })
+        }
       },
 
       states: {
@@ -3219,10 +3275,10 @@ describe('invoke', () => {
       states: {
         idle: {
           on: {
-            start: () => ({
+            start: {
               target: 'active',
               context: { value: 100 }
-            })
+            }
           }
         },
         active: {
@@ -3315,7 +3371,7 @@ describe('invoke', () => {
           }
         }
         // {
-        //   actors: {
+        //   actorSources: {
         //     someSrc: createCallbackLogic(() => {
         //       /* ... */
         //     })
@@ -3356,7 +3412,10 @@ describe('invoke', () => {
                 return Promise.resolve(42);
               }
             }),
-            onDone: (_: any, enq: any) => {
+            onDone: (
+              _args: unknown,
+              enq: (action: typeof handleSuccess) => void
+            ) => {
               enq(handleSuccess);
             }
           }

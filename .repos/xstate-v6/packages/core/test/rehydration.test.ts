@@ -216,12 +216,12 @@ describe('rehydration', () => {
 
   it('a rehydrated active child should be registered in the system', () => {
     const machine = createMachine({
-      actors: {
+      actorSources: {
         foo: createMachine({})
       },
       context: ({ spawn }) => {
         spawn('foo', {
-          systemId: 'mySystemId'
+          registryKey: 'mySystemId'
         });
         return {};
       }
@@ -240,12 +240,12 @@ describe('rehydration', () => {
 
   it('a rehydrated done child should not be registered in the system', () => {
     const machine = createMachine({
-      actors: {
+      actorSources: {
         foo: createMachine({ type: 'final' })
       },
       context: ({ spawn }) => {
         spawn('foo', {
-          systemId: 'mySystemId'
+          registryKey: 'mySystemId'
         });
         return {};
       }
@@ -266,12 +266,12 @@ describe('rehydration', () => {
     const spy = vi.fn();
 
     const machine = createMachine({
-      actors: {
+      actorSources: {
         foo: createMachine({ type: 'final' })
       },
       context: ({ spawn }) => {
         spawn('foo', {
-          systemId: 'mySystemId'
+          registryKey: 'mySystemId'
         });
         return {};
       },
@@ -295,7 +295,7 @@ describe('rehydration', () => {
 
   it('should be possible to persist a rehydrated actor that got its children rehydrated', () => {
     const machine = createMachine({
-      actors: {
+      actorSources: {
         foo: createAsyncLogic({ run: () => Promise.resolve(42) })
       },
       invoke: {
@@ -405,7 +405,7 @@ describe('rehydration', () => {
     const spy = vi.fn();
 
     const machine = createMachine({
-      actors: {
+      actorSources: {
         service: subjectLogic
       },
       invoke: [
