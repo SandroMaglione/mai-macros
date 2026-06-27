@@ -1,9 +1,9 @@
 import {
-  Array as EffectArray,
   Context,
   Data,
   DateTime,
   Effect,
+  Array as EffectArray,
   Equal,
   Layer,
   Schema,
@@ -150,31 +150,44 @@ export type PreviewFoodCatalogJsonInput =
 export type ImportSelectedFoodCatalogJsonInput =
   typeof ImportSelectedFoodCatalogJsonInputSchema.Encoded;
 
+export const FoodCatalogImportCandidateStatus = Schema.Literals([
+  "already-present",
+  "id-conflict",
+  "new",
+]);
 export type FoodCatalogImportCandidateStatus =
-  | "already-present"
-  | "id-conflict"
-  | "new";
+  typeof FoodCatalogImportCandidateStatus.Type;
 
-export type FoodCatalogNameStatus = "same-name-local" | "unique";
+export const FoodCatalogNameStatus = Schema.Literals([
+  "same-name-local",
+  "unique",
+]);
+export type FoodCatalogNameStatus = typeof FoodCatalogNameStatus.Type;
 
+export const FoodCatalogImportSelectionReason = Schema.Literals([
+  "already-present",
+  "id-conflict",
+  "same-name-local",
+]);
 export type FoodCatalogImportSelectionReason =
-  | "already-present"
-  | "id-conflict"
-  | "same-name-local";
+  typeof FoodCatalogImportSelectionReason.Type;
 
-export type FoodCatalogImportCandidateSelection = {
-  readonly defaultSelected: boolean;
-  readonly reasons: readonly FoodCatalogImportSelectionReason[];
-  readonly selectable: boolean;
-};
+export const FoodCatalogImportCandidateSelection = Schema.Struct({
+  defaultSelected: Schema.Boolean,
+  reasons: Schema.Array(FoodCatalogImportSelectionReason),
+  selectable: Schema.Boolean,
+});
+export type FoodCatalogImportCandidateSelection =
+  typeof FoodCatalogImportCandidateSelection.Type;
 
-export type FoodCatalogImportCandidate = {
-  readonly food: FoodCatalogFood;
-  readonly nameStatus: FoodCatalogNameStatus;
-  readonly sameNameLocalFoodIds: readonly FoodId[];
-  readonly selection: FoodCatalogImportCandidateSelection;
-  readonly status: FoodCatalogImportCandidateStatus;
-};
+export const FoodCatalogImportCandidate = Schema.Struct({
+  food: FoodCatalogFood,
+  nameStatus: FoodCatalogNameStatus,
+  sameNameLocalFoodIds: Schema.Array(FoodId),
+  selection: FoodCatalogImportCandidateSelection,
+  status: FoodCatalogImportCandidateStatus,
+});
+export type FoodCatalogImportCandidate = typeof FoodCatalogImportCandidate.Type;
 
 export const FoodCatalogIntegrityErrorReason = Schema.Literals([
   "count-mismatch",
