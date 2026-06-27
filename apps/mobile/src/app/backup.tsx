@@ -10,7 +10,7 @@ import {
 } from "@/components/ui";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { LocalDataResetMachine } from "@mai/machines";
+import { EmptyEvent, LocalDataResetMachine } from "@mai/machines";
 import {
   Backup,
   Domain,
@@ -21,6 +21,7 @@ import { BackupFileTransfer, FoodCatalogShare, Gzip } from "@mai/services";
 import { useMachine } from "@xstate/react";
 import {
   Array,
+  Data,
   DateTime,
   Effect,
   HashSet,
@@ -42,11 +43,13 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { createAsyncLogic, setup } from "xstate";
-import type { FoodCatalogImportCandidate } from "../../../../packages/nutrition/src/services/food-catalog-transfer";
 
-type MobileBackupImportResult =
-  | { readonly message: string; readonly status: "imported" }
-  | { readonly message: null; readonly status: "canceled" };
+const MobileBackupImportResult = Data.taggedEnum<
+  Data.TaggedEnum<{
+    Imported: { readonly message: string };
+    Canceled: {};
+  }>
+>();
 
 type MobileCatalogPreviewResult = {
   readonly catalogJson: string;
@@ -62,7 +65,7 @@ type MobileCatalogFilePreviewResult =
 const exportBackupMachine = setup({
   schemas: {
     events: {
-      Export: Schema.toStandardSchemaV1(Schema.Void),
+      Export: Schema.toStandardSchemaV1(EmptyEvent),
       ChangeBackupName: Schema.toStandardSchemaV1(
         Schema.Struct({ backupName: Schema.String })
       ),
@@ -147,7 +150,7 @@ const exportBackupMachine = setup({
 const importBackupMachine = setup({
   schemas: {
     events: {
-      ImportFile: Schema.toStandardSchemaV1(Schema.Void),
+      ImportFile: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
   delays: { ImportBackupSuccess: 3000 },
@@ -183,10 +186,7 @@ const importBackupMachine = setup({
             return yield* Match.value(pickedFile).pipe(
               Match.tagsExhaustive({
                 BackupFilePickCanceled: () =>
-                  Effect.succeed<MobileBackupImportResult>({
-                    message: null,
-                    status: "canceled",
-                  }),
+                  Effect.succeed(MobileBackupImportResult.Canceled()),
 
                 PickedBackupFile: Effect.fnUntraced(function* (pickedFile) {
                   const json = yield* decodeMobileJsonFile({
@@ -196,14 +196,13 @@ const importBackupMachine = setup({
 
                   const importedBackup = yield* importMobileBackup({ json });
 
-                  return {
+                  return MobileBackupImportResult.Imported({
                     message:
                       "Imported " +
                       pickedFile.fileName +
                       ". " +
                       importedBackup.message,
-                    status: "imported",
-                  } satisfies MobileBackupImportResult;
+                  });
                 }),
               })
             );
@@ -219,7 +218,10 @@ const importBackupMachine = setup({
         src: "importBackupFile",
         onDone: ({ event }) => ({
           target: "Success",
-          context: { message: event.output.message },
+          context: MobileBackupImportResult.$match({
+            Canceled: () => ({ context: { message: "Import canceled" } }),
+            Imported: ({ message }) => ({ context: { message } }),
+          })(event.output),
         }),
         onError: ({ event }) => ({
           target: "Error",
@@ -235,7 +237,7 @@ const importBackupMachine = setup({
 const catalogExportMachine = setup({
   schemas: {
     events: {
-      ExportCatalog: Schema.toStandardSchemaV1(Schema.Void),
+      ExportCatalog: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
   delays: { ExportCatalogSuccess: 3000 },
@@ -316,8 +318,8 @@ const catalogExportMachine = setup({
 const catalogImportMachine = setup({
   schemas: {
     events: {
-      OpenPreviewCatalogImportFile: Schema.toStandardSchemaV1(Schema.Void),
-      ImportSelectedCatalogFoods: Schema.toStandardSchemaV1(Schema.Void),
+      OpenPreviewCatalogImportFile: Schema.toStandardSchemaV1(EmptyEvent),
+      ImportSelectedCatalogFoods: Schema.toStandardSchemaV1(EmptyEvent),
       ToggleCatalogFood: Schema.toStandardSchemaV1(
         Schema.Struct({ foodId: Domain.FoodId })
       ),
@@ -793,7 +795,7 @@ function CatalogCandidateRow({
   onToggle,
   selected,
 }: {
-  readonly candidate: FoodCatalogImportCandidate;
+  readonly candidate: FoodCatalogTransfer.FoodCatalogImportCandidate;
   readonly disabled: boolean;
   readonly onToggle: () => void;
   readonly selected: boolean;
@@ -877,7 +879,7 @@ function ResetDataSection() {
   const canReset = snapshot.can({ type: "Reset" });
   const isIdle = snapshot.matches("Idle");
   const isConfirming =
-    snapshot.matches("Failure") || snapshot.matches("Confirming");
+    snapshot.matches("Failure") || snapshot.matches("ConfirmReset");
   const isResetting = snapshot.matches("Resetting");
   const resetDisabled = isResetting;
   return (
@@ -1053,10 +1055,9 @@ export function importMobileBackup({ json }: { readonly json: string }) {
       },
     });
 
-    return {
+    return MobileBackupImportResult.Imported({
       message: backupImportMessage({ backup: importedBackup.backup }),
-      status: "imported",
-    } satisfies MobileBackupImportResult;
+    });
   });
 }
 

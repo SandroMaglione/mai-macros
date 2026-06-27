@@ -7,6 +7,7 @@ import {
   type SnapshotFrom,
 } from "xstate";
 import type { MachineRuntime } from "./runtime";
+import { EmptyEvent } from "./schemas";
 
 export const makeLocalDataResetMachine = ({
   restartApp,
@@ -18,9 +19,9 @@ export const makeLocalDataResetMachine = ({
   setup({
     schemas: {
       events: {
-        Begin: Schema.toStandardSchemaV1(Schema.Void),
-        Cancel: Schema.toStandardSchemaV1(Schema.Void),
-        Reset: Schema.toStandardSchemaV1(Schema.Void),
+        Begin: Schema.toStandardSchemaV1(EmptyEvent),
+        Cancel: Schema.toStandardSchemaV1(EmptyEvent),
+        Reset: Schema.toStandardSchemaV1(EmptyEvent),
         ChangeConfirmationText: Schema.toStandardSchemaV1(
           Schema.Struct({
             confirmationText: Schema.String,
