@@ -1,5 +1,5 @@
 import { NutritionReports, Reporting } from "@mai/nutrition";
-import { Array as EffectArray } from "effect";
+import { Array } from "effect";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -75,13 +75,25 @@ export function RangeSummary({
   const averageTargetTotals = trackedNutrients.reduce<
     Record<Reporting.NutrientName, number | null>
   >(
-    (targets, nutrientName) => ({
-      ...targets,
-      [nutrientName]: getAverageTargetAmount({
-        nutrientName,
-        report,
-      }),
-    }),
+    (targets, nutrientName) => {
+      const targetAmounts = report.days.flatMap((day) => {
+        const amount = Reporting.getPlanNutrientTargetAmount({
+          nutrientName,
+          plan: day.plan,
+        });
+
+        return amount === undefined ? [] : [amount];
+      });
+
+      return {
+        ...targets,
+        [nutrientName]:
+          dayCount === 0 || targetAmounts.length !== dayCount
+            ? null
+            : targetAmounts.reduce((total, amount) => total + amount, 0) /
+              dayCount,
+      };
+    },
     {
       carbsGrams: null,
       energyKcal: null,
@@ -191,7 +203,7 @@ function SummaryInsights({
         title="Summary"
       />
       <View style={styles.insightList}>
-        {!EffectArray.isReadonlyArrayNonEmpty(insights) ? (
+        {!Array.isReadonlyArrayNonEmpty(insights) ? (
           <Text style={styles.emptyText}>
             Log more meals to surface weekly food and meal patterns.
           </Text>
@@ -228,6 +240,15 @@ function NutrientBalanceCard({
   readonly target: number | null;
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
+  const signedValue = target === null ? null : actual - target;
+  const formattedSignedValue =
+    signedValue === null
+      ? null
+      : formatNumber({
+          maximumFractionDigits:
+            Math.abs(signedValue) > 0 && Math.abs(signedValue) < 10 ? 1 : 0,
+          value: Math.abs(signedValue),
+        });
 
   return (
     <View style={styles.nutrientCard}>
@@ -244,12 +265,11 @@ function NutrientBalanceCard({
         {_formatNutrient({ nutrientName, value: actual })}
       </Text>
       <Text numberOfLines={1} style={styles.nutrientDelta}>
-        {target === null
+        {signedValue === null || formattedSignedValue === null
           ? "No target"
-          : formatSignedNumber({
-              unit,
-              value: actual - target,
-            })}
+          : signedValue === 0
+            ? `0 ${unit}`
+            : `${signedValue > 0 ? "+" : "-"}${formattedSignedValue} ${unit}`}
       </Text>
     </View>
   );
@@ -269,7 +289,7 @@ function FoodContributorGroup({
       >
         {nutrientLabels[nutrientName]}
       </Text>
-      {!EffectArray.isReadonlyArrayNonEmpty(foods) ? (
+      {!Array.isReadonlyArrayNonEmpty(foods) ? (
         <Text style={styles.emptyText}>No tracked foods.</Text>
       ) : (
         <View style={styles.foodRows}>
@@ -310,30 +330,6 @@ function SectionTitle({
   );
 }
 
-export function getAverageTargetAmount({
-  nutrientName,
-  report,
-}: {
-  readonly nutrientName: Reporting.NutrientName;
-  readonly report: NutritionReports.NutritionReportRange;
-}) {
-  const dayCount = report.days.length;
-  const targetAmounts = report.days.flatMap((day) => {
-    const amount = Reporting.getPlanNutrientTargetAmount({
-      nutrientName,
-      plan: day.plan,
-    });
-
-    return amount === undefined ? [] : [amount];
-  });
-
-  if (dayCount === 0 || targetAmounts.length !== dayCount) {
-    return null;
-  }
-
-  return targetAmounts.reduce((total, amount) => total + amount, 0) / dayCount;
-}
-
 function _formatNutrient({
   nutrientName,
   value,
@@ -349,25 +345,6 @@ function _formatNutrient({
   }
 
   return `${formatNumber({ value })}g`;
-}
-
-export function formatSignedNumber({
-  unit,
-  value,
-}: {
-  readonly unit: string;
-  readonly value: number;
-}) {
-  const formatted = formatNumber({
-    maximumFractionDigits: Math.abs(value) > 0 && Math.abs(value) < 10 ? 1 : 0,
-    value: Math.abs(value),
-  });
-
-  if (value === 0) {
-    return `0 ${unit}`;
-  }
-
-  return `${value > 0 ? "+" : "-"}${formatted} ${unit}`;
 }
 
 const styles = StyleSheet.create({

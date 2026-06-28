@@ -1,5 +1,5 @@
 import { BackupFileTransfer } from "@mai/services";
-import { Array as EffectArray, Effect, Layer } from "effect";
+import { Array, Effect, Layer } from "effect";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
@@ -14,7 +14,7 @@ export const ExpoBackupFileTransferLayer = Layer.succeed(
           File.pickFileAsync({
             mimeTypes:
               mimeTypes !== undefined &&
-              EffectArray.isReadonlyArrayNonEmpty(mimeTypes)
+              Array.isReadonlyArrayNonEmpty(mimeTypes)
                 ? [...mimeTypes]
                 : "*/*",
           }),

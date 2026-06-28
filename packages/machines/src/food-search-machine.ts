@@ -1,12 +1,7 @@
-import type { Domain } from "@mai/nutrition";
-import { Array, Order } from "effect";
-import {
-  assertEvent,
-  assign,
-  sendParent,
-  setup,
-  type ActorRefFrom,
-} from "xstate";
+import { Domain } from "@mai/nutrition";
+import { Array, Order, Schema } from "effect";
+import { setup, type ActorRefFrom } from "xstate";
+import { EmptyEvent } from "./schemas";
 
 const foodCategoryLabels = {
   "bread-like": "Bread-like",
@@ -41,20 +36,31 @@ export type FoodSearchMacroOrder =
   | "saturatedFat"
   | "sugar";
 
-type FoodSearchContext = {
-  readonly foods: readonly Domain.Food[];
-  readonly macroOrder: FoodSearchMacroOrder | null;
-  readonly matchingFoods: readonly Domain.Food[];
-  readonly query: string;
-  readonly selectedFoodId: Domain.Food["id"] | null;
-};
+const FoodSearchMacroOrderSchema = Schema.Literals([
+  "carbs",
+  "energy",
+  "fat",
+  "fiber",
+  "protein",
+  "salt",
+  "saturatedFat",
+  "sugar",
+]);
 
-type FoodSearchInput = {
-  readonly foods: readonly Domain.Food[];
-  readonly macroOrder?: FoodSearchMacroOrder | null;
-  readonly query?: string;
-  readonly selectedFoodId?: Domain.Food["id"] | null;
-};
+const FoodSearchContextSchema = Schema.Struct({
+  foods: Schema.Array(Domain.Food),
+  macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
+  matchingFoods: Schema.Array(Domain.Food),
+  query: Schema.String,
+  selectedFoodId: Schema.NullOr(Domain.FoodId),
+});
+
+const FoodSearchInputSchema = Schema.Struct({
+  foods: Schema.Array(Domain.Food),
+  macroOrder: Schema.optionalKey(Schema.NullOr(FoodSearchMacroOrderSchema)),
+  query: Schema.optionalKey(Schema.String),
+  selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
+});
 
 export type FoodSearchEvent =
   | {
@@ -196,7 +202,18 @@ const _foodSearchContextFromInput = ({
   macroOrder = null,
   query = "",
   selectedFoodId = null,
-}: FoodSearchInput): FoodSearchContext => ({
+}: {
+  readonly foods: readonly Domain.Food[];
+  readonly macroOrder?: FoodSearchMacroOrder | null;
+  readonly query?: string;
+  readonly selectedFoodId?: Domain.Food["id"] | null;
+}): {
+  readonly foods: readonly Domain.Food[];
+  readonly macroOrder: FoodSearchMacroOrder | null;
+  readonly matchingFoods: readonly Domain.Food[];
+  readonly query: string;
+  readonly selectedFoodId: Domain.Food["id"] | null;
+} => ({
   foods,
   macroOrder,
   matchingFoods: sortFoodsByMacroOrder({
@@ -213,10 +230,43 @@ const _foodSearchContextFromInput = ({
 });
 
 export const foodSearchMachine = setup({
-  types: {
-    context: {} as FoodSearchContext,
-    events: {} as FoodSearchEvent,
-    input: {} as FoodSearchInput,
+  schemas: {
+    context: Schema.toStandardSchemaV1(FoodSearchContextSchema),
+    events: {
+      reset: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          foods: Schema.Array(Domain.Food),
+          query: Schema.optionalKey(Schema.String),
+          selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
+        })
+      ),
+      changeFoods: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          foods: Schema.Array(Domain.Food),
+        })
+      ),
+      changeQuery: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          query: Schema.String,
+        })
+      ),
+      changeMacroOrder: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
+        })
+      ),
+      selectFirstMatchingFood: Schema.toStandardSchemaV1(EmptyEvent),
+      selectFood: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          foodId: Domain.FoodId,
+        })
+      ),
+      clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
+    },
+    input: Schema.toStandardSchemaV1(FoodSearchInputSchema),
+  },
+  states: {
+    Ready: {},
   },
 }).createMachine({
   context: ({ input }) => _foodSearchContextFromInput(input),
@@ -224,100 +274,80 @@ export const foodSearchMachine = setup({
   states: {
     Ready: {
       on: {
-        changeFoods: {
-          actions: assign(({ context, event }) => {
-            assertEvent(event, "changeFoods");
-
-            return _foodSearchContextFromInput({
-              foods: event.foods,
-              macroOrder: context.macroOrder,
-              query: context.query,
-              selectedFoodId: context.selectedFoodId,
-            });
+        changeFoods: ({ context, event }) => ({
+          context: _foodSearchContextFromInput({
+            foods: event.foods,
+            macroOrder: context.macroOrder,
+            query: context.query,
+            selectedFoodId: context.selectedFoodId,
           }),
-        },
-        changeMacroOrder: {
-          actions: assign(({ context, event }) => {
-            assertEvent(event, "changeMacroOrder");
-
-            return {
+        }),
+        changeMacroOrder: ({ context, event }) => ({
+          context: {
+            macroOrder: event.macroOrder,
+            matchingFoods: sortFoodsByMacroOrder({
+              foods: filterFoodsByQuery({
+                foods: context.foods,
+                query: context.query,
+              }),
               macroOrder: event.macroOrder,
-              matchingFoods: sortFoodsByMacroOrder({
-                foods: filterFoodsByQuery({
-                  foods: context.foods,
-                  query: context.query,
-                }),
-                macroOrder: event.macroOrder,
+            }),
+          },
+        }),
+        changeQuery: ({ context, event }) => ({
+          context: {
+            matchingFoods: sortFoodsByMacroOrder({
+              foods: filterFoodsByQuery({
+                foods: context.foods,
+                query: event.query,
               }),
-            };
-          }),
-        },
-        changeQuery: {
-          actions: assign(({ context, event }) => {
-            assertEvent(event, "changeQuery");
-
-            return {
-              matchingFoods: sortFoodsByMacroOrder({
-                foods: filterFoodsByQuery({
-                  foods: context.foods,
-                  query: event.query,
-                }),
-                macroOrder: context.macroOrder,
-              }),
-              query: event.query,
-            };
-          }),
-        },
-        clearSelectedFood: {
-          actions: assign({
+              macroOrder: context.macroOrder,
+            }),
+            query: event.query,
+          },
+        }),
+        clearSelectedFood: () => ({
+          context: {
             selectedFoodId: null,
-          }),
-        },
-        reset: {
-          actions: assign(({ event }) => {
-            assertEvent(event, "reset");
+          },
+        }),
+        reset: ({ event }) => ({
+          context: _foodSearchContextFromInput(event),
+        }),
+        selectFirstMatchingFood: ({ context, parent }, enq) => {
+          const food = context.matchingFoods[0] ?? null;
 
-            return _foodSearchContextFromInput(event);
-          }),
-        },
-        selectFirstMatchingFood: {
-          actions: [
-            assign(({ context }) => ({
+          if (parent !== undefined) {
+            enq.sendTo(parent, {
+              type: "foodSearchSelected",
+              food,
+              selection: "firstMatching",
+            } satisfies FoodSearchSelectedEvent);
+          }
+
+          return {
+            context: {
               selectedFoodId: context.matchingFoods[0]?.id ?? null,
-            })),
-            sendParent(
-              ({ context }) =>
-                ({
-                  type: "foodSearchSelected",
-                  food: context.matchingFoods[0] ?? null,
-                  selection: "firstMatching",
-                }) satisfies FoodSearchSelectedEvent
-            ),
-          ],
+            },
+          };
         },
-        selectFood: {
-          actions: [
-            assign(({ context, event }) => {
-              assertEvent(event, "selectFood");
-              const food =
-                context.foods.find((food) => food.id === event.foodId) ?? null;
+        selectFood: ({ context, event, parent }, enq) => {
+          const food =
+            context.foods.find((food) => food.id === event.foodId) ?? null;
 
-              return {
-                selectedFoodId: food?.id ?? null,
-              };
-            }),
-            sendParent(({ context, event }) => {
-              assertEvent(event, "selectFood");
+          if (parent !== undefined) {
+            enq.sendTo(parent, {
+              type: "foodSearchSelected",
+              food,
+              selection: "explicit",
+            } satisfies FoodSearchSelectedEvent);
+          }
 
-              return {
-                type: "foodSearchSelected",
-                food:
-                  context.foods.find((food) => food.id === event.foodId) ??
-                  null,
-                selection: "explicit",
-              } satisfies FoodSearchSelectedEvent;
-            }),
-          ],
+          return {
+            context: {
+              selectedFoodId: food?.id ?? null,
+            },
+          };
         },
       },
     },

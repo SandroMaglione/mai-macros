@@ -19,10 +19,10 @@ export const makeLocalDataResetMachine = ({
   setup({
     schemas: {
       events: {
-        Begin: Schema.toStandardSchemaV1(EmptyEvent),
-        Cancel: Schema.toStandardSchemaV1(EmptyEvent),
-        Reset: Schema.toStandardSchemaV1(EmptyEvent),
-        ChangeConfirmationText: Schema.toStandardSchemaV1(
+        begin: Schema.toStandardSchemaV1(EmptyEvent),
+        cancel: Schema.toStandardSchemaV1(EmptyEvent),
+        reset: Schema.toStandardSchemaV1(EmptyEvent),
+        changeConfirmationText: Schema.toStandardSchemaV1(
           Schema.Struct({
             confirmationText: Schema.String,
           })
@@ -71,16 +71,16 @@ export const makeLocalDataResetMachine = ({
     states: {
       Idle: {
         on: {
-          Begin: { target: "ConfirmReset", context: { confirmationText: "" } },
+          begin: { target: "ConfirmReset", context: { confirmationText: "" } },
         },
       },
       ConfirmReset: {
         on: {
-          Cancel: { target: "Idle" },
-          ChangeConfirmationText: ({ event }) => ({
+          cancel: { target: "Idle" },
+          changeConfirmationText: ({ event }) => ({
             context: { confirmationText: event.confirmationText },
           }),
-          Reset: ({ guards, context }) =>
+          reset: ({ guards, context }) =>
             guards.confirmationMatches({
               confirmationText: context.confirmationText,
             })
@@ -105,11 +105,11 @@ export const makeLocalDataResetMachine = ({
       },
       Failure: {
         on: {
-          Cancel: { target: "Idle" },
-          ChangeConfirmationText: ({ event }) => ({
+          cancel: { target: "Idle" },
+          changeConfirmationText: ({ event }) => ({
             context: { confirmationText: event.confirmationText },
           }),
-          Reset: ({ guards, context }) =>
+          reset: ({ guards, context }) =>
             guards.confirmationMatches({
               confirmationText: context.confirmationText,
             })

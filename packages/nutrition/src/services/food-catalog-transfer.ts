@@ -3,7 +3,7 @@ import {
   Data,
   DateTime,
   Effect,
-  Array as EffectArray,
+  Array,
   Equal,
   Layer,
   Schema,
@@ -496,9 +496,7 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
               localFood.id !== food.id && localFood.name === food.name
           )
           .map((localFood) => localFood.id);
-        const nameStatus = EffectArray.isReadonlyArrayNonEmpty(
-          sameNameLocalFoodIds
-        )
+        const nameStatus = Array.isReadonlyArrayNonEmpty(sameNameLocalFoodIds)
           ? "same-name-local"
           : "unique";
         const localFood = localFoods.find(

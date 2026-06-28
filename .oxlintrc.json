@@ -37,6 +37,7 @@
       { "localImportPrefixes": [".", "@/"] }
     ],
     "mai/no-react-component-inner-functions": "error",
+    "mai/no-react-non-component-function-exports": "error",
     "mai/no-react-state-hooks": "error",
     "mai/no-service-option": "error",
     "mai/no-shadowed-standard-array-static": "error",
@@ -49,7 +50,7 @@
     "mai/no-switch": "error",
     "mai/no-sync-schema-apis": "error",
     "mai/no-typeof-object": "error",
-    "mai/no-type-assertion": "warn",
+    "mai/no-type-assertion": "error",
     "mai/no-try-catch": "error",
     "mai/pipe-max-arguments": "warn",
     "mai/prefer-option-from-nullable": "warn",
@@ -62,7 +63,15 @@
     "no-unused-private-class-members": "error",
     "no-unused-vars": [
       "error",
-      { "vars": "all", "args": "all", "caughtErrors": "all" }
+      {
+        "vars": "all",
+        "varsIgnorePattern": "^_",
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "caughtErrors": "all",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_"
+      }
     ],
     "eqeqeq": "error",
     "no-explicit-any": "error",

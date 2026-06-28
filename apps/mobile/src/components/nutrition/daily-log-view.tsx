@@ -19,9 +19,10 @@ import {
   Reporting,
   Utils,
 } from "@mai/nutrition";
+import { EmptyEvent } from "@mai/machines";
 import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
-import { Array as EffectArray, Effect, Option, Schema } from "effect";
+import { Array, Effect, Match, Option, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
@@ -34,50 +35,66 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { assign, fromPromise, setup } from "xstate";
+import { createAsyncLogic, setup } from "xstate";
 
-export type RecordedDailyLogViewData = {
-  readonly _tag: "RecordedDay";
-  readonly day: DailyLogs.OpenedDay;
-  readonly foods: readonly Domain.Food[];
-  readonly mealEntries: readonly Domain.MealEntry[];
-};
+const OpenedDay = Schema.TaggedStruct("OpenedDay", {
+  dailyLog: Domain.DailyLog,
+  plans: Schema.Array(Domain.Plan),
+  selectedPlan: Domain.Plan,
+});
 
-export type UnrecordedDailyLogViewData = {
-  readonly _tag: "UnrecordedDay";
-  readonly day: DailyLogs.UnrecordedDay;
-};
+const UnrecordedDay = Schema.TaggedStruct("UnrecordedDay", {
+  dateKey: Domain.DateKey,
+  plans: Schema.Array(Domain.Plan),
+  selectedPlan: Domain.Plan,
+});
 
-export type DailyLogViewData =
-  | RecordedDailyLogViewData
-  | UnrecordedDailyLogViewData;
+const RecordedDailyLogViewData = Schema.TaggedStruct("RecordedDay", {
+  day: OpenedDay,
+  foods: Schema.Array(Domain.Food),
+  mealEntries: Schema.Array(Domain.MealEntry),
+});
 
-type DailyLogLoadResult =
-  | {
-      readonly _tag: "Ready";
-      readonly data: DailyLogViewData;
-    }
-  | {
-      readonly _tag: "NoMealPlans";
-      readonly dateKey: Domain.DateKey;
-    };
+export type RecordedDailyLogViewData = typeof RecordedDailyLogViewData.Type;
+
+const UnrecordedDailyLogViewData = Schema.TaggedStruct("UnrecordedDay", {
+  day: UnrecordedDay,
+});
+
+export type UnrecordedDailyLogViewData = typeof UnrecordedDailyLogViewData.Type;
+
+const DailyLogViewData = Schema.Union([
+  RecordedDailyLogViewData,
+  UnrecordedDailyLogViewData,
+]);
+
+export type DailyLogViewData = typeof DailyLogViewData.Type;
 
 type MacroDisplayMode = "consumed" | "remaining";
 
-type DailyLogRouteEvent =
-  | {
-      readonly type: "createDay";
-    }
-  | {
-      readonly type: "deleteDay";
-    }
-  | {
-      readonly plan: Domain.Plan;
-      readonly type: "selectPlan";
-    }
-  | {
-      readonly type: "reload";
-    };
+const LoadDailyLogResult = Schema.Union([
+  Schema.TaggedStruct("Ready", {
+    data: DailyLogViewData,
+  }),
+  Schema.TaggedStruct("NoMealPlans", {
+    dateKey: Domain.DateKey,
+  }),
+]);
+
+const DailyLogContext = Schema.Struct({
+  data: Schema.NullOr(DailyLogViewData),
+  dateKey: Domain.DateKey,
+  message: Schema.NullOr(Schema.String),
+});
+
+const DailyLogInput = Schema.Struct({
+  dateKey: Domain.DateKey,
+});
+
+const CreateDailyLogInput = Schema.Struct({
+  dateKey: Domain.DateKey,
+  planId: Domain.PlanId,
+});
 
 const macroProgress = [
   {
@@ -104,73 +121,146 @@ const macroProgress = [
 ] as const;
 
 const dailyLogRouteMachine = setup({
-  types: {
-    context: {} as {
-      readonly data: DailyLogViewData | null;
-      readonly dateKey: Domain.DateKey;
-      readonly message: string | null;
+  schemas: {
+    context: Schema.toStandardSchemaV1(DailyLogContext),
+    events: {
+      createDay: Schema.toStandardSchemaV1(EmptyEvent),
+      deleteDay: Schema.toStandardSchemaV1(EmptyEvent),
+      reload: Schema.toStandardSchemaV1(EmptyEvent),
+      selectPlan: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          plan: Domain.Plan,
+        })
+      ),
     },
-    events: {} as DailyLogRouteEvent,
-    input: {} as {
-      readonly dateKey: Domain.DateKey;
+    input: Schema.toStandardSchemaV1(DailyLogInput),
+  },
+  states: {
+    Loading: {},
+    Error: {},
+    Ready: {},
+    Creating: {},
+    Deleting: {},
+    Redirected: {},
+  },
+  actions: {
+    redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
+      router.replace({
+        pathname: "/plans/new",
+        params,
+      });
     },
   },
-  actors: {
-    createDailyLog: fromPromise<
-      DailyLogViewData,
-      {
-        readonly dateKey: Domain.DateKey;
-        readonly planId: Domain.PlanId;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const dailyLogs = yield* DailyLogs.DailyLogs;
-          const foodsService = yield* Foods.Foods;
-          const mealEntriesService = yield* MealEntries.MealEntries;
-          const day = yield* dailyLogs.create({
-            input,
-          });
-          const foods = yield* foodsService.list();
-          const mealEntries = yield* mealEntriesService.listForDay({
-            input: {
-              dateKey: day.dailyLog.dateKey,
-            },
-          });
+  actorSources: {
+    createDailyLog: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(CreateDailyLogInput),
+        output: Schema.toStandardSchemaV1(DailyLogViewData),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const foodsService = yield* Foods.Foods;
+            const mealEntriesService = yield* MealEntries.MealEntries;
+            const day = yield* dailyLogs.create({
+              input,
+            });
+            const foods = yield* foodsService.list();
+            const mealEntries = yield* mealEntriesService.listForDay({
+              input: {
+                dateKey: day.dailyLog.dateKey,
+              },
+            });
 
-          return {
-            _tag: "RecordedDay" as const,
-            day,
-            foods,
-            mealEntries,
-          };
-        })
-      )
-    ),
-    deleteDailyLog: fromPromise<
-      DailyLogViewData,
-      {
-        readonly dateKey: Domain.DateKey;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const dailyLogs = yield* DailyLogs.DailyLogs;
-          const removedDay = yield* dailyLogs.remove({
-            input,
-          });
+            return {
+              _tag: "RecordedDay" as const,
+              day,
+              foods,
+              mealEntries,
+            };
+          })
+        ),
+    }),
+    deleteDailyLog: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(DailyLogInput),
+        output: Schema.toStandardSchemaV1(DailyLogViewData),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const removedDay = yield* dailyLogs.remove({
+              input,
+            });
 
-          return {
-            _tag: "UnrecordedDay" as const,
-            day: removedDay.day,
-          };
-        })
-      )
-    ),
-    loadDailyLog: fromPromise<
-      DailyLogLoadResult,
-      { readonly dateKey: Domain.DateKey }
-    >(({ input }) => loadDailyLog({ dateKey: input.dateKey })),
+            return {
+              _tag: "UnrecordedDay" as const,
+              day: removedDay.day,
+            };
+          })
+        ),
+    }),
+    loadDailyLog: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(DailyLogInput),
+        output: Schema.toStandardSchemaV1(LoadDailyLogResult),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const foodsService = yield* Foods.Foods;
+            const mealEntriesService = yield* MealEntries.MealEntries;
+            const day = yield* input.dateKey === todayDateKey()
+              ? dailyLogs.openOrCreate({
+                  input: {
+                    dateKey: input.dateKey,
+                  },
+                })
+              : dailyLogs.open({
+                  input: {
+                    dateKey: input.dateKey,
+                  },
+                });
+
+            if (day._tag === "UnrecordedDay") {
+              return {
+                _tag: "Ready" as const,
+                data: {
+                  _tag: "UnrecordedDay" as const,
+                  day,
+                },
+              };
+            }
+
+            const foods = yield* foodsService.list();
+            const mealEntries = yield* mealEntriesService.listForDay({
+              input: {
+                dateKey: day.dailyLog.dateKey,
+              },
+            });
+
+            return {
+              _tag: "Ready" as const,
+              data: {
+                _tag: "RecordedDay" as const,
+                day,
+                foods,
+                mealEntries,
+              },
+            };
+          }).pipe(
+            Effect.catchTag("NoMealPlans", ({ dateKey: noPlanDateKey }) =>
+              Effect.succeed({
+                _tag: "NoMealPlans" as const,
+                dateKey: noPlanDateKey,
+              })
+            )
+          )
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -186,60 +276,42 @@ const dailyLogRouteMachine = setup({
         input: ({ context }) => ({
           dateKey: context.dateKey,
         }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "NoMealPlans",
-            target: "Redirected",
-            actions: ({ event }) => {
-              const output = event.output;
+        onDone: ({ event, actions }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              NoMealPlans: ({ dateKey }) => {
+                enq(actions.redirectToNewPlan, { dateKey });
 
-              if (output._tag === "NoMealPlans") {
-                router.replace({
-                  pathname: "/plans/new",
-                  params: {
-                    dateKey: output.dateKey,
-                  },
-                });
-              }
-            },
-          },
-          {
-            guard: ({ event }) => event.output._tag === "Ready",
-            target: "Ready",
-            actions: assign(({ event }) => {
-              if (event.output._tag !== "Ready") {
-                return {
-                  data: null,
-                  message: "Could not load the daily log.",
-                };
-              }
-
-              return {
-                data: event.output.data,
-                message: null,
-              };
-            }),
-          },
-        ],
-        onError: {
+                return { target: "Redirected" };
+              },
+              Ready: ({ data }) => ({
+                target: "Ready",
+                context: {
+                  data,
+                  message: null,
+                },
+              }),
+            })
+          ),
+        onError: ({ event }) => ({
           target: "Error",
-          actions: assign(({ event }) => ({
+          context: {
             message:
               event.error instanceof Error
                 ? event.error.message
                 : "Could not load the daily log.",
-          })),
-        },
+          },
+        }),
       },
     },
     Error: {
       on: {
         reload: {
           target: "Loading",
-          actions: assign({
+          context: {
             data: null,
             message: null,
-          }),
+          },
         },
       },
     },
@@ -248,34 +320,36 @@ const dailyLogRouteMachine = setup({
         createDay: {
           target: "Creating",
         },
-        deleteDay: {
-          guard: ({ context }) =>
-            context.data === null || context.data._tag !== "RecordedDay"
-              ? false
-              : !EffectArray.isReadonlyArrayNonEmpty(context.data.mealEntries),
-          target: "Deleting",
-          actions: assign({
-            message: null,
-          }),
+        deleteDay: ({ context }) => {
+          if (
+            context.data === null ||
+            context.data._tag !== "RecordedDay" ||
+            Array.isReadonlyArrayNonEmpty(context.data.mealEntries)
+          ) {
+            return undefined;
+          }
+
+          return {
+            target: "Deleting",
+            context: {
+              message: null,
+            },
+          };
         },
         reload: {
           target: "Loading",
-          actions: assign({
+          context: {
             data: null,
             message: null,
-          }),
+          },
         },
-        selectPlan: {
-          actions: assign(({ context, event }) => {
-            if (
-              context.data === null ||
-              context.data._tag !== "UnrecordedDay" ||
-              event.type !== "selectPlan"
-            ) {
-              return {};
-            }
+        selectPlan: ({ context, event }) => {
+          if (context.data === null || context.data._tag !== "UnrecordedDay") {
+            return undefined;
+          }
 
-            return {
+          return {
+            context: {
               data: {
                 _tag: "UnrecordedDay" as const,
                 day: new DailyLogs.UnrecordedDay({
@@ -285,8 +359,8 @@ const dailyLogRouteMachine = setup({
                 }),
               },
               message: null,
-            };
-          }),
+            },
+          };
         },
       },
     },
@@ -302,18 +376,18 @@ const dailyLogRouteMachine = setup({
             dateKey: context.data.day.dailyLog.dateKey,
           };
         },
-        onDone: {
+        onDone: ({ event }) => ({
           target: "Ready",
-          actions: assign(({ event }) => ({
+          context: {
             data: event.output,
             message: null,
-          })),
-        },
+          },
+        }),
         onError: {
           target: "Ready",
-          actions: assign({
+          context: {
             message: "Could not delete this day. Please try again.",
-          }),
+          },
         },
       },
     },
@@ -330,18 +404,18 @@ const dailyLogRouteMachine = setup({
             planId: context.data.day.selectedPlan.id,
           };
         },
-        onDone: {
+        onDone: ({ event }) => ({
           target: "Ready",
-          actions: assign(({ event }) => ({
+          context: {
             data: event.output,
             message: null,
-          })),
-        },
+          },
+        }),
         onError: {
           target: "Ready",
-          actions: assign({
+          context: {
             message: "Could not create this day. Please try again.",
-          }),
+          },
         },
       },
     },
@@ -350,10 +424,14 @@ const dailyLogRouteMachine = setup({
 });
 
 const macroDisplayModeMachine = setup({
-  types: {
-    events: {} as {
-      readonly type: "toggle";
+  schemas: {
+    events: {
+      toggle: Schema.toStandardSchemaV1(EmptyEvent),
     },
+  },
+  states: {
+    Consumed: {},
+    Remaining: {},
   },
 }).createMachine({
   initial: "Consumed",
@@ -380,16 +458,17 @@ export function DailyLogRoute({
 }: {
   readonly dateKey: Domain.DateKey;
 }) {
-  const [snapshot, send] = useMachine(dailyLogRouteMachine, {
+  const [snapshot, , actor] = useMachine(dailyLogRouteMachine, {
     input: {
       dateKey,
     },
   });
   const deleteDayEvent = {
     type: "deleteDay",
-  } satisfies DailyLogRouteEvent;
+  } as const;
+  const routeState = snapshot.value;
 
-  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
+  if (routeState === "Loading" || routeState === "Redirected") {
     return (
       <AppScreen contentStyle={styles.loadingContent}>
         <LoadingView message="Loading daily log" />
@@ -397,7 +476,7 @@ export function DailyLogRoute({
     );
   }
 
-  if (snapshot.matches("Error")) {
+  if (routeState === "Error") {
     return (
       <AppScreen contentStyle={styles.centeredContent}>
         <Notice
@@ -407,9 +486,7 @@ export function DailyLogRoute({
         />
         <Button
           onPress={() => {
-            send({
-              type: "reload",
-            });
+            actor.trigger.reload();
           }}
           style={styles.retryButton}
           variant="secondary"
@@ -428,21 +505,16 @@ export function DailyLogRoute({
     <DailyLogView
       canDeleteDay={snapshot.can(deleteDayEvent)}
       data={snapshot.context.data}
-      disabled={snapshot.matches("Creating") || snapshot.matches("Deleting")}
+      disabled={routeState === "Creating" || routeState === "Deleting"}
       notice={snapshot.context.message}
       onCreateDay={() => {
-        send({
-          type: "createDay",
-        });
+        actor.trigger.createDay();
       }}
       onDeleteDay={() => {
-        send(deleteDayEvent);
+        actor.trigger.deleteDay();
       }}
       onSelectPlan={(plan) => {
-        send({
-          plan,
-          type: "selectPlan",
-        });
+        actor.trigger.selectPlan({ plan });
       }}
     />
   );
@@ -828,22 +900,20 @@ function DailyProgress({
   day,
   nutrients,
 }: {
-  readonly day: DailyLogs.OpenedDay;
+  readonly day: typeof OpenedDay.Type;
   readonly nutrients: Reporting.NutrientTotals;
 }) {
   const plan = day.selectedPlan;
   const targetEnergyKcal = Utils.calculatePlanEnergyKcal({ plan });
-  const [snapshot, send] = useMachine(macroDisplayModeMachine);
-  const displayMode = snapshot.matches("Remaining") ? "remaining" : "consumed";
+  const [snapshot, , actor] = useMachine(macroDisplayModeMachine);
+  const displayMode = snapshot.value === "Remaining" ? "remaining" : "consumed";
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: displayMode === "remaining" }}
       onPress={() => {
-        send({
-          type: "toggle",
-        });
+        actor.trigger.toggle();
       }}
       style={({ pressed }) => [
         styles.dailyProgress,
@@ -1108,7 +1178,7 @@ function MealSection({
 
       <MealMacroStripe nutrients={nutrients} />
 
-      {EffectArray.isReadonlyArrayNonEmpty(mealEntries) ? (
+      {Array.isReadonlyArrayNonEmpty(mealEntries) ? (
         <View style={styles.mealEntries}>
           {mealEntries.map((mealEntry) => {
             const food = foods.find(
@@ -1438,65 +1508,6 @@ function BottomAction({
         {label}
       </Text>
     </Pressable>
-  );
-}
-
-export function loadDailyLog({
-  dateKey,
-}: {
-  readonly dateKey: Domain.DateKey;
-}): Promise<DailyLogLoadResult> {
-  return RuntimeClient.runPromise(
-    Effect.gen(function* () {
-      const dailyLogs = yield* DailyLogs.DailyLogs;
-      const foodsService = yield* Foods.Foods;
-      const mealEntriesService = yield* MealEntries.MealEntries;
-      const day = yield* dateKey === todayDateKey()
-        ? dailyLogs.openOrCreate({
-            input: {
-              dateKey,
-            },
-          })
-        : dailyLogs.open({
-            input: {
-              dateKey,
-            },
-          });
-
-      if (day._tag === "UnrecordedDay") {
-        return {
-          _tag: "Ready" as const,
-          data: {
-            _tag: "UnrecordedDay" as const,
-            day,
-          },
-        };
-      }
-
-      const foods = yield* foodsService.list();
-      const mealEntries = yield* mealEntriesService.listForDay({
-        input: {
-          dateKey: day.dailyLog.dateKey,
-        },
-      });
-
-      return {
-        _tag: "Ready" as const,
-        data: {
-          _tag: "RecordedDay" as const,
-          day,
-          foods,
-          mealEntries,
-        },
-      };
-    }).pipe(
-      Effect.catchTag("NoMealPlans", ({ dateKey: noPlanDateKey }) =>
-        Effect.succeed({
-          _tag: "NoMealPlans" as const,
-          dateKey: noPlanDateKey,
-        })
-      )
-    )
   );
 }
 

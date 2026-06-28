@@ -4,61 +4,119 @@ import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-para
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
+import { EmptyEvent } from "@mai/machines";
 import { Domain, MealPlans } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Array as EffectArray, Effect, Match, Option, Schema } from "effect";
-import { useRouter } from "expo-router";
+import { Array, Effect, Match, Option, Schema } from "effect";
+import { router } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
-import { assign, fromPromise, setup } from "xstate";
-
-type SubmitResult =
-  | {
-      readonly _tag: "Created";
-    }
-  | {
-      readonly _tag: "PlanNameAlreadyExists";
-    }
-  | {
-      readonly _tag: "PlanMealNameAlreadyExists";
-    }
-  | {
-      readonly _tag: "SchemaError";
-    }
-  | {
-      readonly _tag: "UnknownError";
-    };
+import { createAsyncLogic, setup } from "xstate";
 
 const SearchParams = Schema.Struct({
-  dateKey: Schema.optional(Domain.DateKey),
+  dateKey: Schema.optionalKey(Domain.DateKey),
 });
 
+const MealPlanInputMeal = Schema.Struct({
+  id: Schema.optionalKey(Schema.String),
+  name: Schema.String,
+});
+
+const CreateMealPlanInput = Schema.Struct({
+  name: Schema.String,
+  meals: Schema.Array(MealPlanInputMeal),
+  proteinTargetGrams: Schema.String,
+  carbsTargetGrams: Schema.String,
+  fatTargetGrams: Schema.String,
+  fiberTargetGrams: Schema.optionalKey(Schema.String),
+  sugarTargetGrams: Schema.optionalKey(Schema.String),
+  saltTargetGrams: Schema.optionalKey(Schema.String),
+  saturatedFatTargetGrams: Schema.optionalKey(Schema.String),
+});
+
+const NewPlanRouteSearch = Schema.Union([
+  Schema.TaggedStruct("Valid", {
+    dateKey: Schema.optionalKey(Domain.DateKey),
+  }),
+  Schema.TaggedStruct("Invalid", {}),
+]);
+
+const CreateMealPlanResult = Schema.Union([
+  Schema.TaggedStruct("Created", {}),
+  Schema.TaggedStruct("PlanNameAlreadyExists", {}),
+  Schema.TaggedStruct("PlanMealNameAlreadyExists", {}),
+  Schema.TaggedStruct("SchemaError", {}),
+  Schema.TaggedStruct("UnknownError", {}),
+]);
+
 const newPlanRouteMachine = setup({
-  types: {
-    context: {} as {
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        dateKey: Schema.UndefinedOr(Domain.DateKey),
+        errorMessage: Schema.UndefinedOr(Schema.String),
+        hasExistingPlan: Schema.Boolean,
+      })
+    ),
+    events: {
+      back: Schema.toStandardSchemaV1(EmptyEvent),
+      submit: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          input: CreateMealPlanInput,
+        })
+      ),
+    },
+    input: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        search: NewPlanRouteSearch,
+      })
+    ),
+  },
+  states: {
+    Loading: {},
+    Failed: {},
+    Ready: {},
+    Submitting: {},
+    Created: {},
+  },
+  actions: {
+    replaceBack: (params: { readonly dateKey: Domain.DateKey | undefined }) => {
+      if (params.dateKey === undefined) {
+        router.replace("/");
+        return;
+      }
+
+      router.replace({
+        pathname: "/days/[dateKey]",
+        params: { dateKey: params.dateKey },
+      });
+    },
+    replaceToDateKey: (params: {
       readonly dateKey: Domain.DateKey | undefined;
-      readonly errorMessage: string | undefined;
-      readonly hasExistingPlan: boolean;
-      readonly router: ReturnType<typeof useRouter>;
+    }) => {
+      const today = todayDateKey();
+      const targetDateKey = params.dateKey ?? today;
+
+      if (targetDateKey === today) {
+        router.replace("/");
+        return;
+      }
+
+      router.replace({
+        pathname: "/days/[dateKey]",
+        params: { dateKey: targetDateKey },
+      });
     },
-    events: {} as {
-      readonly input: MealPlans.CreateMealPlanInput;
-      readonly type: "submit";
-    },
-    input: {} as {
-      readonly router: ReturnType<typeof useRouter>;
-      readonly search:
-        | {
-            readonly _tag: "Valid";
-            readonly dateKey: Domain.DateKey | undefined;
-          }
-        | {
-            readonly _tag: "Invalid";
-          };
+    showPlanNotSavedAlert: (params: { readonly message: string }) => {
+      Alert.alert("Plan not saved", params.message);
     },
   },
-  actors: {
-    createMealPlan: fromPromise<SubmitResult, MealPlans.CreateMealPlanInput>(
-      ({ input }) =>
+  actorSources: {
+    createMealPlan: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(CreateMealPlanInput),
+        output: Schema.toStandardSchemaV1(CreateMealPlanResult),
+      },
+      run: ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const mealPlans = yield* MealPlans.MealPlans;
@@ -90,18 +148,22 @@ const newPlanRouteMachine = setup({
               })
             )
           )
-        )
-    ),
-    loadExistingPlans: fromPromise(() =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const mealPlans = yield* MealPlans.MealPlans;
-          const plans = yield* mealPlans.list();
+        ),
+    }),
+    loadExistingPlans: createAsyncLogic({
+      schemas: {
+        output: Schema.toStandardSchemaV1(Schema.Boolean),
+      },
+      run: () =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const mealPlans = yield* MealPlans.MealPlans;
+            const plans = yield* mealPlans.list();
 
-          return EffectArray.isReadonlyArrayNonEmpty(plans);
-        })
-      )
-    ),
+            return Array.isReadonlyArrayNonEmpty(plans);
+          })
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -109,24 +171,28 @@ const newPlanRouteMachine = setup({
     errorMessage:
       input.search._tag === "Invalid" ? invalidDateMessage : undefined,
     hasExistingPlan: false,
-    router: input.router,
   }),
   initial: "Loading",
+  on: {
+    back: ({ actions, context }, enq) => {
+      enq(actions.replaceBack, { dateKey: context.dateKey });
+    },
+  },
   states: {
     Loading: {
       invoke: {
         src: "loadExistingPlans",
-        onDone: {
+        onDone: ({ event }) => ({
           target: "Ready",
-          actions: assign(({ event }) => ({
+          context: {
             hasExistingPlan: event.output,
-          })),
-        },
+          },
+        }),
         onError: {
           target: "Failed",
-          actions: assign({
+          context: {
             errorMessage: "Could not load meal plans. Please try again.",
-          }),
+          },
         },
       },
     },
@@ -135,39 +201,80 @@ const newPlanRouteMachine = setup({
       on: {
         submit: {
           target: "Submitting",
-          actions: assign({
+          context: {
             errorMessage: undefined,
-          }),
+          },
         },
       },
     },
     Submitting: {
       invoke: {
         src: "createMealPlan",
-        input: ({ event }) => event.input,
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "Created",
-            target: "Created",
-            actions: ({ context }) => {
-              replaceToDateKey({
-                dateKey: context.dateKey,
-                router: context.router,
-              });
-            },
-          },
-          {
-            target: "Ready",
-            actions: assign(({ event }) => {
-              const message = submitErrorMessage({ result: event.output });
-              Alert.alert("Plan not saved", message);
+        input: ({ event }) => {
+          if (event.type !== "submit") {
+            throw new Error("Cannot create a plan without a submit event.");
+          }
 
-              return {
-                errorMessage: message,
-              };
-            }),
-          },
-        ],
+          return event.input;
+        },
+        onDone: ({ actions, context, event }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              Created: () => {
+                enq(actions.replaceToDateKey, { dateKey: context.dateKey });
+
+                return { target: "Created" };
+              },
+              PlanMealNameAlreadyExists: () => {
+                const message =
+                  "Meal names must be unique inside a plan. Rename the duplicate meal and try again.";
+                enq(actions.showPlanNotSavedAlert, { message });
+
+                return {
+                  target: "Ready",
+                  context: {
+                    errorMessage: message,
+                  },
+                };
+              },
+              PlanNameAlreadyExists: () => {
+                const message =
+                  "A plan with this name already exists. Choose a different name and try again.";
+                enq(actions.showPlanNotSavedAlert, { message });
+
+                return {
+                  target: "Ready",
+                  context: {
+                    errorMessage: message,
+                  },
+                };
+              },
+              SchemaError: () => {
+                const message =
+                  "Check that the plan name and meal names are filled, and every target is a non-negative number.";
+                enq(actions.showPlanNotSavedAlert, { message });
+
+                return {
+                  target: "Ready",
+                  context: {
+                    errorMessage: message,
+                  },
+                };
+              },
+              UnknownError: () => {
+                const message =
+                  "Something went wrong while saving the plan. Please try again.";
+                enq(actions.showPlanNotSavedAlert, { message });
+
+                return {
+                  target: "Ready",
+                  context: {
+                    errorMessage: message,
+                  },
+                };
+              },
+            })
+          ),
       },
     },
     Created: {},
@@ -175,7 +282,6 @@ const newPlanRouteMachine = setup({
 });
 
 export default function NewPlanScreen() {
-  const router = useRouter();
   const search = useSchemaLocalSearchParams(SearchParams).pipe(
     Option.match({
       onNone: () => ({
@@ -187,14 +293,13 @@ export default function NewPlanScreen() {
       }),
     })
   );
-  const [snapshot, send] = useMachine(newPlanRouteMachine, {
+  const [snapshot, , actor] = useMachine(newPlanRouteMachine, {
     input: {
-      router,
       search,
     },
   });
 
-  if (snapshot.matches("Loading")) {
+  if (snapshot.value === "Loading") {
     return (
       <AppScreen contentStyle={styles.loadingScreen}>
         <LoadingView message="Loading plans" />
@@ -202,7 +307,7 @@ export default function NewPlanScreen() {
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  if (snapshot.value === "Failed") {
     return (
       <AppScreen contentStyle={styles.stateScreen}>
         <MaiHeader title="Create plan" />
@@ -224,87 +329,15 @@ export default function NewPlanScreen() {
       canNavigateBack={snapshot.context.hasExistingPlan}
       errorMessage={snapshot.context.errorMessage}
       initialPlan={null}
-      isSubmitting={snapshot.matches("Submitting")}
+      isSubmitting={snapshot.value === "Submitting"}
       onBack={() => {
-        replaceBack({
-          dateKey: snapshot.context.dateKey,
-          router,
-        });
+        actor.trigger.back();
       }}
       onSubmit={(input) => {
-        send({ type: "submit", input });
+        actor.trigger.submit({ input });
       }}
     />
   );
-}
-
-export function submitErrorMessage({
-  result,
-}: {
-  readonly result: SubmitResult;
-}) {
-  return Match.value(result).pipe(
-    Match.tag(
-      "PlanNameAlreadyExists",
-      () =>
-        "A plan with this name already exists. Choose a different name and try again."
-    ),
-    Match.tag(
-      "PlanMealNameAlreadyExists",
-      () =>
-        "Meal names must be unique inside a plan. Rename the duplicate meal and try again."
-    ),
-    Match.tag(
-      "SchemaError",
-      () =>
-        "Check that the plan name and meal names are filled, and every target is a non-negative number."
-    ),
-    Match.tag(
-      "UnknownError",
-      () => "Something went wrong while saving the plan. Please try again."
-    ),
-    Match.tag("Created", () => ""),
-    Match.exhaustive
-  );
-}
-
-export function replaceToDateKey({
-  dateKey,
-  router,
-}: {
-  readonly dateKey: Domain.DateKey | undefined;
-  readonly router: ReturnType<typeof useRouter>;
-}) {
-  const today = todayDateKey();
-  const targetDateKey = dateKey ?? today;
-
-  if (targetDateKey === today) {
-    router.replace("/");
-    return;
-  }
-
-  router.replace({
-    pathname: "/days/[dateKey]",
-    params: { dateKey: targetDateKey },
-  });
-}
-
-export function replaceBack({
-  dateKey,
-  router,
-}: {
-  readonly dateKey: Domain.DateKey | undefined;
-  readonly router: ReturnType<typeof useRouter>;
-}) {
-  if (dateKey === undefined) {
-    router.replace("/");
-    return;
-  }
-
-  router.replace({
-    pathname: "/days/[dateKey]",
-    params: { dateKey },
-  });
 }
 
 const invalidDateMessage =

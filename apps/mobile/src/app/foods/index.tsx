@@ -7,25 +7,28 @@ import { Option, Schema } from "effect";
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
-import { assertEvent, assign, setup } from "xstate";
+import { setup } from "xstate";
 
 import { EditFoodsPanelLoader } from "./edit";
 import { CreateFoodPanel } from "./new";
 
-type FoodsTabIndex = 0 | 1;
-
 const FoodsSearchParams = Schema.Struct({
-  dateKey: Schema.optional(Domain.DateKey),
+  dateKey: Schema.optionalKey(Domain.DateKey),
 });
 
 const foodsHubMachine = setup({
-  types: {
-    context: {} as {
-      readonly activeTab: FoodsTabIndex;
-    },
-    events: {} as {
-      readonly index: FoodsTabIndex;
-      readonly type: "selectTab";
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        activeTab: Schema.Literals([0, 1]),
+      })
+    ),
+    events: {
+      selectTab: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          index: Schema.Literals([0, 1]),
+        })
+      ),
     },
   },
 }).createMachine({
@@ -33,15 +36,11 @@ const foodsHubMachine = setup({
     activeTab: 0,
   },
   on: {
-    selectTab: {
-      actions: assign(({ event }) => {
-        assertEvent(event, "selectTab");
-
-        return {
-          activeTab: event.index,
-        };
-      }),
-    },
+    selectTab: ({ event }) => ({
+      context: {
+        activeTab: event.index,
+      },
+    }),
   },
 });
 
@@ -68,7 +67,7 @@ export default function FoodsScreen() {
     dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
   const panelDateKeyParam =
     dateKeyResult._tag === "Valid" ? dateKey : undefined;
-  const [snapshot, send] = useMachine(foodsHubMachine);
+  const [snapshot, , actor] = useMachine(foodsHubMachine);
   const activeTab = snapshot.context.activeTab;
   const tabs = [
     {
@@ -118,9 +117,8 @@ export default function FoodsScreen() {
         <PagerTabs
           activeIndex={activeTab}
           onActiveIndexChange={(index) => {
-            send({
+            actor.trigger.selectTab({
               index: index === 0 ? 0 : 1,
-              type: "selectTab",
             });
           }}
           tabBarPosition="bottom"

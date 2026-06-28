@@ -2,85 +2,150 @@ import { FoodForm } from "@/components/nutrition/food-form";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { FoodFormMachine } from "@mai/machines";
+import { EmptyEvent, FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { router, useRouter } from "expo-router";
 import { Alert } from "react-native";
-import {
-  assertEvent,
-  assign,
-  fromPromise,
-  setup,
-  type ActorRefFrom,
-} from "xstate";
+import { Actor, createAsyncLogic, setup } from "xstate";
 
-type CreateFoodRouteMode = "screen" | "embedded";
+const CreateFoodRouteMode = Schema.Literals(["screen", "embedded"]);
+
+type CreateFoodRouteMode = typeof CreateFoodRouteMode.Type;
 
 const SearchParams = Schema.Struct({
-  dateKey: Schema.optional(Domain.DateKey),
+  dateKey: Schema.optionalKey(Domain.DateKey),
 });
 
+const FoodFormInput = Schema.Struct({
+  name: Schema.String,
+  brand: Schema.optionalKey(Schema.String),
+  energyKcalPer100g: Schema.String,
+  proteinGramsPer100g: Schema.String,
+  carbsGramsPer100g: Schema.String,
+  fatGramsPer100g: Schema.String,
+  fiberGramsPer100g: Schema.optionalKey(Schema.String),
+  sugarGramsPer100g: Schema.optionalKey(Schema.String),
+  saturatedFatGramsPer100g: Schema.optionalKey(Schema.String),
+  saltGramsPer100g: Schema.optionalKey(Schema.String),
+});
+
+const SubmitFoodInput = Schema.Struct({
+  input: FoodFormInput,
+});
+
+const SubmitFoodOutput = Schema.Union([
+  Schema.TaggedStruct("Created", {}),
+  Schema.TaggedStruct("SchemaError", {}),
+]);
+
+const CreateFoodRouteInput = Schema.Struct({
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
+  initialNotice: Schema.NullOr(Schema.String),
+  mode: CreateFoodRouteMode,
+});
+
+const FoodFormActorSchema = Schema.declare<FoodFormMachine.FoodFormActorRef>(
+  (value): value is FoodFormMachine.FoodFormActorRef =>
+    value instanceof Actor && value.logic === FoodFormMachine.foodFormMachine,
+  { expected: "FoodFormActor" }
+);
+
 const createFoodRouteMachine = setup({
-  types: {
-    context: {} as {
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly foodFormActor: ActorRefFrom<
-        typeof FoodFormMachine.foodFormMachine
-      >;
-      readonly mode: CreateFoodRouteMode;
-      readonly notice: string | null;
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        dateKey: Schema.UndefinedOr(Domain.DateKey),
+        foodFormActor: FoodFormActorSchema,
+        mode: CreateFoodRouteMode,
+        notice: Schema.NullOr(Schema.String),
+      })
+    ),
+    events: {
+      clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
+      submit: Schema.toStandardSchemaV1(SubmitFoodInput),
     },
-    events: {} as
-      | FoodFormMachine.FoodFormSubmitEvent
-      | {
-          readonly type: "clearNotice";
-        },
-    input: {} as {
+    input: Schema.toStandardSchemaV1(CreateFoodRouteInput),
+  },
+  states: {
+    Idle: {},
+    Submitting: {},
+    Failure: {},
+    Created: {},
+  },
+  actions: {
+    alertCreateFoodValidationError: () => {
+      Alert.alert(
+        "Food not saved",
+        "Check that the name is filled and every required nutrient is a non-negative number."
+      );
+    },
+    alertCreateFoodFailure: () => {
+      Alert.alert(
+        "Food not saved",
+        "Something went wrong while saving the food. Please try again."
+      );
+    },
+    navigateAfterCreate: (params: {
       readonly dateKey: Domain.DateKey | undefined;
-      readonly initialNotice: string | null;
-      readonly mode: CreateFoodRouteMode;
+    }) => {
+      const today = todayDateKey();
+      const targetDateKey = params.dateKey ?? today;
+
+      if (targetDateKey === today) {
+        router.replace("/");
+        return;
+      }
+
+      router.replace({
+        pathname: "/days/[dateKey]",
+        params: {
+          dateKey: targetDateKey,
+        },
+      });
+    },
+    resetFoodForm: (params: {
+      readonly foodFormActor: FoodFormMachine.FoodFormActorRef;
+    }) => {
+      params.foodFormActor.send({
+        type: "reset",
+      });
     },
   },
-  actors: {
+  actorSources: {
     foodForm: FoodFormMachine.foodFormMachine,
-    submitFood: fromPromise<
-      | {
-          readonly _tag: "Created";
-        }
-      | {
-          readonly _tag: "SchemaError";
-        },
-      {
-        readonly input: Foods.CreateFoodInput;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const foods = yield* Foods.Foods;
+    submitFood: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(SubmitFoodInput),
+        output: Schema.toStandardSchemaV1(SubmitFoodOutput),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const foods = yield* Foods.Foods;
 
-          yield* foods.create({
-            input: input.input,
-          });
+            yield* foods.create({
+              input: input.input,
+            });
 
-          return {
-            _tag: "Created" as const,
-          };
-        }).pipe(
-          Effect.catchTag("SchemaError", () =>
-            Effect.succeed({
-              _tag: "SchemaError" as const,
-            })
+            return {
+              _tag: "Created" as const,
+            };
+          }).pipe(
+            Effect.catchTag("SchemaError", () =>
+              Effect.succeed({
+                _tag: "SchemaError" as const,
+              })
+            )
           )
-        )
-      )
-    ),
+        ),
+    }),
   },
 }).createMachine({
-  context: ({ input, spawn }) => ({
+  context: ({ actorSources, input, spawn }) => ({
     dateKey: input.dateKey,
-    foodFormActor: spawn("foodForm", {
+    foodFormActor: spawn(actorSources.foodForm, {
       id: "createFoodRouteFoodForm",
       input: {
         initialFood: null,
@@ -94,110 +159,95 @@ const createFoodRouteMachine = setup({
   states: {
     Idle: {
       on: {
-        clearNotice: {
-          actions: assign({
+        clearNotice: () => ({
+          context: {
             notice: null,
-          }),
-        },
-        submit: {
-          actions: assign({
-            notice: null,
-          }),
+          },
+        }),
+        submit: () => ({
           target: "Submitting",
-        },
+          context: {
+            notice: null,
+          },
+        }),
       },
     },
     Submitting: {
       invoke: {
         src: "submitFood",
         input: ({ event }) => {
-          assertEvent(event, "submit");
+          if (event.type !== "submit") {
+            throw new Error("Expected food submission input.");
+          }
 
           return {
             input: event.input,
           };
         },
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "SchemaError",
-            actions: [
-              assign({
-                notice:
-                  "Check that the name is filled and every required nutrient is a non-negative number.",
-              }),
-              () => {
-                Alert.alert(
-                  "Food not saved",
-                  "Check that the name is filled and every required nutrient is a non-negative number."
-                );
-              },
-            ],
-            target: "Failure",
-          },
-          {
-            actions: ({ context }) => {
-              const today = todayDateKey();
-              const targetDateKey = context.dateKey ?? today;
+        onDone: ({ actions, context, event }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              Created: () => {
+                if (context.mode === "screen") {
+                  enq(actions.navigateAfterCreate, {
+                    dateKey: context.dateKey,
+                  });
 
-              if (targetDateKey === today) {
-                router.replace("/");
-                return;
-              }
+                  return {
+                    target: "Created",
+                  };
+                }
 
-              router.replace({
-                pathname: "/days/[dateKey]",
-                params: {
-                  dateKey: targetDateKey,
-                },
-              });
-            },
-            guard: ({ context }) => context.mode === "screen",
-            target: "Created",
-          },
-          {
-            actions: [
-              assign({
-                notice: "Food created.",
-              }),
-              ({ context }) => {
-                context.foodFormActor.send({
-                  type: "reset",
+                enq(actions.resetFoodForm, {
+                  foodFormActor: context.foodFormActor,
                 });
+
+                return {
+                  target: "Idle",
+                  context: {
+                    notice: "Food created.",
+                  },
+                };
               },
-            ],
-            target: "Idle",
-          },
-        ],
-        onError: {
-          actions: [
-            assign({
+              SchemaError: () => {
+                enq(actions.alertCreateFoodValidationError);
+
+                return {
+                  target: "Failure",
+                  context: {
+                    notice:
+                      "Check that the name is filled and every required nutrient is a non-negative number.",
+                  },
+                };
+              },
+            })
+          ),
+        onError: ({ actions }, enq) => {
+          enq(actions.alertCreateFoodFailure);
+
+          return {
+            target: "Failure",
+            context: {
               notice:
                 "Something went wrong while saving the food. Please try again.",
-            }),
-            () => {
-              Alert.alert(
-                "Food not saved",
-                "Something went wrong while saving the food. Please try again."
-              );
             },
-          ],
-          target: "Failure",
+          };
         },
       },
     },
     Failure: {
       on: {
-        clearNotice: {
-          actions: assign({
+        clearNotice: () => ({
+          context: {
             notice: null,
-          }),
-        },
-        submit: {
-          actions: assign({
-            notice: null,
-          }),
+          },
+        }),
+        submit: () => ({
           target: "Submitting",
-        },
+          context: {
+            notice: null,
+          },
+        }),
       },
     },
     Created: {},
@@ -262,23 +312,24 @@ export function CreateFoodPanel({
   readonly mode: CreateFoodRouteMode;
   readonly onBack: () => void;
 }) {
-  const [snapshot] = useMachine(createFoodRouteMachine, {
+  const [rawSnapshot] = useMachine(createFoodRouteMachine, {
     input: {
       dateKey,
       initialNotice,
       mode,
     },
   });
-  const isSubmitting =
-    snapshot.matches("Submitting") || snapshot.matches("Created");
+  const { foodFormActor } = rawSnapshot.context;
+  const routeState = rawSnapshot.value;
+  const isSubmitting = routeState === "Submitting" || routeState === "Created";
 
   return (
     <FoodForm
       action="create"
-      actor={snapshot.context.foodFormActor}
+      actor={foodFormActor}
       disabled={isSubmitting}
-      errorMessage={snapshot.context.notice ?? undefined}
-      hasFailed={snapshot.matches("Failure")}
+      errorMessage={rawSnapshot.context.notice ?? undefined}
+      hasFailed={routeState === "Failure"}
       layout={mode}
       onBack={onBack}
     />

@@ -10,20 +10,20 @@ import {
   SectionCard,
   TextArea,
 } from "@/components/ui";
+import {
+  foodNutrientOverviewFromFormValues,
+  foodNutrientOverviewPrimaryLabel,
+} from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import type { FoodFormMachine } from "@mai/machines";
 import type { FoodQuickInput } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
-import { Array as EffectArray } from "effect";
+import { Array } from "effect";
 import { ChevronLeft, Plus, RotateCcw, Save } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
-import {
-  FoodNutrientOverview,
-  formatFoodNutrientNumber,
-  type FoodNutrientOverviewNutrients,
-} from "./food-nutrient-overview";
+import { FoodNutrientOverview } from "./food-nutrient-overview";
 
 type FoodNutrientField = {
   readonly accentColor: string;
@@ -241,8 +241,8 @@ function FoodQuickInputTextField({
       label="Food text"
       onChangeText={(value) => {
         actor.send({
-          input: value,
           type: "changeQuickInput",
+          input: value,
         });
       }}
       placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
@@ -369,7 +369,7 @@ function FoodNumberWarnings({
 }: {
   readonly warnings: readonly FoodFormMachine.FoodNumberWarning[];
 }) {
-  if (!EffectArray.isReadonlyArrayNonEmpty(warnings)) {
+  if (!Array.isReadonlyArrayNonEmpty(warnings)) {
     return null;
   }
 
@@ -415,7 +415,7 @@ function FoodQuickInputIssues({
 }: {
   readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
 }) {
-  if (!EffectArray.isReadonlyArrayNonEmpty(issues)) {
+  if (!Array.isReadonlyArrayNonEmpty(issues)) {
     return null;
   }
 
@@ -442,53 +442,10 @@ function _sendFoodFormValueChange({
   readonly value: string;
 }) {
   actor.send({
-    name,
     type: "changeFormValue",
+    name,
     value,
   });
-}
-
-export function foodNutrientOverviewFromFormValues({
-  values,
-}: {
-  readonly values: FoodFormMachine.FoodFormValues;
-}): FoodNutrientOverviewNutrients {
-  return {
-    carbsGrams: _nonNegativeFormNumber(values.carbsGramsPer100g),
-    energyKcal: _nonNegativeFormNumber(values.energyKcalPer100g),
-    fatGrams: _nonNegativeFormNumber(values.fatGramsPer100g),
-    fiberGrams: _nonNegativeFormNumber(values.fiberGramsPer100g),
-    proteinGrams: _nonNegativeFormNumber(values.proteinGramsPer100g),
-    saltGrams: _nonNegativeFormNumber(values.saltGramsPer100g),
-    saturatedFatGrams: _nonNegativeFormNumber(values.saturatedFatGramsPer100g),
-    sugarGrams: _nonNegativeFormNumber(values.sugarGramsPer100g),
-  };
-}
-
-export function foodNutrientOverviewPrimaryLabel({
-  values,
-}: {
-  readonly values: FoodFormMachine.FoodFormValues;
-}) {
-  const energyKcal = _nonNegativeFormNumber(values.energyKcalPer100g);
-
-  return energyKcal === undefined
-    ? "Partial"
-    : `${formatFoodNutrientNumber({ value: energyKcal })} kcal`;
-}
-
-function _nonNegativeFormNumber(value: string) {
-  const trimmedValue = value.trim();
-
-  if (trimmedValue === "") {
-    return undefined;
-  }
-
-  const parsedValue = Number(trimmedValue.replace(",", "."));
-
-  return Number.isFinite(parsedValue) && parsedValue >= 0
-    ? parsedValue
-    : undefined;
 }
 
 function _optionalTrimmedText(value: string) {
