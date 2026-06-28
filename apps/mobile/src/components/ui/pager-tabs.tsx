@@ -1,7 +1,14 @@
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import { useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import PagerView from "react-native-pager-view";
 
 export type PagerTab = {
@@ -17,12 +24,14 @@ export function PagerTabBar({
   activeIndex,
   onActiveIndexChange,
   onTabPress,
+  style,
   tabs,
   variant = "surface",
 }: {
   readonly activeIndex: number;
   readonly onActiveIndexChange: (index: number) => void;
   readonly onTabPress?: (index: number) => void;
+  readonly style?: StyleProp<ViewStyle>;
   readonly tabs: readonly Pick<
     PagerTab,
     "accessibilityLabel" | "key" | "label"
@@ -32,7 +41,7 @@ export function PagerTabBar({
   const isHeader = variant === "header";
 
   return (
-    <View style={[styles.tabs, isHeader ? styles.headerTabs : null]}>
+    <View style={[styles.tabs, isHeader ? styles.headerTabs : null, style]}>
       {tabs.map((tab, index) => {
         const isActive = index === activeIndex;
 
@@ -81,12 +90,14 @@ export function PagerTabBar({
 export function PagerTabs({
   activeIndex,
   onActiveIndexChange,
+  tabBarStyle,
   tabBarPosition = "top",
   tabBarVariant = "surface",
   tabs,
 }: {
   readonly activeIndex: number;
   readonly onActiveIndexChange: (index: number) => void;
+  readonly tabBarStyle?: StyleProp<ViewStyle>;
   readonly tabBarPosition?: "top" | "bottom";
   readonly tabBarVariant?: PagerTabBarVariant;
   readonly tabs: readonly PagerTab[];
@@ -99,6 +110,7 @@ export function PagerTabs({
       onTabPress={(index) => {
         pagerRef.current?.setPage(index);
       }}
+      style={tabBarStyle}
       tabs={tabs}
       variant={tabBarVariant}
     />

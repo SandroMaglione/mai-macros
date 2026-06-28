@@ -1,7 +1,19 @@
+import { Button } from "@/components/ui";
+import { EmptyEvent } from "@mai/machines";
 import { NutritionReports, Reporting } from "@mai/nutrition";
-import { Array } from "effect";
+import { useMachine } from "@xstate/react";
+import { Array, Schema } from "effect";
+import type { LucideIcon } from "lucide-react-native";
+import {
+  ChevronDown,
+  ChevronUp,
+  Minus,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react-native";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { setup } from "xstate";
 
 import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
@@ -49,6 +61,69 @@ const nutrientColors = {
   saturatedFatGrams: color.warningText,
   sugarGrams: color.nutritionSugar,
 } satisfies Record<Reporting.NutrientName, string>;
+
+const summaryInsightLimit = 5;
+
+const targetTrendIndicators = {
+  above: {
+    accessibilityLabel: "Average above target",
+    color: color.primary,
+    icon: TrendingUp,
+  },
+  below: {
+    accessibilityLabel: "Average below target",
+    color: color.textMuted,
+    icon: TrendingDown,
+  },
+  inside: {
+    accessibilityLabel: "Average inside target",
+    color: color.successText,
+    icon: Minus,
+  },
+  none: {
+    accessibilityLabel: "No target",
+    color: color.textSubtle,
+    icon: Minus,
+  },
+} satisfies Record<
+  Reporting.NutrientTargetStatusKind | "none",
+  {
+    readonly accessibilityLabel: string;
+    readonly color: string;
+    readonly icon: LucideIcon;
+  }
+>;
+
+const summaryInsightsVisibilityMachine = setup({
+  schemas: {
+    events: {
+      collapse: Schema.toStandardSchemaV1(EmptyEvent),
+      expand: Schema.toStandardSchemaV1(EmptyEvent),
+    },
+  },
+  states: {
+    Collapsed: {},
+    Expanded: {},
+  },
+}).createMachine({
+  initial: "Collapsed",
+  states: {
+    Collapsed: {
+      on: {
+        expand: {
+          target: "Expanded",
+        },
+      },
+    },
+    Expanded: {
+      on: {
+        collapse: {
+          target: "Collapsed",
+        },
+      },
+    },
+  },
+});
 
 export function RangeSummary({
   report,
@@ -136,14 +211,18 @@ export function RangeSummary({
       };
     }, {})
   );
-  const insights = getNutritionReportInsights({
-    limit: 5,
+  const defaultInsights = getNutritionReportInsights({
+    limit: summaryInsightLimit,
+    report,
+  });
+  const allInsights = getNutritionReportInsights({
+    limit: Number.MAX_SAFE_INTEGER,
     report,
   });
 
   return (
     <View style={styles.root}>
-      <SummaryInsights insights={insights} />
+      <SummaryInsights allInsights={allInsights} insights={defaultInsights} />
 
       <View style={styles.section}>
         <SectionTitle
@@ -192,10 +271,18 @@ export function RangeSummary({
 }
 
 function SummaryInsights({
+  allInsights,
   insights,
 }: {
+  readonly allInsights: readonly NutritionReportInsight[];
   readonly insights: readonly NutritionReportInsight[];
 }) {
+  const [snapshot, , actor] = useMachine(summaryInsightsVisibilityMachine);
+  const isExpanded = snapshot.value === "Expanded";
+  const visibleInsights = isExpanded ? allInsights : insights;
+  const canToggle = allInsights.length > insights.length;
+  const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
+
   return (
     <View style={[styles.section, styles.summarySection]}>
       <SectionTitle
@@ -203,12 +290,12 @@ function SummaryInsights({
         title="Summary"
       />
       <View style={styles.insightList}>
-        {!Array.isReadonlyArrayNonEmpty(insights) ? (
+        {!Array.isReadonlyArrayNonEmpty(visibleInsights) ? (
           <Text style={styles.emptyText}>
             Log more meals to surface weekly food and meal patterns.
           </Text>
         ) : (
-          insights.map((insight) => (
+          visibleInsights.map((insight) => (
             <View key={insight.id} style={styles.insightCard}>
               <Text style={styles.insightText}>
                 {insight.parts.map((part, index) => (
@@ -226,6 +313,23 @@ function SummaryInsights({
           ))
         )}
       </View>
+      {canToggle ? (
+        <Button
+          icon={ToggleIcon}
+          onPress={() => {
+            if (isExpanded) {
+              actor.trigger.collapse();
+              return;
+            }
+
+            actor.trigger.expand();
+          }}
+          style={styles.summaryToggle}
+          variant="ghost"
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </Button>
+      ) : null}
     </View>
   );
 }
@@ -241,6 +345,16 @@ function NutrientBalanceCard({
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
   const signedValue = target === null ? null : actual - target;
+  const status =
+    target === null
+      ? null
+      : Reporting.evaluateNutrientTarget({
+          target: Reporting.makeNutrientTarget({
+            amount: target,
+            nutrientName,
+          }),
+          value: actual,
+        });
   const formattedSignedValue =
     signedValue === null
       ? null
@@ -252,15 +366,18 @@ function NutrientBalanceCard({
 
   return (
     <View style={styles.nutrientCard}>
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.nutrientCardTitle,
-          { color: nutrientColors[nutrientName] },
-        ]}
-      >
-        {nutrientLabels[nutrientName]}
-      </Text>
+      <View style={styles.nutrientCardHeader}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.nutrientCardTitle,
+            { color: nutrientColors[nutrientName] },
+          ]}
+        >
+          {nutrientLabels[nutrientName]}
+        </Text>
+        <TargetTrendIcon status={status} />
+      </View>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.nutrientValue}>
         {_formatNutrient({ nutrientName, value: actual })}
       </Text>
@@ -271,6 +388,28 @@ function NutrientBalanceCard({
             ? `0 ${unit}`
             : `${signedValue > 0 ? "+" : "-"}${formattedSignedValue} ${unit}`}
       </Text>
+    </View>
+  );
+}
+
+function TargetTrendIcon({
+  status,
+}: {
+  readonly status: Reporting.NutrientTargetStatus | null;
+}) {
+  const indicator =
+    status === null
+      ? targetTrendIndicators.none
+      : targetTrendIndicators[status.status];
+  const Icon = indicator.icon;
+
+  return (
+    <View
+      accessibilityLabel={indicator.accessibilityLabel}
+      accessible
+      style={styles.targetTrendIcon}
+    >
+      <Icon color={indicator.color} size={17} strokeWidth={3} />
     </View>
   );
 }
@@ -395,6 +534,13 @@ const styles = StyleSheet.create({
     color: color.warningText,
     fontWeight: tokens.type.weight.black,
   },
+  summaryToggle: {
+    minHeight: 32,
+    minWidth: 0,
+    alignSelf: "flex-start",
+    borderWidth: 0,
+    paddingHorizontal: 0,
+  },
   emptyText: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
@@ -417,11 +563,26 @@ const styles = StyleSheet.create({
     backgroundColor: color.sheet,
     padding: spacing.lg,
   },
+  nutrientCardHeader: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
   nutrientCardTitle: {
     minWidth: 0,
+    flex: 1,
     fontSize: tokens.type.size.lg,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.lg,
+  },
+  targetTrendIcon: {
+    width: 18,
+    height: 18,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   nutrientDelta: {
     color: color.textMuted,

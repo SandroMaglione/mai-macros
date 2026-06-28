@@ -111,6 +111,7 @@ export default function FoodsScreen() {
             />
           }
           shadow
+          style={styles.header}
           title="Foods"
         />
 
@@ -122,6 +123,7 @@ export default function FoodsScreen() {
             });
           }}
           tabBarPosition="bottom"
+          tabBarStyle={styles.tabBar}
           tabs={[
             {
               ...tabs[0],
@@ -174,8 +176,14 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     gap: spacing.lg,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 0,
     paddingTop: spacing.lg,
     paddingBottom: 0,
+  },
+  header: {
+    marginHorizontal: 0,
+  },
+  tabBar: {
+    marginHorizontal: spacing.lg,
   },
 });

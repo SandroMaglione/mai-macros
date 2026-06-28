@@ -609,12 +609,21 @@ function ReadyEditFoodsRoute({
         <Notice
           message={notice}
           tone={notice === "Food saved." ? "success" : "danger"}
-          style={styles.notice}
+          style={[
+            styles.notice,
+            layout === "embedded" ? styles.embeddedNotice : null,
+          ]}
         />
       )}
 
       {selectedFood === null ? (
-        <View style={styles.searchBody}>
+        <View
+          style={
+            layout === "embedded"
+              ? styles.embeddedSearchBody
+              : styles.searchBody
+          }
+        >
           <FoodSearchResults
             actor={foodSearchActor}
             disabled={disabled}
@@ -723,7 +732,11 @@ function FoodEditForm({
   );
 
   return (
-    <View style={styles.formLayout}>
+    <View
+      style={
+        layout === "embedded" ? styles.embeddedFormLayout : styles.formLayout
+      }
+    >
       {layout === "embedded" ? (
         <View style={styles.stickyAction}>{changeFoodButton}</View>
       ) : null}
@@ -999,10 +1012,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   embeddedSearchHeader: {
+    marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
   notice: {
     marginBottom: spacing.md,
+  },
+  embeddedNotice: {
+    marginHorizontal: spacing.lg,
   },
   centered: {
     flex: 1,
@@ -1013,9 +1030,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: -spacing.lg,
   },
+  embeddedSearchBody: {
+    flex: 1,
+  },
   formLayout: {
     flex: 1,
     marginHorizontal: -spacing.lg,
+  },
+  embeddedFormLayout: {
+    flex: 1,
   },
   formScroll: {
     flex: 1,

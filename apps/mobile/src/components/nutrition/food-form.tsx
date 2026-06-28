@@ -471,6 +471,7 @@ const styles = StyleSheet.create({
   },
   embeddedContent: {
     gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
   },
   inlineSubmit: {

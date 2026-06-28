@@ -120,6 +120,12 @@ const macroProgress = [
   },
 ] as const;
 
+const dominantMacronutrientColors = {
+  carbs: color.nutritionCarbs,
+  fat: color.nutritionFat,
+  protein: color.nutritionProtein,
+} satisfies Record<Utils.DominantMacronutrient, string>;
+
 const dailyLogRouteMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(DailyLogContext),
@@ -1410,6 +1416,12 @@ function MealEntryRow({
   const quantityLabel = `${_formatMacroValue({
     value: mealEntry.quantityGrams,
   })} g`;
+  const dominantMacronutrient =
+    food === undefined ? null : Utils.findDominantMacronutrient({ food });
+  const dominantMacronutrientColor =
+    dominantMacronutrient === null
+      ? undefined
+      : dominantMacronutrientColors[dominantMacronutrient];
 
   return (
     <Pressable
@@ -1424,11 +1436,22 @@ function MealEntryRow({
         <Text numberOfLines={1} style={styles.entryName}>
           {food?.name ?? "Unknown food"}
         </Text>
-        <Text numberOfLines={1} style={styles.entryDetail}>
-          {food?.brand === undefined
-            ? quantityLabel
-            : `${food.brand}, ${quantityLabel}`}
-        </Text>
+        <View style={styles.entryDetailRow}>
+          {dominantMacronutrientColor === undefined ? null : (
+            <View
+              accessible={false}
+              style={[
+                styles.entryMacronutrientDot,
+                { backgroundColor: dominantMacronutrientColor },
+              ]}
+            />
+          )}
+          <Text numberOfLines={1} style={styles.entryDetail}>
+            {food?.brand === undefined
+              ? quantityLabel
+              : `${food.brand}, ${quantityLabel}`}
+          </Text>
+        </View>
       </View>
       <View style={styles.entryNumbers}>
         <Text style={styles.entryKcal}>
@@ -1824,7 +1847,22 @@ const styles = StyleSheet.create({
     fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
+  entryDetailRow: {
+    minHeight: tokens.type.lineHeight.sm,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  entryMacronutrientDot: {
+    width: 6,
+    height: 6,
+    flexShrink: 0,
+    borderRadius: 3,
+  },
   entryDetail: {
+    minWidth: 0,
+    flexShrink: 1,
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
     fontWeight: tokens.type.weight.medium,
