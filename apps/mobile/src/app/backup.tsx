@@ -262,6 +262,7 @@ const importBackupMachine = setup({
     }),
   },
 }).createMachine({
+  initial: "Idle",
   states: {
     Idle: { on: { importFile: { target: "ImportingFile" } } },
     ImportingFile: {
@@ -355,6 +356,7 @@ const catalogExportMachine = setup({
     }),
   },
 }).createMachine({
+  initial: "Idle",
   states: {
     Idle: { on: { exportCatalog: { target: "ExportingCatalog" } } },
     ExportingCatalog: {
@@ -760,7 +762,7 @@ function ImportBackupSection() {
 
 function CatalogExportSection() {
   const [snapshot, , actor] = useMachine(catalogExportMachine);
-  const isExporting = snapshot.matches("Exporting");
+  const isExporting = snapshot.matches("ExportingCatalog");
   return (
     <>
       <BackupSettingsSection divider title="Export catalog">
