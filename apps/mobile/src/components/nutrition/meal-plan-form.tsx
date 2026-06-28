@@ -100,12 +100,14 @@ export function MealPlanForm({
   readonly onBack: () => void;
   readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {
-  const [snapshot, send] = useMachine(MealPlanFormMachine.mealPlanFormMachine, {
-    input: { initialPlan },
-  });
-  const { values } = snapshot.context;
-  const { mealsActor } = snapshot.context;
-  const meals = useSelector(mealsActor, (state) => state.context.meals);
+  const [snapshot, , actor] = useMachine(
+    MealPlanFormMachine.mealPlanFormMachine,
+    {
+      input: { initialPlan },
+    }
+  );
+  const { mealsActor, values } = snapshot.context;
+  const meals = useSelector(mealsActor, (snapshot) => snapshot.context.meals);
   const isCreating = action === "create";
   const title = isCreating ? "Create plan" : "Edit plan";
   const submitText = isCreating ? "Create plan" : "Save revised plan";
@@ -125,7 +127,7 @@ export function MealPlanForm({
         editable={!isSubmitting}
         label="Name"
         onChangeText={(value) =>
-          send({ type: "changeField", name: "name", value })
+          actor.trigger.changeField({ name: "name", value })
         }
         placeholder="Training day"
         returnKeyType="next"
@@ -140,7 +142,7 @@ export function MealPlanForm({
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
-                send({ type: "changeField", name: field.name, value })
+                actor.trigger.changeField({ name: field.name, value })
               }
               value={values[field.name]}
             />
@@ -173,7 +175,7 @@ export function MealPlanForm({
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
-                send({ type: "changeField", name: field.name, value })
+                actor.trigger.changeField({ name: field.name, value })
               }
               value={values[field.name]}
             />

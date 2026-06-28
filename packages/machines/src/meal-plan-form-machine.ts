@@ -1,5 +1,7 @@
-import { MealPlans, Utils, type Domain } from "@mai/nutrition";
-import { assign, setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
+import { Domain, MealPlans, Utils } from "@mai/nutrition";
+import { Schema } from "effect";
+import { Actor, setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
+import { EmptyEvent } from "./schemas";
 
 export type MealPlanTargetFieldName =
   | "proteinTargetGrams"
@@ -21,27 +23,62 @@ export type MealPlanFormMealValue = {
 
 export type MealPlanFormTextFieldName = keyof MealPlanFormValues;
 
+const MealPlanFormValuesSchema = Schema.Struct({
+  name: Schema.String,
+  proteinTargetGrams: Schema.String,
+  carbsTargetGrams: Schema.String,
+  fatTargetGrams: Schema.String,
+  fiberTargetGrams: Schema.String,
+  sugarTargetGrams: Schema.String,
+  saturatedFatTargetGrams: Schema.String,
+  saltTargetGrams: Schema.String,
+});
+
+const MealPlanFormMealValueSchema = Schema.Struct({
+  id: Schema.optionalKey(Domain.MealId),
+  name: Schema.String,
+});
+
+const MealPlanFormTextFieldNameSchema = Schema.Literals([
+  "name",
+  "proteinTargetGrams",
+  "carbsTargetGrams",
+  "fatTargetGrams",
+  "fiberTargetGrams",
+  "sugarTargetGrams",
+  "saturatedFatTargetGrams",
+  "saltTargetGrams",
+]);
+
 export const mealPlanMealsMachine = setup({
-  types: {
-    context: {} as {
-      readonly meals: readonly MealPlanFormMealValue[];
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        meals: Schema.Array(MealPlanFormMealValueSchema),
+      })
+    ),
+    events: {
+      addMeal: Schema.toStandardSchemaV1(EmptyEvent),
+      changeMealName: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          index: Schema.Number,
+          value: Schema.String,
+        })
+      ),
+      removeMeal: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          index: Schema.Number,
+        })
+      ),
     },
-    events: {} as
-      | {
-          readonly type: "addMeal";
-        }
-      | {
-          readonly index: number;
-          readonly type: "changeMealName";
-          readonly value: string;
-        }
-      | {
-          readonly index: number;
-          readonly type: "removeMeal";
-        },
-    input: {} as {
-      readonly initialPlan: Domain.Plan | null;
-    },
+    input: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        initialPlan: Schema.NullOr(Domain.Plan),
+      })
+    ),
+  },
+  states: {
+    Ready: {},
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -55,55 +92,78 @@ export const mealPlanMealsMachine = setup({
               name: meal.name,
             })),
   }),
-  on: {
-    addMeal: {
-      actions: assign(({ context }) => ({
-        meals: [...context.meals, { name: "" }],
-      })),
-    },
-    changeMealName: {
-      actions: assign(({ context, event }) => ({
-        meals: context.meals.map((meal, index) =>
-          index === event.index
-            ? {
-                ...meal,
-                name: event.value,
-              }
-            : meal
-        ),
-      })),
-    },
-    removeMeal: {
-      actions: assign(({ context, event }) => ({
-        meals: context.meals.flatMap((meal, index) =>
-          index === event.index ? [] : [meal]
-        ),
-      })),
+  initial: "Ready",
+  states: {
+    Ready: {
+      on: {
+        addMeal: ({ context }) => ({
+          context: {
+            meals: [...context.meals, { name: "" }],
+          },
+        }),
+        changeMealName: ({ context, event }) => ({
+          context: {
+            meals: context.meals.map((meal, index) =>
+              index === event.index
+                ? {
+                    ...meal,
+                    name: event.value,
+                  }
+                : meal
+            ),
+          },
+        }),
+        removeMeal: ({ context, event }) => ({
+          context: {
+            meals: context.meals.flatMap((meal, index) =>
+              index === event.index ? [] : [meal]
+            ),
+          },
+        }),
+      },
     },
   },
 });
 
+type MealPlanMealsActor = ActorRefFrom<typeof mealPlanMealsMachine>;
+
+const MealPlanMealsActorSchema = Schema.declare<MealPlanMealsActor>(
+  (value): value is MealPlanMealsActor =>
+    value instanceof Actor && value.logic === mealPlanMealsMachine,
+  { expected: "MealPlanMealsActor" }
+);
+
 export const mealPlanFormMachine = setup({
-  types: {
-    context: {} as {
-      readonly mealsActor: MealPlanMealsActorRef;
-      readonly values: MealPlanFormValues;
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        mealsActor: MealPlanMealsActorSchema,
+        values: MealPlanFormValuesSchema,
+      })
+    ),
+    events: {
+      changeField: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          name: MealPlanFormTextFieldNameSchema,
+          value: Schema.String,
+        })
+      ),
     },
-    events: {} as {
-      readonly name: MealPlanFormTextFieldName;
-      readonly type: "changeField";
-      readonly value: string;
-    },
-    input: {} as {
-      readonly initialPlan: Domain.Plan | null;
-    },
+    input: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        initialPlan: Schema.NullOr(Domain.Plan),
+      })
+    ),
   },
-  actors: {
+  states: {
+    Ready: {},
+  },
+  actorSources: {
     mealPlanMeals: mealPlanMealsMachine,
   },
 }).createMachine({
-  context: ({ input, spawn }) => ({
-    mealsActor: spawn("mealPlanMeals", {
+  context: ({ actorSources, input, spawn }) => ({
+    mealsActor: spawn(actorSources.mealPlanMeals, {
       id: "mealPlanFormMeals",
       input: {
         initialPlan: input.initialPlan,
@@ -134,19 +194,24 @@ export const mealPlanFormMachine = setup({
       ),
     },
   }),
-  on: {
-    changeField: {
-      actions: assign(({ context, event }) => ({
-        values: {
-          ...context.values,
-          [event.name]: event.value,
-        },
-      })),
+  initial: "Ready",
+  states: {
+    Ready: {
+      on: {
+        changeField: ({ context, event }) => ({
+          context: {
+            values: {
+              ...context.values,
+              [event.name]: event.value,
+            },
+          },
+        }),
+      },
     },
   },
 });
 
-export type MealPlanMealsActorRef = ActorRefFrom<typeof mealPlanMealsMachine>;
+export type MealPlanMealsActorRef = MealPlanMealsActor;
 export type MealPlanMealsSnapshot = SnapshotFrom<typeof mealPlanMealsMachine>;
 export type MealPlanFormActorRef = ActorRefFrom<typeof mealPlanFormMachine>;
 export type MealPlanFormSnapshot = SnapshotFrom<typeof mealPlanFormMachine>;

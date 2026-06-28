@@ -17,3 +17,6 @@ allowBuilds:
   dtrace-provider: false
   esbuild: true
   msgpackr-extract: false
+
+minimumReleaseAgeExclude:
+  - xstate@6.0.0-alpha.9

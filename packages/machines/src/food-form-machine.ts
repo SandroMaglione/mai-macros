@@ -1,12 +1,7 @@
-import { FoodQuickInput, type Domain, type Foods } from "@mai/nutrition";
-import { Effect } from "effect";
-import {
-  assign,
-  sendParent,
-  setup,
-  type ActorRefFrom,
-  type SnapshotFrom,
-} from "xstate";
+import { Domain, FoodQuickInput, type Foods } from "@mai/nutrition";
+import { Effect, Schema } from "effect";
+import { setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
+import { EmptyEvent } from "./schemas";
 
 export type FoodNutrientFieldName =
   | "energyKcalPer100g"
@@ -28,13 +23,55 @@ export type FoodNumberWarning = {
   readonly message: string;
 };
 
-type FoodFormMachineContext = {
-  readonly formValues: FoodFormValues;
-  readonly numberWarnings: readonly FoodNumberWarning[];
-  readonly quickInput: string;
-  readonly quickInputParseResult: FoodQuickInput.FoodQuickInputParseResult;
-  readonly syncQuickInputFromFields: boolean;
-};
+const FoodNutrientFieldNameSchema = Schema.Literals([
+  "energyKcalPer100g",
+  "proteinGramsPer100g",
+  "carbsGramsPer100g",
+  "fatGramsPer100g",
+  "fiberGramsPer100g",
+  "sugarGramsPer100g",
+  "saturatedFatGramsPer100g",
+  "saltGramsPer100g",
+]);
+
+const FoodFormValuesSchema = Schema.Struct({
+  brand: Schema.String,
+  name: Schema.String,
+  energyKcalPer100g: Schema.String,
+  proteinGramsPer100g: Schema.String,
+  carbsGramsPer100g: Schema.String,
+  fatGramsPer100g: Schema.String,
+  fiberGramsPer100g: Schema.String,
+  sugarGramsPer100g: Schema.String,
+  saturatedFatGramsPer100g: Schema.String,
+  saltGramsPer100g: Schema.String,
+});
+
+const FoodFormValueNameSchema = Schema.Literals([
+  "brand",
+  "name",
+  "energyKcalPer100g",
+  "proteinGramsPer100g",
+  "carbsGramsPer100g",
+  "fatGramsPer100g",
+  "fiberGramsPer100g",
+  "sugarGramsPer100g",
+  "saturatedFatGramsPer100g",
+  "saltGramsPer100g",
+]);
+
+const FoodNumberWarningSchema = Schema.Struct({
+  field: Schema.optionalKey(FoodNutrientFieldNameSchema),
+  message: Schema.String,
+});
+
+const FoodFormMachineContextSchema = Schema.Struct({
+  formValues: FoodFormValuesSchema,
+  numberWarnings: Schema.Array(FoodNumberWarningSchema),
+  quickInput: Schema.String,
+  quickInputParseResult: Schema.Any,
+  syncQuickInputFromFields: Schema.Boolean,
+});
 
 export type FoodFormSubmitEvent = {
   readonly input: Foods.CreateFoodInput;
@@ -42,160 +79,169 @@ export type FoodFormSubmitEvent = {
 };
 
 export const foodFormMachine = setup({
-  types: {
-    context: {} as FoodFormMachineContext,
-    events: {} as
-      | {
-          readonly input: string;
-          readonly type: "changeQuickInput";
-        }
-      | {
-          readonly name: keyof FoodFormValues;
-          readonly type: "changeFormValue";
-          readonly value: string;
-        }
-      | {
-          readonly type: "reset";
-        }
-      | {
-          readonly type: "submit";
-        },
-    input: {} as {
-      readonly initialFood: Domain.Food | null;
-      readonly syncQuickInputFromFields: boolean;
+  schemas: {
+    context: Schema.toStandardSchemaV1(FoodFormMachineContextSchema),
+    events: {
+      changeFormValue: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          name: FoodFormValueNameSchema,
+          value: Schema.String,
+        })
+      ),
+      changeQuickInput: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          input: Schema.String,
+        })
+      ),
+      reset: Schema.toStandardSchemaV1(EmptyEvent),
+      submit: Schema.toStandardSchemaV1(EmptyEvent),
     },
+    input: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        initialFood: Schema.NullOr(Domain.Food),
+        syncQuickInputFromFields: Schema.Boolean,
+      })
+    ),
+  },
+  states: {
+    Ready: {},
   },
 }).createMachine({
   context: ({ input }) => _foodFormContextFromInput(input),
-  on: {
-    reset: {
-      actions: assign(({ context }) =>
-        _foodFormContextFromInput({
-          initialFood: null,
-          syncQuickInputFromFields: context.syncQuickInputFromFields,
-        })
-      ),
-    },
-    submit: {
-      actions: sendParent(({ context }) => {
-        return {
-          type: "submit",
-          input: createFoodInputFromFormValues({
-            formValues: context.formValues,
+  initial: "Ready",
+  states: {
+    Ready: {
+      on: {
+        reset: ({ context }) => ({
+          context: _foodFormContextFromInput({
+            initialFood: null,
+            syncQuickInputFromFields: context.syncQuickInputFromFields,
           }),
-        } satisfies FoodFormSubmitEvent;
-      }),
-    },
-    changeFormValue: {
-      actions: assign(({ context, event }) => {
-        const formValues = {
-          ...context.formValues,
-          [event.name]: event.value,
-        };
-        const name = formValues.name.trim();
-        const brand = formValues.brand.trim();
-        const nutrients = [
-          _quickNutrientTag({
-            tag: "k",
-            value: formValues.energyKcalPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "f",
-            value: formValues.fatGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "sf",
-            value: formValues.saturatedFatGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "c",
-            value: formValues.carbsGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "su",
-            value: formValues.sugarGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "fi",
-            value: formValues.fiberGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "p",
-            value: formValues.proteinGramsPer100g,
-          }),
-          _quickNutrientTag({
-            tag: "sa",
-            value: formValues.saltGramsPer100g,
-          }),
-        ].filter((value): value is string => value !== undefined);
-        const quickInput = context.syncQuickInputFromFields
-          ? [name, brand, nutrients.join(" ")]
-              .join(", ")
-              .replace(/(?:, )+$/g, "")
-          : context.quickInput;
+        }),
+        submit: ({ context, parent }, enq) => {
+          if (parent === undefined) {
+            return;
+          }
 
-        return {
-          formValues,
-          numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
-          quickInput,
-          quickInputParseResult: context.syncQuickInputFromFields
-            ? Effect.runSync(
-                FoodQuickInput.parseFoodQuickInput({ input: quickInput })
-              )
-            : context.quickInputParseResult,
-        };
-      }),
-    },
-    changeQuickInput: {
-      actions: assign(({ event }) => {
-        const quickInputParseResult = Effect.runSync(
-          FoodQuickInput.parseFoodQuickInput({ input: event.input })
-        );
-        const { partial } = quickInputParseResult;
-        const formValues = {
-          name: partial.name ?? "",
-          brand: partial.brand ?? "",
-          energyKcalPer100g:
-            partial.energyKcalPer100g === undefined
-              ? ""
-              : `${partial.energyKcalPer100g}`,
-          proteinGramsPer100g:
-            partial.proteinGramsPer100g === undefined
-              ? ""
-              : `${partial.proteinGramsPer100g}`,
-          carbsGramsPer100g:
-            partial.carbsGramsPer100g === undefined
-              ? ""
-              : `${partial.carbsGramsPer100g}`,
-          fatGramsPer100g:
-            partial.fatGramsPer100g === undefined
-              ? ""
-              : `${partial.fatGramsPer100g}`,
-          fiberGramsPer100g:
-            partial.fiberGramsPer100g === undefined
-              ? ""
-              : `${partial.fiberGramsPer100g}`,
-          sugarGramsPer100g:
-            partial.sugarGramsPer100g === undefined
-              ? ""
-              : `${partial.sugarGramsPer100g}`,
-          saturatedFatGramsPer100g:
-            partial.saturatedFatGramsPer100g === undefined
-              ? ""
-              : `${partial.saturatedFatGramsPer100g}`,
-          saltGramsPer100g:
-            partial.saltGramsPer100g === undefined
-              ? ""
-              : `${partial.saltGramsPer100g}`,
-        } satisfies FoodFormValues;
+          enq.sendTo(parent, {
+            type: "submit",
+            input: createFoodInputFromFormValues({
+              formValues: context.formValues,
+            }),
+          } satisfies FoodFormSubmitEvent);
+        },
+        changeFormValue: ({ context, event }) => {
+          const formValues = {
+            ...context.formValues,
+            [event.name]: event.value,
+          };
+          const name = formValues.name.trim();
+          const brand = formValues.brand.trim();
+          const nutrients = [
+            _quickNutrientTag({
+              tag: "k",
+              value: formValues.energyKcalPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "f",
+              value: formValues.fatGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "sf",
+              value: formValues.saturatedFatGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "c",
+              value: formValues.carbsGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "su",
+              value: formValues.sugarGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "fi",
+              value: formValues.fiberGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "p",
+              value: formValues.proteinGramsPer100g,
+            }),
+            _quickNutrientTag({
+              tag: "sa",
+              value: formValues.saltGramsPer100g,
+            }),
+          ].filter((value): value is string => value !== undefined);
+          const quickInput = context.syncQuickInputFromFields
+            ? [name, brand, nutrients.join(" ")]
+                .join(", ")
+                .replace(/(?:, )+$/g, "")
+            : context.quickInput;
 
-        return {
-          formValues,
-          numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
-          quickInput: event.input,
-          quickInputParseResult,
-        };
-      }),
+          return {
+            context: {
+              formValues,
+              numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+              quickInput,
+              quickInputParseResult: context.syncQuickInputFromFields
+                ? Effect.runSync(
+                    FoodQuickInput.parseFoodQuickInput({ input: quickInput })
+                  )
+                : context.quickInputParseResult,
+            },
+          };
+        },
+        changeQuickInput: ({ event }) => {
+          const quickInputParseResult = Effect.runSync(
+            FoodQuickInput.parseFoodQuickInput({ input: event.input })
+          );
+          const { partial } = quickInputParseResult;
+          const formValues = {
+            name: partial.name ?? "",
+            brand: partial.brand ?? "",
+            energyKcalPer100g:
+              partial.energyKcalPer100g === undefined
+                ? ""
+                : `${partial.energyKcalPer100g}`,
+            proteinGramsPer100g:
+              partial.proteinGramsPer100g === undefined
+                ? ""
+                : `${partial.proteinGramsPer100g}`,
+            carbsGramsPer100g:
+              partial.carbsGramsPer100g === undefined
+                ? ""
+                : `${partial.carbsGramsPer100g}`,
+            fatGramsPer100g:
+              partial.fatGramsPer100g === undefined
+                ? ""
+                : `${partial.fatGramsPer100g}`,
+            fiberGramsPer100g:
+              partial.fiberGramsPer100g === undefined
+                ? ""
+                : `${partial.fiberGramsPer100g}`,
+            sugarGramsPer100g:
+              partial.sugarGramsPer100g === undefined
+                ? ""
+                : `${partial.sugarGramsPer100g}`,
+            saturatedFatGramsPer100g:
+              partial.saturatedFatGramsPer100g === undefined
+                ? ""
+                : `${partial.saturatedFatGramsPer100g}`,
+            saltGramsPer100g:
+              partial.saltGramsPer100g === undefined
+                ? ""
+                : `${partial.saltGramsPer100g}`,
+          } satisfies FoodFormValues;
+
+          return {
+            context: {
+              formValues,
+              numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+              quickInput: event.input,
+              quickInputParseResult,
+            },
+          };
+        },
+      },
     },
   },
 });
@@ -209,7 +255,13 @@ function _foodFormContextFromInput({
 }: {
   readonly initialFood: Domain.Food | null;
   readonly syncQuickInputFromFields: boolean;
-}): FoodFormMachineContext {
+}): {
+  readonly formValues: FoodFormValues;
+  readonly numberWarnings: readonly FoodNumberWarning[];
+  readonly quickInput: string;
+  readonly quickInputParseResult: FoodQuickInput.FoodQuickInputParseResult;
+  readonly syncQuickInputFromFields: boolean;
+} {
   const food = initialFood;
   const formValues = {
     name: food?.name ?? "",

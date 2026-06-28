@@ -8,15 +8,7 @@ import { stdin, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
 
-import {
-  Array as EffectArray,
-  Data,
-  DateTime,
-  Effect,
-  Option,
-  Schema,
-  Stream,
-} from "effect";
+import { Array, Data, DateTime, Effect, Option, Schema, Stream } from "effect";
 
 import { FoodCatalogTransfer, Metadata } from "../src/index.ts";
 
@@ -642,7 +634,7 @@ function readCatalogDefinitions({
       )
     );
 
-    if (!EffectArray.isReadonlyArrayNonEmpty(definitions)) {
+    if (!Array.isReadonlyArrayNonEmpty(definitions)) {
       return yield* new OpenFoodFactsCatalogImportError({
         detail: `Catalog config must contain at least one catalog: ${catalogPath}.`,
         reason: "catalog-config",
@@ -956,7 +948,7 @@ function parseTsvChunks({
 function flushTsvParserState(state: TsvParserState): readonly TsvRecord[] {
   const records: TsvRecord[] = [];
   const hasPartialRow =
-    state.field.length > 0 || EffectArray.isReadonlyArrayNonEmpty(state.row);
+    state.field.length > 0 || Array.isReadonlyArrayNonEmpty(state.row);
   const unterminatedQuote = state.inQuotes && !state.pendingQuote;
 
   if (unterminatedQuote) {
@@ -1036,7 +1028,7 @@ function processRecord({
       rowMatchesCatalog({ definition: run.definition, row })
     );
 
-    if (!EffectArray.isArrayNonEmpty(matchingRuns)) {
+    if (!Array.isArrayNonEmpty(matchingRuns)) {
       state.stats.unmatchedRows += 1;
       yield* logProgressIfNeeded({ args, state });
       yield* throttleIfNeeded({ args, state });
@@ -1072,7 +1064,7 @@ function processCachedCandidate({
       candidate.catalogs.includes(run.definition.name)
     );
 
-    if (!EffectArray.isArrayNonEmpty(matchingRuns)) {
+    if (!Array.isArrayNonEmpty(matchingRuns)) {
       state.stats.unmatchedRows += 1;
       yield* logProgressIfNeeded({ args, state });
       yield* throttleIfNeeded({ args, state });
@@ -1386,7 +1378,7 @@ function processCacheBuildRecord({
       rowMatchesCatalog({ definition, row })
     );
 
-    if (!EffectArray.isReadonlyArrayNonEmpty(matchingDefinitions)) {
+    if (!Array.isReadonlyArrayNonEmpty(matchingDefinitions)) {
       state.stats.unmatchedRows += 1;
       yield* logCacheBuildProgressIfNeeded({ args, state });
       yield* throttleCacheBuildIfNeeded({ args, state });
@@ -1594,7 +1586,7 @@ function validateCatalogCacheMetadata({
         : "max matches per catalog",
     ].filter((problem) => problem !== undefined);
 
-    if (EffectArray.isReadonlyArrayNonEmpty(problems)) {
+    if (Array.isReadonlyArrayNonEmpty(problems)) {
       return yield* new OpenFoodFactsCatalogImportError({
         detail: `Candidate cache is stale for ${problems.join(
           ", "
@@ -1747,12 +1739,12 @@ function decodeHeader({
       indexByName.has("energy-kcal_100g") || indexByName.has("energy-kj_100g");
 
     if (
-      EffectArray.isReadonlyArrayNonEmpty(missingRequiredFields) ||
+      Array.isReadonlyArrayNonEmpty(missingRequiredFields) ||
       !hasEnergyField
     ) {
       return yield* new OpenFoodFactsCatalogImportError({
         detail: [
-          EffectArray.isReadonlyArrayNonEmpty(missingRequiredFields)
+          Array.isReadonlyArrayNonEmpty(missingRequiredFields)
             ? `Missing required columns: ${missingRequiredFields.join(", ")}`
             : undefined,
           hasEnergyField
@@ -1988,7 +1980,7 @@ function cleanBrand({
   }
 
   return {
-    brand: EffectArray.isReadonlyArrayNonEmpty(tokens)
+    brand: Array.isReadonlyArrayNonEmpty(tokens)
       ? tokens.join(", ")
       : undefined,
     changes,
@@ -2079,7 +2071,7 @@ function trimTextSeparators({ value }: { readonly value: string }): string {
 }
 
 function shouldTitleCaseText({ value }: { readonly value: string }): boolean {
-  const letters = Array.from(value).filter((character) =>
+  const letters = globalThis.Array.from(value).filter((character) =>
     isCasedLetter({ value: character })
   );
 
@@ -2123,7 +2115,7 @@ function titleCaseText({ value }: { readonly value: string }): string {
       return lowercaseWord;
     }
 
-    const characters = Array.from(lowercaseWord);
+    const characters = globalThis.Array.from(lowercaseWord);
     const firstCharacter = characters[0];
 
     if (firstCharacter === undefined) {
@@ -2454,11 +2446,11 @@ function containsComparablePhrase({
 }
 
 function unexpectedScriptRatio({ value }: { readonly value: string }): number {
-  const letters = Array.from(value).filter((character) =>
+  const letters = globalThis.Array.from(value).filter((character) =>
     /\p{L}/u.test(character)
   );
 
-  if (!EffectArray.isReadonlyArrayNonEmpty(letters)) {
+  if (!Array.isReadonlyArrayNonEmpty(letters)) {
     return 0;
   }
 

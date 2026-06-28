@@ -18,6 +18,7 @@ import noNestedLayerProvide from "../src/oxlint/rules/no-nested-layer-provide.ts
 import noOptionalFunctionParameters from "../src/oxlint/rules/no-optional-function-parameters.ts";
 import noReactComponentEventHandlerProps from "../src/oxlint/rules/no-react-component-event-handler-props.ts";
 import noReactComponentInnerFunctions from "../src/oxlint/rules/no-react-component-inner-functions.ts";
+import noReactNonComponentFunctionExports from "../src/oxlint/rules/no-react-non-component-function-exports.ts";
 import noReactStateHooks from "../src/oxlint/rules/no-react-state-hooks.ts";
 import noServiceOption from "../src/oxlint/rules/no-service-option.ts";
 import noShadowedStandardArrayStatic from "../src/oxlint/rules/no-shadowed-standard-array-static.ts";
@@ -336,7 +337,7 @@ run("no-optional-function-parameters", noOptionalFunctionParameters, {
 
 run("no-nested-effect-array-methods", noNestedEffectArrayMethods, {
   valid: [
-    "import { Array as EffectArray } from 'effect';\nArray.map(items, item => item);",
+    "import { Array } from 'effect';\nArray.map(items, item => item);",
     "import { Array } from 'effect';\nconst mapped = Array.map(items, item => item);\nArray.filter(mapped, item => item.active);",
     "const result = Array.map(Array.filter(items, item => item.active), item => item.id);",
   ],
@@ -524,6 +525,111 @@ run("no-react-component-inner-functions", noReactComponentInnerFunctions, {
   ],
 });
 
+run(
+  "no-react-non-component-function-exports",
+  noReactNonComponentFunctionExports,
+  {
+    valid: [
+      {
+        code: "export function formatName({ value }: { readonly value: string }) { return value.trim(); }",
+        filename: "format.ts",
+      },
+      {
+        code: "export function ProfileCard() { return <p />; }",
+        filename: "component.tsx",
+      },
+      {
+        code: "export default function ProfileCard() { return <p />; }",
+        filename: "component.tsx",
+      },
+      {
+        code: "const ProfileCard = () => <p />;\nexport { ProfileCard };",
+        filename: "component.tsx",
+      },
+      {
+        code: "export const ProfileCard = memo(() => <p />);",
+        filename: "component.tsx",
+      },
+      {
+        code: "export const ProfileCard = React.forwardRef(function ProfileCard() { return <p />; });",
+        filename: "component.tsx",
+      },
+      {
+        code: "function BaseProfileCard() { return <p />; }\nexport default memo(BaseProfileCard);",
+        filename: "component.tsx",
+      },
+      {
+        code: "function BaseProfileCard() { return <p />; }\nexport const ProfileCard = memo(BaseProfileCard);",
+        filename: "component.tsx",
+      },
+      {
+        code: "const formatName = ({ value }: { readonly value: string }) => value.trim();",
+        filename: "component.tsx",
+      },
+      {
+        code: "export type Props = { readonly value: string };",
+        filename: "component.tsx",
+      },
+      {
+        code: "export { formatName } from './format';",
+        filename: "component.tsx",
+      },
+    ],
+    invalid: [
+      {
+        code: "export function formatName({ value }: { readonly value: string }) { return value.trim(); }",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "export const formatName = ({ value }: { readonly value: string }) => value.trim();",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "const formatName = ({ value }: { readonly value: string }) => value.trim();\nexport { formatName };",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "const formatName = ({ value }: { readonly value: string }) => value.trim();\nexport { formatName as format };",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "const formatName = () => <p />;\nexport { formatName as ProfileCard };",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "const formatName = ({ value }: { readonly value: string }) => value.trim();\nexport default formatName;",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "export default function formatName({ value }: { readonly value: string }) { return value.trim(); }",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "export default ({ value }: { readonly value: string }) => value.trim();",
+        filename: "component.tsx",
+        errors: [/Move this exported function out of the TSX file/],
+      },
+      {
+        code: "export const formatName = memo(() => <p />);",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+      {
+        code: "const formatName = () => <p />;\nexport default memo(formatName);",
+        filename: "component.tsx",
+        errors: [/Move "formatName" out of the TSX file/],
+      },
+    ],
+  }
+);
+
 run("no-service-option", noServiceOption, {
   valid: ["Effect.service(Service);", "CustomEffect.serviceOption(Service);"],
   invalid: [
@@ -537,7 +643,7 @@ run("no-service-option", noServiceOption, {
 run("no-shadowed-standard-array-static", noShadowedStandardArrayStatic, {
   valid: [
     "Array.from(values);",
-    "import { Array as EffectArray } from 'effect';\nArray.from(values);",
+    "import { Array } from 'effect';\nArray.from(values);",
     "import { Array } from 'effect';\nglobalThis.Array.from(values);",
     "import { Array } from 'effect';\nArray.map(values, value => value);",
   ],

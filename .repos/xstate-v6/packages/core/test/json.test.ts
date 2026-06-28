@@ -279,7 +279,7 @@ describe('json', () => {
           }
         },
         {
-          actors: { worker }
+          actorSources: { worker }
         }
       )
     ).start();
@@ -309,7 +309,7 @@ describe('json', () => {
             done: {}
           }
         },
-        { actors: { worker } }
+        { actorSources: { worker } }
       )
     ).start();
 
@@ -377,7 +377,7 @@ describe('json', () => {
     expect(actor.getSnapshot().value).toBe('done');
   });
 
-  it('revives invoke systemId from JSON', () => {
+  it('revives invoke registryKey from JSON', () => {
     const worker = createAsyncLogic({
       run: () => new Promise(() => {})
     });
@@ -390,12 +390,12 @@ describe('json', () => {
             loading: {
               invoke: {
                 src: 'worker',
-                systemId: 'workerSystem'
+                registryKey: 'workerSystem'
               }
             }
           }
         },
-        { actors: { worker } }
+        { actorSources: { worker } }
       )
     ).start();
 
@@ -419,7 +419,7 @@ describe('json', () => {
             seen: {}
           }
         },
-        { actors: { worker } }
+        { actorSources: { worker } }
       )
     ).start();
 
@@ -474,7 +474,7 @@ describe('json', () => {
             timedOut: {}
           }
         },
-        { actors: { worker } }
+        { actorSources: { worker } }
       ),
       { clock }
     ).start();

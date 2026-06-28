@@ -1,3 +1,4 @@
+import { FoodNutrientOverview } from "@/components/nutrition";
 import {
   AppHeader,
   AppScreen,
@@ -8,38 +9,48 @@ import {
   Notice,
   NumberField,
 } from "@/components/ui";
-import { FoodNutrientOverview } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
+import { EmptyEvent } from "@mai/machines";
 import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, Save, Trash2 } from "lucide-react-native";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { assertEvent, assign, fromPromise, setup } from "xstate";
+import { createAsyncLogic, setup } from "xstate";
 
-type EditMealEntryRouteData = {
-  readonly dateKey: Domain.DateKey;
-  readonly food: Domain.Food | undefined;
-  readonly meal: Domain.MealId;
-  readonly mealLabel: string;
-  readonly mealEntry: Domain.MealEntry;
-};
+const EditMealEntryRouteData = Schema.Struct({
+  dateKey: Domain.DateKey,
+  food: Schema.UndefinedOr(Domain.Food),
+  meal: Domain.MealId,
+  mealLabel: Schema.NonEmptyString,
+  mealEntry: Domain.MealEntry,
+});
 
-type MealEntryMutationResult =
-  | {
-      readonly _tag: "MealEntryNotFound";
-    }
-  | {
-      readonly _tag: "SchemaError";
-    }
-  | {
-      readonly _tag: "Success";
-    };
+const EditMealEntryRouteLoaderInput = Schema.Struct({
+  dateKey: Domain.DateKey,
+  meal: Domain.MealId,
+  mealEntryId: Domain.MealEntryId,
+});
+
+const EditMealEntryRouteLoadResult = Schema.Union([
+  Schema.TaggedStruct("InvalidRoute", {}),
+  Schema.TaggedStruct("Ready", {
+    data: EditMealEntryRouteData,
+  }),
+]);
+
+const MealEntryMutationResult = Schema.Union([
+  Schema.TaggedStruct("MealEntryNotFound", {}),
+  Schema.TaggedStruct("SchemaError", {}),
+  Schema.TaggedStruct("Success", {}),
+]);
+
+type MealEntryMutationResult = typeof MealEntryMutationResult.Type;
 
 const EditMealEntryRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
@@ -48,36 +59,92 @@ const EditMealEntryRouteParams = Schema.Struct({
 });
 
 const editMealEntryRouteLoaderMachine = setup({
-  types: {
-    context: {} as {
-      readonly data: EditMealEntryRouteData | null;
-      readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.MealId;
-      readonly mealEntryId: Domain.MealEntryId;
-    },
-    input: {} as {
-      readonly dateKey: Domain.DateKey;
-      readonly meal: Domain.MealId;
-      readonly mealEntryId: Domain.MealEntryId;
-    },
-  },
-  actors: {
-    loadRouteData: fromPromise<
-      | {
-          readonly _tag: "InvalidRoute";
-        }
-      | {
-          readonly _tag: "Ready";
-          readonly data: EditMealEntryRouteData;
-        },
-      {
-        readonly dateKey: Domain.DateKey;
-        readonly meal: Domain.MealId;
-        readonly mealEntryId: Domain.MealEntryId;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(loadEditMealEntryRouteData(input))
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        data: Schema.NullOr(EditMealEntryRouteData),
+        dateKey: Domain.DateKey,
+        meal: Domain.MealId,
+        mealEntryId: Domain.MealEntryId,
+      })
     ),
+    input: Schema.toStandardSchemaV1(EditMealEntryRouteLoaderInput),
+  },
+  states: {
+    Loading: {},
+    InvalidRoute: {},
+    Ready: {},
+  },
+  actorSources: {
+    loadRouteData: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(EditMealEntryRouteLoaderInput),
+        output: Schema.toStandardSchemaV1(EditMealEntryRouteLoadResult),
+      },
+      run: ({ input: { dateKey, meal, mealEntryId } }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const foodsService = yield* Foods.Foods;
+            const mealEntriesService = yield* MealEntries.MealEntries;
+            const day = yield* dateKey === todayDateKey()
+              ? dailyLogs.openOrCreate({
+                  input: {
+                    dateKey,
+                  },
+                })
+              : dailyLogs.open({
+                  input: {
+                    dateKey,
+                  },
+                });
+
+            if (day._tag === "UnrecordedDay") {
+              return {
+                _tag: "InvalidRoute" as const,
+              };
+            }
+
+            const planMeal = day.selectedPlan.meals.find(
+              (candidate) => candidate.id === meal
+            );
+
+            if (planMeal === undefined) {
+              return {
+                _tag: "InvalidRoute" as const,
+              };
+            }
+
+            const mealEntries = yield* mealEntriesService.listForDay({
+              input: {
+                dateKey,
+              },
+            });
+            const mealEntry = mealEntries.find(
+              (entry) => entry.id === mealEntryId && entry.mealId === meal
+            );
+
+            if (mealEntry === undefined) {
+              return {
+                _tag: "InvalidRoute" as const,
+              };
+            }
+
+            const foods = yield* foodsService.list();
+
+            return {
+              _tag: "Ready" as const,
+              data: {
+                dateKey,
+                food: foods.find((food) => food.id === mealEntry.foodId),
+                meal,
+                mealLabel: planMeal.name,
+                mealEntry,
+              },
+            };
+          })
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -96,27 +163,24 @@ const editMealEntryRouteLoaderMachine = setup({
           meal: context.meal,
           mealEntryId: context.mealEntryId,
         }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "InvalidRoute",
-            target: "InvalidRoute",
-          },
-          {
-            guard: ({ event }) => event.output._tag === "Ready",
-            target: "Ready",
-            actions: assign(({ event }) => ({
-              data: event.output._tag === "Ready" ? event.output.data : null,
-            })),
-          },
-        ],
+        onDone: ({ event }) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              InvalidRoute: () => ({ target: "InvalidRoute" }),
+              Ready: ({ data }) => ({
+                target: "Ready",
+                context: { data },
+              }),
+            })
+          ),
         onError: {
           target: "InvalidRoute",
         },
       },
     },
     InvalidRoute: {
-      entry: () => {
-        router.replace("/");
+      entry: (_, enq) => {
+        enq(() => router.replace("/"));
       },
     },
     Ready: {},
@@ -124,28 +188,48 @@ const editMealEntryRouteLoaderMachine = setup({
 });
 
 const editMealEntryRouteMachine = setup({
-  types: {
-    context: {} as {
-      readonly data: EditMealEntryRouteData;
-      readonly notice: string | null;
-      readonly quantityGrams: string;
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        data: EditMealEntryRouteData,
+        notice: Schema.NullOr(Schema.String),
+        quantityGrams: Schema.String,
+      })
+    ),
+    events: {
+      changeQuantity: Schema.toStandardSchemaV1(
+        Schema.Struct({ quantityGrams: Schema.String })
+      ),
+      delete: Schema.toStandardSchemaV1(EmptyEvent),
+      submit: Schema.toStandardSchemaV1(EmptyEvent),
+      replaceDay: Schema.toStandardSchemaV1(
+        Schema.Struct({ dateKey: Domain.DateKey })
+      ),
     },
-    events: {} as
-      | {
-          readonly quantityGrams: string;
-          readonly type: "changeQuantity";
-        }
-      | {
-          readonly type: "delete";
-        }
-      | {
-          readonly type: "submit";
-        },
-    input: {} as EditMealEntryRouteData,
+    input: Schema.toStandardSchemaV1(EditMealEntryRouteData),
   },
-  actors: {
-    deleteMealEntry: fromPromise<MealEntryMutationResult, Domain.MealEntryId>(
-      ({ input }) =>
+  states: {
+    Ready: {},
+    Deleting: {},
+    Saving: {},
+    Deleted: {},
+    Saved: {},
+  },
+  actions: {
+    replaceDay: (params: { readonly dateKey: Domain.DateKey }) => {
+      router.replace({
+        pathname: "/days/[dateKey]",
+        params,
+      });
+    },
+  },
+  actorSources: {
+    deleteMealEntry: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(Domain.MealEntryId),
+        output: Schema.toStandardSchemaV1(MealEntryMutationResult),
+      },
+      run: ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const mealEntries = yield* MealEntries.MealEntries;
@@ -171,43 +255,47 @@ const editMealEntryRouteMachine = setup({
               })
             )
           )
-        )
-    ),
-    reviseMealEntry: fromPromise<
-      MealEntryMutationResult,
-      {
-        readonly mealEntryId: Domain.MealEntryId;
-        readonly quantityGrams: string;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const mealEntries = yield* MealEntries.MealEntries;
+        ),
+    }),
+    reviseMealEntry: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            mealEntryId: Domain.MealEntryId,
+            quantityGrams: Schema.String,
+          })
+        ),
+        output: Schema.toStandardSchemaV1(MealEntryMutationResult),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const mealEntries = yield* MealEntries.MealEntries;
 
-          yield* mealEntries.revise({
-            input: {
-              mealEntryId: input.mealEntryId,
-              quantityGrams: input.quantityGrams,
-            },
-          });
+            yield* mealEntries.revise({
+              input: {
+                mealEntryId: input.mealEntryId,
+                quantityGrams: input.quantityGrams,
+              },
+            });
 
-          return {
-            _tag: "Success" as const,
-          };
-        }).pipe(
-          Effect.catchTag("MealEntryNotFound", () =>
-            Effect.succeed({
-              _tag: "MealEntryNotFound" as const,
-            })
-          ),
-          Effect.catchTag("SchemaError", () =>
-            Effect.succeed({
-              _tag: "SchemaError" as const,
-            })
+            return {
+              _tag: "Success" as const,
+            };
+          }).pipe(
+            Effect.catchTag("MealEntryNotFound", () =>
+              Effect.succeed({
+                _tag: "MealEntryNotFound" as const,
+              })
+            ),
+            Effect.catchTag("SchemaError", () =>
+              Effect.succeed({
+                _tag: "SchemaError" as const,
+              })
+            )
           )
-        )
-      )
-    ),
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -216,29 +304,24 @@ const editMealEntryRouteMachine = setup({
     quantityGrams: `${input.mealEntry.quantityGrams}`,
   }),
   initial: "Ready",
+  on: {
+    replaceDay: ({ actions, event }, enq) => {
+      enq(actions.replaceDay, { dateKey: event.dateKey });
+    },
+  },
   states: {
     Ready: {
       on: {
-        changeQuantity: {
-          actions: assign(({ event }) => {
-            assertEvent(event, "changeQuantity");
-
-            return {
-              quantityGrams: event.quantityGrams,
-            };
-          }),
-        },
+        changeQuantity: ({ event }) => ({
+          context: { quantityGrams: event.quantityGrams },
+        }),
         delete: {
           target: "Deleting",
-          actions: assign({
-            notice: null,
-          }),
+          context: { notice: null },
         },
         submit: {
           target: "Saving",
-          actions: assign({
-            notice: null,
-          }),
+          context: { notice: null },
         },
       },
     },
@@ -246,26 +329,31 @@ const editMealEntryRouteMachine = setup({
       invoke: {
         src: "deleteMealEntry",
         input: ({ context }) => context.data.mealEntry.id,
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "Success",
-            target: "Deleted",
-            actions: ({ context }) => {
-              _replaceDay({ dateKey: context.data.dateKey });
-            },
-          },
-          {
-            target: "Ready",
-            actions: assign(({ event }) => ({
-              notice: _mutationMessage({ result: event.output }),
-            })),
-          },
-        ],
+        onDone: ({ context, event, actions }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              MealEntryNotFound: (result) => ({
+                target: "Ready",
+                context: {
+                  notice: _mutationMessage({ result }),
+                },
+              }),
+              SchemaError: (result) => ({
+                target: "Ready",
+                context: {
+                  notice: _mutationMessage({ result }),
+                },
+              }),
+              Success: () => {
+                enq(actions.replaceDay, { dateKey: context.data.dateKey });
+
+                return { target: "Deleted" };
+              },
+            })
+          ),
         onError: {
           target: "Ready",
-          actions: assign({
-            notice: "Could not delete this entry. Please try again.",
-          }),
+          context: { notice: "Could not delete this entry. Please try again." },
         },
       },
     },
@@ -276,26 +364,31 @@ const editMealEntryRouteMachine = setup({
           mealEntryId: context.data.mealEntry.id,
           quantityGrams: context.quantityGrams,
         }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "Success",
-            target: "Saved",
-            actions: ({ context }) => {
-              _replaceDay({ dateKey: context.data.dateKey });
-            },
-          },
-          {
-            target: "Ready",
-            actions: assign(({ event }) => ({
-              notice: _mutationMessage({ result: event.output }),
-            })),
-          },
-        ],
+        onDone: ({ context, event, actions }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              MealEntryNotFound: (result) => ({
+                target: "Ready",
+                context: {
+                  notice: _mutationMessage({ result }),
+                },
+              }),
+              SchemaError: (result) => ({
+                target: "Ready",
+                context: {
+                  notice: _mutationMessage({ result }),
+                },
+              }),
+              Success: () => {
+                enq(actions.replaceDay, { dateKey: context.data.dateKey });
+
+                return { target: "Saved" };
+              },
+            })
+          ),
         onError: {
           target: "Ready",
-          actions: assign({
-            notice: "Could not save this entry. Please try again.",
-          }),
+          context: { notice: "Could not save this entry. Please try again." },
         },
       },
     },
@@ -318,8 +411,9 @@ export default function EditMealEntryScreen() {
       mealEntryId: routeParams.value.mealEntryId,
     },
   });
+  const routeState = snapshot.value;
 
-  if (snapshot.matches("Loading") || snapshot.matches("InvalidRoute")) {
+  if (routeState === "Loading" || routeState === "InvalidRoute") {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading meal entry" />
@@ -339,16 +433,17 @@ export default function EditMealEntryScreen() {
 function ReadyEditMealEntryScreen({
   data,
 }: {
-  readonly data: EditMealEntryRouteData;
+  readonly data: typeof EditMealEntryRouteData.Type;
 }) {
-  const [snapshot, send] = useMachine(editMealEntryRouteMachine, {
+  const [snapshot, , actor] = useMachine(editMealEntryRouteMachine, {
     input: data,
   });
+  const routeState = snapshot.value;
   const disabled =
-    snapshot.matches("Saving") ||
-    snapshot.matches("Saved") ||
-    snapshot.matches("Deleting") ||
-    snapshot.matches("Deleted");
+    routeState === "Saving" ||
+    routeState === "Saved" ||
+    routeState === "Deleting" ||
+    routeState === "Deleted";
   const food = data.food;
   const selectedFoodNutrients =
     food === undefined
@@ -376,10 +471,10 @@ function ReadyEditMealEntryScreen({
             <IconButton
               accessibilityLabel={`Back to ${mealLabel}`}
               icon={ChevronLeft}
-              onPress={() => {
-                _replaceDay({ dateKey: data.dateKey });
-              }}
               variant="ghost"
+              onPress={() =>
+                actor.trigger.replaceDay({ dateKey: data.dateKey })
+              }
             />
           }
           shadow
@@ -401,10 +496,7 @@ function ReadyEditMealEntryScreen({
             editable={!disabled}
             label="Grams"
             onChangeText={(quantityGrams) => {
-              send({
-                quantityGrams,
-                type: "changeQuantity",
-              });
+              actor.trigger.changeQuantity({ quantityGrams });
             }}
             placeholder="150"
             rightElement={<Text style={styles.unitLabel}>g</Text>}
@@ -443,9 +535,7 @@ function ReadyEditMealEntryScreen({
                 },
                 {
                   onPress: () => {
-                    send({
-                      type: "delete",
-                    });
+                    actor.trigger.delete();
                   },
                   style: "destructive",
                   text: "Delete",
@@ -461,11 +551,9 @@ function ReadyEditMealEntryScreen({
         <Button
           disabled={disabled || snapshot.context.quantityGrams.trim() === ""}
           icon={Save}
-          loading={snapshot.matches("Saving")}
+          loading={routeState === "Saving"}
           onPress={() => {
-            send({
-              type: "submit",
-            });
+            actor.trigger.submit();
           }}
           style={styles.footerButton}
         >
@@ -474,77 +562,6 @@ function ReadyEditMealEntryScreen({
       </BottomActionBar>
     </KeyboardAvoidingView>
   );
-}
-
-export function loadEditMealEntryRouteData({
-  dateKey,
-  mealEntryId,
-  meal,
-}: {
-  readonly dateKey: Domain.DateKey;
-  readonly mealEntryId: Domain.MealEntryId;
-  readonly meal: Domain.MealId;
-}) {
-  return Effect.gen(function* () {
-    const dailyLogs = yield* DailyLogs.DailyLogs;
-    const foodsService = yield* Foods.Foods;
-    const mealEntriesService = yield* MealEntries.MealEntries;
-    const day = yield* dateKey === todayDateKey()
-      ? dailyLogs.openOrCreate({
-          input: {
-            dateKey,
-          },
-        })
-      : dailyLogs.open({
-          input: {
-            dateKey,
-          },
-        });
-
-    if (day._tag === "UnrecordedDay") {
-      return {
-        _tag: "InvalidRoute" as const,
-      };
-    }
-
-    const planMeal = day.selectedPlan.meals.find(
-      (candidate) => candidate.id === meal
-    );
-
-    if (planMeal === undefined) {
-      return {
-        _tag: "InvalidRoute" as const,
-      };
-    }
-
-    const mealEntries = yield* mealEntriesService.listForDay({
-      input: {
-        dateKey,
-      },
-    });
-    const mealEntry = mealEntries.find(
-      (entry) => entry.id === mealEntryId && entry.mealId === meal
-    );
-
-    if (mealEntry === undefined) {
-      return {
-        _tag: "InvalidRoute" as const,
-      };
-    }
-
-    const foods = yield* foodsService.list();
-
-    return {
-      _tag: "Ready" as const,
-      data: {
-        dateKey,
-        food: foods.find((food) => food.id === mealEntry.foodId),
-        meal,
-        mealLabel: planMeal.name,
-        mealEntry,
-      },
-    };
-  });
 }
 
 function _mutationMessage({
@@ -561,15 +578,6 @@ function _mutationMessage({
   }
 
   return "";
-}
-
-function _replaceDay({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-  router.replace({
-    pathname: "/days/[dateKey]",
-    params: {
-      dateKey,
-    },
-  });
 }
 
 const styles = StyleSheet.create({

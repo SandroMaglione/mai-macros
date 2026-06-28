@@ -13,7 +13,7 @@ import {
   STATE_IDENTIFIER,
   XSTATE_STOP
 } from './constants.ts';
-import { matchesEventDescriptor } from './utils.ts';
+import { getEventOutput, matchesEventDescriptor } from './utils.ts';
 import {
   AnyEventObject,
   AnyMachineSnapshot,
@@ -1070,7 +1070,7 @@ function microstep(
             children,
             system: actorScope.system,
             actions: currentSnapshot.machine.implementations.actions,
-            actors: currentSnapshot.machine.implementations.actors,
+            actorSources: currentSnapshot.machine.implementations.actorSources,
             guards: currentSnapshot.machine.implementations.guards,
             delays: currentSnapshot.machine.implementations.delays,
             input
@@ -1394,7 +1394,8 @@ function microstep(
           let src = invokeDef.logic;
           if (typeof src === 'function') {
             src = src({
-              actors: currentSnapshot.machine.implementations.actors,
+              actorSources:
+                currentSnapshot.machine.implementations.actorSources,
               context: nextState.context,
               event,
               self: actorScope.self
@@ -1417,7 +1418,8 @@ function microstep(
               ? invokeDef.input({
                   self: actorScope.self,
                   context: nextState.context,
-                  event
+                  event,
+                  output: getEventOutput(event)
                 })
               : invokeDef.input;
 
@@ -1673,6 +1675,7 @@ export function getTransitionResult(
   transition: Pick<AnyTransitionDefinition, 'target' | 'to' | 'source'> & {
     reenter?: AnyTransitionDefinition['reenter'];
     input?: AnyTransitionDefinition['input'];
+    context?: AnyTransitionDefinition['context'];
   },
   snapshot: AnyMachineSnapshot,
   event: AnyEventObject,
@@ -1698,12 +1701,14 @@ export function getTransitionResult(
       {
         context: snapshot.context,
         event,
+        output: getEventOutput(event),
         value: snapshot.value,
         children: snapshot.children,
+        system: actorScope.system,
         parent: actorScope.self._parent,
         self: actorScope.self,
         actions: snapshot.machine.implementations.actions,
-        actors: snapshot.machine.implementations.actors,
+        actorSources: snapshot.machine.implementations.actorSources,
         guards: snapshot.machine.implementations.guards,
         delays: snapshot.machine.implementations.delays
       },
@@ -1716,7 +1721,11 @@ export function getTransitionResult(
     // Resolve input for .to transitions
     const resolvedInput =
       typeof transition.input === 'function'
-        ? transition.input({ context: snapshot.context, event })
+        ? transition.input({
+            context: snapshot.context,
+            event,
+            output: getEventOutput(event)
+          })
         : transition.input;
 
     return {
@@ -1732,12 +1741,16 @@ export function getTransitionResult(
   // Resolve input for regular transitions
   const resolvedInput =
     typeof transition.input === 'function'
-      ? transition.input({ context: snapshot.context, event })
+      ? transition.input({
+          context: snapshot.context,
+          event,
+          output: getEventOutput(event)
+        })
       : transition.input;
 
   return {
     targets: transition.target as AnyStateNode[] | undefined,
-    context: undefined,
+    context: transition.context,
     reenter: transition.reenter,
     actions: undefined,
     internalEvents: undefined,
@@ -1973,14 +1986,16 @@ function transitionToHasEffect(
       {
         context,
         event,
+        output: getEventOutput(event),
         self,
+        system: self.system,
         value: snapshot.value,
         children: snapshot.children,
         parent: {
           send: triggerEffect
         } as any,
         actions: implementations.actions,
-        actors: implementations.actors,
+        actorSources: implementations.actorSources,
         guards: implementations.guards,
         delays: implementations.delays
       },
@@ -2081,11 +2096,12 @@ export function evaluateCandidate(
     const guardArgs = {
       context: snapshot.context,
       event,
+      output: getEventOutput(event),
       self,
       parent: self._parent,
       children: snapshot.children,
       actions: stateNode.machine.implementations.actions,
-      actors: stateNode.machine.implementations.actors,
+      actorSources: stateNode.machine.implementations.actorSources,
       guards: stateNode.machine.implementations.guards,
       delays: stateNode.machine.implementations.delays,
       _snapshot: snapshot

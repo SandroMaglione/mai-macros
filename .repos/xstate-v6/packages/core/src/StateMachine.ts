@@ -35,11 +35,16 @@ import type {
   AnyTransitionDefinition,
   Equals,
   EventDescriptor,
+  EmittedFrom,
   EventObject,
+  EventFromLogic,
   ExecutableActionObjectFromLogic,
   HistoryValue,
+  InputFrom,
+  IsAny,
   MachineContext,
   MetaObject,
+  OutputFrom,
   Snapshot,
   SnapshotFrom,
   StateValue,
@@ -61,6 +66,42 @@ import {
 
 const STATE_IDENTIFIER = '#';
 
+type CompatibleProvidedActorSource<
+  TExpected extends AnyActorLogic,
+  TActual extends AnyActorLogic
+> =
+  IsAny<TActual> extends true
+    ? TActual
+    : [OutputFrom<TActual>] extends [OutputFrom<TExpected>]
+      ? [Omit<SnapshotFrom<TActual>, 'input'>] extends [
+          Omit<SnapshotFrom<TExpected>, 'input'>
+        ]
+        ? [InputFrom<TExpected>] extends [InputFrom<TActual>]
+          ? [EventFromLogic<TExpected>] extends [EventFromLogic<TActual>]
+            ? [EmittedFrom<TActual>] extends [EmittedFrom<TExpected>]
+              ? TActual
+              : never
+            : never
+          : never
+        : never
+      : never;
+
+type ProvidedActorSources<
+  TExpectedActorMap extends Implementations['actorSources'],
+  TProvidedActorMap extends Partial<
+    Record<keyof TExpectedActorMap & string, AnyActorLogic>
+  >
+> = {
+  [K in keyof TProvidedActorMap]: K extends keyof TExpectedActorMap
+    ? TProvidedActorMap[K] extends AnyActorLogic
+      ? CompatibleProvidedActorSource<
+          TExpectedActorMap[K],
+          TProvidedActorMap[K]
+        >
+      : never
+    : never;
+};
+
 export class StateMachine<
   TContext extends MachineContext,
   TEvent extends EventObject,
@@ -73,7 +114,7 @@ export class StateMachine<
   TMeta extends MetaObject,
   TConfig extends StateSchema,
   TActionMap extends Implementations['actions'],
-  TActorMap extends Implementations['actors'],
+  TActorMap extends Implementations['actorSources'],
   TGuardMap extends Implementations['guards'],
   TDelayMap extends Implementations['delays']
 > implements
@@ -136,7 +177,7 @@ export class StateMachine<
   ) {
     this.id = config.id || '(machine)';
     this.implementations = {
-      actors: config.actors ?? {},
+      actorSources: config.actorSources ?? {},
       actions: config.actions ?? {},
       delays: (config.delays ?? {}) as Implementations['delays'],
       guards: config.guards ?? {},
@@ -145,7 +186,12 @@ export class StateMachine<
     if (isDevelopment) {
       // The `@xstate.` prefix is reserved for built-in serialized action and
       // guard descriptors — user implementation names must not collide.
-      for (const kind of ['actions', 'guards', 'actors', 'delays'] as const) {
+      for (const kind of [
+        'actions',
+        'guards',
+        'actorSources',
+        'delays'
+      ] as const) {
         for (const key of Object.keys(this.implementations[kind])) {
           if (key.startsWith('@xstate.')) {
             throw new Error(
@@ -198,13 +244,18 @@ export class StateMachine<
   /**
    * Clones this state machine with the provided implementations.
    *
-   * @param implementations Options (`actions`, `guards`, `actors`, `delays`) to
-   *   recursively merge with the existing options.
+   * @param implementations Options (`actions`, `guards`, `actorSources`,
+   *   `delays`) to recursively merge with the existing options.
    * @returns A new `StateMachine` instance with the provided implementations.
    */
-  public provide(implementations: {
+  public provide<
+    const TProvidedActorMap extends Partial<
+      Record<keyof TActorMap & string, AnyActorLogic>
+    > = {}
+  >(implementations: {
     actions?: Partial<TActionMap>;
-    actors?: Partial<TActorMap>;
+    actorSources?: TProvidedActorMap &
+      ProvidedActorSources<TActorMap, TProvidedActorMap>;
     guards?: Partial<TGuardMap>;
     delays?: Partial<TDelayMap>;
   }): StateMachine<
@@ -223,7 +274,7 @@ export class StateMachine<
     TGuardMap,
     TDelayMap
   > {
-    const { actions, guards, actors, delays } = this.implementations;
+    const { actions, guards, actorSources, delays } = this.implementations;
 
     const provided = new StateMachine(this.config, {
       actions: {
@@ -234,10 +285,10 @@ export class StateMachine<
         ...guards,
         ...implementations.guards
       } as Implementations['guards'],
-      actors: {
-        ...actors,
-        ...implementations.actors
-      } as Implementations['actors'],
+      actorSources: {
+        ...actorSources,
+        ...implementations.actorSources
+      } as Implementations['actorSources'],
       delays: {
         ...delays,
         ...implementations.delays
@@ -461,7 +512,7 @@ export class StateMachine<
         spawn,
         input: initEvent.input,
         self: actorScope.self,
-        actors: this.implementations.actors
+        actorSources: this.implementations.actorSources
       });
       const [nextState] = resolveActionsWithContext(
         preInitial,
@@ -697,7 +748,7 @@ export class StateMachine<
         src: string | AnyActorLogic;
         snapshot: Snapshot<unknown>;
         syncSnapshot?: boolean;
-        systemId?: string;
+        registryKey?: string;
       }
     > = snapshotData.children;
 
@@ -719,7 +770,7 @@ export class StateMachine<
         syncSnapshot: actorData.syncSnapshot,
         snapshot: childState,
         src,
-        systemId: actorData.systemId
+        registryKey: actorData.registryKey
       });
       // Mark so `start()` knows to start this child (freshly invoked/spawned
       // children are started via deferred `@xstate.start` actions instead).

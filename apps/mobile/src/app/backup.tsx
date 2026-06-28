@@ -10,15 +10,24 @@ import {
 } from "@/components/ui";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { LocalDataResetMachine } from "@mai/machines";
+import { EmptyEvent, LocalDataResetMachine } from "@mai/machines";
 import {
   Backup,
+  Domain,
   FoodCatalogTransfer,
   LocalData as NutritionLocalData,
 } from "@mai/nutrition";
 import { BackupFileTransfer, FoodCatalogShare, Gzip } from "@mai/services";
 import { useMachine } from "@xstate/react";
-import { Array as EffectArray, DateTime, Effect } from "effect";
+import {
+  Array,
+  DateTime,
+  Effect,
+  HashSet,
+  Match,
+  Option,
+  Schema,
+} from "effect";
 import { router } from "expo-router";
 import {
   ChevronLeft,
@@ -29,632 +38,599 @@ import {
   Upload,
   X,
 } from "lucide-react-native";
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import {
-  assertEvent,
-  assign,
-  cancel,
-  fromPromise,
-  sendTo,
-  setup,
-} from "xstate";
-import type { ReactNode } from "react";
+import { createAsyncLogic, setup } from "xstate";
 
-type FoodCatalogImportCandidate =
-  FoodCatalogTransfer.FoodCatalogImportCandidate;
+const MobileBackupImportResult = Schema.Union([
+  Schema.TaggedStruct("Imported", { message: Schema.NonEmptyString }),
+  Schema.TaggedStruct("Canceled", {}),
+]);
 
-type FoodCatalogFoodId = FoodCatalogImportCandidate["food"]["id"];
+type MobileBackupImportResult = typeof MobileBackupImportResult.Type;
 
-type MobileBackupExportResult = {
-  readonly fileName: string;
-  readonly message: string;
-};
-
-type MobileBackupImportResult =
-  | {
-      readonly message: string;
-      readonly status: "imported";
-    }
-  | {
-      readonly message: null;
-      readonly status: "canceled";
-    };
-
-type MobileCatalogExportResult = {
-  readonly fileName: string;
-  readonly foodCount: number;
-  readonly message: string;
-};
-
-type MobileCatalogPreviewResult = {
-  readonly catalogJson: string;
-  readonly candidates: readonly FoodCatalogImportCandidate[];
-  readonly message: string;
-  readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-};
+const MobileCatalogFilePreviewResult = Schema.Union([
+  Schema.TaggedStruct("Previewed", {
+    catalogJson: Schema.String,
+    message: Schema.NonEmptyString,
+    candidates: Schema.Array(FoodCatalogTransfer.FoodCatalogImportCandidate),
+    selectedFoodIds: Schema.Array(Domain.FoodId),
+  }),
+  Schema.TaggedStruct("Canceled", {}),
+]);
 
 type MobileCatalogFilePreviewResult =
-  | (MobileCatalogPreviewResult & {
-      readonly status: "previewed";
-    })
-  | {
-      readonly message: null;
-      readonly status: "canceled";
-    };
-
-type MobileCatalogImportResult = {
-  readonly message: string;
-};
-
-const SuccessNoticeDurationMs = 5000;
-const ExportBackupSuccessDismissId = "backup.export.success.dismiss";
-const ImportBackupSuccessDismissId = "backup.import.success.dismiss";
-const CatalogExportSuccessDismissId = "catalog.export.success.dismiss";
-const CatalogImportSuccessDismissId = "catalog.import.success.dismiss";
+  typeof MobileCatalogFilePreviewResult.Type;
 
 const exportBackupMachine = setup({
-  types: {
-    context: {} as {
-      readonly backupName: string;
-      readonly errorMessage: string | null;
-      readonly successMessage: string | null;
+  schemas: {
+    events: {
+      exportBackup: Schema.toStandardSchemaV1(EmptyEvent),
+      changeBackupName: Schema.toStandardSchemaV1(
+        Schema.Struct({ backupName: Schema.String })
+      ),
     },
-    events: {} as
-      | {
-          readonly backupName: string;
-          readonly type: "changeBackupName";
-        }
-      | {
-          readonly type: "dismissExportBackupSuccess";
-        }
-      | {
-          readonly type: "export";
-        },
-  },
-  actors: {
-    exportBackup: fromPromise<MobileBackupExportResult, string>(({ input }) =>
-      RuntimeClient.runPromise(exportMobileBackup({ backupName: input }))
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({ backupName: Schema.String })
     ),
   },
-}).createMachine({
-  context: () => ({
-    backupName: "Mai backup",
-    errorMessage: null,
-    successMessage: null,
-  }),
-  initial: "Idle",
-  on: {
-    changeBackupName: {
-      actions: [
-        cancel(ExportBackupSuccessDismissId),
-        assign(({ event }) => {
-          assertEvent(event, "changeBackupName");
-
-          return {
-            backupName: event.backupName,
-            errorMessage: null,
-            successMessage: null,
-          };
-        }),
-      ],
-    },
-    dismissExportBackupSuccess: {
-      actions: assign({
-        successMessage: null,
-      }),
-    },
-  },
+  delays: { exportBackupSuccess: 3000 },
   states: {
-    Idle: {
-      on: {
-        export: {
-          target: "Exporting",
-          actions: [
-            cancel(ExportBackupSuccessDismissId),
-            assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          ],
-        },
+    Idle: {},
+    Exporting: {},
+    Error: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            message: Schema.NonEmptyString,
+          })
+        ),
       },
     },
+    Success: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            message: Schema.NonEmptyString,
+          })
+        ),
+      },
+    },
+  },
+  actorSources: {
+    exportBackup: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            backupName: Schema.String,
+          })
+        ),
+        output: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const backups = yield* Backup.Backups;
+            const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+            const gzip = yield* Gzip.Gzip;
+            const exportedBackup = yield* backups.exportToJson();
+            const exportedAt = new Date(
+              DateTime.toEpochMillis(exportedBackup.backup.source.exportedAt)
+            );
+            const baseName =
+              input.backupName.trim() === ""
+                ? "mai-backup"
+                : input.backupName.trim();
+            const sanitizedName = baseName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "");
+            const fileNamePrefix =
+              sanitizedName.trim() === "" ? "mai-backup" : sanitizedName;
+            const fileName = `${fileNamePrefix}-format-v${exportedBackup.backup.formatVersion}-db-v${exportedBackup.backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.json.gz`;
+            const bytes = yield* gzip.gzipText({
+              text: exportedBackup.json,
+            });
+
+            yield* fileTransfers.shareFile({
+              bytes,
+              dialogTitle: "Export backup",
+              fileName,
+              mimeType: GzipFileMimeType,
+              uti: GzipFileUti,
+            });
+
+            return {
+              fileName,
+              message: `Opened share options for ${fileName}.`,
+            };
+          })
+        ),
+    }),
+  },
+}).createMachine({
+  context: { backupName: "" },
+  initial: "Idle",
+  on: {
+    changeBackupName: ({ event }) => ({
+      context: { backupName: event.backupName },
+    }),
+  },
+  states: {
+    Idle: { on: { exportBackup: { target: "Exporting" } } },
     Exporting: {
       invoke: {
         src: "exportBackup",
-        input: ({ context }) => context.backupName,
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign(({ event }) => ({
-              errorMessage: null,
-              successMessage: event.output.message,
-            })),
-            sendTo(
-              ({ self }) => self,
-              () =>
-                ({
-                  type: "dismissExportBackupSuccess",
-                }) satisfies {
-                  readonly type: "dismissExportBackupSuccess";
-                },
-              {
-                delay: SuccessNoticeDurationMs,
-                id: ExportBackupSuccessDismissId,
-              }
-            ),
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
-            successMessage: null,
-          })),
-        },
+        input: ({ context }) => ({ backupName: context.backupName }),
+        onError: ({ event, context }) => ({
+          target: "Error",
+          context: {
+            ...context,
+            message: _backupErrorMessage({ error: event.error }),
+          },
+        }),
+        onDone: ({ event, context }) => ({
+          target: "Success",
+          context: { ...context, message: event.output.message },
+        }),
       },
     },
+    Error: { on: { exportBackup: { target: "Exporting" } } },
+    Success: { after: { exportBackupSuccess: { target: "Idle" } } },
   },
 });
 
 const importBackupMachine = setup({
-  types: {
-    context: {} as {
-      readonly errorMessage: string | null;
-      readonly successMessage: string | null;
-    },
-    events: {} as
-      | {
-          readonly type: "dismissImportBackupSuccess";
-        }
-      | {
-          readonly type: "importFile";
-        },
-  },
-  actors: {
-    importBackupFile: fromPromise<MobileBackupImportResult>(() =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-          const pickedFile = yield* fileTransfers.pickFile({
-            mimeTypes: BackupImportMimeTypes,
-          });
-
-          if (pickedFile._tag === "BackupFilePickCanceled") {
-            return {
-              message: null,
-              status: "canceled",
-            } satisfies MobileBackupImportResult;
-          }
-
-          const json = yield* decodeMobileJsonFile({
-            bytes: pickedFile.bytes,
-            fileName: pickedFile.fileName,
-          });
-          const importedBackup = yield* importMobileBackup({ json });
-
-          return {
-            message:
-              "Imported " + pickedFile.fileName + ". " + importedBackup.message,
-            status: "imported",
-          } satisfies MobileBackupImportResult;
-        })
-      )
-    ),
-  },
-}).createMachine({
-  context: () => ({
-    errorMessage: null,
-    successMessage: null,
-  }),
-  initial: "Idle",
-  on: {
-    dismissImportBackupSuccess: {
-      actions: assign({
-        successMessage: null,
-      }),
+  schemas: {
+    events: {
+      importFile: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
+  delays: { importBackupSuccess: 3000 },
   states: {
-    Idle: {
-      on: {
-        importFile: {
-          target: "ImportingFile",
-          actions: [
-            cancel(ImportBackupSuccessDismissId),
-            assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          ],
-        },
+    Idle: {},
+    ImportingFile: {},
+    Error: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
       },
     },
+    Success: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+    },
+  },
+  actorSources: {
+    importBackupFile: createAsyncLogic({
+      schemas: {
+        output: Schema.toStandardSchemaV1(MobileBackupImportResult),
+      },
+      run: () =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+
+            const pickedFile = yield* fileTransfers.pickFile({
+              mimeTypes: BackupImportMimeTypes,
+            });
+
+            return yield* Match.value(pickedFile).pipe(
+              Match.tagsExhaustive({
+                BackupFilePickCanceled: () =>
+                  Effect.succeed<MobileBackupImportResult>({
+                    _tag: "Canceled",
+                  }),
+
+                PickedBackupFile: Effect.fnUntraced(function* (pickedFile) {
+                  const json = yield* _decodeMobileJsonFile({
+                    bytes: pickedFile.bytes,
+                    fileName: pickedFile.fileName,
+                  });
+
+                  const backups = yield* Backup.Backups;
+                  const importedBackup = yield* backups.importFromJson({
+                    input: {
+                      json,
+                    },
+                  });
+                  const totalRecords =
+                    importedBackup.backup.integrity.counts.dailyLogs +
+                    importedBackup.backup.integrity.counts.foods +
+                    importedBackup.backup.integrity.counts.mealEntries +
+                    importedBackup.backup.integrity.counts.plans;
+
+                  return {
+                    _tag: "Imported" as const,
+                    message:
+                      "Imported " +
+                      pickedFile.fileName +
+                      `. Imported backup. Format v${importedBackup.backup.formatVersion}, database v${importedBackup.backup.source.databaseVersion}, ${totalRecords} records restored.`,
+                  };
+                }),
+              })
+            );
+          })
+        ),
+    }),
+  },
+}).createMachine({
+  initial: "Idle",
+  states: {
+    Idle: { on: { importFile: { target: "ImportingFile" } } },
     ImportingFile: {
       invoke: {
         src: "importBackupFile",
-        onDone: [
-          {
-            guard: ({ event }) => event.output.status === "canceled",
-            target: "Idle",
-            actions: assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          },
-          {
-            target: "Idle",
-            actions: [
-              assign(({ event }) => ({
-                errorMessage: null,
-                successMessage: event.output.message,
-              })),
-              sendTo(
-                ({ self }) => self,
-                () =>
-                  ({
-                    type: "dismissImportBackupSuccess",
-                  }) satisfies {
-                    readonly type: "dismissImportBackupSuccess";
-                  },
-                {
-                  delay: SuccessNoticeDurationMs,
-                  id: ImportBackupSuccessDismissId,
-                }
-              ),
-            ],
-          },
-        ],
-        onError: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({ error: event.error }),
-            successMessage: null,
-          })),
-        },
+        onDone: ({ event }) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              Canceled: () => ({
+                target: "Success",
+                context: { message: "Import canceled" },
+              }),
+              Imported: ({ message }) => ({
+                target: "Success",
+                context: { message },
+              }),
+            })
+          ),
+        onError: ({ event }) => ({
+          target: "Error",
+          context: { message: _backupErrorMessage({ error: event.error }) },
+        }),
       },
     },
+    Error: { on: { importFile: { target: "ImportingFile" } } },
+    Success: { after: { importBackupSuccess: { target: "Idle" } } },
   },
 });
 
 const catalogExportMachine = setup({
-  types: {
-    context: {} as {
-      readonly errorMessage: string | null;
-      readonly successMessage: string | null;
+  schemas: {
+    events: {
+      exportCatalog: Schema.toStandardSchemaV1(EmptyEvent),
     },
-    events: {} as
-      | {
-          readonly type: "dismissCatalogExportSuccess";
-        }
-      | {
-          readonly type: "exportCatalog";
-        },
   },
-  actors: {
-    exportCatalog: fromPromise<MobileCatalogExportResult>(() =>
-      RuntimeClient.runPromise(exportMobileFoodCatalogFile())
-    ),
+  delays: { exportCatalogSuccess: 3000 },
+  states: {
+    Idle: {},
+    ExportingCatalog: {},
+    Error: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+    },
+    Success: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+    },
+  },
+  actorSources: {
+    exportCatalog: createAsyncLogic({
+      schemas: {
+        output: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+      run: () =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+            const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
+            const gzip = yield* Gzip.Gzip;
+
+            const exportedCatalog = yield* transfers.exportToJson();
+            const exportedAt = new Date(
+              DateTime.toEpochMillis(exportedCatalog.catalog.source.exportedAt)
+            );
+            const fileName = `mai-food-catalog-format-v${exportedCatalog.catalog.formatVersion}-db-v${exportedCatalog.catalog.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.json.gz`;
+            const bytes = yield* gzip.gzipText({
+              text: exportedCatalog.json,
+            });
+
+            yield* fileTransfers.shareFile({
+              bytes,
+              dialogTitle: "Export food catalog",
+              fileName,
+              mimeType: GzipFileMimeType,
+              uti: GzipFileUti,
+            });
+
+            return {
+              message: `Opened share options for ${fileName}.`,
+            };
+          })
+        ),
+    }),
   },
 }).createMachine({
-  context: () => ({
-    errorMessage: null,
-    successMessage: null,
-  }),
   initial: "Idle",
-  on: {
-    dismissCatalogExportSuccess: {
-      actions: assign({
-        successMessage: null,
-      }),
-    },
-  },
   states: {
-    Idle: {
-      on: {
-        exportCatalog: {
-          target: "Exporting",
-          actions: [
-            cancel(CatalogExportSuccessDismissId),
-            assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          ],
-        },
-      },
-    },
-    Exporting: {
+    Idle: { on: { exportCatalog: { target: "ExportingCatalog" } } },
+    ExportingCatalog: {
       invoke: {
         src: "exportCatalog",
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign(({ event }) => ({
-              errorMessage: null,
-              successMessage: event.output.message,
-            })),
-            sendTo(
-              ({ self }) => self,
-              () =>
-                ({
-                  type: "dismissCatalogExportSuccess",
-                }) satisfies {
-                  readonly type: "dismissCatalogExportSuccess";
-                },
-              {
-                delay: SuccessNoticeDurationMs,
-                id: CatalogExportSuccessDismissId,
-              }
-            ),
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({
-              error: event.error,
-            }),
-            successMessage: null,
-          })),
-        },
+        onDone: ({ event }) => ({
+          target: "Success",
+          context: { message: event.output.message },
+        }),
+        onError: ({ event }) => ({
+          target: "Error",
+          context: { message: _backupErrorMessage({ error: event.error }) },
+        }),
       },
     },
+    Error: { on: { exportCatalog: { target: "ExportingCatalog" } } },
+    Success: { after: { exportCatalogSuccess: { target: "Idle" } } },
   },
 });
 
 const catalogImportMachine = setup({
-  types: {
-    context: {} as {
-      readonly catalogJson: string | null;
-      readonly errorMessage: string | null;
-      readonly previewCandidates: readonly FoodCatalogImportCandidate[];
-      readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-      readonly successMessage: string | null;
+  schemas: {
+    events: {
+      openPreviewCatalogImportFile: Schema.toStandardSchemaV1(EmptyEvent),
+      importSelectedCatalogFoods: Schema.toStandardSchemaV1(EmptyEvent),
+      toggleCatalogFood: Schema.toStandardSchemaV1(
+        Schema.Struct({ foodId: Domain.FoodId })
+      ),
     },
-    events: {} as
-      | {
-          readonly type: "dismissCatalogImportSuccess";
-        }
-      | {
-          readonly type: "previewCatalogImportFile";
-        }
-      | {
-          readonly foodId: FoodCatalogFoodId;
-          readonly type: "toggleCatalogFood";
-        }
-      | {
-          readonly type: "importSelectedCatalogFoods";
-        },
   },
-  actors: {
-    importSelectedCatalogFoods: fromPromise<
-      MobileCatalogImportResult,
-      {
-        readonly catalogJson: string;
-        readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        importSelectedMobileFoodCatalog({
-          catalogJson: input.catalogJson,
-          selectedFoodIds: input.selectedFoodIds,
-        })
-      )
-    ),
-    previewCatalogImportFile: fromPromise<MobileCatalogFilePreviewResult>(() =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-          const pickedFile = yield* fileTransfers.pickFile({
-            mimeTypes: BackupImportMimeTypes,
-          });
+  delays: { importCatalogSuccess: 3000 },
+  states: {
+    Idle: {},
+    ImportingPreview: {},
+    ImportingPreviewError: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+    },
+    CatalogPreview: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            catalogJson: Schema.String,
+            selectedFoodIds: Schema.HashSet(Domain.FoodId),
+            previewCandidates: Schema.Array(
+              FoodCatalogTransfer.FoodCatalogImportCandidate
+            ),
+          })
+        ),
+      },
+      states: {
+        SelectFoods: {},
+        ImportingCatalog: {},
+        ImportCompleted: {},
+        Error: {
+          schemas: {
+            context: Schema.toStandardSchemaV1(
+              Schema.Struct({ message: Schema.NonEmptyString })
+            ),
+          },
+        },
+        Success: {
+          schemas: {
+            context: Schema.toStandardSchemaV1(
+              Schema.Struct({ message: Schema.NonEmptyString })
+            ),
+          },
+        },
+      },
+    },
+  },
+  actorSources: {
+    previewCatalogImportFile: createAsyncLogic({
+      schemas: {
+        output: Schema.toStandardSchemaV1(MobileCatalogFilePreviewResult),
+      },
+      run: () =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
+            const pickedFile = yield* fileTransfers.pickFile({
+              mimeTypes: BackupImportMimeTypes,
+            });
 
-          if (pickedFile._tag === "BackupFilePickCanceled") {
+            return yield* Match.value(pickedFile).pipe(
+              Match.tagsExhaustive({
+                BackupFilePickCanceled: () =>
+                  Effect.succeed<MobileCatalogFilePreviewResult>({
+                    _tag: "Canceled",
+                  }),
+                PickedBackupFile: Effect.fnUntraced(function* (pickedFile) {
+                  const json = yield* _decodeMobileJsonFile({
+                    bytes: pickedFile.bytes,
+                    fileName: pickedFile.fileName,
+                  });
+
+                  const transfers =
+                    yield* FoodCatalogTransfer.FoodCatalogTransfers;
+                  const decodedCatalog =
+                    yield* FoodCatalogShare.decodeShareText({
+                      text: json,
+                    });
+                  const preview = yield* transfers.previewImportFromJson({
+                    input: {
+                      json: decodedCatalog.catalogJson,
+                    },
+                  });
+                  const selectedFoodIds = preview.candidates
+                    .filter(
+                      (candidate) =>
+                        candidate.selection.selectable &&
+                        candidate.selection.defaultSelected &&
+                        candidate.status !== "already-present" &&
+                        candidate.nameStatus !== "same-name-local"
+                    )
+                    .map((candidate) => candidate.food.id);
+
+                  return {
+                    _tag: "Previewed" as const,
+                    catalogJson: decodedCatalog.catalogJson,
+                    candidates: preview.candidates,
+                    message: `Previewed ${pickedFile.fileName}. Previewed ${preview.candidates.length} foods. ${selectedFoodIds.length} selected by default.`,
+                    selectedFoodIds,
+                  };
+                }),
+              })
+            );
+          })
+        ),
+    }),
+
+    importSelectedCatalogFoods: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            catalogJson: Schema.String,
+            selectedFoodIds: Schema.Array(Domain.FoodId),
+          })
+        ),
+        output: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.NonEmptyString })
+        ),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
+            const importedCatalog = yield* transfers.importSelectedFromJson({
+              input: {
+                json: input.catalogJson,
+                selectedFoodIds: input.selectedFoodIds,
+              },
+            });
+
             return {
-              message: null,
-              status: "canceled",
-            } satisfies MobileCatalogFilePreviewResult;
-          }
-
-          const json = yield* decodeMobileJsonFile({
-            bytes: pickedFile.bytes,
-            fileName: pickedFile.fileName,
-          });
-          const preview = yield* previewMobileFoodCatalogImport({
-            json,
-          });
-
-          return {
-            ...preview,
-            message: `Previewed ${pickedFile.fileName}. ${preview.message}`,
-            status: "previewed",
-          } satisfies MobileCatalogFilePreviewResult;
-        })
-      )
-    ),
+              message: `Imported ${importedCatalog.importedFoods.length} foods.`,
+            };
+          })
+        ),
+    }),
   },
 }).createMachine({
-  context: () => ({
-    catalogJson: null,
-    errorMessage: null,
-    previewCandidates: [],
-    selectedFoodIds: [],
-    successMessage: null,
-  }),
   initial: "Idle",
-  on: {
-    dismissCatalogImportSuccess: {
-      actions: assign({
-        successMessage: null,
-      }),
-    },
-    toggleCatalogFood: {
-      actions: assign(({ context, event }) => {
-        assertEvent(event, "toggleCatalogFood");
-
-        const candidate = context.previewCandidates.find(
-          (previewCandidate) => previewCandidate.food.id === event.foodId
-        );
-
-        if (candidate?.selection.selectable !== true) {
-          return {};
-        }
-
-        const isSelected = context.selectedFoodIds.includes(event.foodId);
-
-        return {
-          selectedFoodIds: isSelected
-            ? context.selectedFoodIds.filter(
-                (selectedFoodId) => selectedFoodId !== event.foodId
-              )
-            : [...context.selectedFoodIds, event.foodId],
-        };
-      }),
-    },
-  },
   states: {
     Idle: {
       on: {
-        importSelectedCatalogFoods: {
-          guard: ({ context }) =>
-            context.catalogJson !== null &&
-            EffectArray.isReadonlyArrayNonEmpty(context.selectedFoodIds),
-          target: "Importing",
-          actions: [
-            cancel(CatalogImportSuccessDismissId),
-            assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          ],
-        },
-        previewCatalogImportFile: {
-          target: "PreviewingFile",
-          actions: [
-            cancel(CatalogImportSuccessDismissId),
-            assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          ],
-        },
+        openPreviewCatalogImportFile: { target: "ImportingPreview" },
       },
     },
-    Importing: {
-      invoke: {
-        src: "importSelectedCatalogFoods",
-        input: ({ context }) => ({
-          catalogJson: context.catalogJson ?? "",
-          selectedFoodIds: context.selectedFoodIds,
-        }),
-        onDone: {
-          target: "Idle",
-          actions: [
-            assign(({ event }) => ({
-              catalogJson: null,
-              errorMessage: null,
-              previewCandidates: [],
-              selectedFoodIds: [],
-              successMessage: event.output.message,
-            })),
-            sendTo(
-              ({ self }) => self,
-              () =>
-                ({
-                  type: "dismissCatalogImportSuccess",
-                }) satisfies {
-                  readonly type: "dismissCatalogImportSuccess";
-                },
-              {
-                delay: SuccessNoticeDurationMs,
-                id: CatalogImportSuccessDismissId,
-              }
-            ),
-          ],
-        },
-        onError: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            errorMessage: backupErrorMessage({
-              error: event.error,
-            }),
-            successMessage: null,
-          })),
-        },
-      },
-    },
-    PreviewingFile: {
+    ImportingPreview: {
       invoke: {
         src: "previewCatalogImportFile",
-        onDone: [
-          {
-            guard: ({ event }) => event.output.status === "canceled",
-            target: "Idle",
-            actions: assign({
-              errorMessage: null,
-              successMessage: null,
-            }),
-          },
-          {
-            target: "Idle",
-            actions: [
-              assign(({ event }) => {
-                if (event.output.status === "canceled") {
-                  return {};
-                }
-
-                return {
-                  catalogJson: event.output.catalogJson,
-                  errorMessage: null,
-                  previewCandidates: event.output.candidates,
-                  selectedFoodIds: event.output.selectedFoodIds,
-                  successMessage: event.output.message,
-                };
+        onDone: ({ event }) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              Canceled: () => ({
+                target: "Idle",
               }),
-              sendTo(
-                ({ self }) => self,
-                () =>
-                  ({
-                    type: "dismissCatalogImportSuccess",
-                  }) satisfies {
-                    readonly type: "dismissCatalogImportSuccess";
-                  },
-                {
-                  delay: SuccessNoticeDurationMs,
-                  id: CatalogImportSuccessDismissId,
-                }
-              ),
-            ],
+              Previewed: ({ candidates, catalogJson, selectedFoodIds }) => ({
+                target: "CatalogPreview",
+                context: {
+                  catalogJson,
+                  previewCandidates: candidates,
+                  selectedFoodIds: HashSet.fromIterable(selectedFoodIds),
+                },
+              }),
+            })
+          ),
+        onError: ({ event }) => ({
+          target: "ImportingPreviewError",
+          context: { message: _backupErrorMessage({ error: event.error }) },
+        }),
+      },
+    },
+    ImportingPreviewError: {
+      on: {
+        openPreviewCatalogImportFile: { target: "ImportingPreview" },
+      },
+    },
+    CatalogPreview: {
+      initial: "SelectFoods",
+      onDone: { target: "Idle" },
+      on: {
+        toggleCatalogFood: ({ context, event }) =>
+          Option.gen(function* () {
+            const { selection } = yield* Array.findFirst(
+              context.previewCandidates,
+              (previewCandidate) => previewCandidate.food.id === event.foodId
+            );
+
+            if (!selection.selectable) return yield* Option.none();
+
+            return {
+              context: {
+                ...context,
+                selectedFoodIds: HashSet.has(
+                  context.selectedFoodIds,
+                  event.foodId
+                )
+                  ? HashSet.remove(context.selectedFoodIds, event.foodId)
+                  : HashSet.add(context.selectedFoodIds, event.foodId),
+              },
+            };
+          }).pipe(Option.getOrElse(() => ({ context }))),
+      },
+      states: {
+        SelectFoods: {
+          on: {
+            importSelectedCatalogFoods: { target: "ImportingCatalog" },
           },
-        ],
-        onError: {
-          target: "Idle",
-          actions: assign(({ event }) => ({
-            catalogJson: null,
-            errorMessage: backupErrorMessage({
-              error: event.error,
-            }),
-            previewCandidates: [],
-            selectedFoodIds: [],
-            successMessage: null,
-          })),
         },
+        ImportingCatalog: {
+          invoke: {
+            src: "importSelectedCatalogFoods",
+            input: ({ context }) => ({
+              catalogJson: context.catalogJson,
+              selectedFoodIds: globalThis.Array.from(context.selectedFoodIds),
+            }),
+            onError: ({ event }) => ({
+              target: "Error",
+              context: { message: _backupErrorMessage({ error: event.error }) },
+            }),
+            onDone: ({ event }) => ({
+              target: "Success",
+              context: { message: event.output.message },
+            }),
+          },
+        },
+        Error: {
+          on: {
+            importSelectedCatalogFoods: { target: "ImportingCatalog" },
+          },
+        },
+        Success: {
+          after: { importCatalogSuccess: { target: "ImportCompleted" } },
+        },
+        ImportCompleted: { type: "final" },
       },
     },
   },
 });
 
 const localDataResetMachine = LocalDataResetMachine.makeLocalDataResetMachine({
-  restartApp: () => {
+  runtime: RuntimeClient,
+  restartApp: Effect.sync(() => {
     if (router.canDismiss()) {
       router.dismissAll();
     }
 
     router.replace("/");
-  },
-  runtime: RuntimeClient,
+  }),
 });
 
 export default function BackupScreen() {
@@ -700,10 +676,8 @@ export default function BackupScreen() {
 }
 
 function ExportBackupSection() {
-  const [snapshot, send] = useMachine(exportBackupMachine);
+  const [snapshot, , actor] = useMachine(exportBackupMachine);
   const exporting = snapshot.matches("Exporting");
-  const { backupName, errorMessage, successMessage } = snapshot.context;
-
   return (
     <>
       <BackupSettingsSection divider={false} title="Export">
@@ -713,33 +687,28 @@ function ExportBackupSection() {
             autoCorrect={false}
             editable={!exporting}
             label="Name"
-            onChangeText={(value) => {
-              send({
-                backupName: value,
-                type: "changeBackupName",
-              });
-            }}
             placeholder="Mai backup"
-            value={backupName}
+            value={snapshot.context.backupName}
+            onChangeText={(value) =>
+              actor.trigger.changeBackupName({ backupName: value })
+            }
           />
           <Button
             disabled={exporting}
             icon={Download}
             loading={exporting}
-            onPress={() => {
-              send({
-                type: "export",
-              });
-            }}
+            onPress={actor.trigger.exportBackup}
           >
             Export backup
           </Button>
-          {successMessage === null ? null : (
-            <Notice message={successMessage} tone="success" />
+
+          {snapshot.matches("Success") && (
+            <Notice message={snapshot.context.message} tone="success" />
           )}
-          {errorMessage === null ? null : (
+
+          {snapshot.matches("Error") && (
             <Notice
-              message={errorMessage}
+              message={snapshot.context.message}
               title="Export failed"
               tone="danger"
             />
@@ -753,10 +722,8 @@ function ExportBackupSection() {
 }
 
 function ImportBackupSection() {
-  const [snapshot, send] = useMachine(importBackupMachine);
+  const [snapshot, , actor] = useMachine(importBackupMachine);
   const isImporting = snapshot.matches("ImportingFile");
-  const { errorMessage, successMessage } = snapshot.context;
-
   return (
     <>
       <BackupSettingsSection divider title="Import">
@@ -768,21 +735,19 @@ function ImportBackupSection() {
             disabled={isImporting}
             icon={Upload}
             loading={isImporting}
-            onPress={() => {
-              send({
-                type: "importFile",
-              });
-            }}
+            onPress={actor.trigger.importFile}
             variant="danger"
           >
             Choose backup file
           </Button>
-          {successMessage === null ? null : (
-            <Notice message={successMessage} tone="success" />
+
+          {snapshot.matches("Success") && (
+            <Notice message={snapshot.context.message} tone="success" />
           )}
-          {errorMessage === null ? null : (
+
+          {snapshot.matches("Error") && (
             <Notice
-              message={errorMessage}
+              message={snapshot.context.message}
               title="Import failed"
               tone="danger"
             />
@@ -796,10 +761,8 @@ function ImportBackupSection() {
 }
 
 function CatalogExportSection() {
-  const [snapshot, send] = useMachine(catalogExportMachine);
-  const isExporting = snapshot.matches("Exporting");
-  const { errorMessage, successMessage } = snapshot.context;
-
+  const [snapshot, , actor] = useMachine(catalogExportMachine);
+  const isExporting = snapshot.matches("ExportingCatalog");
   return (
     <>
       <BackupSettingsSection divider title="Export catalog">
@@ -808,21 +771,18 @@ function CatalogExportSection() {
             disabled={isExporting}
             icon={Download}
             loading={isExporting}
-            onPress={() => {
-              send({
-                type: "exportCatalog",
-              });
-            }}
+            onPress={actor.trigger.exportCatalog}
           >
             Export catalog file
           </Button>
 
-          {successMessage === null ? null : (
-            <Notice message={successMessage} tone="success" />
+          {snapshot.matches("Success") && (
+            <Notice message={snapshot.context.message} tone="success" />
           )}
-          {errorMessage === null ? null : (
+
+          {snapshot.matches("Error") && (
             <Notice
-              message={errorMessage}
+              message={snapshot.context.message}
               title="Export catalog failed"
               tone="danger"
             />
@@ -836,13 +796,12 @@ function CatalogExportSection() {
 }
 
 function CatalogImportSection() {
-  const [snapshot, send] = useMachine(catalogImportMachine);
-  const isImporting = snapshot.matches("Importing");
-  const isPreviewing = snapshot.matches("PreviewingFile");
+  const [snapshot, , actor] = useMachine(catalogImportMachine);
+  const isImporting = snapshot.matches({
+    CatalogPreview: "ImportingCatalog",
+  });
+  const isPreviewing = snapshot.matches("ImportingPreview");
   const isBusy = isImporting || isPreviewing;
-  const { errorMessage, previewCandidates, selectedFoodIds, successMessage } =
-    snapshot.context;
-
   return (
     <>
       <BackupSettingsSection divider title="Import catalog">
@@ -851,20 +810,18 @@ function CatalogImportSection() {
             disabled={isBusy}
             icon={Upload}
             loading={isPreviewing}
-            onPress={() => {
-              send({
-                type: "previewCatalogImportFile",
-              });
-            }}
+            onPress={actor.trigger.openPreviewCatalogImportFile}
           >
             Choose catalog file
           </Button>
-          {successMessage === null ? null : (
-            <Notice message={successMessage} tone="success" />
+
+          {snapshot.matches({ CatalogPreview: "Success" }) && (
+            <Notice message={snapshot.context.message} tone="success" />
           )}
-          {errorMessage === null ? null : (
+
+          {snapshot.matches({ CatalogPreview: "Error" }) && (
             <Notice
-              message={errorMessage}
+              message={snapshot.context.message}
               title="Import catalog failed"
               tone="danger"
             />
@@ -872,24 +829,49 @@ function CatalogImportSection() {
         </View>
       </BackupSettingsSection>
 
-      {!EffectArray.isReadonlyArrayNonEmpty(previewCandidates) ? null : (
-        <CatalogPreviewSection
-          candidates={previewCandidates}
-          disabled={isBusy}
-          importing={isImporting}
-          onImport={() => {
-            send({
-              type: "importSelectedCatalogFoods",
-            });
-          }}
-          onToggleFood={(foodId) => {
-            send({
-              foodId,
-              type: "toggleCatalogFood",
-            });
-          }}
-          selectedFoodIds={selectedFoodIds}
-        />
+      {snapshot.matches("CatalogPreview") && (
+        <BackupSettingsSection divider title="Preview">
+          <View style={styles.sectionBody}>
+            <View style={styles.catalogMetricRow}>
+              <Text style={styles.catalogMetricText}>
+                {snapshot.context.previewCandidates.length} candidates
+              </Text>
+              <Text style={styles.catalogMetricText}>
+                {HashSet.size(snapshot.context.selectedFoodIds)} selected
+              </Text>
+            </View>
+
+            <View style={styles.catalogCandidateList}>
+              {snapshot.context.previewCandidates.map((candidate) => (
+                <CatalogCandidateRow
+                  key={candidate.food.id}
+                  candidate={candidate}
+                  disabled={isBusy}
+                  selected={HashSet.has(
+                    snapshot.context.selectedFoodIds,
+                    candidate.food.id
+                  )}
+                  onToggle={() =>
+                    actor.trigger.toggleCatalogFood({
+                      foodId: candidate.food.id,
+                    })
+                  }
+                />
+              ))}
+            </View>
+
+            <Button
+              icon={Upload}
+              loading={isImporting}
+              onPress={actor.trigger.importSelectedCatalogFoods}
+              disabled={
+                HashSet.isEmpty(snapshot.context.selectedFoodIds) || isBusy
+              }
+            >
+              Import selected
+            </Button>
+          </View>
+        </BackupSettingsSection>
       )}
 
       <LoadingOverlay
@@ -900,69 +882,13 @@ function CatalogImportSection() {
   );
 }
 
-function CatalogPreviewSection({
-  candidates,
-  disabled,
-  importing,
-  onImport,
-  onToggleFood,
-  selectedFoodIds,
-}: {
-  readonly candidates: readonly FoodCatalogImportCandidate[];
-  readonly disabled: boolean;
-  readonly importing: boolean;
-  readonly onImport: () => void;
-  readonly onToggleFood: (foodId: FoodCatalogFoodId) => void;
-  readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-}) {
-  return (
-    <BackupSettingsSection divider title="Preview">
-      <View style={styles.sectionBody}>
-        <View style={styles.catalogMetricRow}>
-          <Text style={styles.catalogMetricText}>
-            {candidates.length} candidates
-          </Text>
-          <Text style={styles.catalogMetricText}>
-            {selectedFoodIds.length} selected
-          </Text>
-        </View>
-
-        <View style={styles.catalogCandidateList}>
-          {candidates.map((candidate) => (
-            <CatalogCandidateRow
-              candidate={candidate}
-              disabled={disabled}
-              key={candidate.food.id}
-              onToggle={() => {
-                onToggleFood(candidate.food.id);
-              }}
-              selected={selectedFoodIds.includes(candidate.food.id)}
-            />
-          ))}
-        </View>
-
-        <Button
-          disabled={
-            disabled || !EffectArray.isReadonlyArrayNonEmpty(selectedFoodIds)
-          }
-          icon={Upload}
-          loading={importing}
-          onPress={onImport}
-        >
-          Import selected
-        </Button>
-      </View>
-    </BackupSettingsSection>
-  );
-}
-
 function CatalogCandidateRow({
   candidate,
   disabled,
   onToggle,
   selected,
 }: {
-  readonly candidate: FoodCatalogImportCandidate;
+  readonly candidate: FoodCatalogTransfer.FoodCatalogImportCandidate;
   readonly disabled: boolean;
   readonly onToggle: () => void;
   readonly selected: boolean;
@@ -1042,16 +968,13 @@ function CatalogBadge({
 }
 
 function ResetDataSection() {
-  const [snapshot, send] = useMachine(localDataResetMachine);
+  const [snapshot, , actor] = useMachine(localDataResetMachine);
+  const canReset = snapshot.can({ type: "reset" });
   const isIdle = snapshot.matches("Idle");
   const isConfirming =
-    snapshot.matches("Confirming") || snapshot.matches("Failure");
+    snapshot.matches("Failure") || snapshot.matches("ConfirmReset");
   const isResetting = snapshot.matches("Resetting");
   const resetDisabled = isResetting;
-  const canReset =
-    snapshot.context.confirmationText ===
-    NutritionLocalData.LocalDataResetConfirmationText;
-
   return (
     <>
       <BackupSettingsSection divider title="Reset">
@@ -1064,9 +987,7 @@ function ResetDataSection() {
             <Button
               disabled={resetDisabled}
               icon={Trash2}
-              onPress={() => {
-                send({ type: "begin" });
-              }}
+              onPress={actor.trigger.begin}
               variant="danger"
             >
               Delete everything
@@ -1087,22 +1008,19 @@ function ResetDataSection() {
                 autoCorrect={false}
                 editable={!resetDisabled}
                 label="Confirmation"
-                onChangeText={(confirmationText) => {
-                  send({
-                    confirmationText,
-                    type: "changeConfirmationText",
-                  });
-                }}
                 placeholder={NutritionLocalData.LocalDataResetConfirmationText}
                 value={snapshot.context.confirmationText}
+                onChangeText={(confirmationText) =>
+                  actor.trigger.changeConfirmationText({
+                    confirmationText,
+                  })
+                }
               />
               <View style={styles.inlineActions}>
                 <Button
                   disabled={resetDisabled}
                   icon={X}
-                  onPress={() => {
-                    send({ type: "cancel" });
-                  }}
+                  onPress={actor.trigger.cancel}
                   style={styles.inlineAction}
                   variant="secondary"
                 >
@@ -1111,18 +1029,17 @@ function ResetDataSection() {
                 <Button
                   disabled={resetDisabled || !canReset}
                   icon={Trash2}
-                  onPress={() => {
-                    send({ type: "reset" });
-                  }}
+                  onPress={actor.trigger.reset}
                   style={styles.inlineAction}
                   variant="danger"
                 >
                   Delete data
                 </Button>
               </View>
-              {snapshot.context.errorMessage === null ? null : (
+
+              {snapshot.matches("Failure") && (
                 <Text style={styles.resetErrorText}>
-                  {snapshot.context.errorMessage}
+                  {snapshot.context.message}
                 </Text>
               )}
             </View>
@@ -1168,7 +1085,7 @@ const BackupImportMimeTypes = [
 const GzipFileMimeType = "application/gzip";
 const GzipFileUti = "org.gnu.gnu-zip-archive";
 
-export function decodeMobileJsonFile({
+function _decodeMobileJsonFile({
   bytes,
   fileName,
 }: {
@@ -1185,142 +1102,6 @@ export function decodeMobileJsonFile({
       : yield* gzip.bytesToText({
           bytes,
         });
-  });
-}
-
-export function exportMobileBackup({
-  backupName,
-}: {
-  readonly backupName: string;
-}) {
-  return Effect.gen(function* () {
-    const backups = yield* Backup.Backups;
-    const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-    const gzip = yield* Gzip.Gzip;
-    const exportedBackup = yield* backups.exportToJson();
-    const fileName = backupFileName({
-      backup: exportedBackup.backup,
-      backupName,
-      extension: "json.gz",
-    });
-    const bytes = yield* gzip.gzipText({
-      text: exportedBackup.json,
-    });
-
-    yield* fileTransfers.shareFile({
-      bytes,
-      dialogTitle: "Export backup",
-      fileName,
-      mimeType: GzipFileMimeType,
-      uti: GzipFileUti,
-    });
-
-    return {
-      fileName,
-      message: `Opened share options for ${fileName}.`,
-    } satisfies MobileBackupExportResult;
-  });
-}
-
-export function exportMobileFoodCatalogFile() {
-  return Effect.gen(function* () {
-    const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-    const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const gzip = yield* Gzip.Gzip;
-    const exportedCatalog = yield* transfers.exportToJson();
-    const fileName = foodCatalogFileName({
-      catalog: exportedCatalog.catalog,
-      extension: "json.gz",
-    });
-    const bytes = yield* gzip.gzipText({
-      text: exportedCatalog.json,
-    });
-
-    yield* fileTransfers.shareFile({
-      bytes,
-      dialogTitle: "Export food catalog",
-      fileName,
-      mimeType: GzipFileMimeType,
-      uti: GzipFileUti,
-    });
-
-    return {
-      fileName,
-      foodCount: exportedCatalog.catalog.integrity.counts.foods,
-      message: `Opened share options for ${fileName}.`,
-    } satisfies MobileCatalogExportResult;
-  });
-}
-
-export function importMobileBackup({ json }: { readonly json: string }) {
-  return Effect.gen(function* () {
-    const backups = yield* Backup.Backups;
-    const importedBackup = yield* backups.importFromJson({
-      input: {
-        json,
-      },
-    });
-
-    return {
-      message: backupImportMessage({ backup: importedBackup.backup }),
-      status: "imported",
-    } satisfies MobileBackupImportResult;
-  });
-}
-
-export function previewMobileFoodCatalogImport({
-  json,
-}: {
-  readonly json: string;
-}) {
-  return Effect.gen(function* () {
-    const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const decodedCatalog = yield* FoodCatalogShare.decodeShareText({
-      text: json,
-    });
-    const preview = yield* transfers.previewImportFromJson({
-      input: {
-        json: decodedCatalog.catalogJson,
-      },
-    });
-    const selectedFoodIds = preview.candidates
-      .filter(
-        (candidate) =>
-          candidate.selection.selectable &&
-          candidate.selection.defaultSelected &&
-          candidate.status !== "already-present" &&
-          candidate.nameStatus !== "same-name-local"
-      )
-      .map((candidate) => candidate.food.id);
-
-    return {
-      catalogJson: decodedCatalog.catalogJson,
-      candidates: preview.candidates,
-      message: `Previewed ${preview.candidates.length} foods. ${selectedFoodIds.length} selected by default.`,
-      selectedFoodIds,
-    } satisfies MobileCatalogPreviewResult;
-  });
-}
-
-export function importSelectedMobileFoodCatalog({
-  catalogJson,
-  selectedFoodIds,
-}: {
-  readonly catalogJson: string;
-  readonly selectedFoodIds: readonly FoodCatalogFoodId[];
-}) {
-  return Effect.gen(function* () {
-    const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-    const importedCatalog = yield* transfers.importSelectedFromJson({
-      input: {
-        json: catalogJson,
-        selectedFoodIds,
-      },
-    });
-
-    return {
-      message: `Imported ${importedCatalog.importedFoods.length} foods.`,
-    } satisfies MobileCatalogImportResult;
   });
 }
 
@@ -1342,56 +1123,7 @@ const CatalogCandidateStatusTone: Record<
   new: "success",
 };
 
-export function backupFileName({
-  backup,
-  backupName,
-  extension = "json",
-}: {
-  readonly backup: Backup.MaiBackup;
-  readonly backupName: string;
-  readonly extension?: "json" | "json.gz";
-}) {
-  const exportedAt = new Date(DateTime.toEpochMillis(backup.source.exportedAt));
-  const baseName = backupName.trim() === "" ? "mai-backup" : backupName.trim();
-  const sanitizedName = baseName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const fileNamePrefix =
-    sanitizedName.trim() === "" ? "mai-backup" : sanitizedName;
-
-  return `${fileNamePrefix}-format-v${backup.formatVersion}-db-v${backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.${extension}`;
-}
-
-export function foodCatalogFileName({
-  catalog,
-  extension = "json",
-}: {
-  readonly catalog: FoodCatalogTransfer.MaiFoodCatalog;
-  readonly extension?: "json" | "json.gz";
-}) {
-  const exportedAt = new Date(
-    DateTime.toEpochMillis(catalog.source.exportedAt)
-  );
-
-  return `mai-food-catalog-format-v${catalog.formatVersion}-db-v${catalog.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.${extension}`;
-}
-
-export function backupImportMessage({
-  backup,
-}: {
-  readonly backup: Backup.MaiBackup;
-}) {
-  const totalRecords =
-    backup.integrity.counts.dailyLogs +
-    backup.integrity.counts.foods +
-    backup.integrity.counts.mealEntries +
-    backup.integrity.counts.plans;
-
-  return `Imported backup. Format v${backup.formatVersion}, database v${backup.source.databaseVersion}, ${totalRecords} records restored.`;
-}
-
-export function backupErrorMessage({ error }: { readonly error: unknown }) {
+function _backupErrorMessage({ error }: { readonly error: unknown }) {
   if (error instanceof BackupFileTransfer.BackupFileTransferError) {
     return error.detail;
   }

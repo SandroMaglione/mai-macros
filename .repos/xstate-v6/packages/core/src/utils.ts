@@ -17,6 +17,7 @@ import type {
   Mapper,
   NonReducibleUnknown,
   Observer,
+  OutputArg,
   SingleOrArray,
   StateLike,
   StateValue,
@@ -181,7 +182,20 @@ export function resolveOutput<
   self: AnyActor
 ): unknown {
   if (typeof mapper === 'function') {
-    return mapper({ context, event, self });
+    const outputMapper = mapper as Mapper<
+      TContext,
+      TExpressionEvent,
+      unknown,
+      EventObject
+    >;
+    const args = {
+      context,
+      event,
+      output: getEventOutput(event),
+      self
+    } as unknown as Parameters<typeof outputMapper>[0];
+
+    return outputMapper(args);
   }
 
   if (
@@ -206,6 +220,24 @@ export function resolveOutput<
   }
 
   return mapper;
+}
+
+export function getEventOutput<TEvent extends EventObject>(
+  event: TEvent
+): OutputArg<TEvent>['output'] {
+  if (isDoneEvent(event)) {
+    const doneEvent = event as unknown as EventObject & { output: unknown };
+    return doneEvent.output as OutputArg<TEvent>['output'];
+  }
+
+  return undefined as OutputArg<TEvent>['output'];
+}
+
+function isDoneEvent(event: EventObject): boolean {
+  return (
+    event.type.startsWith('xstate.done.actor.') ||
+    event.type.startsWith('xstate.done.state.')
+  );
 }
 
 function isArray(value: any): value is readonly any[] {
@@ -275,7 +307,7 @@ export function createInvokeId(stateNodeId: string, index: number): string {
 export function resolveReferencedActor(machine: AnyStateMachine, src: string) {
   const match = src.match(/^xstate\.invoke\.(\d+)\.(.*)/)!;
   if (!match) {
-    return machine.implementations.actors[src];
+    return machine.implementations.actorSources[src];
   }
   const [, indexStr, nodeId] = match;
   const node = machine.getStateNodeById(nodeId);
@@ -296,7 +328,7 @@ export function resolveReferencedActor(machine: AnyStateMachine, src: string) {
   ).src;
   // A referenced actor may itself be registered by name.
   return typeof configSrc === 'string'
-    ? machine.implementations.actors[configSrc]
+    ? machine.implementations.actorSources[configSrc]
     : configSrc;
 }
 

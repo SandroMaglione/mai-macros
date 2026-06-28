@@ -1,149 +1,123 @@
 import { LocalData as NutritionLocalData } from "@mai/nutrition";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
-  assertEvent,
-  assign,
-  fromPromise,
+  createAsyncLogic,
   setup,
   type ActorRefFrom,
   type SnapshotFrom,
 } from "xstate";
-
 import type { MachineRuntime } from "./runtime";
-
-export type LocalDataResetEvent =
-  | {
-      readonly type: "begin";
-    }
-  | {
-      readonly type: "cancel";
-    }
-  | {
-      readonly confirmationText: string;
-      readonly type: "changeConfirmationText";
-    }
-  | {
-      readonly type: "reset";
-    };
-
-const ResetLocalData = Effect.gen(function* () {
-  const localData = yield* NutritionLocalData.LocalData;
-
-  yield* localData.reset;
-});
-
-const LocalDataResetErrorMessage = ({ error }: { readonly error: unknown }) =>
-  error instanceof Error ? error.message : "Could not delete the local data.";
+import { EmptyEvent } from "./schemas";
 
 export const makeLocalDataResetMachine = ({
   restartApp,
   runtime,
 }: {
-  readonly restartApp: () => Promise<void> | void;
+  readonly restartApp: Effect.Effect<void>;
   readonly runtime: MachineRuntime<NutritionLocalData.LocalData>;
 }) =>
   setup({
-    types: {
-      context: {} as {
-        readonly confirmationText: string;
-        readonly errorMessage: string | null;
+    schemas: {
+      events: {
+        begin: Schema.toStandardSchemaV1(EmptyEvent),
+        cancel: Schema.toStandardSchemaV1(EmptyEvent),
+        reset: Schema.toStandardSchemaV1(EmptyEvent),
+        changeConfirmationText: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            confirmationText: Schema.String,
+          })
+        ),
       },
-      events: {} as LocalDataResetEvent,
     },
-    actors: {
-      resetLocalData: fromPromise(async () => {
-        await runtime.runPromise(ResetLocalData);
-        await restartApp();
+    states: {
+      Idle: {},
+      ConfirmReset: {
+        schemas: {
+          context: Schema.toStandardSchemaV1(
+            Schema.Struct({ confirmationText: Schema.String })
+          ),
+        },
+      },
+      Failure: {
+        schemas: {
+          context: Schema.toStandardSchemaV1(
+            Schema.Struct({ message: Schema.String })
+          ),
+        },
+      },
+      Resetting: {},
+      ResetCompleted: {},
+    },
+    actorSources: {
+      resetLocalData: createAsyncLogic({
+        run: () =>
+          runtime.runPromise(
+            Effect.gen(function* () {
+              const localData = yield* NutritionLocalData.LocalData;
+
+              yield* localData.reset;
+              yield* restartApp;
+            })
+          ),
       }),
     },
     guards: {
-      confirmationMatches: ({ context }) =>
-        context.confirmationText ===
+      confirmationMatches: (params: { readonly confirmationText: string }) =>
+        params.confirmationText ===
         NutritionLocalData.LocalDataResetConfirmationText,
     },
   }).createMachine({
-    context: () => ({
-      confirmationText: "",
-      errorMessage: null,
-    }),
     initial: "Idle",
     states: {
       Idle: {
         on: {
-          begin: {
-            target: "Confirming",
-            actions: assign({
-              confirmationText: "",
-              errorMessage: null,
-            }),
-          },
+          begin: { target: "ConfirmReset", context: { confirmationText: "" } },
         },
       },
-      Confirming: {
+      ConfirmReset: {
         on: {
-          cancel: {
-            target: "Idle",
-            actions: assign({
-              confirmationText: "",
-              errorMessage: null,
-            }),
-          },
-          changeConfirmationText: {
-            actions: assign(({ event }) => {
-              assertEvent(event, "changeConfirmationText");
-
-              return {
-                confirmationText: event.confirmationText,
-              };
-            }),
-          },
-          reset: {
-            guard: "confirmationMatches",
-            target: "Resetting",
-          },
-        },
-      },
-      Failure: {
-        on: {
-          cancel: {
-            target: "Idle",
-            actions: assign({
-              confirmationText: "",
-              errorMessage: null,
-            }),
-          },
-          changeConfirmationText: {
-            actions: assign(({ event }) => {
-              assertEvent(event, "changeConfirmationText");
-
-              return {
-                confirmationText: event.confirmationText,
-              };
-            }),
-          },
-          reset: {
-            guard: "confirmationMatches",
-            target: "Resetting",
-          },
+          cancel: { target: "Idle" },
+          changeConfirmationText: ({ event }) => ({
+            context: { confirmationText: event.confirmationText },
+          }),
+          reset: ({ guards, context }) =>
+            guards.confirmationMatches({
+              confirmationText: context.confirmationText,
+            })
+              ? { target: "Resetting" }
+              : undefined,
         },
       },
       Resetting: {
         invoke: {
           src: "resetLocalData",
-          onDone: {
-            target: "Reset",
-          },
-          onError: {
+          onDone: { target: "ResetCompleted" },
+          onError: ({ event }) => ({
             target: "Failure",
-            actions: assign(({ event }) => ({
-              errorMessage: LocalDataResetErrorMessage({
-                error: event.error,
-              }),
-            })),
-          },
+            context: {
+              message:
+                event.error instanceof Error
+                  ? event.error.message
+                  : "Could not delete the local data.",
+            },
+          }),
         },
       },
-      Reset: {},
+      Failure: {
+        on: {
+          cancel: { target: "Idle" },
+          changeConfirmationText: ({ event }) => ({
+            context: { confirmationText: event.confirmationText },
+          }),
+          reset: ({ guards, context }) =>
+            guards.confirmationMatches({
+              confirmationText: context.confirmationText,
+            })
+              ? { target: "Resetting" }
+              : undefined,
+        },
+      },
+      ResetCompleted: {},
     },
   });
 

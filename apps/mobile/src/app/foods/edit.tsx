@@ -15,60 +15,97 @@ import {
   FoodNutrientOverview,
   FoodSearchField,
   FoodSearchResults,
-  foodNutrientOverviewFromFormValues,
-  foodNutrientOverviewPrimaryLabel,
 } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { formatNumber } from "@/lib/format";
+import {
+  foodNutrientOverviewFromFormValues,
+  foodNutrientOverviewPrimaryLabel,
+  formatNumber,
+} from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import { EmptyEvent, FoodFormMachine, FoodSearchMachine } from "@mai/machines";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
-import { FoodFormMachine, FoodSearchMachine } from "@mai/machines";
 import { useMachine, useSelector } from "@xstate/react";
-import { Array as EffectArray, Effect, Option, Schema } from "effect";
-import { type Href, Redirect, router } from "expo-router";
+import { Array, Effect, Match, Option, Schema } from "effect";
+import { Redirect, router } from "expo-router";
 import { ChevronLeft, Pencil, RotateCcw, Save } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import {
-  assertEvent,
-  assign,
-  fromPromise,
-  sendTo,
-  setup,
-  type ActorRefFrom,
-} from "xstate";
-
-type EditFoodsRouteData = {
-  readonly dateKey: Domain.DateKey | undefined;
-  readonly foods: readonly Domain.Food[];
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-};
+import { Actor, createAsyncLogic, setup } from "xstate";
 
 type EditFoodsLayout = "screen" | "embedded";
 
-type EditFoodsRouteLoadResult = {
-  readonly _tag: "Ready";
-  readonly data: EditFoodsRouteData;
+const FoodFormInputFields = {
+  name: Schema.String,
+  brand: Schema.optionalKey(Schema.String),
+  energyKcalPer100g: Schema.String,
+  proteinGramsPer100g: Schema.String,
+  carbsGramsPer100g: Schema.String,
+  fatGramsPer100g: Schema.String,
+  fiberGramsPer100g: Schema.optionalKey(Schema.String),
+  sugarGramsPer100g: Schema.optionalKey(Schema.String),
+  saturatedFatGramsPer100g: Schema.optionalKey(Schema.String),
+  saltGramsPer100g: Schema.optionalKey(Schema.String),
 };
 
-type ReviseFoodOutput =
-  | {
-      readonly _tag: "FoodNotFound";
-      readonly data: FoodLibraryData;
-    }
-  | {
-      readonly _tag: "Revised";
-      readonly data: FoodLibraryData;
-    }
-  | {
-      readonly _tag: "SchemaError";
-    };
+const ReviseFoodInput = Schema.Struct({
+  foodId: Domain.FoodId,
+  ...FoodFormInputFields,
+});
 
-type FoodLibraryData = {
-  readonly foods: readonly Domain.Food[];
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-};
+const MealFoodUsage = Schema.Struct({
+  foodId: Domain.FoodId,
+  latestQuantityGrams: Domain.QuantityGrams,
+  latestUsedAt: Schema.DateTimeUtc,
+  meals: Schema.Array(
+    Schema.Struct({
+      latestUsedAt: Schema.DateTimeUtc,
+      mealId: Domain.MealId,
+    })
+  ),
+});
+
+const FoodLibraryData = Schema.Struct({
+  foods: Schema.Array(Domain.Food),
+  foodUsage: Schema.Array(MealFoodUsage),
+});
+
+type FoodLibraryData = typeof FoodLibraryData.Type;
+
+const EditFoodsRouteData = Schema.Struct({
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
+  foods: Schema.Array(Domain.Food),
+  foodUsage: Schema.Array(MealFoodUsage),
+});
+
+type EditFoodsRouteData = typeof EditFoodsRouteData.Type;
+
+const EditFoodsRouteLoaderInput = Schema.Struct({
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
+});
+
+const EditFoodsRouteLoadResult = Schema.TaggedStruct("Ready", {
+  data: EditFoodsRouteData,
+});
+
+const ReviseFoodOutput = Schema.Union([
+  Schema.TaggedStruct("FoodNotFound", {
+    data: FoodLibraryData,
+  }),
+  Schema.TaggedStruct("Revised", {
+    data: FoodLibraryData,
+  }),
+  Schema.TaggedStruct("SchemaError", {}),
+]);
+
+const FoodSearchActorSchema =
+  Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
+    (value): value is FoodSearchMachine.FoodSearchActorRef =>
+      value instanceof Actor &&
+      value.logic === FoodSearchMachine.foodSearchMachine,
+    { expected: "FoodSearchActor" }
+  );
 
 type FoodNutrientField = {
   readonly accentColor: string;
@@ -141,74 +178,85 @@ const nutrientFields: readonly FoodNutrientField[] = [
 ];
 
 const editFoodsRouteMachine = setup({
-  types: {
-    context: {} as {
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly foods: readonly Domain.Food[];
-      readonly foodSearchActor: ActorRefFrom<
-        typeof FoodSearchMachine.foodSearchMachine
-      >;
-      readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-      readonly notice: string | null;
-      readonly selectedFood: Domain.Food | null;
-    },
-    events: {} as
-      | FoodSearchMachine.FoodSearchSelectedEvent
-      | {
-          readonly input: Foods.ReviseFoodInput;
-          readonly type: "reviseFood";
-        }
-      | {
-          readonly type: "clearNotice";
-        }
-      | {
-          readonly type: "clearSelectedFood";
-        },
-    input: {} as EditFoodsRouteData,
-  },
-  actors: {
-    foodSearch: FoodSearchMachine.foodSearchMachine,
-    reviseFood: fromPromise<
-      ReviseFoodOutput,
-      {
-        readonly input: Foods.ReviseFoodInput;
-      }
-    >(({ input }) =>
-      RuntimeClient.runPromise(
-        Effect.gen(function* () {
-          const foods = yield* Foods.Foods;
-
-          yield* foods.revise({
-            input: input.input,
-          });
-
-          return {
-            _tag: "Revised" as const,
-            data: yield* _loadFoodLibraryData(),
-          };
-        }).pipe(
-          Effect.catchTag("FoodNotFound", () =>
-            _loadFoodLibraryData().pipe(
-              Effect.map((data) => ({
-                _tag: "FoodNotFound" as const,
-                data,
-              }))
-            )
-          ),
-          Effect.catchTag("SchemaError", () =>
-            Effect.succeed({
-              _tag: "SchemaError" as const,
-            })
-          )
-        )
-      )
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        dateKey: Schema.UndefinedOr(Domain.DateKey),
+        foods: Schema.Array(Domain.Food),
+        foodSearchActor: FoodSearchActorSchema,
+        foodUsage: Schema.Array(MealFoodUsage),
+        notice: Schema.NullOr(Schema.String),
+        selectedFood: Schema.NullOr(Domain.Food),
+      })
     ),
+    events: {
+      clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
+      clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
+      foodSearchSelected: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          food: Schema.NullOr(Domain.Food),
+          selection: Schema.Literals(["explicit", "firstMatching"]),
+        })
+      ),
+      reviseFood: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          input: ReviseFoodInput,
+        })
+      ),
+    },
+    input: Schema.toStandardSchemaV1(EditFoodsRouteData),
+  },
+  states: {
+    Idle: {},
+    RevisingFood: {},
+  },
+  actorSources: {
+    foodSearch: FoodSearchMachine.foodSearchMachine,
+    reviseFood: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({
+            input: ReviseFoodInput,
+          })
+        ),
+        output: Schema.toStandardSchemaV1(ReviseFoodOutput),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const foods = yield* Foods.Foods;
+
+            yield* foods.revise({
+              input: input.input,
+            });
+
+            return {
+              _tag: "Revised" as const,
+              data: yield* _loadFoodLibraryData(),
+            };
+          }).pipe(
+            Effect.catchTag("FoodNotFound", () =>
+              _loadFoodLibraryData().pipe(
+                Effect.map((data) => ({
+                  _tag: "FoodNotFound" as const,
+                  data,
+                }))
+              )
+            ),
+            Effect.catchTag("SchemaError", () =>
+              Effect.succeed({
+                _tag: "SchemaError" as const,
+              })
+            )
+          )
+        ),
+    }),
   },
 }).createMachine({
-  context: ({ input, spawn }) => ({
+  context: ({ actorSources, input, spawn }) => ({
     dateKey: input.dateKey,
     foods: input.foods,
-    foodSearchActor: spawn("foodSearch", {
+    foodSearchActor: spawn(actorSources.foodSearch, {
       id: "editFoodsRouteFoodSearch",
       input: {
         foods: input.foods,
@@ -220,27 +268,28 @@ const editFoodsRouteMachine = setup({
   }),
   initial: "Idle",
   on: {
-    clearNotice: {
-      actions: assign({
+    clearNotice: () => ({
+      context: {
         notice: null,
-      }),
-    },
-    clearSelectedFood: {
-      actions: [
-        assign({
+      },
+    }),
+    clearSelectedFood: ({ context }, enq) => {
+      enq.sendTo(context.foodSearchActor, {
+        type: "clearSelectedFood",
+      } satisfies FoodSearchMachine.FoodSearchEvent);
+
+      return {
+        context: {
           selectedFood: null,
-        }),
-        sendTo(({ context }) => context.foodSearchActor, {
-          type: "clearSelectedFood",
-        } satisfies FoodSearchMachine.FoodSearchEvent),
-      ],
+        },
+      };
     },
-    foodSearchSelected: {
-      actions: assign(({ event }) => ({
+    foodSearchSelected: ({ event }) => ({
+      context: {
         notice: null,
         selectedFood: event.food,
-      })),
-    },
+      },
+    }),
   },
   states: {
     Idle: {
@@ -254,89 +303,68 @@ const editFoodsRouteMachine = setup({
       invoke: {
         src: "reviseFood",
         input: ({ event }) => {
-          assertEvent(event, "reviseFood");
+          if (event.type !== "reviseFood") {
+            throw new Error("Expected food revision input.");
+          }
 
           return {
             input: event.input,
           };
         },
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "FoodNotFound",
-            target: "Idle",
-            actions: [
-              assign(({ event }) => {
-                const output = event.output;
-                assertFoodLibraryOutput(output);
+        onDone: ({ context, event }, enq) =>
+          Match.value(event.output).pipe(
+            Match.tagsExhaustive({
+              FoodNotFound: ({ data }) => {
+                enq.sendTo(context.foodSearchActor, {
+                  type: "reset",
+                  foods: data.foods,
+                  query: "",
+                  selectedFoodId: null,
+                } satisfies FoodSearchMachine.FoodSearchEvent);
 
                 return {
-                  foods: output.data.foods,
-                  foodUsage: output.data.foodUsage,
+                  target: "Idle",
+                  context: {
+                    foods: data.foods,
+                    foodUsage: data.foodUsage,
+                    notice:
+                      "Could not find that food. Pick another food and try again.",
+                    selectedFood: null,
+                  },
+                };
+              },
+              Revised: ({ data }) => {
+                enq.sendTo(context.foodSearchActor, {
+                  type: "reset",
+                  foods: data.foods,
+                  query: "",
+                  selectedFoodId: null,
+                } satisfies FoodSearchMachine.FoodSearchEvent);
+
+                return {
+                  target: "Idle",
+                  context: {
+                    foods: data.foods,
+                    foodUsage: data.foodUsage,
+                    notice: "Food saved.",
+                    selectedFood: null,
+                  },
+                };
+              },
+              SchemaError: () => ({
+                target: "Idle",
+                context: {
                   notice:
-                    "Could not find that food. Pick another food and try again.",
-                  selectedFood: null,
-                };
+                    "Check that the name is filled and every nutrient is a non-negative number.",
+                },
               }),
-              sendTo(
-                ({ context }) => context.foodSearchActor,
-                ({ event }) => {
-                  const output = event.output;
-                  assertFoodLibraryOutput(output);
-
-                  return {
-                    type: "reset",
-                    foods: output.data.foods,
-                    query: "",
-                    selectedFoodId: null,
-                  } satisfies FoodSearchMachine.FoodSearchEvent;
-                }
-              ),
-            ],
-          },
-          {
-            guard: ({ event }) => event.output._tag === "SchemaError",
-            target: "Idle",
-            actions: assign({
-              notice:
-                "Check that the name is filled and every nutrient is a non-negative number.",
-            }),
-          },
-          {
-            target: "Idle",
-            actions: [
-              assign(({ event }) => {
-                const output = event.output;
-                assertFoodLibraryOutput(output);
-
-                return {
-                  foods: output.data.foods,
-                  foodUsage: output.data.foodUsage,
-                  notice: "Food saved.",
-                  selectedFood: null,
-                };
-              }),
-              sendTo(
-                ({ context }) => context.foodSearchActor,
-                ({ event }) => {
-                  const output = event.output;
-                  assertFoodLibraryOutput(output);
-
-                  return {
-                    type: "reset",
-                    foods: output.data.foods,
-                    query: "",
-                    selectedFoodId: null,
-                  } satisfies FoodSearchMachine.FoodSearchEvent;
-                }
-              ),
-            ],
-          },
-        ],
+            })
+          ),
         onError: {
           target: "Idle",
-          actions: assign({
+          context: {
             notice: "Could not update the food. Try again.",
-          }),
+          },
         },
       },
     },
@@ -344,30 +372,50 @@ const editFoodsRouteMachine = setup({
 });
 
 const EditFoodsSearchParams = Schema.Struct({
-  dateKey: Schema.optional(Domain.DateKey),
+  dateKey: Schema.optionalKey(Domain.DateKey),
 });
 
 const editFoodsRouteLoaderMachine = setup({
-  types: {
-    context: {} as {
-      readonly data: EditFoodsRouteData | null;
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly message: string | null;
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        data: Schema.NullOr(EditFoodsRouteData),
+        dateKey: Schema.UndefinedOr(Domain.DateKey),
+        message: Schema.NullOr(Schema.String),
+      })
+    ),
+    events: {
+      retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
-    events: {} as {
-      readonly type: "retry";
-    },
-    input: {} as {
-      readonly dateKey: Domain.DateKey | undefined;
-    },
+    input: Schema.toStandardSchemaV1(EditFoodsRouteLoaderInput),
   },
-  actors: {
-    loadRouteData: fromPromise<
-      EditFoodsRouteLoadResult,
-      {
-        readonly dateKey: Domain.DateKey | undefined;
-      }
-    >(({ input }) => RuntimeClient.runPromise(loadEditFoodsRouteData(input))),
+  states: {
+    Loading: {},
+    Failed: {},
+    Ready: {},
+    Redirected: {},
+  },
+  actorSources: {
+    loadRouteData: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(EditFoodsRouteLoaderInput),
+        output: Schema.toStandardSchemaV1(EditFoodsRouteLoadResult),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const data = yield* _loadFoodLibraryData();
+
+            return {
+              _tag: "Ready" as const,
+              data: {
+                dateKey: input.dateKey,
+                ...data,
+              },
+            };
+          })
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -383,20 +431,17 @@ const editFoodsRouteLoaderMachine = setup({
         input: ({ context }) => ({
           dateKey: context.dateKey,
         }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output._tag === "Ready",
-            target: "Ready",
-            actions: assign(({ event }) => ({
-              data: getEditFoodsRouteData({ result: event.output }),
-            })),
+        onDone: ({ event }) => ({
+          target: "Ready",
+          context: {
+            data: event.output.data,
           },
-        ],
+        }),
         onError: {
           target: "Failed",
-          actions: assign({
+          context: {
             message: "Could not load foods. Please try again.",
-          }),
+          },
         },
       },
     },
@@ -404,9 +449,9 @@ const editFoodsRouteLoaderMachine = setup({
       on: {
         retry: {
           target: "Loading",
-          actions: assign({
+          context: {
             message: null,
-          }),
+          },
         },
       },
     },
@@ -434,13 +479,13 @@ export function EditFoodsPanelLoader({
   readonly dateKey: Domain.DateKey | undefined;
   readonly layout: EditFoodsLayout;
 }) {
-  const [snapshot, send] = useMachine(editFoodsRouteLoaderMachine, {
+  const [snapshot, , actor] = useMachine(editFoodsRouteLoaderMachine, {
     input: {
       dateKey,
     },
   });
 
-  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
+  if (snapshot.value === "Loading" || snapshot.value === "Redirected") {
     const loading = (
       <View style={styles.centered}>
         <LoadingView message="Loading foods" />
@@ -456,7 +501,7 @@ export function EditFoodsPanelLoader({
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  if (snapshot.value === "Failed") {
     const failure = (
       <View style={styles.centered}>
         <Notice
@@ -470,9 +515,7 @@ export function EditFoodsPanelLoader({
         <Button
           icon={RotateCcw}
           onPress={() => {
-            send({
-              type: "retry",
-            });
+            actor.trigger.retry();
           }}
           variant="secondary"
         >
@@ -521,7 +564,7 @@ function ReadyEditFoodsRoute({
   });
   const { dateKey, foodSearchActor, foodUsage, notice, selectedFood } =
     snapshot.context;
-  const disabled = snapshot.matches("RevisingFood");
+  const disabled = snapshot.value === "RevisingFood";
   const selectedFoodUsage =
     selectedFood === null
       ? undefined
@@ -595,9 +638,10 @@ function ReadyEditFoodsRoute({
         </View>
       ) : (
         <FoodEditForm
-          actor={actor}
           disabled={disabled}
           layout={layout}
+          onChangeFood={actor.trigger.clearSelectedFood}
+          onReviseFood={actor.trigger.reviseFood}
           revisionMessage={revisionMessage}
           selectedFood={selectedFood}
           submitLabel={submitLabel}
@@ -621,16 +665,20 @@ function ReadyEditFoodsRoute({
 }
 
 function FoodEditForm({
-  actor,
   disabled,
   layout,
+  onChangeFood,
+  onReviseFood,
   revisionMessage,
   selectedFood,
   submitLabel,
 }: {
-  readonly actor: ActorRefFrom<typeof editFoodsRouteMachine>;
   readonly disabled: boolean;
   readonly layout: EditFoodsLayout;
+  readonly onChangeFood: () => void;
+  readonly onReviseFood: (params: {
+    readonly input: typeof ReviseFoodInput.Type;
+  }) => void;
   readonly revisionMessage: string;
   readonly selectedFood: Domain.Food;
   readonly submitLabel: string;
@@ -647,9 +695,7 @@ function FoodEditForm({
       disabled={disabled}
       icon={Pencil}
       onPress={() => {
-        actor.send({
-          type: "clearSelectedFood",
-        });
+        onChangeFood();
       }}
       style={styles.footerButton}
       variant="secondary"
@@ -663,8 +709,7 @@ function FoodEditForm({
       icon={Save}
       loading={disabled}
       onPress={() => {
-        actor.send({
-          type: "reviseFood",
+        onReviseFood({
           input: {
             ...FoodFormMachine.createFoodInputFromFormValues({ formValues }),
             foodId: selectedFood.id,
@@ -746,8 +791,8 @@ function FoodFormFields({
             label="Name"
             onChangeText={(value) => {
               actor.send({
-                name: "name",
                 type: "changeFormValue",
+                name: "name",
                 value,
               });
             }}
@@ -762,8 +807,8 @@ function FoodFormFields({
             label="Brand"
             onChangeText={(value) => {
               actor.send({
-                name: "brand",
                 type: "changeFormValue",
+                name: "brand",
                 value,
               });
             }}
@@ -837,8 +882,8 @@ function FoodNutrientInput({
         error={fieldWarning?.message}
         onChangeText={(nextValue) => {
           actor.send({
-            name: field.name,
             type: "changeFormValue",
+            name: field.name,
             value: nextValue,
           });
         }}
@@ -859,7 +904,7 @@ function FoodNumberWarnings({
     (warning) => warning.field === undefined
   );
 
-  if (!EffectArray.isReadonlyArrayNonEmpty(generalWarnings)) {
+  if (!Array.isReadonlyArrayNonEmpty(generalWarnings)) {
     return null;
   }
 
@@ -888,41 +933,20 @@ function BackButton({
       }
       icon={ChevronLeft}
       onPress={() => {
-        router.replace(backHrefForDateKey({ dateKey }));
+        router.replace(
+          dateKey === undefined
+            ? "/"
+            : {
+                pathname: "/days/[dateKey]",
+                params: {
+                  dateKey,
+                },
+              }
+        );
       }}
       variant="ghost"
     />
   );
-}
-
-export function getEditFoodsRouteData({
-  result,
-}: {
-  readonly result: EditFoodsRouteLoadResult;
-}): EditFoodsRouteData {
-  if (result._tag !== "Ready") {
-    throw new Error("Expected edit foods route data.");
-  }
-
-  return result.data;
-}
-
-export function loadEditFoodsRouteData({
-  dateKey,
-}: {
-  readonly dateKey: Domain.DateKey | undefined;
-}) {
-  return Effect.gen(function* () {
-    const data = yield* _loadFoodLibraryData();
-
-    return {
-      _tag: "Ready" as const,
-      data: {
-        dateKey,
-        ...data,
-      },
-    };
-  });
 }
 
 function _loadFoodLibraryData() {
@@ -941,17 +965,6 @@ function _loadFoodLibraryData() {
   });
 }
 
-export function assertFoodLibraryOutput(
-  output: ReviseFoodOutput
-): asserts output is Extract<
-  ReviseFoodOutput,
-  { readonly _tag: "FoodNotFound" | "Revised" }
-> {
-  if (output._tag === "SchemaError") {
-    throw new Error("Expected food library output.");
-  }
-}
-
 function _findFoodUsage({
   foodId,
   foodUsage,
@@ -966,21 +979,6 @@ function _optionalTrimmedText(value: string) {
   const trimmedValue = value.trim();
 
   return trimmedValue === "" ? undefined : trimmedValue;
-}
-
-export function backHrefForDateKey({
-  dateKey,
-}: {
-  readonly dateKey: Domain.DateKey | undefined;
-}): Href {
-  return dateKey === undefined
-    ? "/"
-    : {
-        pathname: "/days/[dateKey]",
-        params: {
-          dateKey,
-        },
-      };
 }
 
 const styles = StyleSheet.create({

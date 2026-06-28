@@ -1,18 +1,10 @@
-import { formatNumber } from "@/lib/format";
+import {
+  formatFoodNutrientNumber,
+  type FoodNutrientOverviewNutrients,
+} from "@/lib/format";
 import { color, spacing, tokens } from "@/theme/tokens";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-
-export type FoodNutrientOverviewNutrients = {
-  readonly carbsGrams?: number | undefined;
-  readonly energyKcal?: number | undefined;
-  readonly fatGrams?: number | undefined;
-  readonly fiberGrams?: number | undefined;
-  readonly proteinGrams?: number | undefined;
-  readonly saltGrams?: number | undefined;
-  readonly saturatedFatGrams?: number | undefined;
-  readonly sugarGrams?: number | undefined;
-};
 
 type FoodNutrientOverviewNutrientName =
   | "carbsGrams"
@@ -222,43 +214,6 @@ function NutrientRow({
       </Text>
     </View>
   );
-}
-
-export function foodQuickInputNutrients({
-  food,
-}: {
-  readonly food: {
-    readonly carbsGramsPer100g?: number | undefined;
-    readonly energyKcalPer100g?: number | undefined;
-    readonly fatGramsPer100g?: number | undefined;
-    readonly fiberGramsPer100g?: number | undefined;
-    readonly proteinGramsPer100g?: number | undefined;
-    readonly saltGramsPer100g?: number | undefined;
-    readonly saturatedFatGramsPer100g?: number | undefined;
-    readonly sugarGramsPer100g?: number | undefined;
-  };
-}): FoodNutrientOverviewNutrients {
-  return {
-    carbsGrams: food.carbsGramsPer100g,
-    energyKcal: food.energyKcalPer100g,
-    fatGrams: food.fatGramsPer100g,
-    fiberGrams: food.fiberGramsPer100g,
-    proteinGrams: food.proteinGramsPer100g,
-    saltGrams: food.saltGramsPer100g,
-    saturatedFatGrams: food.saturatedFatGramsPer100g,
-    sugarGrams: food.sugarGramsPer100g,
-  };
-}
-
-export function formatFoodNutrientNumber({
-  value,
-}: {
-  readonly value: number;
-}) {
-  return formatNumber({
-    maximumFractionDigits: 2,
-    value,
-  });
 }
 
 const styles = StyleSheet.create({
