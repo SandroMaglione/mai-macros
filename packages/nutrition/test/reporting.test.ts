@@ -226,4 +226,48 @@ describe("nutrition reporting", () => {
     assert.equal(result.coverage.sugarGrams, 1);
     assert.equal(result.coverage.saltGrams, 1);
   });
+
+  it("aggregates entry weight and density ratios", async () => {
+    const program = Effect.gen(function* () {
+      const firstQuantity = yield* Schema.decodeEffect(Domain.QuantityGrams)(
+        100
+      );
+      const secondQuantity = yield* Schema.decodeEffect(Domain.QuantityGrams)(
+        250
+      );
+
+      return Reporting.calculateEntriesWeightTotals({
+        entries: [
+          { quantityGrams: firstQuantity },
+          { quantityGrams: secondQuantity },
+        ],
+      });
+    });
+
+    const result = await Effect.runPromise(program);
+
+    assert.equal(result.entriesCount, 2);
+    assert.equal(result.quantityGrams, 350);
+    assert.equal(
+      Reporting.calculateCaloriesPerGram({
+        energyKcal: 700,
+        quantityGrams: result.quantityGrams,
+      }),
+      2
+    );
+    assert.equal(
+      Reporting.calculateGramsPerCalorie({
+        energyKcal: 700,
+        quantityGrams: result.quantityGrams,
+      }),
+      0.5
+    );
+    assert.equal(
+      Reporting.calculateGramsPerCalorie({
+        energyKcal: 0,
+        quantityGrams: result.quantityGrams,
+      }),
+      null
+    );
+  });
 });

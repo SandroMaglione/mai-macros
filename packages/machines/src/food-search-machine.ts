@@ -28,6 +28,8 @@ export type FoodSearchSelectedEvent = {
 
 export type FoodSearchMacroOrder =
   | "carbs"
+  | "calorieDensityHigh"
+  | "calorieDensityLow"
   | "energy"
   | "fat"
   | "fiber"
@@ -38,6 +40,8 @@ export type FoodSearchMacroOrder =
 
 const FoodSearchMacroOrderSchema = Schema.Literals([
   "carbs",
+  "calorieDensityHigh",
+  "calorieDensityLow",
   "energy",
   "fat",
   "fiber",
@@ -106,6 +110,8 @@ const foodOriginThenNameOrder = Order.combineAll([
 ]);
 const foodMacroOrderValueKey = {
   carbs: "carbsGramsPer100g",
+  calorieDensityHigh: "energyKcalPer100g",
+  calorieDensityLow: "energyKcalPer100g",
   energy: "energyKcalPer100g",
   fat: "fatGramsPer100g",
   fiber: "fiberGramsPer100g",
@@ -124,6 +130,19 @@ const foodMacroOrderValueKey = {
   | "saturatedFatGramsPer100g"
   | "sugarGramsPer100g"
 >;
+
+const foodMacroOrderValueDirection = {
+  carbs: "descending",
+  calorieDensityHigh: "descending",
+  calorieDensityLow: "ascending",
+  energy: "descending",
+  fat: "descending",
+  fiber: "descending",
+  protein: "descending",
+  salt: "descending",
+  saturatedFat: "descending",
+  sugar: "descending",
+} satisfies Record<FoodSearchMacroOrder, "ascending" | "descending">;
 
 export function getFoodCategoryLabel({
   category,
@@ -181,13 +200,19 @@ export function sortFoodsByMacroOrder({
   readonly foods: readonly Domain.Food[];
   readonly macroOrder: FoodSearchMacroOrder | null;
 }) {
+  const valueOrder =
+    macroOrder !== null &&
+    foodMacroOrderValueDirection[macroOrder] === "ascending"
+      ? Order.Number
+      : Order.flip(Order.Number);
+
   return macroOrder === null
     ? foods
     : Array.sort(
         foods,
         Order.combineAll([
           foodUserOriginOrder,
-          Order.mapInput(Order.flip(Order.Number), (food: Domain.Food) => {
+          Order.mapInput(valueOrder, (food: Domain.Food) => {
             const valueKey = foodMacroOrderValueKey[macroOrder];
 
             return food[valueKey] ?? 0;

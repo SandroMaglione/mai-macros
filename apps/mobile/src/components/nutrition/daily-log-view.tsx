@@ -1155,6 +1155,9 @@ function MealSection({
     foods,
     mealEntries,
   }).totals;
+  const weightTotals = Reporting.calculateMealEntriesWeightTotals({
+    mealEntries,
+  });
 
   return (
     <View style={styles.mealCard}>
@@ -1215,6 +1218,10 @@ function MealSection({
 
       <MealTotalColumns nutrients={nutrients} />
       <MealNutrientColumns nutrients={nutrients} />
+      <MealCalorieWeightRatio
+        energyKcal={nutrients.energyKcal}
+        quantityGrams={weightTotals.quantityGrams}
+      />
 
       <Pressable
         accessibilityRole="button"
@@ -1237,6 +1244,42 @@ function MealSection({
         />
         <Text style={styles.addFoodText}>Add food</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function MealCalorieWeightRatio({
+  energyKcal,
+  quantityGrams,
+}: {
+  readonly energyKcal: number;
+  readonly quantityGrams: number;
+}) {
+  const gramsPerCalorie = Reporting.calculateGramsPerCalorie({
+    energyKcal,
+    quantityGrams,
+  });
+  const ratioLabel =
+    gramsPerCalorie === null
+      ? "- g/kcal"
+      : `${formatNumber({
+          maximumFractionDigits: gramsPerCalorie < 1 ? 2 : 1,
+          value: gramsPerCalorie,
+        })} g/kcal`;
+  const weightLabel = `${_formatMacroValue({ value: quantityGrams })}g`;
+
+  return (
+    <View style={styles.mealWeightRatioColumns}>
+      <MealNutrientColumn
+        colorValue={color.secondaryMetric}
+        label="Total volume"
+        value={weightLabel}
+      />
+      <MealNutrientColumn
+        colorValue={color.secondaryMetric}
+        label="Weight / calorie"
+        value={ratioLabel}
+      />
     </View>
   );
 }
@@ -1943,6 +1986,12 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.size.xs,
     fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
+  },
+  mealWeightRatioColumns: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+    backgroundColor: "#18181b",
   },
   addFoodButton: {
     minHeight: 60,

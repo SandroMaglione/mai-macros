@@ -54,6 +54,11 @@ export type EntriesNutrientTotals = {
   readonly totals: NutrientTotals;
 };
 
+export type EntriesWeightTotals = {
+  readonly entriesCount: number;
+  readonly quantityGrams: number;
+};
+
 export const NutrientTargetSemanticsByName = {
   carbsGrams: "range",
   energyKcal: "range",
@@ -215,6 +220,53 @@ export const calculateMealEntriesNutrientTotals = ({
           ];
     }),
   });
+
+export const calculateEntriesWeightTotals = ({
+  entries,
+}: {
+  readonly entries: readonly {
+    readonly quantityGrams: QuantityGrams;
+  }[];
+}): EntriesWeightTotals =>
+  entries.reduce<EntriesWeightTotals>(
+    (totals, entry) => ({
+      entriesCount: totals.entriesCount + 1,
+      quantityGrams: totals.quantityGrams + entry.quantityGrams,
+    }),
+    {
+      entriesCount: 0,
+      quantityGrams: 0,
+    }
+  );
+
+export const calculateMealEntriesWeightTotals = ({
+  mealEntries,
+}: {
+  readonly mealEntries: readonly MealEntry[];
+}): EntriesWeightTotals =>
+  calculateEntriesWeightTotals({
+    entries: mealEntries.map((mealEntry) => ({
+      quantityGrams: mealEntry.quantityGrams,
+    })),
+  });
+
+export const calculateCaloriesPerGram = ({
+  energyKcal,
+  quantityGrams,
+}: {
+  readonly energyKcal: number;
+  readonly quantityGrams: number;
+}): number | null =>
+  quantityGrams <= 0 || energyKcal <= 0 ? null : energyKcal / quantityGrams;
+
+export const calculateGramsPerCalorie = ({
+  energyKcal,
+  quantityGrams,
+}: {
+  readonly energyKcal: number;
+  readonly quantityGrams: number;
+}): number | null =>
+  quantityGrams <= 0 || energyKcal <= 0 ? null : quantityGrams / energyKcal;
 
 export const makeNutrientTarget = ({
   amount,

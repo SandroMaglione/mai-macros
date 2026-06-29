@@ -97,6 +97,20 @@ const foodSearchMacroOrderOptions = [
     macroOrder: "energy",
   },
   {
+    accessibilityLabel: "Order foods by highest calories per gram",
+    color: color.nutritionEnergy,
+    key: "calorie-density-high",
+    label: "Highest kcal/g",
+    macroOrder: "calorieDensityHigh",
+  },
+  {
+    accessibilityLabel: "Order foods by lowest calories per gram",
+    color: color.textMuted,
+    key: "calorie-density-low",
+    label: "Lowest kcal/g",
+    macroOrder: "calorieDensityLow",
+  },
+  {
     accessibilityLabel: "Order foods by fat",
     color: color.nutritionFat,
     key: "fat",

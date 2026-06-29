@@ -26,6 +26,7 @@ import {
 type FoodContributor = {
   readonly foodId: string;
   readonly name: string;
+  readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
 };
 
@@ -132,6 +133,10 @@ export function RangeSummary({
 }) {
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
+  const totalQuantityGrams = entries.reduce(
+    (total, entry) => total + entry.mealEntry.quantityGrams,
+    0
+  );
   const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
       Reporting.addNutrientTotals({
@@ -147,6 +152,19 @@ export function RangeSummary({
           divisor: dayCount,
           totals,
         });
+  const averageQuantityGrams =
+    dayCount === 0 ? 0 : totalQuantityGrams / dayCount;
+  const averageGramsPerCalorie = Reporting.calculateGramsPerCalorie({
+    energyKcal: averageTotals.energyKcal,
+    quantityGrams: averageQuantityGrams,
+  });
+  const averageGramsPerCalorieLabel =
+    averageGramsPerCalorie === null
+      ? "- g/kcal"
+      : `${formatNumber({
+          maximumFractionDigits: averageGramsPerCalorie < 1 ? 2 : 1,
+          value: averageGramsPerCalorie,
+        })} g/kcal`;
   const averageTargetTotals = trackedNutrients.reduce<
     Record<Reporting.NutrientName, number | null>
   >(
@@ -187,6 +205,7 @@ export function RangeSummary({
         ({
           foodId: entry.food.id,
           name: entry.food.name,
+          quantityGrams: 0,
           totals: Reporting.emptyNutrientTotals(),
         } satisfies FoodContributor);
 
@@ -194,6 +213,7 @@ export function RangeSummary({
         ...contributors,
         [entry.food.id]: {
           ...current,
+          quantityGrams: current.quantityGrams + entry.mealEntry.quantityGrams,
           totals: Reporting.addNutrientTotals({
             left: current.totals,
             right: {
@@ -238,6 +258,14 @@ export function RangeSummary({
               target={averageTargetTotals[nutrientName]}
             />
           ))}
+          <SecondaryMetricBalanceCard
+            label="Food weight"
+            value={_formatWeight({ value: averageQuantityGrams })}
+          />
+          <SecondaryMetricBalanceCard
+            label="Weight / calorie"
+            value={averageGramsPerCalorieLabel}
+          />
         </View>
       </View>
 
@@ -264,6 +292,12 @@ export function RangeSummary({
               />
             );
           })}
+          <FoodWeightContributorGroup
+            foods={foodContributors
+              .filter((food) => food.quantityGrams > 0)
+              .sort((left, right) => right.quantityGrams - left.quantityGrams)
+              .slice(0, 3)}
+          />
         </View>
       </View>
     </View>
@@ -302,7 +336,11 @@ function SummaryInsights({
                   <Text
                     key={`${insight.id}-${index}`}
                     style={
-                      part.tone === "food" ? styles.insightFoodText : undefined
+                      part.tone === "food"
+                        ? styles.insightFoodText
+                        : part.tone === "meal"
+                          ? styles.insightMealText
+                          : undefined
                     }
                   >
                     {part.text}
@@ -392,6 +430,35 @@ function NutrientBalanceCard({
   );
 }
 
+function SecondaryMetricBalanceCard({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <View style={styles.nutrientCard}>
+      <Text
+        numberOfLines={1}
+        style={[styles.nutrientCardTitle, { color: color.secondaryMetric }]}
+      >
+        {label}
+      </Text>
+      <Text
+        adjustsFontSizeToFit
+        numberOfLines={1}
+        style={[styles.nutrientValue, { color: color.secondaryMetric }]}
+      >
+        {value}
+      </Text>
+      <Text numberOfLines={1} style={styles.nutrientDelta}>
+        No target
+      </Text>
+    </View>
+  );
+}
+
 function TargetTrendIcon({
   status,
 }: {
@@ -410,6 +477,42 @@ function TargetTrendIcon({
       style={styles.targetTrendIcon}
     >
       <Icon color={indicator.color} size={17} strokeWidth={3} />
+    </View>
+  );
+}
+
+function FoodWeightContributorGroup({
+  foods,
+}: {
+  readonly foods: readonly FoodContributor[];
+}) {
+  return (
+    <View style={styles.foodGroup}>
+      <Text style={[styles.foodGroupTitle, { color: color.secondaryMetric }]}>
+        Food weight
+      </Text>
+      {!Array.isReadonlyArrayNonEmpty(foods) ? (
+        <Text style={styles.emptyText}>No tracked foods.</Text>
+      ) : (
+        <View style={styles.foodRows}>
+          {foods.map((food, index) => (
+            <Fragment key={`food-weight-${food.foodId}`}>
+              {index === 0 ? null : <View style={styles.divider} />}
+              <View style={styles.foodRow}>
+                <Text numberOfLines={1} style={styles.foodName}>
+                  {food.name}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.foodAmount, { color: color.secondaryMetric }]}
+                >
+                  {_formatWeight({ value: food.quantityGrams })}
+                </Text>
+              </View>
+            </Fragment>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -467,6 +570,13 @@ function SectionTitle({
       <Text style={styles.sectionSubtitle}>{subtitle}</Text>
     </View>
   );
+}
+
+function _formatWeight({ value }: { readonly value: number }) {
+  return `${formatNumber({
+    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+    value,
+  })}g`;
 }
 
 function _formatNutrient({
@@ -532,6 +642,10 @@ const styles = StyleSheet.create({
   },
   insightFoodText: {
     color: color.warningText,
+    fontWeight: tokens.type.weight.black,
+  },
+  insightMealText: {
+    color: color.nutritionProtein,
     fontWeight: tokens.type.weight.black,
   },
   summaryToggle: {

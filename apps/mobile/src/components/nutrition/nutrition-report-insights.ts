@@ -3,13 +3,14 @@ import { NutritionReports, Reporting, type Domain } from "@mai/nutrition";
 export type NutritionReportInsightKind =
   | "diet-concentration"
   | "food-contribution"
+  | "food-volume"
   | "meal-imbalance"
   | "nutrient-concentration"
   | "repeated-food";
 
 export type NutritionReportInsightPart = {
   readonly text: string;
-  readonly tone: "food" | "text";
+  readonly tone: "food" | "meal" | "text";
 };
 
 export type NutritionReportInsight = {
@@ -24,12 +25,14 @@ type FoodInsightContributor = {
   readonly foodId: Domain.Food["id"];
   readonly mealsByName: Record<string, Record<string, true>>;
   readonly name: string;
+  readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
 };
 
 type MealInsightContributor = {
   readonly mealId: Domain.MealId;
   readonly mealLabel: string;
+  readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
 };
 
@@ -71,6 +74,15 @@ export function getNutritionReportInsights({
       }),
     Reporting.emptyNutrientTotals()
   );
+  const totalQuantityGrams = report.days.reduce(
+    (rangeTotal, day) =>
+      rangeTotal +
+      day.entries.reduce(
+        (dayTotal, entry) => dayTotal + entry.mealEntry.quantityGrams,
+        0
+      ),
+    0
+  );
   const getEntryTotals = ({
     entry,
   }: {
@@ -111,6 +123,7 @@ export function getNutritionReportInsights({
                 foodId: entry.food.id,
                 mealsByName: {},
                 name: entry.food.name,
+                quantityGrams: 0,
                 totals: Reporting.emptyNutrientTotals(),
               } satisfies FoodInsightContributor);
 
@@ -129,6 +142,8 @@ export function getNutritionReportInsights({
                     [day.dateKey]: true,
                   },
                 },
+                quantityGrams:
+                  current.quantityGrams + entry.mealEntry.quantityGrams,
                 totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: getEntryTotals({ entry }),
@@ -152,6 +167,7 @@ export function getNutritionReportInsights({
               ({
                 mealId,
                 mealLabel: mealLabel({ mealId }),
+                quantityGrams: 0,
                 totals: Reporting.emptyNutrientTotals(),
               } satisfies MealInsightContributor);
 
@@ -159,6 +175,8 @@ export function getNutritionReportInsights({
               ...nextContributors,
               [mealId]: {
                 ...current,
+                quantityGrams:
+                  current.quantityGrams + entry.mealEntry.quantityGrams,
                 totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: getEntryTotals({ entry }),
@@ -171,8 +189,29 @@ export function getNutritionReportInsights({
       {}
     )
   );
+  const dayVolumeContributors = report.days.map(
+    (
+      day
+    ): {
+      readonly dateKey: Domain.DateKey;
+      readonly energyKcal: number;
+      readonly quantityGrams: number;
+    } => ({
+      dateKey: day.dateKey,
+      energyKcal: day.totals.energyKcal,
+      quantityGrams: day.entries.reduce(
+        (total, entry) => total + entry.mealEntry.quantityGrams,
+        0
+      ),
+    })
+  );
   const formatPercent = ({ share }: { readonly share: number }) =>
     `${Math.round(share * 100)}%`;
+  const formatWeight = ({
+    quantityGrams,
+  }: {
+    readonly quantityGrams: number;
+  }) => `${Math.round(quantityGrams)}g`;
   const sortedByScore = ({
     insights,
   }: {
@@ -282,10 +321,13 @@ export function getNutritionReportInsights({
               kind: "repeated-food",
               parts: [
                 { text: food.name, tone: "food" },
+                { text: " appeared at ", tone: "text" },
                 {
-                  text: ` appeared at ${mealLabel({
-                    mealId,
-                  }).toLocaleLowerCase()} on ${mealDayFrequency} of ${dayCount} days.`,
+                  text: mealLabel({ mealId }).toLocaleLowerCase(),
+                  tone: "meal",
+                },
+                {
+                  text: ` on ${mealDayFrequency} of ${dayCount} days.`,
                   tone: "text",
                 },
               ],
@@ -315,6 +357,152 @@ export function getNutritionReportInsights({
         } satisfies NutritionReportInsight,
       ];
     }),
+  });
+  const foodVolumeInsights = sortedByScore({
+    insights: [
+      ...(() => {
+        const topFood = foodContributors
+          .filter((food) => food.quantityGrams > 0)
+          .sort((left, right) => right.quantityGrams - left.quantityGrams)[0];
+
+        if (totalQuantityGrams <= 0 || topFood === undefined) {
+          return [];
+        }
+
+        const share = topFood.quantityGrams / totalQuantityGrams;
+
+        if (share < 0.25) {
+          return [];
+        }
+
+        return [
+          {
+            id: `food-volume-${topFood.foodId}`,
+            kind: "food-volume",
+            parts: [
+              { text: topFood.name, tone: "food" },
+              {
+                text: ` made up ${formatPercent({
+                  share,
+                })} of your food weight.`,
+                tone: "text",
+              },
+            ],
+            score: share,
+          } satisfies NutritionReportInsight,
+        ];
+      })(),
+      ...dayVolumeContributors.flatMap((day, dayIndex) =>
+        dayVolumeContributors.slice(dayIndex + 1).flatMap((otherDay) => {
+          const higherEnergyKcal = Math.max(
+            day.energyKcal,
+            otherDay.energyKcal
+          );
+          const calorieDeltaShare =
+            higherEnergyKcal <= 0
+              ? 1
+              : Math.abs(day.energyKcal - otherDay.energyKcal) /
+                higherEnergyKcal;
+          const higherVolumeDay =
+            day.quantityGrams >= otherDay.quantityGrams ? day : otherDay;
+          const lowerVolumeDay =
+            day.quantityGrams >= otherDay.quantityGrams ? otherDay : day;
+
+          if (calorieDeltaShare > 0.15 || lowerVolumeDay.quantityGrams <= 0) {
+            return [];
+          }
+
+          const volumeRatio =
+            higherVolumeDay.quantityGrams / lowerVolumeDay.quantityGrams;
+
+          if (volumeRatio < 1.35) {
+            return [];
+          }
+
+          return [
+            {
+              id: `food-volume-day-${higherVolumeDay.dateKey}-${lowerVolumeDay.dateKey}`,
+              kind: "food-volume",
+              parts: [
+                {
+                  text: `${higherVolumeDay.dateKey} had ${formatPercent({
+                    share: volumeRatio - 1,
+                  })} more food weight than ${lowerVolumeDay.dateKey} at similar calories.`,
+                  tone: "text",
+                },
+              ],
+              score: (volumeRatio - 1) * (1 - calorieDeltaShare),
+            } satisfies NutritionReportInsight,
+          ];
+        })
+      ),
+      ...mealContributors.flatMap((meal) => {
+        const otherMeals = mealContributors.filter(
+          (otherMeal) => otherMeal.mealId !== meal.mealId
+        );
+        const otherTotals = otherMeals.reduce<{
+          readonly energyKcal: number;
+          readonly quantityGrams: number;
+        }>(
+          (totals, otherMeal) => ({
+            energyKcal: totals.energyKcal + otherMeal.totals.energyKcal,
+            quantityGrams: totals.quantityGrams + otherMeal.quantityGrams,
+          }),
+          {
+            energyKcal: 0,
+            quantityGrams: 0,
+          }
+        );
+        const mealGramsPerCalorie = Reporting.calculateGramsPerCalorie({
+          energyKcal: meal.totals.energyKcal,
+          quantityGrams: meal.quantityGrams,
+        });
+        const otherGramsPerCalorie = Reporting.calculateGramsPerCalorie({
+          energyKcal: otherTotals.energyKcal,
+          quantityGrams: otherTotals.quantityGrams,
+        });
+        const calorieShare =
+          totals.energyKcal <= 0
+            ? 0
+            : meal.totals.energyKcal / totals.energyKcal;
+
+        if (
+          calorieShare < 0.1 ||
+          mealGramsPerCalorie === null ||
+          otherGramsPerCalorie === null
+        ) {
+          return [];
+        }
+
+        const highVolume = mealGramsPerCalorie >= otherGramsPerCalorie * 1.35;
+        const lowVolume = mealGramsPerCalorie <= otherGramsPerCalorie * 0.65;
+
+        if (!highVolume && !lowVolume) {
+          return [];
+        }
+
+        return [
+          {
+            id: `food-volume-meal-${meal.mealId}`,
+            kind: "food-volume",
+            parts: [
+              { text: meal.mealLabel, tone: "meal" },
+              {
+                text: ` was ${
+                  highVolume ? "higher" : "lower"
+                }-volume per calorie than your other meals (${formatWeight({
+                  quantityGrams: meal.quantityGrams,
+                })}).`,
+                tone: "text",
+              },
+            ],
+            score: highVolume
+              ? mealGramsPerCalorie / otherGramsPerCalorie - 1
+              : otherGramsPerCalorie / mealGramsPerCalorie - 1,
+          } satisfies NutritionReportInsight,
+        ];
+      }),
+    ],
   });
   const dietConcentrationInsights = sortedByScore({
     insights: (() => {
@@ -374,8 +562,9 @@ export function getNutritionReportInsights({
             id: `meal-calories-${meal.mealId}`,
             kind: "meal-imbalance",
             parts: [
+              { text: meal.mealLabel, tone: "meal" },
               {
-                text: `${meal.mealLabel} made up ${formatPercent({
+                text: ` made up ${formatPercent({
                   share,
                 })} of your weekly calories.`,
                 tone: "text",
@@ -423,8 +612,9 @@ export function getNutritionReportInsights({
             id: `meal-protein-density-${meal.mealId}`,
             kind: "meal-imbalance",
             parts: [
+              { text: meal.mealLabel, tone: "meal" },
               {
-                text: `${meal.mealLabel} had much less protein per calorie than your other meals.`,
+                text: " had much less protein per calorie than your other meals.",
                 tone: "text",
               },
             ],
@@ -439,6 +629,7 @@ export function getNutritionReportInsights({
     ...foodContributionInsights.slice(0, 2),
     ...nutrientConcentrationInsights.slice(0, 1),
     ...repeatedFoodInsights.slice(0, 1),
+    ...foodVolumeInsights.slice(0, 1),
     ...dietConcentrationInsights.slice(0, 1),
     ...mealImbalanceInsights.slice(0, 1),
   ].slice(0, limit);
@@ -446,6 +637,7 @@ export function getNutritionReportInsights({
     ...foodContributionInsights,
     ...nutrientConcentrationInsights,
     ...repeatedFoodInsights,
+    ...foodVolumeInsights,
     ...dietConcentrationInsights,
     ...mealImbalanceInsights,
   ];

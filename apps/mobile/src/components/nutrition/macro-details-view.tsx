@@ -79,7 +79,12 @@ const MacroDetailsRouteContext = Schema.Struct({
   message: Schema.NullOr(Schema.String),
 });
 
-const NutrientName = Schema.Literals(Reporting.NutrientNames);
+const FoodWeightMetricName = "foodWeightGrams";
+const detailMetricNames = [
+  ...Reporting.NutrientNames,
+  FoodWeightMetricName,
+] as const;
+const DetailMetricName = Schema.Literals(detailMetricNames);
 
 type NutrientUnit = "g" | "kcal";
 
@@ -347,14 +352,14 @@ const macroDetailsSelectionMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(
       Schema.Struct({
-        selectedNutrientName: Schema.NullOr(NutrientName),
+        selectedMetricName: Schema.NullOr(DetailMetricName),
       })
     ),
     events: {
       clearSelection: Schema.toStandardSchemaV1(EmptyEvent),
-      selectNutrient: Schema.toStandardSchemaV1(
+      selectMetric: Schema.toStandardSchemaV1(
         Schema.Struct({
-          nutrientName: NutrientName,
+          metricName: DetailMetricName,
         })
       ),
     },
@@ -364,7 +369,7 @@ const macroDetailsSelectionMachine = setup({
   },
 }).createMachine({
   context: {
-    selectedNutrientName: null,
+    selectedMetricName: null,
   },
   initial: "Selected",
   states: {
@@ -373,15 +378,15 @@ const macroDetailsSelectionMachine = setup({
   on: {
     clearSelection: {
       context: {
-        selectedNutrientName: null,
+        selectedMetricName: null,
       },
     },
-    selectNutrient: ({ context, event }) => ({
+    selectMetric: ({ context, event }) => ({
       context: {
-        selectedNutrientName:
-          context.selectedNutrientName === event.nutrientName
+        selectedMetricName:
+          context.selectedMetricName === event.metricName
             ? null
-            : event.nutrientName,
+            : event.metricName,
       },
     }),
   },
@@ -468,6 +473,9 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
           },
         ];
   });
+  const weightTotals = Reporting.calculateMealEntriesWeightTotals({
+    mealEntries,
+  });
   const title =
     meal === null
       ? "Day details"
@@ -508,7 +516,7 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
       <View style={styles.nutrientList}>
         {nutrientDetails.map((nutrient) => {
           const selected =
-            snapshot.context.selectedNutrientName === nutrient.nutrientName;
+            snapshot.context.selectedMetricName === nutrient.nutrientName;
           const total = Reporting.getNutrientTotal({
             nutrientName: nutrient.nutrientName,
             totals,
@@ -519,8 +527,8 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
               <NutrientRow
                 nutrient={nutrient}
                 onPress={() => {
-                  actor.trigger.selectNutrient({
-                    nutrientName: nutrient.nutrientName,
+                  actor.trigger.selectMetric({
+                    metricName: nutrient.nutrientName,
                   });
                 }}
                 selected={selected}
@@ -541,6 +549,34 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
             </View>
           );
         })}
+
+        <View style={styles.secondaryMetricDivider}>
+          <View style={styles.secondaryMetricDividerLine} />
+          <Text style={styles.secondaryMetricDividerLabel}>
+            Secondary metrics
+          </Text>
+          <View style={styles.secondaryMetricDividerLine} />
+        </View>
+
+        <View style={styles.nutrientGroup}>
+          <WeightRow
+            onPress={() => {
+              actor.trigger.selectMetric({
+                metricName: FoodWeightMetricName,
+              });
+            }}
+            selected={
+              snapshot.context.selectedMetricName === FoodWeightMetricName
+            }
+            total={weightTotals.quantityGrams}
+          />
+          {snapshot.context.selectedMetricName === FoodWeightMetricName ? (
+            <WeightContributors
+              entries={entries}
+              total={weightTotals.quantityGrams}
+            />
+          ) : null}
+        </View>
       </View>
     </AppScreen>
   );
@@ -633,6 +669,72 @@ function NutrientRow({
   );
 }
 
+function WeightRow({
+  onPress,
+  selected,
+  total,
+}: {
+  readonly onPress: () => void;
+  readonly selected: boolean;
+  readonly total: number;
+}) {
+  const clampedProgress = total <= 0 ? 0 : 1;
+
+  return (
+    <Pressable
+      accessibilityLabel="Food weight details"
+      accessibilityRole="button"
+      accessibilityState={{ expanded: selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.nutrientRow,
+        selected ? styles.nutrientRowSelected : null,
+        pressed ? styles.pressed : null,
+      ]}
+    >
+      <View style={styles.nutrientTopRow}>
+        {selected ? (
+          <ChevronDown color={color.textMuted} size={18} strokeWidth={2.8} />
+        ) : (
+          <ChevronRight color={color.textMuted} size={18} strokeWidth={2.8} />
+        )}
+        <View style={styles.nutrientCopy}>
+          <Text
+            numberOfLines={1}
+            style={[styles.nutrientLabel, { color: color.secondaryMetric }]}
+          >
+            Food weight
+          </Text>
+        </View>
+        <Text
+          numberOfLines={1}
+          style={[styles.nutrientValue, { color: color.secondaryMetric }]}
+        >
+          {_formatWeightValue({ value: total })}
+        </Text>
+      </View>
+      <View
+        style={[
+          styles.nutrientTrack,
+          {
+            backgroundColor: color.progressTrack,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.nutrientFill,
+            {
+              backgroundColor: color.secondaryMetric,
+              width: `${clampedProgress * 100}%`,
+            },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
 function NutrientContributors({
   entries,
   nutrient,
@@ -651,56 +753,13 @@ function NutrientContributors({
       })
   );
   const contributions = Array.sortBy(contributionValueOrder)(
-    entries
-      .reduce<readonly FoodNutrientContribution[]>((contributions, entry) => {
-        const entryTotals: Reporting.NutrientTotals = {
-          carbsGrams: entry.nutrients.carbsGrams,
-          energyKcal: entry.nutrients.energyKcal,
-          fatGrams: entry.nutrients.fatGrams,
-          fiberGrams: entry.nutrients.fiberGrams ?? 0,
-          proteinGrams: entry.nutrients.proteinGrams,
-          saltGrams: entry.nutrients.saltGrams ?? 0,
-          saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
-          sugarGrams: entry.nutrients.sugarGrams ?? 0,
-        };
-        const previousContribution = contributions.find(
-          (contribution) => contribution.food.id === entry.food.id
-        );
-
-        if (previousContribution === undefined) {
-          return [
-            ...contributions,
-            {
-              entries: [entry],
-              food: entry.food,
-              quantityGrams: entry.mealEntry.quantityGrams,
-              totals: entryTotals,
-            },
-          ];
-        }
-
-        return contributions.map((contribution) =>
-          contribution.food.id === entry.food.id
-            ? {
-                ...contribution,
-                entries: [...contribution.entries, entry],
-                quantityGrams:
-                  contribution.quantityGrams + entry.mealEntry.quantityGrams,
-                totals: Reporting.addNutrientTotals({
-                  left: contribution.totals,
-                  right: entryTotals,
-                }),
-              }
-            : contribution
-        );
-      }, [])
-      .filter(
-        (contribution) =>
-          Reporting.getNutrientTotal({
-            nutrientName: nutrient.nutrientName,
-            totals: contribution.totals,
-          }) > 0
-      )
+    _calculateFoodNutrientContributions({ entries }).filter(
+      (contribution) =>
+        Reporting.getNutrientTotal({
+          nutrientName: nutrient.nutrientName,
+          totals: contribution.totals,
+        }) > 0
+    )
   );
 
   return (
@@ -718,6 +777,44 @@ function NutrientContributors({
         <View style={styles.emptyContributors}>
           <Text style={styles.emptyContributorsText}>
             No foods contribute to this macro.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function WeightContributors({
+  entries,
+  total,
+}: {
+  readonly entries: readonly FoodMealEntry[];
+  readonly total: number;
+}) {
+  const contributionValueOrder = Order.mapInput(
+    Order.flip(Order.Number),
+    (contribution: FoodNutrientContribution) => contribution.quantityGrams
+  );
+  const contributions = Array.sortBy(contributionValueOrder)(
+    _calculateFoodNutrientContributions({ entries }).filter(
+      (contribution) => contribution.quantityGrams > 0
+    )
+  );
+
+  return (
+    <View style={styles.contributors}>
+      {Array.isReadonlyArrayNonEmpty(contributions) ? (
+        contributions.map((contribution) => (
+          <WeightContributionRow
+            contribution={contribution}
+            key={contribution.food.id}
+            total={total}
+          />
+        ))
+      ) : (
+        <View style={styles.emptyContributors}>
+          <Text style={styles.emptyContributorsText}>
+            No foods contribute to this weight.
           </Text>
         </View>
       )}
@@ -793,6 +890,67 @@ function ContributionRow({
   );
 }
 
+function WeightContributionRow({
+  contribution,
+  total,
+}: {
+  readonly contribution: FoodNutrientContribution;
+  readonly total: number;
+}) {
+  const percent = total <= 0 ? 0 : contribution.quantityGrams / total;
+  const clampedPercent = Math.max(0, Math.min(1, percent));
+  const percentLabel = formatNumber({
+    maximumFractionDigits: 0,
+    value: clampedPercent * 100,
+  });
+  const quantityLabel = _formatWeightValue({
+    value: contribution.quantityGrams,
+  });
+
+  return (
+    <View style={styles.contributionRow}>
+      <View style={styles.contributionCopy}>
+        <Text numberOfLines={1} style={styles.contributionName}>
+          {contribution.food.name}
+        </Text>
+        <Text numberOfLines={1} style={styles.contributionDetail}>
+          {contribution.food.brand === undefined
+            ? `${contribution.entries.length} entries`
+            : contribution.food.brand}
+        </Text>
+      </View>
+      <View style={styles.contributionImpact}>
+        <View style={styles.contributionValueRow}>
+          <Text
+            style={[
+              styles.contributionPercent,
+              { color: color.secondaryMetric },
+            ]}
+          >
+            ({percentLabel}%)
+          </Text>
+          <Text
+            style={[styles.contributionValue, { color: color.secondaryMetric }]}
+          >
+            {quantityLabel}
+          </Text>
+        </View>
+        <View style={styles.contributionTrack}>
+          <View
+            style={[
+              styles.contributionFill,
+              {
+                backgroundColor: color.secondaryMetric,
+                width: `${clampedPercent * 100}%`,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function _formatNutrientValue({
   unit,
   value,
@@ -804,6 +962,65 @@ function _formatNutrientValue({
     maximumFractionDigits: value < 10 ? 1 : 0,
     value,
   })}${unit}`;
+}
+
+function _formatWeightValue({ value }: { readonly value: number }) {
+  return `${formatNumber({
+    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
+    value,
+  })}g`;
+}
+
+function _calculateFoodNutrientContributions({
+  entries,
+}: {
+  readonly entries: readonly FoodMealEntry[];
+}): readonly FoodNutrientContribution[] {
+  return entries.reduce<readonly FoodNutrientContribution[]>(
+    (contributions, entry) => {
+      const entryTotals: Reporting.NutrientTotals = {
+        carbsGrams: entry.nutrients.carbsGrams,
+        energyKcal: entry.nutrients.energyKcal,
+        fatGrams: entry.nutrients.fatGrams,
+        fiberGrams: entry.nutrients.fiberGrams ?? 0,
+        proteinGrams: entry.nutrients.proteinGrams,
+        saltGrams: entry.nutrients.saltGrams ?? 0,
+        saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
+        sugarGrams: entry.nutrients.sugarGrams ?? 0,
+      };
+      const previousContribution = contributions.find(
+        (contribution) => contribution.food.id === entry.food.id
+      );
+
+      if (previousContribution === undefined) {
+        return [
+          ...contributions,
+          {
+            entries: [entry],
+            food: entry.food,
+            quantityGrams: entry.mealEntry.quantityGrams,
+            totals: entryTotals,
+          },
+        ];
+      }
+
+      return contributions.map((contribution) =>
+        contribution.food.id === entry.food.id
+          ? {
+              ...contribution,
+              entries: [...contribution.entries, entry],
+              quantityGrams:
+                contribution.quantityGrams + entry.mealEntry.quantityGrams,
+              totals: Reporting.addNutrientTotals({
+                left: contribution.totals,
+                right: entryTotals,
+              }),
+            }
+          : contribution
+      );
+    },
+    []
+  );
 }
 
 const styles = StyleSheet.create({
@@ -833,6 +1050,26 @@ const styles = StyleSheet.create({
   nutrientGroup: {
     borderBottomWidth: 1,
     borderBottomColor: color.sheetBorder,
+  },
+  secondaryMetricDivider: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: color.bg,
+  },
+  secondaryMetricDividerLine: {
+    height: 1,
+    flex: 1,
+    backgroundColor: color.sheetBorder,
+  },
+  secondaryMetricDividerLabel: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
+    textTransform: "uppercase",
   },
   nutrientRow: {
     minHeight: 76,

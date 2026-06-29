@@ -18,6 +18,7 @@ export const color = {
   nutritionFiber: "#74d99f",
   nutritionSugar: "#ff7aa9",
   nutritionSalt: "#aaaab1",
+  secondaryMetric: "#c7c7cf",
   sheet: "#161618",
   sheetBorder: "#29292d",
   actionSheet: "#16120f",
