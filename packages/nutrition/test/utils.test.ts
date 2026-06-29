@@ -69,9 +69,9 @@ describe("nutrition utils", () => {
     assert.equal(result.validatedEnergyKcal, result.energyKcal);
   });
 
-  it("finds the dominant food macronutrient by calorie contribution", () => {
-    assert.equal(
-      Utils.findDominantMacronutrient({
+  it("finds the dominant food macronutrients by gram amount", () => {
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
           proteinGramsPer100g: 8,
@@ -79,10 +79,10 @@ describe("nutrition utils", () => {
           fatGramsPer100g: 5,
         },
       }),
-      "fat"
+      ["protein"]
     );
-    assert.equal(
-      Utils.findDominantMacronutrient({
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
           proteinGramsPer100g: 12,
@@ -90,10 +90,10 @@ describe("nutrition utils", () => {
           fatGramsPer100g: 1,
         },
       }),
-      "protein"
+      ["protein"]
     );
-    assert.equal(
-      Utils.findDominantMacronutrient({
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
           proteinGramsPer100g: 4,
@@ -101,13 +101,24 @@ describe("nutrition utils", () => {
           fatGramsPer100g: 2,
         },
       }),
-      "carbs"
+      ["carbs"]
+    );
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
+        food: {
+          ...foodInput,
+          proteinGramsPer100g: 4,
+          carbsGramsPer100g: 5,
+          fatGramsPer100g: 9,
+        },
+      }),
+      ["fat"]
     );
   });
 
-  it("does not pick a dominant food macronutrient when macros are empty or tied", () => {
-    assert.equal(
-      Utils.findDominantMacronutrient({
+  it("returns every tied dominant food macronutrient", () => {
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
           proteinGramsPer100g: 0,
@@ -115,10 +126,10 @@ describe("nutrition utils", () => {
           fatGramsPer100g: 0,
         },
       }),
-      null
+      []
     );
-    assert.equal(
-      Utils.findDominantMacronutrient({
+    assert.deepEqual(
+      Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
           proteinGramsPer100g: 9,
@@ -126,7 +137,7 @@ describe("nutrition utils", () => {
           fatGramsPer100g: 4,
         },
       }),
-      null
+      ["protein", "carbs"]
     );
   });
 

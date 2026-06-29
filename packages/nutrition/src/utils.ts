@@ -45,48 +45,44 @@ export const calculatePlanEnergyKcal = ({
     fatGrams: plan.fatTargetGrams,
   });
 
-export const findDominantMacronutrient = ({
+export const findDominantMacronutrients = ({
   food,
 }: {
   readonly food: Pick<
     Food,
     "carbsGramsPer100g" | "fatGramsPer100g" | "proteinGramsPer100g"
   >;
-}): DominantMacronutrient | null => {
-  const macronutrientEnergy = [
+}): readonly DominantMacronutrient[] => {
+  const macronutrientGrams = [
     {
-      energyKcal: food.proteinGramsPer100g * 4,
+      grams: food.proteinGramsPer100g,
       macronutrient: "protein",
     },
     {
-      energyKcal: food.carbsGramsPer100g * 4,
+      grams: food.carbsGramsPer100g,
       macronutrient: "carbs",
     },
     {
-      energyKcal: food.fatGramsPer100g * 9,
+      grams: food.fatGramsPer100g,
       macronutrient: "fat",
     },
   ] satisfies readonly {
-    readonly energyKcal: number;
+    readonly grams: number;
     readonly macronutrient: DominantMacronutrient;
   }[];
 
-  const dominant = macronutrientEnergy.reduce((current, candidate) =>
-    candidate.energyKcal > current.energyKcal ? candidate : current
+  const highestGrams = macronutrientGrams.reduce(
+    (current, candidate) => Math.max(current, candidate.grams),
+    0
   );
 
-  if (
-    dominant.energyKcal <= 0 ||
-    macronutrientEnergy.some(
-      (item) =>
-        item.macronutrient !== dominant.macronutrient &&
-        item.energyKcal === dominant.energyKcal
-    )
-  ) {
-    return null;
+  if (highestGrams <= 0) {
+    return [];
   }
 
-  return dominant.macronutrient;
+  return macronutrientGrams.flatMap((item) =>
+    item.grams === highestGrams ? [item.macronutrient] : []
+  );
 };
 
 export const calculateEntryNutrients = ({

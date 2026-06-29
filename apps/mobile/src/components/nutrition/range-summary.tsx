@@ -64,6 +64,9 @@ const nutrientColors = {
 } satisfies Record<Reporting.NutrientName, string>;
 
 const summaryInsightLimit = 5;
+const targetTrendMarginFraction = 0.05;
+
+type TargetTrendKind = "above" | "below" | "inside" | "none";
 
 const targetTrendIndicators = {
   above: {
@@ -87,7 +90,7 @@ const targetTrendIndicators = {
     icon: Minus,
   },
 } satisfies Record<
-  Reporting.NutrientTargetStatusKind | "none",
+  TargetTrendKind,
   {
     readonly accessibilityLabel: string;
     readonly color: string;
@@ -383,16 +386,18 @@ function NutrientBalanceCard({
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
   const signedValue = target === null ? null : actual - target;
-  const status =
+  const trend =
     target === null
-      ? null
-      : Reporting.evaluateNutrientTarget({
-          target: Reporting.makeNutrientTarget({
-            amount: target,
-            nutrientName,
-          }),
-          value: actual,
-        });
+      ? "none"
+      : target <= 0
+        ? actual > 0
+          ? "above"
+          : "inside"
+        : actual >= target * (1 + targetTrendMarginFraction)
+          ? "above"
+          : actual <= target * (1 - targetTrendMarginFraction)
+            ? "below"
+            : "inside";
   const formattedSignedValue =
     signedValue === null
       ? null
@@ -414,7 +419,7 @@ function NutrientBalanceCard({
         >
           {nutrientLabels[nutrientName]}
         </Text>
-        <TargetTrendIcon status={status} />
+        <TargetTrendIcon trend={trend} />
       </View>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.nutrientValue}>
         {_formatNutrient({ nutrientName, value: actual })}
@@ -459,15 +464,8 @@ function SecondaryMetricBalanceCard({
   );
 }
 
-function TargetTrendIcon({
-  status,
-}: {
-  readonly status: Reporting.NutrientTargetStatus | null;
-}) {
-  const indicator =
-    status === null
-      ? targetTrendIndicators.none
-      : targetTrendIndicators[status.status];
+function TargetTrendIcon({ trend }: { readonly trend: TargetTrendKind }) {
+  const indicator = targetTrendIndicators[trend];
   const Icon = indicator.icon;
 
   return (

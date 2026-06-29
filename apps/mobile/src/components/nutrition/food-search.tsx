@@ -476,11 +476,16 @@ function FoodSearchResult({
     maximumFractionDigits: 0,
     value: food.energyKcalPer100g,
   })} kcal / 100 g`;
-  const dominantMacronutrient = Utils.findDominantMacronutrient({ food });
-  const dominantMacronutrientMeta =
-    dominantMacronutrient === null
-      ? undefined
-      : dominantMacronutrientIndicator[dominantMacronutrient];
+  const dominantMacronutrientMetas = Utils.findDominantMacronutrients({
+    food,
+  }).map((macronutrient) => dominantMacronutrientIndicator[macronutrient]);
+  const dominantMacronutrientLabel = !Array.isReadonlyArrayNonEmpty(
+    dominantMacronutrientMetas
+  )
+    ? undefined
+    : dominantMacronutrientMetas
+        .map((meta) => meta.accessibilityLabel)
+        .join(", ");
   const isDefaultFood = food.origin === "app-default";
   const isUserFood = food.origin === "user";
   const defaultFoodAccessibilityLabel = isDefaultFood
@@ -489,7 +494,7 @@ function FoodSearchResult({
   const accessibilityLabel = [
     `${food.name}${defaultFoodAccessibilityLabel}`,
     brandLabel,
-    dominantMacronutrientMeta?.accessibilityLabel,
+    dominantMacronutrientLabel,
     primaryLabel ?? per100gLabel,
     secondaryLabel,
   ]
@@ -520,14 +525,18 @@ function FoodSearchResult({
           </Text>
         </View>
         <View style={styles.summaryRow}>
-          {dominantMacronutrientMeta === undefined ? null : (
-            <View
-              accessible={false}
-              style={[
-                styles.macronutrientDot,
-                { backgroundColor: dominantMacronutrientMeta.color },
-              ]}
-            />
+          {!Array.isReadonlyArrayNonEmpty(dominantMacronutrientMetas) ? null : (
+            <View accessible={false} style={styles.macronutrientDots}>
+              {dominantMacronutrientMetas.map((meta) => (
+                <View
+                  key={meta.accessibilityLabel}
+                  style={[
+                    styles.macronutrientDot,
+                    { backgroundColor: meta.color },
+                  ]}
+                />
+              ))}
+            </View>
           )}
           {brandLabel === null ? null : (
             <Text numberOfLines={1} style={styles.resultSummary}>
@@ -742,6 +751,11 @@ const styles = StyleSheet.create({
     height: 6,
     flexShrink: 0,
     borderRadius: 3,
+  },
+  macronutrientDots: {
+    flexShrink: 0,
+    flexDirection: "row",
+    gap: spacing.xxs,
   },
   resultMetrics: {
     width: 112,

@@ -1459,12 +1459,12 @@ function MealEntryRow({
   const quantityLabel = `${_formatMacroValue({
     value: mealEntry.quantityGrams,
   })} g`;
-  const dominantMacronutrient =
-    food === undefined ? null : Utils.findDominantMacronutrient({ food });
-  const dominantMacronutrientColor =
-    dominantMacronutrient === null
-      ? undefined
-      : dominantMacronutrientColors[dominantMacronutrient];
+  const dominantMacronutrientColorsForFood =
+    food === undefined
+      ? []
+      : Utils.findDominantMacronutrients({ food }).map(
+          (macronutrient) => dominantMacronutrientColors[macronutrient]
+        );
 
   return (
     <Pressable
@@ -1480,14 +1480,22 @@ function MealEntryRow({
           {food?.name ?? "Unknown food"}
         </Text>
         <View style={styles.entryDetailRow}>
-          {dominantMacronutrientColor === undefined ? null : (
-            <View
-              accessible={false}
-              style={[
-                styles.entryMacronutrientDot,
-                { backgroundColor: dominantMacronutrientColor },
-              ]}
-            />
+          {!Array.isReadonlyArrayNonEmpty(
+            dominantMacronutrientColorsForFood
+          ) ? null : (
+            <View accessible={false} style={styles.entryMacronutrientDots}>
+              {dominantMacronutrientColorsForFood.map(
+                (dominantMacronutrientColor) => (
+                  <View
+                    key={dominantMacronutrientColor}
+                    style={[
+                      styles.entryMacronutrientDot,
+                      { backgroundColor: dominantMacronutrientColor },
+                    ]}
+                  />
+                )
+              )}
+            </View>
           )}
           <Text numberOfLines={1} style={styles.entryDetail}>
             {food?.brand === undefined
@@ -1902,6 +1910,11 @@ const styles = StyleSheet.create({
     height: 6,
     flexShrink: 0,
     borderRadius: 3,
+  },
+  entryMacronutrientDots: {
+    flexShrink: 0,
+    flexDirection: "row",
+    gap: spacing.xxs,
   },
   entryDetail: {
     minWidth: 0,
