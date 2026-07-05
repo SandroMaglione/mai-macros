@@ -1,4 +1,4 @@
-import { NutritionReports, Reporting } from "@mai/nutrition";
+import { NutritionReports, Reporting, type Domain } from "@mai/nutrition";
 
 import { insightNutrients } from "./constants.ts";
 import type {
@@ -177,6 +177,19 @@ export function buildInsightContext({
     dayCount,
     dayVolumeContributors,
     foodContributors,
+    formatDate: ({ dateKey }: { readonly dateKey: Domain.DateKey }) => {
+      const [yearString, monthString, dayString] = dateKey.split("-");
+      const year = Number(yearString);
+      const month = Number(monthString);
+      const day = Number(dayString);
+      const date = new Date(Date.UTC(year, month - 1, day, 12));
+
+      return new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(date);
+    },
     formatPercent: ({ share }) => `${Math.round(share * 100)}%`,
     formatWeight: ({ quantityGrams }) => `${Math.round(quantityGrams)}g`,
     mealContributors,

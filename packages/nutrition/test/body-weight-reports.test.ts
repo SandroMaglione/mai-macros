@@ -148,14 +148,14 @@ describe("BodyWeightReports", () => {
     );
     assert.match(
       report.insights.find((insight) => insight.id === "movement")?.text ?? "",
-      /from June \d{1,2}, 2026 to June \d{1,2}, 2026\./
+      /from \d{1,2} Jun 2026 to \d{1,2} Jun 2026\./
     );
     assert.deepEqual(
       report.insights
         .find((insight) => insight.id === "movement")
         ?.parts.filter((part) => part.tone === "highlight")
         .map((part) => part.text),
-      ["5.3 kg", "June 1, 2026", "June 16, 2026"]
+      ["5.3 kg", "1 Jun 2026", "16 Jun 2026"]
     );
 
     const staleReport = await Effect.runPromise(

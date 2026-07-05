@@ -545,9 +545,9 @@ function _formatDateKey({ dateKey }: { readonly dateKey: DateKey }) {
   const day = Number(dayString);
   const date = new Date(Date.UTC(year, month - 1, day, 12));
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
-    month: "long",
+    month: "short",
     year: "numeric",
   }).format(date);
 }

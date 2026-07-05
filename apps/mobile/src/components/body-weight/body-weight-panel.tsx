@@ -73,6 +73,8 @@ const BodyWeightReportRange = Schema.Struct({
 
 type BodyWeightReportRange = typeof BodyWeightReportRange.Type;
 
+const estimateWeightWindowDays = 14;
+
 const BodyWeightRouteInput = Schema.Struct({
   dateKey: Domain.DateKey,
 });
@@ -696,7 +698,7 @@ const bodyWeightRouteMachine = setup({
             editorDeleted: {
               target: "#bodyWeightRoute.Loading",
               context: {
-                message: "Weight deleted.",
+                message: null,
               },
             },
             editorSaved: {
@@ -820,12 +822,6 @@ function BodyWeightRoute({ dateKey }: { readonly dateKey: Domain.DateKey }) {
 
   return (
     <View style={styles.stack}>
-      {snapshot.context.message === null ||
-      isEditing ||
-      isImportingForm ? null : (
-        <Notice message={snapshot.context.message} tone="neutral" />
-      )}
-
       <BodyWeightCalendar
         dateKey={snapshot.context.dateKey}
         disabled={disabled}
@@ -1250,10 +1246,16 @@ function BodyWeightSummary({
 }: {
   readonly report: BodyWeightReportRange;
 }) {
-  const latestWeight = report.latestEntry?.weightKilograms ?? null;
+  const latestEntry = report.latestEntry;
+  const latestWeight = latestEntry?.weightKilograms ?? null;
   const weightedWeight = report.weightedWeightKilograms;
   const firstTrendPoint = report.trendPoints[0];
   const latestTrendPoint = report.trendPoints.at(-1);
+  const progressDayCount = _reportTrendDayCount({ report });
+  const latestWeightLabel =
+    latestEntry === null || latestEntry.dateKey === report.endDateKey
+      ? "Today"
+      : _formatChartDateLabel({ dateKey: latestEntry.dateKey });
   const trendChange =
     firstTrendPoint === undefined || latestTrendPoint === undefined
       ? null
@@ -1262,7 +1264,7 @@ function BodyWeightSummary({
   return (
     <View style={styles.metricGrid}>
       <BodyWeightMetric
-        label="Current"
+        label={latestWeightLabel}
         value={
           latestWeight === null
             ? "-"
@@ -1272,7 +1274,9 @@ function BodyWeightSummary({
         }
       />
       <BodyWeightMetric
-        label="Progress"
+        label={_formatLastDaysLabel({
+          dayCount: progressDayCount,
+        })}
         value={
           trendChange === null
             ? "-"
@@ -1282,7 +1286,10 @@ function BodyWeightSummary({
         }
       />
       <BodyWeightMetric
-        label="Estimate"
+        label={_formatLastDaysLabel({
+          dayCount: estimateWeightWindowDays,
+          suffix: "avg",
+        })}
         value={
           weightedWeight === null
             ? "-"
@@ -1341,6 +1348,7 @@ function BodyWeightChart({
   }
 
   const chart = ChartModel.make({ report });
+  const progressDayCount = _reportTrendDayCount({ report });
 
   return (
     <View>
@@ -1434,7 +1442,9 @@ function BodyWeightChart({
             <View style={styles.chartLegendItem}>
               <View style={[styles.chartLegendMark, styles.chartLegendTrend]} />
               <Text numberOfLines={1} style={styles.chartLegendLabel}>
-                Progress
+                {_formatLastDaysLabel({
+                  dayCount: progressDayCount,
+                })}
               </Text>
             </View>
             <View style={styles.chartLegendItem}>
@@ -1442,7 +1452,10 @@ function BodyWeightChart({
                 style={[styles.chartLegendMark, styles.chartLegendStable]}
               />
               <Text numberOfLines={1} style={styles.chartLegendLabel}>
-                Estimate
+                {_formatLastDaysLabel({
+                  dayCount: estimateWeightWindowDays,
+                  suffix: "avg",
+                })}
               </Text>
             </View>
           </View>
@@ -1778,6 +1791,32 @@ function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: Domain.DateKey }) {
   const day = Number(dayString);
 
   return Math.floor(Date.UTC(year, month - 1, day, 12) / 86_400_000);
+}
+
+function _reportTrendDayCount({
+  report,
+}: {
+  readonly report: BodyWeightReportRange;
+}) {
+  const startDateKey = report.trendPoints[0]?.dateKey ?? report.startDateKey;
+  const endDateKey = report.trendPoints.at(-1)?.dateKey ?? report.endDateKey;
+
+  return Math.max(
+    1,
+    _dateKeyToDayIndex({ dateKey: endDateKey }) -
+      _dateKeyToDayIndex({ dateKey: startDateKey }) +
+      1
+  );
+}
+
+function _formatLastDaysLabel({
+  dayCount,
+  suffix,
+}: {
+  readonly dayCount: number;
+  readonly suffix?: string;
+}) {
+  return `Last ${dayCount}d${suffix === undefined ? "" : ` ${suffix}`}`;
 }
 
 function _formatKilograms({ value }: { readonly value: number }) {

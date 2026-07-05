@@ -82,11 +82,13 @@ export const volumeDensityInsightModule = {
                   kind: "food-volume",
                   parts: [
                     {
-                      text: `${higherVolumeDay.dateKey} had ${context.formatPercent(
-                        {
-                          share: volumeRatio - 1,
-                        }
-                      )} more food weight than ${lowerVolumeDay.dateKey} at similar calories.`,
+                      text: `${context.formatDate({
+                        dateKey: higherVolumeDay.dateKey,
+                      })} had ${context.formatPercent({
+                        share: volumeRatio - 1,
+                      })} more food weight than ${context.formatDate({
+                        dateKey: lowerVolumeDay.dateKey,
+                      })} at similar calories.`,
                       tone: "text",
                     },
                   ],

@@ -48,6 +48,7 @@ export type InsightContext = {
   readonly averageTotals: Reporting.NutrientTotals;
   readonly dayCount: number;
   readonly dayVolumeContributors: readonly DayVolumeContributor[];
+  readonly formatDate: (input: { readonly dateKey: Domain.DateKey }) => string;
   readonly foodContributors: readonly FoodInsightContributor[];
   readonly formatPercent: (input: { readonly share: number }) => string;
   readonly formatWeight: (input: { readonly quantityGrams: number }) => string;
