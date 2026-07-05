@@ -13,6 +13,7 @@ type IconButtonVariant = "primary" | "secondary" | "ghost";
 export function IconButton({
   disabled,
   icon: Icon,
+  iconColor,
   iconSize = 22,
   style,
   strokeWidth = 2.8,
@@ -21,6 +22,7 @@ export function IconButton({
 }: Omit<PressableProps, "children" | "style"> & {
   readonly accessibilityLabel: string;
   readonly icon: LucideIcon;
+  readonly iconColor?: string;
   readonly iconSize?: number;
   readonly style?: StyleProp<ViewStyle>;
   readonly strokeWidth?: number;
@@ -40,7 +42,7 @@ export function IconButton({
       ]}
     >
       <Icon
-        color={textColor[variant]}
+        color={iconColor ?? textColor[variant]}
         size={iconSize}
         strokeWidth={strokeWidth}
       />

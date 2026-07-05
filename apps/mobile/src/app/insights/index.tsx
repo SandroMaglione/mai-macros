@@ -1,4 +1,3 @@
-import { BodyWeightPanel } from "@/components/body-weight/body-weight-panel";
 import { RangeSummary } from "@/components/nutrition/range-summary";
 import {
   AppScreen,
@@ -6,7 +5,6 @@ import {
   LoadingView,
   MaiHeader,
   Notice,
-  PagerTabBar,
 } from "@/components/ui";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
@@ -69,10 +67,6 @@ const NutritionReportRange = Schema.Struct({
   endDateKey: Domain.DateKey,
   startDateKey: Domain.DateKey,
 });
-
-const StatsTab = Schema.Literals(["nutrition", "weight"]);
-
-type StatsTab = typeof StatsTab.Type;
 
 const NutritionInsightsFailureContext = Schema.Struct({
   message: Schema.String,
@@ -232,67 +226,8 @@ const nutritionInsightsRouteMachine = setup({
   },
 });
 
-const statsTabMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        activeTab: StatsTab,
-      })
-    ),
-    events: {
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          tab: StatsTab,
-        })
-      ),
-    },
-  },
-  states: {
-    Ready: {},
-  },
-}).createMachine({
-  context: () => ({
-    activeTab: "nutrition" as const,
-  }),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        selectTab: ({ event }) => ({
-          context: {
-            activeTab: event.tab,
-          },
-        }),
-      },
-    },
-  },
-});
-
-const statsTabs = [
-  {
-    accessibilityLabel: "Nutrition stats tab",
-    key: "nutrition",
-    label: "Nutrition",
-  },
-  {
-    accessibilityLabel: "Weight stats tab",
-    key: "weight",
-    label: "Weight",
-  },
-] as const satisfies readonly {
-  readonly accessibilityLabel: string;
-  readonly key: StatsTab;
-  readonly label: string;
-}[];
-
 export default function InsightsScreen() {
   const appRouter = useRouter();
-  const [snapshot, , actor] = useMachine(statsTabMachine);
-  const activeTab = snapshot.context.activeTab;
-  const activeIndex = Math.max(
-    0,
-    statsTabs.findIndex((tab) => tab.key === activeTab)
-  );
 
   return (
     <AppScreen
@@ -308,22 +243,7 @@ export default function InsightsScreen() {
           appRouter.replace("/");
         }}
       />
-      <PagerTabBar
-        activeIndex={activeIndex}
-        onActiveIndexChange={(index) => {
-          const tab = statsTabs[index];
-
-          if (tab !== undefined) {
-            actor.trigger.selectTab({ tab: tab.key });
-          }
-        }}
-        tabs={statsTabs}
-      />
-      {activeTab === "nutrition" ? (
-        <NutritionInsightsPanel />
-      ) : (
-        <BodyWeightPanel />
-      )}
+      <NutritionInsightsPanel />
     </AppScreen>
   );
 }

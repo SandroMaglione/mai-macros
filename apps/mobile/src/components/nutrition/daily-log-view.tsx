@@ -30,8 +30,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Download,
+  Database,
   Plus,
+  Scale,
   Trash2,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -868,6 +869,18 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
+        icon={Scale}
+        label="Weight"
+        onPress={() => {
+          router.push({
+            pathname: "/weight",
+            params: {
+              dateKey,
+            },
+          });
+        }}
+      />
+      <BottomAction
         icon={ClipboardList}
         label="Plans"
         onPress={() => {
@@ -892,8 +905,8 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
-        icon={Download}
-        label="Backup"
+        icon={Database}
+        label="Data"
         onPress={() => {
           router.push("/backup");
         }}

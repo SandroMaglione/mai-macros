@@ -23,8 +23,14 @@ export type BodyWeightReportOutlier = {
 
 export type BodyWeightReportInsight = {
   readonly id: string;
+  readonly parts: readonly BodyWeightReportInsightPart[];
   readonly text: string;
   readonly tone: "neutral" | "positive" | "warning";
+};
+
+export type BodyWeightReportInsightPart = {
+  readonly text: string;
+  readonly tone: "default" | "highlight";
 };
 
 export type BodyWeightReportRange = {
@@ -34,8 +40,10 @@ export type BodyWeightReportRange = {
   readonly insights: readonly BodyWeightReportInsight[];
   readonly latestEntry: BodyWeightEntry | null;
   readonly outliers: readonly BodyWeightReportOutlier[];
+  readonly stableTrendPoints: readonly BodyWeightReportPoint[];
   readonly startDateKey: DateKey;
   readonly trendPoints: readonly BodyWeightReportPoint[];
+  readonly weightedWeightKilograms: number | null;
 };
 
 export class InvalidBodyWeightReportRange extends Data.TaggedError(
@@ -49,6 +57,8 @@ const outlierMinimumNeighborCount = 3;
 const outlierWindowDays = 10;
 const outlierMinimumResidualKilograms = 2.5;
 const trendHalfLifeDays = 7;
+const stableTrendWindowDays = 14;
+const stableTrendHalfLifeDays = 7;
 
 export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
   "BodyWeightReports",
@@ -162,6 +172,24 @@ export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
               },
             ];
           }, []);
+          const stableTrendPoints = trendEntries.map((entry) => {
+            const weightKilograms = _recencyWeightedAverage({
+              entries: trendEntries,
+              referenceDateKey: entry.dateKey,
+            });
+
+            return {
+              dateKey: entry.dateKey,
+              weightKilograms:
+                weightKilograms === null
+                  ? entry.weightKilograms
+                  : weightKilograms,
+            };
+          });
+          const weightedWeightKilograms = _recencyWeightedAverage({
+            entries: trendEntries,
+            referenceDateKey: decodedInput.endDateKey,
+          });
           const firstPoint = trendPoints[0];
           const lastPoint = trendPoints.at(-1);
           const trendElapsedDays =
@@ -182,23 +210,37 @@ export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
           const trendInsight: BodyWeightReportInsight | null =
             trendElapsedDays === null || trendElapsedDays <= 0
               ? null
-              : {
+              : _insight({
                   id: "trend",
-                  text:
+                  parts:
                     trendDirection === "flat"
-                      ? `Your weighted trend is flat over ${trendElapsedDays} days.`
-                      : `Your weighted trend is ${trendDirection} ${_formatKilograms(
-                          {
-                            value: Math.abs(trendChangeKilograms),
-                          }
-                        )} over ${trendElapsedDays} days.`,
+                      ? [
+                          _defaultInsightPart(
+                            "Your weighted trend is flat over "
+                          ),
+                          _highlightInsightPart(String(trendElapsedDays)),
+                          _defaultInsightPart(" days."),
+                        ]
+                      : [
+                          _defaultInsightPart(
+                            `Your weighted trend is ${trendDirection} `
+                          ),
+                          _highlightInsightPart(
+                            _formatKilograms({
+                              value: Math.abs(trendChangeKilograms),
+                            })
+                          ),
+                          _defaultInsightPart(" over "),
+                          _highlightInsightPart(String(trendElapsedDays)),
+                          _defaultInsightPart(" days."),
+                        ],
                   tone:
                     trendDirection === "up"
                       ? "warning"
                       : trendDirection === "down"
                         ? "positive"
                         : "neutral",
-                };
+                });
           const movement = trendPoints.reduce<{
             readonly end: BodyWeightReportPoint;
             readonly start: BodyWeightReportPoint;
@@ -239,15 +281,33 @@ export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
           const movementInsight: BodyWeightReportInsight | null =
             movement === null || _absoluteMovement(movement) < 0.5
               ? null
-              : {
+              : _insight({
                   id: "movement",
-                  text: `The largest trend shift moved ${movementDirection} ${_formatKilograms(
-                    {
-                      value: Math.abs(movementChangeKilograms),
-                    }
-                  )} from ${movement.start.dateKey} to ${movement.end.dateKey}.`,
+                  parts: [
+                    _defaultInsightPart(
+                      `The largest trend shift moved ${movementDirection} `
+                    ),
+                    _highlightInsightPart(
+                      _formatKilograms({
+                        value: Math.abs(movementChangeKilograms),
+                      })
+                    ),
+                    _defaultInsightPart(" from "),
+                    _highlightInsightPart(
+                      _formatDateKey({
+                        dateKey: movement.start.dateKey,
+                      })
+                    ),
+                    _defaultInsightPart(" to "),
+                    _highlightInsightPart(
+                      _formatDateKey({
+                        dateKey: movement.end.dateKey,
+                      })
+                    ),
+                    _defaultInsightPart("."),
+                  ],
                   tone: movementDirection === "up" ? "warning" : "positive",
-                };
+                });
           const weekdayResiduals: Record<string, readonly number[]> =
             entries.length < 8 || trendPoints.length < 2
               ? {}
@@ -301,28 +361,41 @@ export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
             strongestWeekday === undefined ||
             Math.abs(strongestWeekday.residualKilograms) < 0.3
               ? null
-              : {
+              : _insight({
                   id: "weekday",
-                  text: `${strongestWeekday.weekday} entries average ${_formatKilograms(
-                    {
-                      value: Math.abs(strongestWeekday.residualKilograms),
-                    }
-                  )} ${
-                    strongestWeekday.residualKilograms > 0 ? "above" : "below"
-                  } your trend.`,
+                  parts: [
+                    _highlightInsightPart(strongestWeekday.weekday),
+                    _defaultInsightPart(" entries average "),
+                    _highlightInsightPart(
+                      _formatKilograms({
+                        value: Math.abs(strongestWeekday.residualKilograms),
+                      })
+                    ),
+                    _defaultInsightPart(
+                      ` ${
+                        strongestWeekday.residualKilograms > 0
+                          ? "above"
+                          : "below"
+                      } your trend.`
+                    ),
+                  ],
                   tone: "neutral",
-                };
+                });
           const outlierInsight: BodyWeightReportInsight | null =
             !Array.isReadonlyArrayNonEmpty(outliers)
               ? null
-              : {
+              : _insight({
                   id: "outliers",
-                  text:
-                    outliers.length === 1
-                      ? "1 weight entry looks unusual and is excluded from the trend line."
-                      : `${outliers.length} weight entries look unusual and are excluded from the trend line.`,
+                  parts: [
+                    _highlightInsightPart(String(outliers.length)),
+                    _defaultInsightPart(
+                      outliers.length === 1
+                        ? " weight entry looks unusual and is excluded from the trend line."
+                        : " weight entries look unusual and are excluded from the trend line."
+                    ),
+                  ],
                   tone: "warning",
-                };
+                });
           const insights = [
             trendInsight,
             movementInsight,
@@ -337,8 +410,10 @@ export class BodyWeightReports extends Context.Service<BodyWeightReports>()(
             insights,
             latestEntry: entries.at(-1) ?? null,
             outliers,
+            stableTrendPoints,
             startDateKey: decodedInput.startDateKey,
             trendPoints,
+            weightedWeightKilograms,
           } satisfies BodyWeightReportRange;
         }),
       };
@@ -359,6 +434,37 @@ function _absoluteMovement(
     : Math.abs(movement.end.weightKilograms - movement.start.weightKilograms);
 }
 
+function _defaultInsightPart(text: string): BodyWeightReportInsightPart {
+  return {
+    text,
+    tone: "default",
+  };
+}
+
+function _highlightInsightPart(text: string): BodyWeightReportInsightPart {
+  return {
+    text,
+    tone: "highlight",
+  };
+}
+
+function _insight({
+  id,
+  parts,
+  tone,
+}: {
+  readonly id: string;
+  readonly parts: readonly BodyWeightReportInsightPart[];
+  readonly tone: BodyWeightReportInsight["tone"];
+}): BodyWeightReportInsight {
+  return {
+    id,
+    parts,
+    text: parts.map((part) => part.text).join(""),
+    tone,
+  };
+}
+
 function _median(values: readonly number[]) {
   if (!Array.isReadonlyArrayNonEmpty(values)) {
     return 0;
@@ -373,6 +479,56 @@ function _median(values: readonly number[]) {
     : ((sortedValues[middleIndex - 1] ?? middleValue) + middleValue) / 2;
 }
 
+function _recencyWeightedAverage({
+  entries,
+  referenceDateKey,
+}: {
+  readonly entries: readonly BodyWeightEntry[];
+  readonly referenceDateKey: DateKey;
+}) {
+  const referenceDay = _dateKeyToDayIndex({ dateKey: referenceDateKey });
+  const weightedEntries = entries.flatMap((entry) => {
+    if (entry.dateKey > referenceDateKey) {
+      return [];
+    }
+
+    const ageDays =
+      referenceDay - _dateKeyToDayIndex({ dateKey: entry.dateKey });
+
+    if (ageDays < 0 || ageDays > stableTrendWindowDays) {
+      return [];
+    }
+
+    return [
+      {
+        weight: Math.exp((-Math.log(2) * ageDays) / stableTrendHalfLifeDays),
+        weightKilograms: entry.weightKilograms,
+      },
+    ];
+  });
+
+  if (!Array.isReadonlyArrayNonEmpty(weightedEntries)) {
+    return null;
+  }
+
+  const totals = weightedEntries.reduce(
+    (aggregate, entry) => ({
+      weightedWeightKilograms:
+        aggregate.weightedWeightKilograms +
+        entry.weightKilograms * entry.weight,
+      weight: aggregate.weight + entry.weight,
+    }),
+    {
+      weightedWeightKilograms: 0,
+      weight: 0,
+    }
+  );
+
+  return totals.weight === 0
+    ? null
+    : totals.weightedWeightKilograms / totals.weight;
+}
+
 function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: DateKey }) {
   const [yearString, monthString, dayString] = dateKey.split("-");
   const year = Number(yearString);
@@ -380,6 +536,20 @@ function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: DateKey }) {
   const day = Number(dayString);
 
   return Math.floor(Date.UTC(year, month - 1, day, 12) / 86_400_000);
+}
+
+function _formatDateKey({ dateKey }: { readonly dateKey: DateKey }) {
+  const [yearString, monthString, dayString] = dateKey.split("-");
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
 }
 
 function _formatKilograms({ value }: { readonly value: number }) {

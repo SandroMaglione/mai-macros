@@ -78,6 +78,109 @@ describe("BodyWeightReports", () => {
       report.trendPoints.map((point) => point.dateKey),
       ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05"]
     );
+    assert.deepEqual(
+      report.stableTrendPoints.map((point) => point.dateKey),
+      ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05"]
+    );
+  });
+
+  it("calculates the latest stable weight from a trailing recency-weighted window", async () => {
+    const entries = await Effect.runPromise(
+      Effect.forEach(
+        [
+          {
+            dateKey: "2026-06-01",
+            weightKilograms: 80,
+          },
+          {
+            dateKey: "2026-06-08",
+            weightKilograms: 84,
+          },
+          {
+            dateKey: "2026-06-16",
+            weightKilograms: 88,
+          },
+        ],
+        ({ dateKey, weightKilograms }) =>
+          Schema.decodeEffect(Domain.BodyWeightEntry)({
+            createdAt: 0,
+            dateKey,
+            updatedAt: 0,
+            weightKilograms,
+          })
+      )
+    );
+    const report = await Effect.runPromise(
+      Effect.gen(function* () {
+        const reports = yield* BodyWeightReports.BodyWeightReports;
+
+        return yield* reports.getRange({
+          input: {
+            endDateKey: "2026-06-16",
+            startDateKey: "2026-06-01",
+          },
+        });
+      }).pipe(
+        Effect.provide(
+          BodyWeightReportsTestLayer({
+            stores: {
+              ...emptyStores,
+              bodyWeightEntries: entries,
+            },
+          })
+        )
+      )
+    );
+    const previousWeight = Math.exp((-Math.log(2) * 8) / 7);
+    const expectedWeight = (84 * previousWeight + 88) / (previousWeight + 1);
+    const latestStableTrendPoint = report.stableTrendPoints.at(-1);
+
+    assert.equal(latestStableTrendPoint?.dateKey, "2026-06-16");
+    assert.ok(report.weightedWeightKilograms !== null);
+    assert.ok(
+      Math.abs(report.weightedWeightKilograms - expectedWeight) < 1e-10
+    );
+    assert.ok(
+      latestStableTrendPoint === undefined
+        ? false
+        : Math.abs(latestStableTrendPoint.weightKilograms - expectedWeight) <
+            1e-10
+    );
+    assert.match(
+      report.insights.find((insight) => insight.id === "movement")?.text ?? "",
+      /from June \d{1,2}, 2026 to June \d{1,2}, 2026\./
+    );
+    assert.deepEqual(
+      report.insights
+        .find((insight) => insight.id === "movement")
+        ?.parts.filter((part) => part.tone === "highlight")
+        .map((part) => part.text),
+      ["5.3 kg", "June 1, 2026", "June 16, 2026"]
+    );
+
+    const staleReport = await Effect.runPromise(
+      Effect.gen(function* () {
+        const reports = yield* BodyWeightReports.BodyWeightReports;
+
+        return yield* reports.getRange({
+          input: {
+            endDateKey: "2026-07-01",
+            startDateKey: "2026-06-01",
+          },
+        });
+      }).pipe(
+        Effect.provide(
+          BodyWeightReportsTestLayer({
+            stores: {
+              ...emptyStores,
+              bodyWeightEntries: entries,
+            },
+          })
+        )
+      )
+    );
+
+    assert.equal(staleReport.weightedWeightKilograms, null);
   });
 });
 

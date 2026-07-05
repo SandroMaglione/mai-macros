@@ -14,13 +14,16 @@ export type FoodNutrientOverviewNutrients = {
 
 export const formatNumber = ({
   maximumFractionDigits = 1,
+  minimumFractionDigits = 0,
   value,
 }: {
   readonly maximumFractionDigits?: number;
+  readonly minimumFractionDigits?: number;
   readonly value: number;
 }) =>
   new Intl.NumberFormat(undefined, {
     maximumFractionDigits,
+    minimumFractionDigits,
   }).format(value);
 
 export const formatDateTitle = ({

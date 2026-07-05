@@ -6,6 +6,7 @@ import {
   TextInput,
   View,
   type StyleProp,
+  type TextStyle,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
@@ -13,6 +14,7 @@ import {
 type FieldProps = Omit<TextInputProps, "style"> & {
   readonly error?: string;
   readonly helperText?: string;
+  readonly inputStyle?: StyleProp<TextStyle>;
   readonly label?: string;
   readonly rightElement?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
@@ -21,6 +23,7 @@ type FieldProps = Omit<TextInputProps, "style"> & {
 export function Field({
   error,
   helperText,
+  inputStyle,
   label,
   placeholderTextColor = color.textSubtle,
   rightElement,
@@ -45,6 +48,7 @@ export function Field({
           style={[
             styles.input,
             inputProps.multiline === true ? styles.inputMultiline : null,
+            inputStyle,
           ]}
         />
         {rightElement === undefined ? null : (
