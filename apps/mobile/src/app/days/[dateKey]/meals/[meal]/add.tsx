@@ -305,21 +305,21 @@ const addMealFoodRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               FoodNotFound: () => ({
-                target: "EnteringQuantity",
+                target: "EnteringQuantity" as const,
                 context: {
                   notice:
                     "Could not find that food. Pick another food and try again.",
                 },
               }),
               MealNotFound: () => ({
-                target: "EnteringQuantity",
+                target: "EnteringQuantity" as const,
                 context: {
                   notice:
                     "Could not find that food. Pick another food and try again.",
                 },
               }),
               SchemaError: () => ({
-                target: "EnteringQuantity",
+                target: "EnteringQuantity" as const,
                 context: {
                   notice: "Enter a quantity greater than zero.",
                 },
@@ -330,12 +330,12 @@ const addMealFoodRouteMachine = setup({
                 if (context.dateKey === today) {
                   enq(actions.replaceHome);
 
-                  return { target: "Submitted" };
+                  return { target: "Submitted" as const };
                 }
 
                 enq(actions.replaceDay, { dateKey: context.dateKey });
 
-                return { target: "Submitted" };
+                return { target: "Submitted" as const };
               },
             })
           ),
@@ -462,20 +462,20 @@ const addMealFoodRouteLoaderMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               InvalidRoute: () => ({
-                target: "Failed",
+                target: "Failed" as const,
                 context: { message: "Could not find this meal." },
               }),
               NoMealPlans: ({ dateKey }) => {
                 enq(actions.replaceNewPlan, { dateKey });
 
-                return { target: "Redirected" };
+                return { target: "Redirected" as const };
               },
               Ready: ({ data }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: { data },
               }),
               UnrecordedDay: () => ({
-                target: "Failed",
+                target: "Failed" as const,
                 context: { message: "Create this day before adding food." },
               }),
             })

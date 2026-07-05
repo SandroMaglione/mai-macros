@@ -194,7 +194,7 @@ const createFoodRouteMachine = setup({
                   });
 
                   return {
-                    target: "Created",
+                    target: "Created" as const,
                   };
                 }
 
@@ -203,7 +203,7 @@ const createFoodRouteMachine = setup({
                 });
 
                 return {
-                  target: "Idle",
+                  target: "Idle" as const,
                   context: {
                     notice: "Food created.",
                   },
@@ -213,7 +213,7 @@ const createFoodRouteMachine = setup({
                 enq(actions.alertCreateFoodValidationError);
 
                 return {
-                  target: "Failure",
+                  target: "Failure" as const,
                   context: {
                     notice:
                       "Check that the name is filled and every required nutrient is a non-negative number.",

@@ -393,16 +393,16 @@ const plansRouteMachine = setup({
         onDone: ({ event }) =>
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
-              InvalidRoute: () => ({ target: "InvalidRoute" }),
+              InvalidRoute: () => ({ target: "InvalidRoute" as const }),
               NoMealPlans: ({ dateKey }) => ({
-                target: "NoMealPlans",
+                target: "NoMealPlans" as const,
                 context: {
                   data: null,
                   redirectDateKey: dateKey,
                 },
               }),
               Ready: ({ data }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   data,
                 },
@@ -544,13 +544,13 @@ const plansRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Failed: ({ notice }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   notice,
                 },
               }),
               Saved: ({ day, editingPlan, notice }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context:
                   context.data === null
                     ? {

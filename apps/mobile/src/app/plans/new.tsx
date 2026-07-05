@@ -223,7 +223,7 @@ const newPlanRouteMachine = setup({
               Created: () => {
                 enq(actions.replaceToDateKey, { dateKey: context.dateKey });
 
-                return { target: "Created" };
+                return { target: "Created" as const };
               },
               PlanMealNameAlreadyExists: () => {
                 const message =
@@ -231,7 +231,7 @@ const newPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
@@ -243,7 +243,7 @@ const newPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
@@ -255,7 +255,7 @@ const newPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
@@ -267,7 +267,7 @@ const newPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },

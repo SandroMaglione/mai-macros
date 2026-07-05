@@ -166,9 +166,9 @@ const editMealEntryRouteLoaderMachine = setup({
         onDone: ({ event }) =>
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
-              InvalidRoute: () => ({ target: "InvalidRoute" }),
+              InvalidRoute: () => ({ target: "InvalidRoute" as const }),
               Ready: ({ data }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: { data },
               }),
             })
@@ -333,13 +333,13 @@ const editMealEntryRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               MealEntryNotFound: (result) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   notice: _mutationMessage({ result }),
                 },
               }),
               SchemaError: (result) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   notice: _mutationMessage({ result }),
                 },
@@ -347,7 +347,7 @@ const editMealEntryRouteMachine = setup({
               Success: () => {
                 enq(actions.replaceDay, { dateKey: context.data.dateKey });
 
-                return { target: "Deleted" };
+                return { target: "Deleted" as const };
               },
             })
           ),
@@ -368,13 +368,13 @@ const editMealEntryRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               MealEntryNotFound: (result) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   notice: _mutationMessage({ result }),
                 },
               }),
               SchemaError: (result) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   notice: _mutationMessage({ result }),
                 },
@@ -382,7 +382,7 @@ const editMealEntryRouteMachine = setup({
               Success: () => {
                 enq(actions.replaceDay, { dateKey: context.data.dateKey });
 
-                return { target: "Saved" };
+                return { target: "Saved" as const };
               },
             })
           ),

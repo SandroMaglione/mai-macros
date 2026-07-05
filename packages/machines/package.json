@@ -12,7 +12,7 @@
   "dependencies": {
     "@mai/nutrition": "workspace:^",
     "effect": "4.0.0-beta.84",
-    "xstate": "6.0.0-alpha.9"
+    "xstate": "6.0.0-alpha.18"
   },
   "devDependencies": {
     "@types/node": "latest"

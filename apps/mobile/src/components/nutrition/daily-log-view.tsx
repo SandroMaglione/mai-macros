@@ -288,10 +288,10 @@ const dailyLogRouteMachine = setup({
               NoMealPlans: ({ dateKey }) => {
                 enq(actions.redirectToNewPlan, { dateKey });
 
-                return { target: "Redirected" };
+                return { target: "Redirected" as const };
               },
               Ready: ({ data }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   data,
                   message: null,

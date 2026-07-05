@@ -54,7 +54,7 @@
     "react-native-svg": "15.15.4",
     "react-native-web": "0.21.2",
     "react-native-worklets": "0.8.3",
-    "xstate": "6.0.0-alpha.9"
+    "xstate": "6.0.0-alpha.18"
   },
   "devDependencies": {
     "@react-native/metro-config": "0.85.3",

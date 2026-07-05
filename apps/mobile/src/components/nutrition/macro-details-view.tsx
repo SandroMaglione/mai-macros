@@ -59,24 +59,17 @@ const MacroDetailsRouteInput = Schema.Struct({
   meal: Schema.UndefinedOr(Domain.MealId),
 });
 
-const MacroDetailsRouteResult = Schema.Union([
-  Schema.TaggedStruct("InvalidRoute", {}),
-  Schema.TaggedStruct("NoMealPlans", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("UnrecordedDay", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("Ready", {
-    data: MacroDetailsRouteData,
-  }),
-]);
-
 const MacroDetailsRouteContext = Schema.Struct({
-  data: Schema.NullOr(MacroDetailsRouteData),
   dateKey: Domain.DateKey,
   meal: Schema.UndefinedOr(Domain.MealId),
-  message: Schema.NullOr(Schema.String),
+});
+
+const MacroDetailsRouteFailureContext = Schema.Struct({
+  message: Schema.String,
+});
+
+const MacroDetailsRouteReadyContext = Schema.Struct({
+  data: MacroDetailsRouteData,
 });
 
 const FoodWeightMetricName = "foodWeightGrams";
@@ -178,8 +171,16 @@ const macroDetailsRouteMachine = setup({
   },
   states: {
     Loading: {},
-    Failed: {},
-    Ready: {},
+    Failed: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(MacroDetailsRouteFailureContext),
+      },
+    },
+    Ready: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(MacroDetailsRouteReadyContext),
+      },
+    },
     Redirected: {},
   },
   actions: {
@@ -194,7 +195,6 @@ const macroDetailsRouteMachine = setup({
     loadMacroDetails: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(MacroDetailsRouteInput),
-        output: Schema.toStandardSchemaV1(MacroDetailsRouteResult),
       },
       run: ({ input }) =>
         RuntimeClient.runPromise(
@@ -271,10 +271,8 @@ const macroDetailsRouteMachine = setup({
   },
 }).createMachine({
   context: ({ input }) => ({
-    data: null,
     dateKey: input.dateKey,
     meal: input.meal,
-    message: null,
   }),
   initial: "Loading",
   states: {
@@ -289,7 +287,7 @@ const macroDetailsRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               InvalidRoute: () => ({
-                target: "Failed",
+                target: "Failed" as const,
                 context: {
                   message: "Could not find this meal.",
                 },
@@ -297,17 +295,16 @@ const macroDetailsRouteMachine = setup({
               NoMealPlans: ({ dateKey }) => {
                 enq(actions.redirectToNewPlan, { dateKey });
 
-                return { target: "Redirected" };
+                return { target: "Redirected" as const };
               },
               Ready: ({ data }) => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   data,
-                  message: null,
                 },
               }),
               UnrecordedDay: () => ({
-                target: "Failed",
+                target: "Failed" as const,
                 context: {
                   message: "Create this day before viewing details.",
                 },
@@ -326,10 +323,6 @@ const macroDetailsRouteMachine = setup({
       on: {
         reload: {
           target: "Loading",
-          context: {
-            data: null,
-            message: null,
-          },
         },
       },
     },
@@ -337,10 +330,6 @@ const macroDetailsRouteMachine = setup({
       on: {
         reload: {
           target: "Loading",
-          context: {
-            data: null,
-            message: null,
-          },
         },
       },
     },
@@ -405,9 +394,8 @@ export function MacroDetailsRoute({
       meal,
     },
   });
-  const routeState = snapshot.value;
 
-  if (routeState === "Loading" || routeState === "Redirected") {
+  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading details" />
@@ -415,13 +403,10 @@ export function MacroDetailsRoute({
     );
   }
 
-  if (routeState === "Failed") {
+  if (snapshot.matches("Failed")) {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load details."}
-          tone="danger"
-        />
+        <Notice message={snapshot.context.message} tone="danger" />
         <Button
           icon={RotateCcw}
           onPress={() => {
@@ -435,13 +420,7 @@ export function MacroDetailsRoute({
     );
   }
 
-  return snapshot.context.data === null ? (
-    <AppScreen contentStyle={styles.centered}>
-      <LoadingView message="Loading details" />
-    </AppScreen>
-  ) : (
-    <MacroDetailsView data={snapshot.context.data} />
-  );
+  return <MacroDetailsView data={snapshot.context.data} />;
 }
 
 function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {

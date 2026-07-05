@@ -19,7 +19,7 @@ importers:
         version: link:packages/typed-lint
       '@types/node':
         specifier: latest
-        version: 26.0.1
+        version: 26.1.0
       '@typescript/native-preview':
         specifier: beta
         version: 7.0.0-dev.20260421.2
@@ -52,7 +52,7 @@ importers:
         version: link:../../packages/sqlite
       '@xstate/react':
         specifier: 7.0.0-alpha.1
-        version: 7.0.0-alpha.1(@types/react@19.2.17)(react@19.2.3)(xstate@6.0.0-alpha.9)
+        version: 7.0.0-alpha.1(@types/react@19.2.17)(react@19.2.3)(xstate@6.0.0-alpha.18)
       effect:
         specifier: 4.0.0-beta.84
         version: 4.0.0-beta.84
@@ -129,8 +129,8 @@ importers:
         specifier: 0.8.3
         version: 0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7)(supports-color@8.1.1))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7)(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
       xstate:
-        specifier: 6.0.0-alpha.9
-        version: 6.0.0-alpha.9
+        specifier: 6.0.0-alpha.18
+        version: 6.0.0-alpha.18
     devDependencies:
       '@react-native/metro-config':
         specifier: 0.85.3
@@ -140,7 +140,7 @@ importers:
         version: 19.2.17
       eas-cli:
         specifier: ^16.32.0
-        version: 16.32.0(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3)
+        version: 16.32.0(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3)
       tsx:
         specifier: 4.22.4
         version: 4.22.4
@@ -154,12 +154,12 @@ importers:
         specifier: 4.0.0-beta.84
         version: 4.0.0-beta.84
       xstate:
-        specifier: 6.0.0-alpha.9
-        version: 6.0.0-alpha.9
+        specifier: 6.0.0-alpha.18
+        version: 6.0.0-alpha.18
     devDependencies:
       '@types/node':
         specifier: latest
-        version: 26.0.1
+        version: 26.1.0
 
   packages/nutrition:
     dependencies:
@@ -169,16 +169,16 @@ importers:
     devDependencies:
       '@types/node':
         specifier: latest
-        version: 26.0.1
+        version: 26.1.0
       vitest:
         specifier: ^4.0.8
-        version: 4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/oxc:
     devDependencies:
       vitest:
         specifier: ^4.0.8
-        version: 4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/services:
     dependencies:
@@ -197,13 +197,13 @@ importers:
     devDependencies:
       '@types/node':
         specifier: latest
-        version: 26.0.1
+        version: 26.1.0
       '@types/qrcode':
         specifier: ^1.5.6
         version: 1.5.6
       vitest:
         specifier: ^4.0.8
-        version: 4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/sqlite:
     dependencies:
@@ -222,13 +222,13 @@ importers:
         version: 4.0.0-beta.78(effect@4.0.0-beta.84)
       vitest:
         specifier: ^4.0.8
-        version: 4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/typed-lint:
     devDependencies:
       vitest:
         specifier: ^4.0.8
-        version: 4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
 packages:
 
@@ -2044,11 +2044,11 @@ packages:
   '@types/istanbul-reports@3.0.4':
     resolution: {integrity: sha512-pk2B1NWalF9toCRu6gjBzR69syFjP4Od8WRAX+0mmf9lAjCRicLOWc+ZrxZHx/0XRjotgkF9t6iaMJ+aXcOdZQ==}
 
-  '@types/node@26.0.0':
-    resolution: {integrity: sha512-vf2YFi1iY9lHGwNJMs01biZFbKJkrZR1T6/MlzjhJLPdntOHLhTrDSnSVcdtvjihi4VQNlrFRIxLsDBlQpAipA==}
-
   '@types/node@26.0.1':
     resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
+
+  '@types/node@26.1.0':
+    resolution: {integrity: sha512-O0A1G3xPGy4w7AgQdAQYUlQ+BKk2Oovw8eRpofyp5KdBZULnbe+WqaOVNrm705SHphCiG4XHsACrSmPu1f+Kgw==}
 
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
@@ -5281,8 +5281,9 @@ packages:
     resolution: {integrity: sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==}
     engines: {node: '>=8.0'}
 
-  xstate@6.0.0-alpha.9:
-    resolution: {integrity: sha512-Jm9e13B0rHXZWWNzTPM5Ui0FdHbFud32MR2bt1N24BKnim4na/1uKMH/Q1aY0Yeqwkz8RAy/aOF4+DbzbngOWg==}
+  xstate@6.0.0-alpha.18:
+    resolution: {integrity: sha512-7n5iNC4mrLua/ch+iAQ1NtWMFMgXKX/NAfQ4Ne/GJ8r9e0aTbX+5PX0ZhEU/SSjGK/OmILn7+enB6G5fl6YBLw==}
+    hasBin: true
 
   y18n@4.0.3:
     resolution: {integrity: sha512-JKhqTOwSrqNA1NY5lSztJ1GrBiUodLMmIZuLiDaMRJ+itFd+ABVE8XBjOvIWL+rSqNDC74LCSFmlb/U4UZ4hJQ==}
@@ -6410,18 +6411,18 @@ snapshots:
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
 
-  '@expo/plugin-help@5.1.23(@types/node@26.0.1)(typescript@6.0.3)':
+  '@expo/plugin-help@5.1.23(@types/node@26.1.0)(typescript@6.0.3)':
     dependencies:
-      '@oclif/core': 2.16.0(@types/node@26.0.1)(typescript@6.0.3)
+      '@oclif/core': 2.16.0(@types/node@26.1.0)(typescript@6.0.3)
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
       - '@types/node'
       - typescript
 
-  '@expo/plugin-warn-if-update-available@2.5.1(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3)':
+  '@expo/plugin-warn-if-update-available@2.5.1(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:
-      '@oclif/core': 2.16.0(@types/node@26.0.1)(typescript@6.0.3)
+      '@oclif/core': 2.16.0(@types/node@26.1.0)(typescript@6.0.3)
       chalk: 4.1.2
       debug: 4.4.3(supports-color@8.1.1)
       ejs: 3.1.10
@@ -6691,7 +6692,7 @@ snapshots:
       widest-line: 3.1.0
       wrap-ansi: 7.0.0
 
-  '@oclif/core@2.16.0(@types/node@26.0.1)(typescript@6.0.3)':
+  '@oclif/core@2.16.0(@types/node@26.1.0)(typescript@6.0.3)':
     dependencies:
       '@types/cli-progress': 3.11.6
       ansi-escapes: 4.3.2
@@ -6716,7 +6717,7 @@ snapshots:
       strip-ansi: 6.0.1
       supports-color: 8.1.1
       supports-hyperlinks: 2.3.0
-      ts-node: 10.9.2(@types/node@26.0.1)(typescript@6.0.3)
+      ts-node: 10.9.2(@types/node@26.1.0)(typescript@6.0.3)
       tslib: 2.8.1
       widest-line: 3.1.0
       wordwrap: 1.0.0
@@ -6729,9 +6730,9 @@ snapshots:
 
   '@oclif/linewrap@1.0.0': {}
 
-  '@oclif/plugin-autocomplete@2.3.10(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3)':
+  '@oclif/plugin-autocomplete@2.3.10(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:
-      '@oclif/core': 2.16.0(@types/node@26.0.1)(typescript@6.0.3)
+      '@oclif/core': 2.16.0(@types/node@26.1.0)(typescript@6.0.3)
       chalk: 4.1.2
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -7462,7 +7463,7 @@ snapshots:
 
   '@types/bunyan@1.8.11':
     dependencies:
-      '@types/node': 26.0.0
+      '@types/node': 26.0.1
 
   '@types/chai@5.2.3':
     dependencies:
@@ -7471,7 +7472,7 @@ snapshots:
 
   '@types/cli-progress@3.11.6':
     dependencies:
-      '@types/node': 26.0.0
+      '@types/node': 26.0.1
 
   '@types/deep-eql@4.0.2': {}
 
@@ -7489,17 +7490,17 @@ snapshots:
     dependencies:
       '@types/istanbul-lib-report': 3.0.3
 
-  '@types/node@26.0.0':
+  '@types/node@26.0.1':
     dependencies:
       undici-types: 8.3.0
 
-  '@types/node@26.0.1':
+  '@types/node@26.1.0':
     dependencies:
       undici-types: 8.3.0
 
   '@types/qrcode@1.5.6':
     dependencies:
-      '@types/node': 26.0.0
+      '@types/node': 26.0.1
 
   '@types/react-dom@19.2.3(@types/react@19.2.17)':
     dependencies:
@@ -7576,13 +7577,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.8(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.8(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.8
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.8':
     dependencies:
@@ -7614,13 +7615,13 @@ snapshots:
 
   '@xmldom/xmldom@0.9.10': {}
 
-  '@xstate/react@7.0.0-alpha.1(@types/react@19.2.17)(react@19.2.3)(xstate@6.0.0-alpha.9)':
+  '@xstate/react@7.0.0-alpha.1(@types/react@19.2.17)(react@19.2.3)(xstate@6.0.0-alpha.18)':
     dependencies:
       react: 19.2.3
       use-isomorphic-layout-effect: 1.2.1(@types/react@19.2.17)(react@19.2.3)
       use-sync-external-store: 1.6.0(react@19.2.3)
     optionalDependencies:
-      xstate: 6.0.0-alpha.9
+      xstate: 6.0.0-alpha.18
     transitivePeerDependencies:
       - '@types/react'
 
@@ -8226,7 +8227,7 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
-  eas-cli@16.32.0(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3):
+  eas-cli@16.32.0(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3):
     dependencies:
       '@expo/apple-utils': 2.1.13
       '@expo/code-signing-certificates': 0.0.5
@@ -8242,8 +8243,8 @@ snapshots:
       '@expo/package-manager': 1.9.10
       '@expo/pkcs12': 0.1.3
       '@expo/plist': 0.2.0
-      '@expo/plugin-help': 5.1.23(@types/node@26.0.1)(typescript@6.0.3)
-      '@expo/plugin-warn-if-update-available': 2.5.1(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3)
+      '@expo/plugin-help': 5.1.23(@types/node@26.1.0)(typescript@6.0.3)
+      '@expo/plugin-warn-if-update-available': 2.5.1(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3)
       '@expo/prebuild-config': 8.0.17(supports-color@8.1.1)
       '@expo/results': 1.0.0
       '@expo/rudder-sdk-node': 1.1.1
@@ -8251,7 +8252,7 @@ snapshots:
       '@expo/steps': 1.0.231
       '@expo/timeago.js': 1.0.0
       '@oclif/core': 1.26.2
-      '@oclif/plugin-autocomplete': 2.3.10(@types/node@26.0.1)(supports-color@8.1.1)(typescript@6.0.3)
+      '@oclif/plugin-autocomplete': 2.3.10(@types/node@26.1.0)(supports-color@8.1.1)(typescript@6.0.3)
       '@segment/ajv-human-errors': 2.16.0(ajv@8.11.0)
       '@urql/core': 4.0.11(graphql@16.8.1)
       '@urql/exchange-retry': 1.2.0(graphql@16.8.1)
@@ -10669,14 +10670,14 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-node@10.9.2(@types/node@26.0.1)(typescript@6.0.3):
+  ts-node@10.9.2(@types/node@26.1.0)(typescript@6.0.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 26.0.1
+      '@types/node': 26.1.0
       acorn: 8.17.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -10806,7 +10807,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0):
+  vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -10814,7 +10815,7 @@ snapshots:
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.0.1
+      '@types/node': 26.1.0
       esbuild: 0.28.1
       fsevents: 2.3.3
       jiti: 2.7.0
@@ -10822,10 +10823,10 @@ snapshots:
       tsx: 4.22.4
       yaml: 2.9.0
 
-  vitest@4.1.8(@types/node@26.0.1)(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)):
+  vitest@4.1.8(@types/node@26.1.0)(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.8(vite@8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.8
       '@vitest/runner': 4.1.8
       '@vitest/snapshot': 4.1.8
@@ -10842,10 +10843,10 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.0.16(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 26.0.1
+      '@types/node': 26.1.0
     transitivePeerDependencies:
       - msw
 
@@ -10937,7 +10938,7 @@ snapshots:
 
   xmlbuilder@15.1.1: {}
 
-  xstate@6.0.0-alpha.9: {}
+  xstate@6.0.0-alpha.18: {}
 
   y18n@4.0.3: {}
 

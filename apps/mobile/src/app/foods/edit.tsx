@@ -85,19 +85,17 @@ const EditFoodsRouteLoaderInput = Schema.Struct({
   dateKey: Schema.UndefinedOr(Domain.DateKey),
 });
 
-const EditFoodsRouteLoadResult = Schema.TaggedStruct("Ready", {
-  data: EditFoodsRouteData,
+const EditFoodsRouteLoaderContext = Schema.Struct({
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
 });
 
-const ReviseFoodOutput = Schema.Union([
-  Schema.TaggedStruct("FoodNotFound", {
-    data: FoodLibraryData,
-  }),
-  Schema.TaggedStruct("Revised", {
-    data: FoodLibraryData,
-  }),
-  Schema.TaggedStruct("SchemaError", {}),
-]);
+const EditFoodsRouteLoaderFailureContext = Schema.Struct({
+  message: Schema.String,
+});
+
+const EditFoodsRouteLoaderReadyContext = Schema.Struct({
+  data: EditFoodsRouteData,
+});
 
 const FoodSearchActorSchema =
   Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
@@ -219,7 +217,6 @@ const editFoodsRouteMachine = setup({
             input: ReviseFoodInput,
           })
         ),
-        output: Schema.toStandardSchemaV1(ReviseFoodOutput),
       },
       run: ({ input }) =>
         RuntimeClient.runPromise(
@@ -323,7 +320,7 @@ const editFoodsRouteMachine = setup({
                 } satisfies FoodSearchMachine.FoodSearchEvent);
 
                 return {
-                  target: "Idle",
+                  target: "Idle" as const,
                   context: {
                     foods: data.foods,
                     foodUsage: data.foodUsage,
@@ -342,7 +339,7 @@ const editFoodsRouteMachine = setup({
                 } satisfies FoodSearchMachine.FoodSearchEvent);
 
                 return {
-                  target: "Idle",
+                  target: "Idle" as const,
                   context: {
                     foods: data.foods,
                     foodUsage: data.foodUsage,
@@ -352,7 +349,7 @@ const editFoodsRouteMachine = setup({
                 };
               },
               SchemaError: () => ({
-                target: "Idle",
+                target: "Idle" as const,
                 context: {
                   notice:
                     "Check that the name is filled and every nutrient is a non-negative number.",
@@ -377,13 +374,7 @@ const EditFoodsSearchParams = Schema.Struct({
 
 const editFoodsRouteLoaderMachine = setup({
   schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        data: Schema.NullOr(EditFoodsRouteData),
-        dateKey: Schema.UndefinedOr(Domain.DateKey),
-        message: Schema.NullOr(Schema.String),
-      })
-    ),
+    context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderContext),
     events: {
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
@@ -391,15 +382,22 @@ const editFoodsRouteLoaderMachine = setup({
   },
   states: {
     Loading: {},
-    Failed: {},
-    Ready: {},
+    Failed: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderFailureContext),
+      },
+    },
+    Ready: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderReadyContext),
+      },
+    },
     Redirected: {},
   },
   actorSources: {
     loadRouteData: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(EditFoodsRouteLoaderInput),
-        output: Schema.toStandardSchemaV1(EditFoodsRouteLoadResult),
       },
       run: ({ input }) =>
         RuntimeClient.runPromise(
@@ -407,11 +405,8 @@ const editFoodsRouteLoaderMachine = setup({
             const data = yield* _loadFoodLibraryData();
 
             return {
-              _tag: "Ready" as const,
-              data: {
-                dateKey: input.dateKey,
-                ...data,
-              },
+              dateKey: input.dateKey,
+              ...data,
             };
           })
         ),
@@ -419,9 +414,7 @@ const editFoodsRouteLoaderMachine = setup({
   },
 }).createMachine({
   context: ({ input }) => ({
-    data: null,
     dateKey: input.dateKey,
-    message: null,
   }),
   initial: "Loading",
   states: {
@@ -434,7 +427,7 @@ const editFoodsRouteLoaderMachine = setup({
         onDone: ({ event }) => ({
           target: "Ready",
           context: {
-            data: event.output.data,
+            data: event.output,
           },
         }),
         onError: {
@@ -449,9 +442,6 @@ const editFoodsRouteLoaderMachine = setup({
       on: {
         retry: {
           target: "Loading",
-          context: {
-            message: null,
-          },
         },
       },
     },
@@ -485,7 +475,7 @@ export function EditFoodsPanelLoader({
     },
   });
 
-  if (snapshot.value === "Loading" || snapshot.value === "Redirected") {
+  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
     const loading = (
       <View style={styles.centered}>
         <LoadingView message="Loading foods" />
@@ -501,14 +491,11 @@ export function EditFoodsPanelLoader({
     );
   }
 
-  if (snapshot.value === "Failed") {
+  if (snapshot.matches("Failed")) {
     const failure = (
       <View style={styles.centered}>
         <Notice
-          message={
-            snapshot.context.message ??
-            "Could not load foods. Please try again."
-          }
+          message={snapshot.context.message}
           title="Food library unavailable"
           tone="danger"
         />
@@ -537,19 +524,7 @@ export function EditFoodsPanelLoader({
     );
   }
 
-  return snapshot.context.data === null ? (
-    layout === "embedded" ? (
-      <View style={styles.centered}>
-        <LoadingView message="Loading foods" />
-      </View>
-    ) : (
-      <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading foods" />
-      </AppScreen>
-    )
-  ) : (
-    <ReadyEditFoodsRoute data={snapshot.context.data} layout={layout} />
-  );
+  return <ReadyEditFoodsRoute data={snapshot.context.data} layout={layout} />;
 }
 
 function ReadyEditFoodsRoute({

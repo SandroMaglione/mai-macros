@@ -296,7 +296,7 @@ const editPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
@@ -308,17 +308,17 @@ const editPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
                 };
               },
-              PlanNotFound: () => ({ target: "InvalidRoute" }),
+              PlanNotFound: () => ({ target: "InvalidRoute" as const }),
               Revised: ({ dateKey }) => {
                 enq(actions.replaceToDateKey, { dateKey });
 
-                return { target: "Revised" };
+                return { target: "Revised" as const };
               },
               SchemaError: () => {
                 const message =
@@ -326,7 +326,7 @@ const editPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },
@@ -338,7 +338,7 @@ const editPlanRouteMachine = setup({
                 enq(actions.showPlanNotSavedAlert, { message });
 
                 return {
-                  target: "Ready",
+                  target: "Ready" as const,
                   context: {
                     errorMessage: message,
                   },

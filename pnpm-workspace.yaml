@@ -19,4 +19,4 @@ allowBuilds:
   msgpackr-extract: false
 
 minimumReleaseAgeExclude:
-  - xstate@6.0.0-alpha.9
+  - xstate@6.0.0-alpha.18

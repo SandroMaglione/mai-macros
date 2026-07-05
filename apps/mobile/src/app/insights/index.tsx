@@ -8,7 +8,7 @@ import {
   Notice,
   PagerTabBar,
 } from "@/components/ui";
-import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
+import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines";
@@ -74,41 +74,45 @@ const StatsTab = Schema.Literals(["nutrition", "weight"]);
 
 type StatsTab = typeof StatsTab.Type;
 
-const LoadDefaultRangeResult = Schema.Union([
-  Schema.TaggedStruct("Loaded", {
-    report: NutritionReportRange,
-  }),
-  Schema.TaggedStruct("NoPlans", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("Failure", {
-    message: Schema.String,
-  }),
-]);
+const NutritionInsightsFailureContext = Schema.Struct({
+  message: Schema.String,
+});
 
-const NutritionInsightsRouteContext = Schema.Struct({
-  dateKey: Schema.NullOr(Domain.DateKey),
-  message: Schema.NullOr(Schema.String),
-  report: Schema.NullOr(NutritionReportRange),
+const NutritionInsightsLoadedContext = Schema.Struct({
+  report: NutritionReportRange,
+});
+
+const NutritionInsightsNoPlansContext = Schema.Struct({
+  dateKey: Domain.DateKey,
+  message: Schema.String,
 });
 
 const nutritionInsightsRouteMachine = setup({
   schemas: {
-    context: Schema.toStandardSchemaV1(NutritionInsightsRouteContext),
     events: {
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
   states: {
-    Failure: {},
-    Loaded: {},
+    Failure: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(NutritionInsightsFailureContext),
+      },
+    },
+    Loaded: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(NutritionInsightsLoadedContext),
+      },
+    },
     Loading: {},
+    NoPlans: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(NutritionInsightsNoPlansContext),
+      },
+    },
   },
   actorSources: {
     loadDefaultRange: createAsyncLogic({
-      schemas: {
-        output: Schema.toStandardSchemaV1(LoadDefaultRangeResult),
-      },
       run: () =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
@@ -188,29 +192,22 @@ const nutritionInsightsRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Failure: ({ message }) => ({
-                target: "Failure",
+                target: "Failure" as const,
                 context: {
-                  dateKey: null,
-                  message:
-                    message ??
-                    "Something went wrong while loading your nutrition report.",
-                  report: null,
+                  message,
                 },
               }),
               Loaded: ({ report }) => ({
-                target: "Loaded",
+                target: "Loaded" as const,
                 context: {
-                  dateKey: report.endDateKey,
-                  message: null,
                   report,
                 },
               }),
               NoPlans: ({ dateKey }) => ({
-                target: "Loaded",
+                target: "NoPlans" as const,
                 context: {
                   dateKey,
                   message: "Create a meal plan to unlock nutrition insights.",
-                  report: null,
                 },
               }),
             })
@@ -218,10 +215,8 @@ const nutritionInsightsRouteMachine = setup({
         onError: {
           target: "Failure",
           context: {
-            dateKey: null,
             message:
               "Something went wrong while loading your nutrition report.",
-            report: null,
           },
         },
       },
@@ -230,11 +225,6 @@ const nutritionInsightsRouteMachine = setup({
       on: {
         retry: {
           target: "Loading",
-          context: {
-            dateKey: null,
-            message: null,
-            report: null,
-          },
         },
       },
     },
@@ -340,10 +330,8 @@ export default function InsightsScreen() {
 
 function NutritionInsightsPanel() {
   const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine);
-  const state = snapshot.context;
-  const routeState = snapshot.value;
 
-  if (routeState === "Loading") {
+  if (snapshot.matches("Loading")) {
     return (
       <View style={styles.centered}>
         <LoadingView message="Loading nutrition insights..." />
@@ -351,15 +339,12 @@ function NutritionInsightsPanel() {
     );
   }
 
-  if (routeState === "Failure") {
+  if (snapshot.matches("Failure")) {
     return (
       <View style={styles.failure}>
         <Text style={styles.failureTitle}>Insights unavailable</Text>
         <Notice
-          message={
-            state.message ??
-            "Something went wrong while loading your nutrition report."
-          }
+          message={snapshot.context.message}
           title="Range summary could not load"
           tone="warning"
         />
@@ -375,13 +360,11 @@ function NutritionInsightsPanel() {
     );
   }
 
-  if (state.report === null) {
+  if (snapshot.matches("NoPlans")) {
     return (
       <View style={styles.failure}>
         <Notice
-          message={
-            state.message ?? "Create a meal plan to unlock nutrition insights."
-          }
+          message={snapshot.context.message}
           title="Nutrition unavailable"
           tone="neutral"
         />
@@ -391,7 +374,7 @@ function NutritionInsightsPanel() {
             router.push({
               pathname: "/plans/new",
               params: {
-                dateKey: state.dateKey ?? todayDateKey(),
+                dateKey: snapshot.context.dateKey,
               },
             });
           }}
@@ -402,7 +385,7 @@ function NutritionInsightsPanel() {
     );
   }
 
-  return <RangeSummary report={state.report} />;
+  return <RangeSummary report={snapshot.context.report} />;
 }
 
 function StatsHeader({

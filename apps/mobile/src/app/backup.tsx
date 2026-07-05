@@ -272,11 +272,11 @@ const importBackupMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Canceled: () => ({
-                target: "Success",
+                target: "Success" as const,
                 context: { message: "Import canceled" },
               }),
               Imported: ({ message }) => ({
-                target: "Success",
+                target: "Success" as const,
                 context: { message },
               }),
             })
@@ -536,10 +536,10 @@ const catalogImportMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Canceled: () => ({
-                target: "Idle",
+                target: "Idle" as const,
               }),
               Previewed: ({ candidates, catalogJson, selectedFoodIds }) => ({
-                target: "CatalogPreview",
+                target: "CatalogPreview" as const,
                 context: {
                   catalogJson,
                   previewCandidates: candidates,
@@ -614,7 +614,9 @@ const catalogImportMachine = setup({
           },
         },
         Success: {
-          after: { importCatalogSuccess: { target: "ImportCompleted" } },
+          after: {
+            importCatalogSuccess: { target: "ImportCompleted" },
+          },
         },
         ImportCompleted: { type: "final" },
       },
@@ -797,10 +799,11 @@ function CatalogExportSection() {
 
 function CatalogImportSection() {
   const [snapshot, , actor] = useMachine(catalogImportMachine);
-  const isImporting = snapshot.matches({
-    CatalogPreview: "ImportingCatalog",
-  });
+  const isImporting = snapshot.matches("CatalogPreview.ImportingCatalog");
   const isPreviewing = snapshot.matches("ImportingPreview");
+  const isPreviewReady =
+    snapshot.matches("CatalogPreview.SelectFoods") ||
+    snapshot.matches("CatalogPreview.ImportingCatalog");
   const isBusy = isImporting || isPreviewing;
   return (
     <>
@@ -815,11 +818,11 @@ function CatalogImportSection() {
             Choose catalog file
           </Button>
 
-          {snapshot.matches({ CatalogPreview: "Success" }) && (
+          {snapshot.matches("CatalogPreview.Success") && (
             <Notice message={snapshot.context.message} tone="success" />
           )}
 
-          {snapshot.matches({ CatalogPreview: "Error" }) && (
+          {snapshot.matches("CatalogPreview.Error") && (
             <Notice
               message={snapshot.context.message}
               title="Import catalog failed"
@@ -829,7 +832,7 @@ function CatalogImportSection() {
         </View>
       </BackupSettingsSection>
 
-      {snapshot.matches("CatalogPreview") && (
+      {isPreviewReady && (
         <BackupSettingsSection divider title="Preview">
           <View style={styles.sectionBody}>
             <View style={styles.catalogMetricRow}>
@@ -842,22 +845,24 @@ function CatalogImportSection() {
             </View>
 
             <View style={styles.catalogCandidateList}>
-              {snapshot.context.previewCandidates.map((candidate) => (
-                <CatalogCandidateRow
-                  key={candidate.food.id}
-                  candidate={candidate}
-                  disabled={isBusy}
-                  selected={HashSet.has(
-                    snapshot.context.selectedFoodIds,
-                    candidate.food.id
-                  )}
-                  onToggle={() =>
-                    actor.trigger.toggleCatalogFood({
-                      foodId: candidate.food.id,
-                    })
-                  }
-                />
-              ))}
+              {snapshot.context.previewCandidates.map(
+                (candidate: FoodCatalogTransfer.FoodCatalogImportCandidate) => (
+                  <CatalogCandidateRow
+                    key={candidate.food.id}
+                    candidate={candidate}
+                    disabled={isBusy}
+                    selected={HashSet.has(
+                      snapshot.context.selectedFoodIds,
+                      candidate.food.id
+                    )}
+                    onToggle={() =>
+                      actor.trigger.toggleCatalogFood({
+                        foodId: candidate.food.id,
+                      })
+                    }
+                  />
+                )
+              )}
             </View>
 
             <Button

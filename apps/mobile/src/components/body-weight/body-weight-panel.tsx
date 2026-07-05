@@ -311,13 +311,13 @@ const bodyWeightRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Saved: () => ({
-                target: "Loading",
+                target: "Loading" as const,
                 context: {
                   message: "Weight saved.",
                 },
               }),
               ValidationFailure: () => ({
-                target: "Ready",
+                target: "Ready" as const,
                 context: {
                   message: "Enter a positive weight in kilograms.",
                 },
