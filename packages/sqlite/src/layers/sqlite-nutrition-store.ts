@@ -67,6 +67,13 @@ const DailyLogRow = Schema.Struct({
   updatedAt: Schema.Number,
 });
 
+const BodyWeightEntryRow = Schema.Struct({
+  createdAt: Schema.Number,
+  dateKey: Domain.DateKey,
+  updatedAt: Schema.Number,
+  weightKilograms: Domain.BodyWeightKilograms,
+});
+
 const ActiveMealPlanSelectionRow = Schema.Struct({
   id: Domain.ActiveMealPlanSelectionId,
   planId: Domain.PlanId,
@@ -125,6 +132,13 @@ const selectPlanMealColumns = `
 const selectDailyLogColumns = `
   date_key AS dateKey,
   plan_id AS planId,
+  created_at AS createdAt,
+  updated_at AS updatedAt
+`;
+
+const selectBodyWeightEntryColumns = `
+  date_key AS dateKey,
+  weight_kilograms AS weightKilograms,
   created_at AS createdAt,
   updated_at AS updatedAt
 `;
@@ -198,6 +212,9 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
   const decodeDailyLogRow = (row: typeof DailyLogRow.Type) =>
     Schema.decodeEffect(Domain.DailyLog)(row);
+
+  const decodeBodyWeightEntryRow = (row: typeof BodyWeightEntryRow.Type) =>
+    Schema.decodeEffect(Domain.BodyWeightEntry)(row);
 
   const decodeActiveMealPlanSelectionRow = (
     row: typeof ActiveMealPlanSelectionRow.Type
@@ -281,6 +298,45 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Result: DailyLogRow,
     execute: (dateKey) =>
       sql`SELECT ${sql.literal(selectDailyLogColumns)} FROM daily_logs WHERE date_key = ${dateKey}`,
+  });
+
+  const listBodyWeightEntryRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: BodyWeightEntryRow,
+    execute: () =>
+      sql`
+        SELECT ${sql.literal(selectBodyWeightEntryColumns)}
+        FROM body_weight_entries
+        ORDER BY date_key
+      `,
+  });
+
+  const findBodyWeightEntryByDateKeyRows = SqlSchema.findAll({
+    Request: Domain.DateKey,
+    Result: BodyWeightEntryRow,
+    execute: (dateKey) =>
+      sql`
+        SELECT ${sql.literal(selectBodyWeightEntryColumns)}
+        FROM body_weight_entries
+        WHERE date_key = ${dateKey}
+      `,
+  });
+
+  const BodyWeightEntryRangeRequest = Schema.Struct({
+    endDateKey: Domain.DateKey,
+    startDateKey: Domain.DateKey,
+  });
+
+  const findBodyWeightEntriesByRangeRows = SqlSchema.findAll({
+    Request: BodyWeightEntryRangeRequest,
+    Result: BodyWeightEntryRow,
+    execute: ({ endDateKey, startDateKey }) =>
+      sql`
+        SELECT ${sql.literal(selectBodyWeightEntryColumns)}
+        FROM body_weight_entries
+        WHERE date_key BETWEEN ${startDateKey} AND ${endDateKey}
+        ORDER BY date_key
+      `,
   });
 
   const findDailyLogsByPlanRows = SqlSchema.findAll({
@@ -384,6 +440,10 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Effect.flatMap((rows) => Effect.forEach(rows, decodeDailyLogRow))
   );
 
+  const listBodyWeightEntries = listBodyWeightEntryRows({}).pipe(
+    Effect.flatMap((rows) => Effect.forEach(rows, decodeBodyWeightEntryRow))
+  );
+
   const listMealEntries = listMealEntryRows({}).pipe(
     Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
   );
@@ -438,6 +498,15 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     date_key: dailyLog.dateKey,
     plan_id: dailyLog.planId,
     updated_at: dailyLog.updatedAt,
+  });
+
+  const bodyWeightEntryRowValues = (
+    bodyWeightEntry: typeof Domain.BodyWeightEntry.Encoded
+  ) => ({
+    created_at: bodyWeightEntry.createdAt,
+    date_key: bodyWeightEntry.dateKey,
+    updated_at: bodyWeightEntry.updatedAt,
+    weight_kilograms: bodyWeightEntry.weightKilograms,
   });
 
   const activeMealPlanSelectionRowValues = (
@@ -517,6 +586,19 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       })
     );
 
+  const upsertBodyWeightEntry = (bodyWeightEntry: Domain.BodyWeightEntry) =>
+    Schema.encodeEffect(Domain.BodyWeightEntry)(bodyWeightEntry).pipe(
+      Effect.flatMap((encodedBodyWeightEntry) => {
+        const row = bodyWeightEntryRowValues(encodedBodyWeightEntry);
+
+        return sql`
+          INSERT INTO body_weight_entries ${sql.insert(row)}
+          ON CONFLICT(date_key) DO UPDATE SET
+            ${sql.update(row, ["date_key"])}
+        `;
+      })
+    );
+
   const upsertActiveMealPlanSelection = (
     selection: Domain.ActiveMealPlanSelection
   ) =>
@@ -574,6 +656,29 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
     deleteDailyLog: (dateKey) =>
       _mapStoreError(sql`DELETE FROM daily_logs WHERE date_key = ${dateKey}`),
+
+    deleteBodyWeightEntry: (dateKey) =>
+      _mapStoreError(
+        sql`DELETE FROM body_weight_entries WHERE date_key = ${dateKey}`
+      ),
+
+    findBodyWeightEntryByDateKey: (dateKey) =>
+      _mapStoreError(
+        findBodyWeightEntryByDateKeyRows(dateKey).pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, decodeBodyWeightEntryRow)
+          )
+        )
+      ),
+
+    findBodyWeightEntriesByRange: (input) =>
+      _mapStoreError(
+        findBodyWeightEntriesByRangeRows(input).pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, decodeBodyWeightEntryRow)
+          )
+        )
+      ),
 
     findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
       _mapStoreError(
@@ -648,6 +753,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
     listDailyLogs: _mapStoreError(listDailyLogs),
 
+    listBodyWeightEntries: _mapStoreError(listBodyWeightEntries),
+
     listFoods: _mapStoreError(listFoods),
 
     listMealEntries: _mapStoreError(listMealEntries),
@@ -667,12 +774,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
                 )
               );
             const dailyLogs = yield* listDailyLogs;
+            const bodyWeightEntries = yield* listBodyWeightEntries;
             const foods = yield* listFoods;
             const mealEntries = yield* listMealEntries;
             const plans = yield* listPlans;
 
             return {
               activeMealPlanSelections,
+              bodyWeightEntries,
               dailyLogs,
               foods,
               mealEntries,
@@ -688,6 +797,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         sql.withTransaction(
           Effect.gen(function* () {
             yield* sql`DELETE FROM meal_entries`;
+            yield* sql`DELETE FROM body_weight_entries`;
             yield* sql`DELETE FROM active_meal_plan_selections`;
             yield* sql`DELETE FROM daily_logs`;
             yield* sql`DELETE FROM plan_meals`;
@@ -695,6 +805,11 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
             yield* sql`DELETE FROM plans`;
             yield* Effect.forEach(stores.plans, upsertPlan, { discard: true });
             yield* Effect.forEach(stores.foods, upsertFood, { discard: true });
+            yield* Effect.forEach(
+              stores.bodyWeightEntries,
+              upsertBodyWeightEntry,
+              { discard: true }
+            );
             yield* Effect.forEach(stores.dailyLogs, upsertDailyLog, {
               discard: true,
             });
@@ -714,6 +829,9 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       _mapStoreError(upsertActiveMealPlanSelection(selection)),
 
     upsertDailyLog: (dailyLog) => _mapStoreError(upsertDailyLog(dailyLog)),
+
+    upsertBodyWeightEntry: (bodyWeightEntry) =>
+      _mapStoreError(upsertBodyWeightEntry(bodyWeightEntry)),
 
     upsertFood: (food) => _mapStoreError(upsertFood(food)),
 

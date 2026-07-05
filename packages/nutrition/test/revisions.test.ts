@@ -5,6 +5,7 @@ import { Domain, Foods, MealPlans, Store } from "../src/index.ts";
 
 const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
+  bodyWeightEntries: [],
   dailyLogs: [],
   foods: [],
   mealEntries: [],
@@ -435,6 +436,29 @@ function _revisionTestLayer({
           ),
         };
       }),
+    deleteBodyWeightEntry: (dateKey) =>
+      Effect.sync(() => {
+        currentStores = {
+          ...currentStores,
+          bodyWeightEntries: currentStores.bodyWeightEntries.filter(
+            (bodyWeightEntry) => bodyWeightEntry.dateKey !== dateKey
+          ),
+        };
+      }),
+    findBodyWeightEntryByDateKey: (dateKey) =>
+      Effect.sync(() =>
+        currentStores.bodyWeightEntries.filter(
+          (bodyWeightEntry) => bodyWeightEntry.dateKey === dateKey
+        )
+      ),
+    findBodyWeightEntriesByRange: ({ endDateKey, startDateKey }) =>
+      Effect.sync(() =>
+        currentStores.bodyWeightEntries.filter(
+          (bodyWeightEntry) =>
+            bodyWeightEntry.dateKey >= startDateKey &&
+            bodyWeightEntry.dateKey <= endDateKey
+        )
+      ),
     findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
       Effect.sync(() =>
         currentStores.activeMealPlanSelections.filter(
@@ -501,6 +525,7 @@ function _revisionTestLayer({
         };
       }),
     listDailyLogs: Effect.sync(() => currentStores.dailyLogs),
+    listBodyWeightEntries: Effect.sync(() => currentStores.bodyWeightEntries),
     listFoods: Effect.sync(() => currentStores.foods),
     listMealEntries: Effect.sync(() => currentStores.mealEntries),
     listPlans: Effect.sync(() => currentStores.plans),
@@ -530,6 +555,19 @@ function _revisionTestLayer({
               (currentDailyLog) => currentDailyLog.dateKey !== dailyLog.dateKey
             ),
             dailyLog,
+          ],
+        };
+      }),
+    upsertBodyWeightEntry: (bodyWeightEntry) =>
+      Effect.sync(() => {
+        currentStores = {
+          ...currentStores,
+          bodyWeightEntries: [
+            ...currentStores.bodyWeightEntries.filter(
+              (currentBodyWeightEntry) =>
+                currentBodyWeightEntry.dateKey !== bodyWeightEntry.dateKey
+            ),
+            bodyWeightEntry,
           ],
         };
       }),

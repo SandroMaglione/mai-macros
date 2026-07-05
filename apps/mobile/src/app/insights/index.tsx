@@ -1,12 +1,4 @@
-import { EmptyEvent } from "@mai/machines";
-import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { DateTime, Effect, Match, Schema } from "effect";
-import { router, useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
-
+import { BodyWeightPanel } from "@/components/body-weight/body-weight-panel";
 import { RangeSummary } from "@/components/nutrition/range-summary";
 import {
   AppScreen,
@@ -14,10 +6,19 @@ import {
   LoadingView,
   MaiHeader,
   Notice,
+  PagerTabBar,
 } from "@/components/ui";
-import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
+import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
+import { EmptyEvent } from "@mai/machines";
+import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
+import { useMachine } from "@xstate/react";
+import { DateTime, Effect, Match, Schema } from "effect";
+import { router, useRouter } from "expo-router";
+import { ChevronLeft, Plus } from "lucide-react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { createAsyncLogic, setup } from "xstate";
 
 const NutrientName = Schema.Literals(Reporting.NutrientNames);
 
@@ -69,6 +70,10 @@ const NutritionReportRange = Schema.Struct({
   startDateKey: Domain.DateKey,
 });
 
+const StatsTab = Schema.Literals(["nutrition", "weight"]);
+
+type StatsTab = typeof StatsTab.Type;
+
 const LoadDefaultRangeResult = Schema.Union([
   Schema.TaggedStruct("Loaded", {
     report: NutritionReportRange,
@@ -81,31 +86,23 @@ const LoadDefaultRangeResult = Schema.Union([
   }),
 ]);
 
-const InsightsRouteContext = Schema.Struct({
+const NutritionInsightsRouteContext = Schema.Struct({
+  dateKey: Schema.NullOr(Domain.DateKey),
   message: Schema.NullOr(Schema.String),
   report: Schema.NullOr(NutritionReportRange),
 });
 
-const insightsRouteMachine = setup({
+const nutritionInsightsRouteMachine = setup({
   schemas: {
-    context: Schema.toStandardSchemaV1(InsightsRouteContext),
+    context: Schema.toStandardSchemaV1(NutritionInsightsRouteContext),
     events: {
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
   states: {
-    Loading: {},
     Failure: {},
     Loaded: {},
-    Redirected: {},
-  },
-  actions: {
-    redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/plans/new",
-        params,
-      });
-    },
+    Loading: {},
   },
   actorSources: {
     loadDefaultRange: createAsyncLogic({
@@ -178,6 +175,7 @@ const insightsRouteMachine = setup({
   },
 }).createMachine({
   context: () => ({
+    dateKey: null,
     message: null,
     report: null,
   }),
@@ -186,36 +184,44 @@ const insightsRouteMachine = setup({
     Loading: {
       invoke: {
         src: "loadDefaultRange",
-        onDone: ({ event, actions }, enq) =>
+        onDone: ({ event }) =>
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Failure: ({ message }) => ({
                 target: "Failure",
                 context: {
+                  dateKey: null,
                   message:
                     message ??
                     "Something went wrong while loading your nutrition report.",
+                  report: null,
                 },
               }),
               Loaded: ({ report }) => ({
                 target: "Loaded",
                 context: {
+                  dateKey: report.endDateKey,
                   message: null,
                   report,
                 },
               }),
-              NoPlans: ({ dateKey }) => {
-                enq(actions.redirectToNewPlan, { dateKey });
-
-                return { target: "Redirected" };
-              },
+              NoPlans: ({ dateKey }) => ({
+                target: "Loaded",
+                context: {
+                  dateKey,
+                  message: "Create a meal plan to unlock nutrition insights.",
+                  report: null,
+                },
+              }),
             })
           ),
         onError: {
           target: "Failure",
           context: {
+            dateKey: null,
             message:
               "Something went wrong while loading your nutrition report.",
+            report: null,
           },
         },
       },
@@ -225,6 +231,7 @@ const insightsRouteMachine = setup({
         retry: {
           target: "Loading",
           context: {
+            dateKey: null,
             message: null,
             report: null,
           },
@@ -232,57 +239,70 @@ const insightsRouteMachine = setup({
       },
     },
     Loaded: {},
-    Redirected: {},
   },
 });
 
+const statsTabMachine = setup({
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({
+        activeTab: StatsTab,
+      })
+    ),
+    events: {
+      selectTab: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          tab: StatsTab,
+        })
+      ),
+    },
+  },
+  states: {
+    Ready: {},
+  },
+}).createMachine({
+  context: () => ({
+    activeTab: "nutrition" as const,
+  }),
+  initial: "Ready",
+  states: {
+    Ready: {
+      on: {
+        selectTab: ({ event }) => ({
+          context: {
+            activeTab: event.tab,
+          },
+        }),
+      },
+    },
+  },
+});
+
+const statsTabs = [
+  {
+    accessibilityLabel: "Nutrition stats tab",
+    key: "nutrition",
+    label: "Nutrition",
+  },
+  {
+    accessibilityLabel: "Weight stats tab",
+    key: "weight",
+    label: "Weight",
+  },
+] as const satisfies readonly {
+  readonly accessibilityLabel: string;
+  readonly key: StatsTab;
+  readonly label: string;
+}[];
+
 export default function InsightsScreen() {
   const appRouter = useRouter();
-  const [snapshot, , actor] = useMachine(insightsRouteMachine);
-  const state = snapshot.context;
-  const routeState = snapshot.value;
-
-  if (routeState === "Loading" || routeState === "Redirected") {
-    return (
-      <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading nutrition insights..." />
-      </AppScreen>
-    );
-  }
-
-  if (routeState === "Failure") {
-    return (
-      <AppScreen contentStyle={styles.centered}>
-        <View style={styles.failure}>
-          <Text style={styles.failureTitle}>Insights unavailable</Text>
-          <Notice
-            message={
-              state.message ??
-              "Something went wrong while loading your nutrition report."
-            }
-            title="Range summary could not load"
-            tone="warning"
-          />
-          <Button
-            onPress={() => {
-              actor.trigger.retry();
-            }}
-            variant="secondary"
-          >
-            Retry
-          </Button>
-        </View>
-      </AppScreen>
-    );
-  }
-
-  if (state.report === null) {
-    return (
-      <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading nutrition insights..." />
-      </AppScreen>
-    );
-  }
+  const [snapshot, , actor] = useMachine(statsTabMachine);
+  const activeTab = snapshot.context.activeTab;
+  const activeIndex = Math.max(
+    0,
+    statsTabs.findIndex((tab) => tab.key === activeTab)
+  );
 
   return (
     <AppScreen
@@ -293,17 +313,99 @@ export default function InsightsScreen() {
       }}
       topSafeAreaColor={color.primary}
     >
-      <InsightsHeader
+      <StatsHeader
         onBackToToday={() => {
           appRouter.replace("/");
         }}
       />
-      <RangeSummary report={state.report} />
+      <PagerTabBar
+        activeIndex={activeIndex}
+        onActiveIndexChange={(index) => {
+          const tab = statsTabs[index];
+
+          if (tab !== undefined) {
+            actor.trigger.selectTab({ tab: tab.key });
+          }
+        }}
+        tabs={statsTabs}
+      />
+      {activeTab === "nutrition" ? (
+        <NutritionInsightsPanel />
+      ) : (
+        <BodyWeightPanel />
+      )}
     </AppScreen>
   );
 }
 
-function InsightsHeader({
+function NutritionInsightsPanel() {
+  const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine);
+  const state = snapshot.context;
+  const routeState = snapshot.value;
+
+  if (routeState === "Loading") {
+    return (
+      <View style={styles.centered}>
+        <LoadingView message="Loading nutrition insights..." />
+      </View>
+    );
+  }
+
+  if (routeState === "Failure") {
+    return (
+      <View style={styles.failure}>
+        <Text style={styles.failureTitle}>Insights unavailable</Text>
+        <Notice
+          message={
+            state.message ??
+            "Something went wrong while loading your nutrition report."
+          }
+          title="Range summary could not load"
+          tone="warning"
+        />
+        <Button
+          onPress={() => {
+            actor.trigger.retry();
+          }}
+          variant="secondary"
+        >
+          Retry
+        </Button>
+      </View>
+    );
+  }
+
+  if (state.report === null) {
+    return (
+      <View style={styles.failure}>
+        <Notice
+          message={
+            state.message ?? "Create a meal plan to unlock nutrition insights."
+          }
+          title="Nutrition unavailable"
+          tone="neutral"
+        />
+        <Button
+          icon={Plus}
+          onPress={() => {
+            router.push({
+              pathname: "/plans/new",
+              params: {
+                dateKey: state.dateKey ?? todayDateKey(),
+              },
+            });
+          }}
+        >
+          Create plan
+        </Button>
+      </View>
+    );
+  }
+
+  return <RangeSummary report={state.report} />;
+}
+
+function StatsHeader({
   onBackToToday,
 }: {
   readonly onBackToToday: () => void;
@@ -323,13 +425,14 @@ function InsightsHeader({
           <ChevronLeft color={color.white} size={31} strokeWidth={2.6} />
         </Pressable>
       }
-      title="Nutrition insights"
+      title="Stats"
     />
   );
 }
 
 const styles = StyleSheet.create({
   content: {
+    gap: spacing.lg,
     paddingBottom: spacing.xxxl,
     backgroundColor: color.bg,
   },
@@ -344,7 +447,7 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   centered: {
-    flex: 1,
+    minHeight: 220,
     justifyContent: "center",
   },
   failure: {

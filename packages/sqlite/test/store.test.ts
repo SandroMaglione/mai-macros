@@ -13,6 +13,7 @@ import { assert, describe, it } from "vitest";
 
 import migration001 from "../src/migrations/001-initial.ts";
 import migration002 from "../src/migrations/002-custom-plan-meals.ts";
+import migration003 from "../src/migrations/003-body-weight-entries.ts";
 import {
   TestSqliteClientLayer,
   TestSqliteDataLayer,
@@ -56,14 +57,20 @@ describe("SqliteNutritionStore", () => {
         yield* store.upsertDailyLog(dailyLog);
         yield* store.upsertActiveMealPlanSelection(selection);
         yield* store.insertMealEntry(mealEntry);
+        yield* store.upsertBodyWeightEntry(yield* testBodyWeightEntry);
 
         const foods = yield* store.findFoodsByName(food.name);
         const mealEntries = yield* store.findMealEntriesByDate(
           dailyLog.dateKey
         );
+        const bodyWeightEntries = yield* store.findBodyWeightEntriesByRange({
+          endDateKey: dailyLog.dateKey,
+          startDateKey: dailyLog.dateKey,
+        });
         const count = yield* store.countMealEntriesByFood(food.id);
 
         return {
+          bodyWeightEntries,
           count,
           foods,
           mealEntries,
@@ -71,6 +78,7 @@ describe("SqliteNutritionStore", () => {
       }).pipe(Effect.provide(testLayer))
     );
 
+    assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.count, 1);
     assert.isDefined(
       result.foods.find(
@@ -284,6 +292,114 @@ describe("SqliteNutritionStore", () => {
     ]);
   });
 
+  it("adds body weight entries without rewriting existing nutrition tables", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const findMealEntries = SqlSchema.findAll({
+          Request: Schema.Struct({}),
+          Result: Schema.Struct({
+            id: Schema.String,
+            quantityGrams: Schema.Number,
+          }),
+          execute: () =>
+            sql`
+              SELECT id, quantity_grams AS quantityGrams
+              FROM meal_entries
+              ORDER BY id
+            `,
+        });
+        const findBodyWeightEntries = SqlSchema.findAll({
+          Request: Schema.Struct({}),
+          Result: Schema.Struct({
+            dateKey: Schema.String,
+            weightKilograms: Schema.Number,
+          }),
+          execute: () =>
+            sql`
+              SELECT
+                date_key AS dateKey,
+                weight_kilograms AS weightKilograms
+              FROM body_weight_entries
+              ORDER BY date_key
+            `,
+        });
+
+        yield* migration001;
+        yield* sql`
+          INSERT INTO foods ${sql.insert({
+            carbs_grams_per_100g: 3.6,
+            created_at: 0,
+            energy_kcal_per_100g: 59,
+            fat_grams_per_100g: 0.4,
+            id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
+            name: "Greek yogurt",
+            origin: "user",
+            protein_grams_per_100g: 10,
+            updated_at: 0,
+          })}
+        `;
+        yield* sql`
+          INSERT INTO plans ${sql.insert({
+            carbs_target_grams: 220,
+            created_at: 100,
+            fat_target_grams: 70,
+            id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
+            name: "Training day",
+            protein_target_grams: 160,
+          })}
+        `;
+        yield* sql`
+          INSERT INTO active_meal_plan_selections ${sql.insert({
+            id: "active-meal-plan",
+            plan_id: "9535a059-a61f-42e1-a2e0-35ec87203c25",
+            updated_at: 150,
+          })}
+        `;
+        yield* sql`
+          INSERT INTO meal_entries ${sql.insert({
+            created_at: 200,
+            date_key: "2026-06-21",
+            food_id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
+            id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
+            meal: "dinner",
+            quantity_grams: 150,
+            updated_at: 300,
+          })}
+        `;
+
+        yield* migration002;
+        yield* migration003;
+        yield* sql`
+          INSERT INTO body_weight_entries ${sql.insert({
+            created_at: 400,
+            date_key: "2026-06-21",
+            updated_at: 400,
+            weight_kilograms: 82.4,
+          })}
+        `;
+
+        return {
+          bodyWeightEntries: yield* findBodyWeightEntries({}),
+          mealEntries: yield* findMealEntries({}),
+        };
+      }).pipe(Effect.provide(TestSqliteClientLayer))
+    );
+
+    assert.deepStrictEqual(result.mealEntries, [
+      {
+        id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
+        quantityGrams: 150,
+      },
+    ]);
+    assert.deepStrictEqual(result.bodyWeightEntries, [
+      {
+        dateKey: "2026-06-21",
+        weightKilograms: 82.4,
+      },
+    ]);
+  });
+
   it("exports and imports shared backups", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -291,13 +407,16 @@ describe("SqliteNutritionStore", () => {
         const backups = yield* Backup.Backups;
         const plan = yield* testPlan;
         const food = yield* testFood;
+        const bodyWeightEntry = yield* testBodyWeightEntry;
 
         yield* store.insertPlan(plan);
         yield* store.insertFood(food);
+        yield* store.upsertBodyWeightEntry(bodyWeightEntry);
 
         const exported = yield* backups.exportToJson();
         yield* store.replaceStores({
           activeMealPlanSelections: [],
+          bodyWeightEntries: [],
           dailyLogs: [],
           foods: [],
           mealEntries: [],
@@ -310,12 +429,49 @@ describe("SqliteNutritionStore", () => {
     );
 
     assert.equal(result.foods.length, DefaultFoods.DefaultFoods.length + 1);
+    assert.equal(result.bodyWeightEntries.length, 1);
+    assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.plans.length, 1);
     assert.isDefined(
       result.foods.find(
         (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
       )
     );
+  });
+
+  it("imports version 4 backups with an empty body weight history", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const backups = yield* Backup.Backups;
+        const plan = yield* testPlan;
+        const food = yield* testFood;
+
+        yield* store.insertPlan(plan);
+        yield* store.insertFood(food);
+
+        const exported = yield* backups.exportToJson();
+        const legacyJson = exported.json
+          .replace('"databaseVersion":5', '"databaseVersion":4')
+          .replace('"bodyWeightEntries":0,', "")
+          .replace('"bodyWeightEntries":[],', "");
+
+        yield* store.replaceStores({
+          activeMealPlanSelections: [],
+          bodyWeightEntries: [],
+          dailyLogs: [],
+          foods: [],
+          mealEntries: [],
+          plans: [],
+        });
+        yield* backups.importFromJson({ input: { json: legacyJson } });
+
+        return yield* store.readStores;
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    assert.equal(result.bodyWeightEntries.length, 0);
+    assert.equal(result.plans.length, 1);
   });
 
   it("resets the sqlite database back to migration-seeded defaults", async () => {
@@ -335,6 +491,7 @@ describe("SqliteNutritionStore", () => {
     );
 
     assert.equal(result.activeMealPlanSelections.length, 0);
+    assert.equal(result.bodyWeightEntries.length, 0);
     assert.equal(result.dailyLogs.length, 0);
     assert.equal(result.mealEntries.length, 0);
     assert.equal(result.plans.length, 0);
@@ -437,4 +594,11 @@ const testMealEntry = Schema.decodeEffect(Domain.MealEntry)({
   mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
   quantityGrams: 150,
   updatedAt: 0,
+});
+
+const testBodyWeightEntry = Schema.decodeEffect(Domain.BodyWeightEntry)({
+  createdAt: 0,
+  dateKey: "2026-06-20",
+  updatedAt: 0,
+  weightKilograms: 82.4,
 });

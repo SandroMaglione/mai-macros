@@ -3,6 +3,7 @@ import { Context, Data, Effect } from "effect";
 import type {
   ActiveMealPlanSelection,
   ActiveMealPlanSelectionId,
+  BodyWeightEntry,
   DailyLog,
   DateKey,
   Food,
@@ -25,6 +26,7 @@ type StoreMutation = StoreEffect<unknown>;
 
 export type NutritionStores = {
   readonly activeMealPlanSelections: readonly ActiveMealPlanSelection[];
+  readonly bodyWeightEntries: readonly BodyWeightEntry[];
   readonly dailyLogs: readonly DailyLog[];
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
@@ -45,6 +47,17 @@ export class NutritionStore extends Context.Service<
     readonly deleteMealEntry: (mealEntryId: MealEntryId) => StoreMutation;
 
     readonly deleteDailyLog: (dateKey: DateKey) => StoreMutation;
+
+    readonly deleteBodyWeightEntry: (dateKey: DateKey) => StoreMutation;
+
+    readonly findBodyWeightEntryByDateKey: (
+      dateKey: DateKey
+    ) => StoreEffect<readonly BodyWeightEntry[]>;
+
+    readonly findBodyWeightEntriesByRange: (input: {
+      readonly endDateKey: DateKey;
+      readonly startDateKey: DateKey;
+    }) => StoreEffect<readonly BodyWeightEntry[]>;
 
     readonly findActiveMealPlanSelectionById: (
       activeMealPlanSelectionId: ActiveMealPlanSelectionId
@@ -86,6 +99,8 @@ export class NutritionStore extends Context.Service<
 
     readonly listDailyLogs: StoreEffect<readonly DailyLog[]>;
 
+    readonly listBodyWeightEntries: StoreEffect<readonly BodyWeightEntry[]>;
+
     readonly listFoods: StoreEffect<readonly Food[]>;
 
     readonly listMealEntries: StoreEffect<readonly MealEntry[]>;
@@ -101,6 +116,10 @@ export class NutritionStore extends Context.Service<
     ) => StoreMutation;
 
     readonly upsertDailyLog: (dailyLog: DailyLog) => StoreMutation;
+
+    readonly upsertBodyWeightEntry: (
+      bodyWeightEntry: BodyWeightEntry
+    ) => StoreMutation;
 
     readonly upsertFood: (food: Food) => StoreMutation;
 

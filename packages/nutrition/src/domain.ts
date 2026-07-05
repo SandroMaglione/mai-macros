@@ -44,6 +44,12 @@ export const QuantityGrams = PositiveNumber.pipe(Schema.brand("QuantityGrams"));
 
 export type QuantityGrams = typeof QuantityGrams.Type;
 
+export const BodyWeightKilograms = PositiveNumber.pipe(
+  Schema.brand("BodyWeightKilograms")
+);
+
+export type BodyWeightKilograms = typeof BodyWeightKilograms.Type;
+
 export const LegacyMeal = Schema.Literals(["breakfast", "lunch", "dinner"]);
 
 export type LegacyMeal = typeof LegacyMeal.Type;
@@ -141,6 +147,15 @@ export class MealEntry extends Schema.Class<MealEntry>("MealEntry")({
   mealId: MealId,
   foodId: FoodId,
   quantityGrams: QuantityGrams,
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+export class BodyWeightEntry extends Schema.Class<BodyWeightEntry>(
+  "BodyWeightEntry"
+)({
+  dateKey: DateKey,
+  weightKilograms: BodyWeightKilograms,
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}

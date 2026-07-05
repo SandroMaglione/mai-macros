@@ -1,0 +1,182 @@
+import { Effect, Layer, Schema } from "effect";
+import { assert, describe, it } from "vitest";
+
+import { BodyWeightReports, Domain, Store } from "../src/index.ts";
+
+const emptyStores: Store.NutritionStores = {
+  activeMealPlanSelections: [],
+  bodyWeightEntries: [],
+  dailyLogs: [],
+  foods: [],
+  mealEntries: [],
+  plans: [],
+};
+
+describe("BodyWeightReports", () => {
+  it("keeps raw outliers but excludes them from the trend", async () => {
+    const entries = await Effect.runPromise(
+      Effect.forEach(
+        [
+          {
+            dateKey: "2026-06-01",
+            weightKilograms: 80,
+          },
+          {
+            dateKey: "2026-06-02",
+            weightKilograms: 80.2,
+          },
+          {
+            dateKey: "2026-06-03",
+            weightKilograms: 95,
+          },
+          {
+            dateKey: "2026-06-04",
+            weightKilograms: 80.3,
+          },
+          {
+            dateKey: "2026-06-05",
+            weightKilograms: 80.4,
+          },
+        ],
+        ({ dateKey, weightKilograms }) =>
+          Schema.decodeEffect(Domain.BodyWeightEntry)({
+            createdAt: 0,
+            dateKey,
+            updatedAt: 0,
+            weightKilograms,
+          })
+      )
+    );
+    const report = await Effect.runPromise(
+      Effect.gen(function* () {
+        const reports = yield* BodyWeightReports.BodyWeightReports;
+
+        return yield* reports.getRange({
+          input: {
+            endDateKey: "2026-06-05",
+            startDateKey: "2026-06-01",
+          },
+        });
+      }).pipe(
+        Effect.provide(
+          BodyWeightReportsTestLayer({
+            stores: {
+              ...emptyStores,
+              bodyWeightEntries: entries,
+            },
+          })
+        )
+      )
+    );
+
+    assert.equal(report.entries.length, 5);
+    assert.deepEqual(
+      report.outliers.map((outlier) => outlier.entry.dateKey),
+      ["2026-06-03"]
+    );
+    assert.deepEqual(
+      report.trendPoints.map((point) => point.dateKey),
+      ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05"]
+    );
+  });
+});
+
+function BodyWeightReportsTestLayer({
+  stores,
+}: {
+  readonly stores: Store.NutritionStores;
+}) {
+  return BodyWeightReports.BodyWeightReports.layer.pipe(
+    Layer.provide(
+      Layer.succeed(Store.NutritionStore, {
+        countMealEntriesByDate: (dateKey: Domain.DateKey) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) => mealEntry.dateKey === dateKey
+            ).length
+          ),
+        countMealEntriesByFood: (foodId: Domain.FoodId) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) => mealEntry.foodId === foodId
+            ).length
+          ),
+        countMealEntriesByMealIds: (mealIds: readonly Domain.MealId[]) =>
+          Effect.succeed(
+            stores.mealEntries.filter((mealEntry) =>
+              mealIds.includes(mealEntry.mealId)
+            ).length
+          ),
+        deleteBodyWeightEntry: () => Effect.void,
+        deleteDailyLog: () => Effect.void,
+        deleteMealEntry: () => Effect.void,
+        findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
+          Effect.succeed(
+            stores.activeMealPlanSelections.filter(
+              (selection) => selection.id === activeMealPlanSelectionId
+            )
+          ),
+        findBodyWeightEntriesByRange: ({ endDateKey, startDateKey }) =>
+          Effect.succeed(
+            stores.bodyWeightEntries.filter(
+              (bodyWeightEntry) =>
+                bodyWeightEntry.dateKey >= startDateKey &&
+                bodyWeightEntry.dateKey <= endDateKey
+            )
+          ),
+        findBodyWeightEntryByDateKey: (dateKey: Domain.DateKey) =>
+          Effect.succeed(
+            stores.bodyWeightEntries.filter(
+              (bodyWeightEntry) => bodyWeightEntry.dateKey === dateKey
+            )
+          ),
+        findDailyLogByDateKey: (dateKey: Domain.DateKey) =>
+          Effect.succeed(
+            stores.dailyLogs.filter((dailyLog) => dailyLog.dateKey === dateKey)
+          ),
+        findDailyLogsByPlan: (planId: Domain.PlanId) =>
+          Effect.succeed(
+            stores.dailyLogs.filter((dailyLog) => dailyLog.planId === planId)
+          ),
+        findFoodById: (foodId: Domain.FoodId) =>
+          Effect.succeed(stores.foods.filter((food) => food.id === foodId)),
+        findFoodsByName: (name) =>
+          Effect.succeed(stores.foods.filter((food) => food.name === name)),
+        findMealEntriesByDate: (dateKey: Domain.DateKey) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) => mealEntry.dateKey === dateKey
+            )
+          ),
+        findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) => mealEntry.id === mealEntryId
+            )
+          ),
+        findPlanById: (planId: Domain.PlanId) =>
+          Effect.succeed(stores.plans.filter((plan) => plan.id === planId)),
+        findPlansByName: (name) =>
+          Effect.succeed(stores.plans.filter((plan) => plan.name === name)),
+        insertFood: () => Effect.void,
+        insertMealEntry: () => Effect.void,
+        insertPlan: () => Effect.void,
+        listBodyWeightEntries: Effect.succeed(stores.bodyWeightEntries),
+        listDailyLogs: Effect.succeed(stores.dailyLogs),
+        listFoods: Effect.succeed(stores.foods),
+        listMealEntries: Effect.succeed(stores.mealEntries),
+        listPlans: Effect.succeed(stores.plans),
+        readStores: Effect.succeed(stores),
+        replaceStores: () => Effect.void,
+        upsertActiveMealPlanSelection: () => Effect.void,
+        upsertBodyWeightEntry: () => Effect.void,
+        upsertDailyLog: () => Effect.void,
+        upsertFood: () => Effect.void,
+        upsertFoods: () => Effect.void,
+        upsertMealEntries: () => Effect.void,
+        upsertMealEntry: () => Effect.void,
+        upsertPlans: () => Effect.void,
+      } satisfies Store.NutritionStore["Service"])
+    )
+  );
+}

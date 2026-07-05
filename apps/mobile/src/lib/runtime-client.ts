@@ -1,5 +1,7 @@
 import {
   Backup,
+  BodyWeightReports,
+  BodyWeights,
   DailyLogs,
   FoodCatalogTransfer,
   Foods,
@@ -20,6 +22,8 @@ const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
 
 const MobileServicesLayer = Layer.mergeAll(
   Backup.Backups.layer,
+  BodyWeights.BodyWeights.layer,
+  BodyWeightReports.BodyWeightReports.layer,
   MealPlans.MealPlans.layer,
   DailyLogs.DailyLogs.layer,
   Foods.Foods.layer,

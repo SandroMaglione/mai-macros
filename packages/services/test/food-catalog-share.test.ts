@@ -105,7 +105,7 @@ const testCatalogJson = Effect.gen(function* () {
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 4,
+      databaseVersion: 5,
       exportedAt: 0,
     },
     stores: {

@@ -12,6 +12,7 @@ export const makeSqliteLocalData = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* sql`PRAGMA foreign_keys = OFF`;
         yield* sql`DROP TABLE IF EXISTS meal_entries`;
+        yield* sql`DROP TABLE IF EXISTS body_weight_entries`;
         yield* sql`DROP TABLE IF EXISTS active_meal_plan_selections`;
         yield* sql`DROP TABLE IF EXISTS daily_logs`;
         yield* sql`DROP TABLE IF EXISTS plan_meals`;

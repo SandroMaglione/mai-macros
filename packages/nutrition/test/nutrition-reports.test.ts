@@ -34,6 +34,7 @@ const foodInput: typeof Domain.Food.Encoded = {
 
 const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
+  bodyWeightEntries: [],
   dailyLogs: [],
   foods: [],
   mealEntries: [],
@@ -214,6 +215,21 @@ function _getRange({
               ),
             deleteMealEntry: () => Effect.void,
             deleteDailyLog: () => Effect.void,
+            deleteBodyWeightEntry: () => Effect.void,
+            findBodyWeightEntryByDateKey: (dateKey: Domain.DateKey) =>
+              Effect.succeed(
+                stores.bodyWeightEntries.filter(
+                  (bodyWeightEntry) => bodyWeightEntry.dateKey === dateKey
+                )
+              ),
+            findBodyWeightEntriesByRange: ({ endDateKey, startDateKey }) =>
+              Effect.succeed(
+                stores.bodyWeightEntries.filter(
+                  (bodyWeightEntry) =>
+                    bodyWeightEntry.dateKey >= startDateKey &&
+                    bodyWeightEntry.dateKey <= endDateKey
+                )
+              ),
             findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
               Effect.succeed(
                 stores.activeMealPlanSelections.filter(
@@ -256,6 +272,7 @@ function _getRange({
             insertMealEntry: () => Effect.void,
             insertPlan: () => Effect.void,
             listDailyLogs: Effect.succeed(stores.dailyLogs),
+            listBodyWeightEntries: Effect.succeed(stores.bodyWeightEntries),
             listFoods: Effect.succeed(stores.foods),
             listMealEntries: Effect.succeed(stores.mealEntries),
             listPlans: Effect.succeed(stores.plans),
@@ -263,6 +280,7 @@ function _getRange({
             replaceStores: () => Effect.void,
             upsertActiveMealPlanSelection: () => Effect.void,
             upsertDailyLog: () => Effect.void,
+            upsertBodyWeightEntry: () => Effect.void,
             upsertFood: () => Effect.void,
             upsertFoods: () => Effect.void,
             upsertMealEntry: () => Effect.void,

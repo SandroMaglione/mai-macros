@@ -2,6 +2,7 @@ import { Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 
 import {
   ActiveMealPlanSelection,
+  BodyWeightEntry,
   DailyLog,
   Food,
   FoodCategory,
@@ -39,6 +40,7 @@ export type BackupDatabaseVersion = typeof BackupDatabaseVersion.Type;
 
 export const BackupStoreName = Schema.Literals([
   "activeMealPlanSelections",
+  "bodyWeightEntries",
   "dailyLogs",
   "foods",
   "mealEntries",
@@ -108,6 +110,7 @@ export class MaiBackupCounts extends Schema.Class<MaiBackupCounts>(
   "MaiBackupCounts"
 )({
   activeMealPlanSelections: BackupCount,
+  bodyWeightEntries: Schema.optional(BackupCount),
   dailyLogs: BackupCount,
   foods: BackupCount,
   mealEntries: BackupCount,
@@ -124,6 +127,7 @@ export class MaiBackupStores extends Schema.Class<MaiBackupStores>(
   "MaiBackupStores"
 )({
   activeMealPlanSelections: Schema.Array(ActiveMealPlanSelection),
+  bodyWeightEntries: Schema.Array(BodyWeightEntry),
   dailyLogs: Schema.Array(DailyLog),
   foods: Schema.Array(Food),
   mealEntries: Schema.Array(MealEntry),
@@ -134,6 +138,7 @@ class CurrentMaiBackupImportStores extends Schema.Class<CurrentMaiBackupImportSt
   "CurrentMaiBackupImportStores"
 )({
   activeMealPlanSelections: Schema.Array(ActiveMealPlanSelection),
+  bodyWeightEntries: Schema.Array(BodyWeightEntry),
   dailyLogs: Schema.Array(DailyLog),
   foods: Schema.Array(BackupLegacyFood),
   mealEntries: Schema.Array(MealEntry),
@@ -164,6 +169,14 @@ class LegacyMaiBackupSourceV3 extends Schema.Class<LegacyMaiBackupSourceV3>(
   exportedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+class LegacyMaiBackupSourceV4 extends Schema.Class<LegacyMaiBackupSourceV4>(
+  "LegacyMaiBackupSourceV4"
+)({
+  databaseName: Schema.Literal(DatabaseName),
+  databaseVersion: Schema.Literal(4),
+  exportedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
 class LegacyMaiBackupStores extends Schema.Class<LegacyMaiBackupStores>(
   "LegacyMaiBackupStores"
 )({
@@ -174,6 +187,16 @@ class LegacyMaiBackupStores extends Schema.Class<LegacyMaiBackupStores>(
     CustomPlanMealsMigration.MealEntryBeforeCustomPlanMeals
   ),
   plans: Schema.Array(CustomPlanMealsMigration.PlanBeforeCustomPlanMeals),
+}) {}
+
+class LegacyMaiBackupStoresBeforeBodyWeight extends Schema.Class<LegacyMaiBackupStoresBeforeBodyWeight>(
+  "LegacyMaiBackupStoresBeforeBodyWeight"
+)({
+  activeMealPlanSelections: Schema.Array(ActiveMealPlanSelection),
+  dailyLogs: Schema.Array(DailyLog),
+  foods: Schema.Array(BackupLegacyFood),
+  mealEntries: Schema.Array(MealEntry),
+  plans: Schema.Array(BackupImportPlan),
 }) {}
 
 class LegacyMaiBackupV1DatabaseVersion1 extends Schema.Class<LegacyMaiBackupV1DatabaseVersion1>(
@@ -206,6 +229,16 @@ class LegacyMaiBackupV1DatabaseVersion3 extends Schema.Class<LegacyMaiBackupV1Da
   stores: LegacyMaiBackupStores,
 }) {}
 
+class LegacyMaiBackupV1DatabaseVersion4 extends Schema.Class<LegacyMaiBackupV1DatabaseVersion4>(
+  "LegacyMaiBackupV1DatabaseVersion4"
+)({
+  format: MaiBackupFormat,
+  formatVersion: MaiBackupFormatVersion,
+  integrity: MaiBackupIntegrity,
+  source: LegacyMaiBackupSourceV4,
+  stores: LegacyMaiBackupStoresBeforeBodyWeight,
+}) {}
+
 export class MaiBackupV1 extends Schema.Class<MaiBackupV1>("MaiBackupV1")({
   format: MaiBackupFormat,
   formatVersion: MaiBackupFormatVersion,
@@ -234,6 +267,7 @@ export const MaiBackupImportV1 = Schema.Union([
   LegacyMaiBackupV1DatabaseVersion1,
   LegacyMaiBackupV1DatabaseVersion2,
   LegacyMaiBackupV1DatabaseVersion3,
+  LegacyMaiBackupV1DatabaseVersion4,
   CurrentMaiBackupImportV1,
 ]);
 
@@ -255,9 +289,15 @@ const LegacyMaiBackupImportV1 = Schema.Union([
   LegacyMaiBackupV1DatabaseVersion3,
 ]);
 
+const LegacyMaiBackupImportV4 = Schema.Union([
+  LegacyMaiBackupV1DatabaseVersion4,
+]);
+
 const isCurrentMaiBackupImportV1 = Schema.is(CurrentMaiBackupImportV1);
 
 const isLegacyMaiBackupImportV1 = Schema.is(LegacyMaiBackupImportV1);
+
+const isLegacyMaiBackupImportV4 = Schema.is(LegacyMaiBackupImportV4);
 
 const ImportBackupJsonInputSchema = Schema.Struct({
   json: Schema.String,
@@ -269,6 +309,7 @@ export const BackupIntegrityErrorReason = Schema.Literals([
   "active-selection-plan-missing",
   "active-selection-count-mismatch",
   "count-mismatch",
+  "duplicate-body-weight-date",
   "daily-log-plan-missing",
   "duplicate-food-id",
   "duplicate-meal-id",
@@ -308,39 +349,14 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       );
       const plans = yield* Effect.forEach(
         currentBackup.stores.plans,
-        Effect.fn("_planFromBackupImport")(function* (plan: BackupImportPlan) {
-          const encodedPlan =
-            yield* Schema.encodeEffect(BackupImportPlan)(plan);
-          const {
-            basedOnPlanId,
-            meals: encodedMeals,
-            ...planWithoutLineage
-          } = encodedPlan;
-          void basedOnPlanId;
-          const meals = yield* Effect.forEach(encodedMeals, (meal) => {
-            const { basedOnMealId, order, position, ...mealWithoutLineage } =
-              meal;
-            void basedOnMealId;
-            const mealPosition = position ?? order;
-
-            return Schema.decodeUnknownEffect(PlanMeal)({
-              ...mealWithoutLineage,
-              ...(mealPosition === undefined ? {} : { position: mealPosition }),
-            });
-          });
-          const encodedCurrentMeals = yield* Schema.encodeEffect(
-            Schema.Array(PlanMeal)
-          )(meals);
-
-          return yield* Schema.decodeEffect(Plan)({
-            ...planWithoutLineage,
-            meals: encodedCurrentMeals,
-          });
-        })
+        _planFromBackupImport
       );
       const activeMealPlanSelections = yield* Schema.encodeEffect(
         Schema.Array(ActiveMealPlanSelection)
       )(currentBackup.stores.activeMealPlanSelections);
+      const bodyWeightEntries = yield* Schema.encodeEffect(
+        Schema.Array(BodyWeightEntry)
+      )(currentBackup.stores.bodyWeightEntries);
       const dailyLogs = yield* Schema.encodeEffect(Schema.Array(DailyLog))(
         currentBackup.stores.dailyLogs
       );
@@ -365,6 +381,73 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
         },
         stores: {
           activeMealPlanSelections,
+          bodyWeightEntries,
+          dailyLogs,
+          foods: encodedFoods,
+          mealEntries,
+          plans: encodedPlans,
+        },
+      });
+    }
+
+    if (isLegacyMaiBackupImportV4(backup)) {
+      const legacyBackup = backup;
+      const userFoods = yield* Effect.forEach(
+        legacyBackup.stores.foods,
+        (food) => _foodFromBackupImport({ food, originFallback: "user" })
+      );
+      const userFoodIds = userFoods.map((food) => food.id);
+      const defaultFoods = yield* Schema.decodeEffect(Schema.Array(Food))(
+        DefaultFoods
+      );
+      const foods = [
+        ...userFoods,
+        ...defaultFoods.filter((food) => !userFoodIds.includes(food.id)),
+      ];
+      const plans = yield* Effect.forEach(
+        legacyBackup.stores.plans,
+        _planFromBackupImport
+      );
+      const activeMealPlanSelections = yield* Schema.encodeEffect(
+        Schema.Array(ActiveMealPlanSelection)
+      )(legacyBackup.stores.activeMealPlanSelections);
+      const bodyWeightEntries = yield* Schema.encodeEffect(
+        Schema.Array(BodyWeightEntry)
+      )([]);
+      const dailyLogs = yield* Schema.encodeEffect(Schema.Array(DailyLog))(
+        legacyBackup.stores.dailyLogs
+      );
+      const encodedFoods = yield* Schema.encodeEffect(Schema.Array(Food))(
+        foods
+      );
+      const mealEntries = yield* Schema.encodeEffect(Schema.Array(MealEntry))(
+        legacyBackup.stores.mealEntries
+      );
+      const encodedPlans = yield* Schema.encodeEffect(Schema.Array(Plan))(
+        plans
+      );
+
+      return yield* Schema.decodeEffect(MaiBackupV1)({
+        format: legacyBackup.format,
+        formatVersion: legacyBackup.formatVersion,
+        integrity: {
+          counts: {
+            activeMealPlanSelections: activeMealPlanSelections.length,
+            bodyWeightEntries: bodyWeightEntries.length,
+            dailyLogs: dailyLogs.length,
+            foods: foods.length,
+            mealEntries: mealEntries.length,
+            plans: plans.length,
+          },
+        },
+        source: {
+          databaseName: legacyBackup.source.databaseName,
+          databaseVersion: CurrentDatabaseVersion,
+          exportedAt: DateTime.toEpochMillis(legacyBackup.source.exportedAt),
+        },
+        stores: {
+          activeMealPlanSelections,
+          bodyWeightEntries,
           dailyLogs,
           foods: encodedFoods,
           mealEntries,
@@ -449,6 +532,7 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       integrity: {
         counts: {
           activeMealPlanSelections: activeMealPlanSelections.length,
+          bodyWeightEntries: 0,
           dailyLogs: dailyLogs.length,
           foods: foods.length,
           mealEntries: mealEntries.length,
@@ -462,6 +546,7 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       },
       stores: {
         activeMealPlanSelections,
+        bodyWeightEntries: [],
         dailyLogs,
         foods: encodedFoods,
         mealEntries,
@@ -488,14 +573,53 @@ const _foodFromBackupImport = Effect.fn("_foodFromBackupImport")(function* ({
   });
 });
 
+const _planFromBackupImport = Effect.fn("_planFromBackupImport")(function* (
+  plan: BackupImportPlan
+) {
+  const encodedPlan = yield* Schema.encodeEffect(BackupImportPlan)(plan);
+  const {
+    basedOnPlanId,
+    meals: encodedMeals,
+    ...planWithoutLineage
+  } = encodedPlan;
+  void basedOnPlanId;
+  const meals = yield* Effect.forEach(encodedMeals, (meal) => {
+    const { basedOnMealId, order, position, ...mealWithoutLineage } = meal;
+    void basedOnMealId;
+    const mealPosition = position ?? order;
+
+    return Schema.decodeUnknownEffect(PlanMeal)({
+      ...mealWithoutLineage,
+      ...(mealPosition === undefined ? {} : { position: mealPosition }),
+    });
+  });
+  const encodedCurrentMeals = yield* Schema.encodeEffect(
+    Schema.Array(PlanMeal)
+  )(meals);
+
+  return yield* Schema.decodeEffect(Plan)({
+    ...planWithoutLineage,
+    meals: encodedCurrentMeals,
+  });
+});
+
 export const validateBackup = Effect.fn("validateBackup")(function* ({
   backup,
 }: {
   readonly backup: MaiBackup;
 }) {
   const { counts } = backup.integrity;
-  const { activeMealPlanSelections, dailyLogs, foods, mealEntries, plans } =
-    backup.stores;
+  const {
+    activeMealPlanSelections,
+    bodyWeightEntries,
+    dailyLogs,
+    foods,
+    mealEntries,
+    plans,
+  } = backup.stores;
+  const bodyWeightEntryDateKeys = bodyWeightEntries.map(
+    (bodyWeightEntry) => bodyWeightEntry.dateKey
+  );
   const foodIds = foods.map((food) => food.id);
   const planIds = plans.map((plan) => plan.id);
   const planNames = plans.map((plan) => plan.name);
@@ -505,6 +629,13 @@ export const validateBackup = Effect.fn("validateBackup")(function* ({
   if (counts.activeMealPlanSelections !== activeMealPlanSelections.length) {
     return yield* new BackupIntegrityError({
       detail: "The active meal plan selection count does not match the stores.",
+      reason: "count-mismatch",
+    });
+  }
+
+  if ((counts.bodyWeightEntries ?? 0) !== bodyWeightEntries.length) {
+    return yield* new BackupIntegrityError({
+      detail: "The body weight entry count does not match the stores.",
       reason: "count-mismatch",
     });
   }
@@ -541,6 +672,17 @@ export const validateBackup = Effect.fn("validateBackup")(function* ({
     return yield* new BackupIntegrityError({
       detail: "The backup contains more than one active meal plan selection.",
       reason: "active-selection-count-mismatch",
+    });
+  }
+
+  if (
+    bodyWeightEntryDateKeys.some(
+      (dateKey, index) => bodyWeightEntryDateKeys.indexOf(dateKey) !== index
+    )
+  ) {
+    return yield* new BackupIntegrityError({
+      detail: "The backup contains duplicate body weight dates.",
+      reason: "duplicate-body-weight-date",
     });
   }
 
@@ -679,6 +821,7 @@ export class Backups extends Context.Service<Backups>()("Backups", {
             counts: {
               activeMealPlanSelections:
                 encodedStores.activeMealPlanSelections.length,
+              bodyWeightEntries: encodedStores.bodyWeightEntries.length,
               dailyLogs: encodedStores.dailyLogs.length,
               foods: encodedStores.foods.length,
               mealEntries: encodedStores.mealEntries.length,
@@ -731,9 +874,13 @@ export class Backups extends Context.Service<Backups>()("Backups", {
                 ? yield* Schema.decodeUnknownEffect(
                     LegacyMaiBackupV1DatabaseVersion3
                   )(rawBackup)
-                : yield* Schema.decodeUnknownEffect(CurrentMaiBackupImportV1)(
-                    rawBackup
-                  );
+                : versionProbe.source.databaseVersion === 4
+                  ? yield* Schema.decodeUnknownEffect(
+                      LegacyMaiBackupV1DatabaseVersion4
+                    )(rawBackup)
+                  : yield* Schema.decodeUnknownEffect(CurrentMaiBackupImportV1)(
+                      rawBackup
+                    );
         const backup = yield* migrateBackupToCurrent({ backup: importBackup });
 
         yield* validateBackup({ backup });

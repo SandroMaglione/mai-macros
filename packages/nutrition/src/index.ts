@@ -1,4 +1,6 @@
 import * as BackupService from "./services/backup.ts";
+import * as BodyWeightReportsService from "./services/body-weight-reports.ts";
+import * as BodyWeightsService from "./services/body-weights.ts";
 import * as DailyLogsService from "./services/daily-logs.ts";
 import * as FoodCatalogTransferService from "./services/food-catalog-transfer.ts";
 import * as FoodsService from "./services/foods.ts";
@@ -18,6 +20,8 @@ export * as Reporting from "./reporting.ts";
 export * as Utils from "./utils.ts";
 export {
   BackupService as Backup,
+  BodyWeightReportsService as BodyWeightReports,
+  BodyWeightsService as BodyWeights,
   DailyLogsService as DailyLogs,
   FoodCatalogTransferService as FoodCatalogTransfer,
   FoodsService as Foods,
@@ -30,6 +34,8 @@ export {
 
 export const Service = {
   Backup: BackupService,
+  BodyWeightReports: BodyWeightReportsService,
+  BodyWeights: BodyWeightsService,
   DailyLogs: DailyLogsService,
   FoodCatalogTransfer: FoodCatalogTransferService,
   Foods: FoodsService,

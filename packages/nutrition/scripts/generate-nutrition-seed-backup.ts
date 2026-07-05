@@ -1141,6 +1141,7 @@ function buildBackup(): Backup.MaiBackupEncoded {
     integrity: {
       counts: {
         activeMealPlanSelections: activeMealPlanSelections.length,
+        bodyWeightEntries: 0,
         dailyLogs: dailyLogs.length,
         foods: foods.length,
         mealEntries: mealEntries.length,
@@ -1149,11 +1150,12 @@ function buildBackup(): Backup.MaiBackupEncoded {
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 4,
+      databaseVersion: 5,
       exportedAt: timestampForDateKey({ dateKey: todayDateKey, hour: 12 }),
     },
     stores: {
       activeMealPlanSelections,
+      bodyWeightEntries: [],
       dailyLogs,
       foods,
       mealEntries,

@@ -1,3 +1,3 @@
 export const DatabaseName = "mai";
 
-export const CurrentDatabaseVersion = 4;
+export const CurrentDatabaseVersion = 5;
