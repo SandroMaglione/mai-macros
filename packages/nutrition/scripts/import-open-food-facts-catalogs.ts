@@ -1893,19 +1893,21 @@ function foodFromRow({
     id: stableFoodIdFromOpenFoodFactsCode({ code }),
     name: nameCleanup.name,
     origin: "import",
-    energyKcalPer100g: roundNumber(energyKcal),
-    proteinGramsPer100g: roundNumber(protein),
-    carbsGramsPer100g: roundNumber(carbs),
-    fatGramsPer100g: roundNumber(fat),
+    nutritionReference: { amount: 100, unit: "g" },
+    energyKcal: roundNumber(energyKcal),
+    proteinGrams: roundNumber(protein),
+    carbsGrams: roundNumber(carbs),
+    fatGrams: roundNumber(fat),
+    portions: [],
     createdAt: exportedAt,
     updatedAt: exportedAt,
     ...(brandCleanup.brand === undefined ? {} : { brand: brandCleanup.brand }),
-    ...(fiber === undefined ? {} : { fiberGramsPer100g: roundNumber(fiber) }),
-    ...(sugars === undefined ? {} : { sugarGramsPer100g: roundNumber(sugars) }),
+    ...(fiber === undefined ? {} : { fiberGrams: roundNumber(fiber) }),
+    ...(sugars === undefined ? {} : { sugarGrams: roundNumber(sugars) }),
     ...(saturatedFat === undefined
       ? {}
-      : { saturatedFatGramsPer100g: roundNumber(saturatedFat) }),
-    ...(salt === undefined ? {} : { saltGramsPer100g: salt }),
+      : { saturatedFatGrams: roundNumber(saturatedFat) }),
+    ...(salt === undefined ? {} : { saltGrams: salt }),
   } satisfies CatalogFoodEncoded;
 
   return {
@@ -2391,10 +2393,10 @@ function cleanedIdentityKeyFromFood({
   return [
     normalizeComparableText({ value: food.brand ?? "" }),
     normalizeComparableText({ value: food.name }),
-    roundedIdentityMacro({ value: food.energyKcalPer100g }),
-    roundedIdentityMacro({ value: food.proteinGramsPer100g }),
-    roundedIdentityMacro({ value: food.carbsGramsPer100g }),
-    roundedIdentityMacro({ value: food.fatGramsPer100g }),
+    roundedIdentityMacro({ value: food.energyKcal }),
+    roundedIdentityMacro({ value: food.proteinGrams }),
+    roundedIdentityMacro({ value: food.carbsGrams }),
+    roundedIdentityMacro({ value: food.fatGrams }),
   ].join("|");
 }
 

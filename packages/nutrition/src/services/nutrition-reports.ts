@@ -174,7 +174,8 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                             mealEntry,
                             nutrients: calculateEntryNutrients({
                               food,
-                              quantityGrams: mealEntry.quantityGrams,
+                              nutritionMultiplier:
+                                mealEntry.nutritionMultiplier,
                             }),
                           },
                         ],
@@ -184,7 +185,7 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                   const aggregate = calculateEntriesNutrientTotals({
                     entries: entries.map((entry) => ({
                       food: entry.food,
-                      quantityGrams: entry.mealEntry.quantityGrams,
+                      nutritionMultiplier: entry.mealEntry.nutritionMultiplier,
                     })),
                   });
                   const targetStatuses = evaluatePlanNutrientTargets({

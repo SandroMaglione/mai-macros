@@ -129,7 +129,13 @@ describe("version 004 custom plan meals migration", () => {
       result.mealEntries[0]?.foodId,
       mealEntryBeforeCustomPlanMealsInput.foodId
     );
-    assert.equal(result.mealEntries[0]?.quantityGrams, 150);
+    assert.equal(result.mealEntries[0]?.quantity._tag, "MeasuredFoodQuantity");
+    assert.equal(
+      result.mealEntries[0]?.quantity._tag === "MeasuredFoodQuantity"
+        ? result.mealEntries[0].quantity.amount
+        : undefined,
+      150
+    );
     assert.equal(
       result.mealEntries[0]?.mealId,
       CustomPlanMealsMigration.makeMigratedMealId({

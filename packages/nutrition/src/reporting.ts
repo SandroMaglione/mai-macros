@@ -1,7 +1,14 @@
 import { Array } from "effect";
 
-import type { Food, MealEntry, Plan, QuantityGrams } from "./domain.ts";
+import type {
+  Food,
+  LoggedFoodQuantity,
+  MealEntry,
+  NutritionMultiplier,
+  Plan,
+} from "./domain.ts";
 import { calculateEntryNutrients, calculatePlanEnergyKcal } from "./utils.ts";
+import { massGramsFromQuantity } from "./measurements.ts";
 
 export const NutrientNames = [
   "energyKcal",
@@ -57,6 +64,7 @@ export type EntriesNutrientTotals = {
 export type EntriesWeightTotals = {
   readonly entriesCount: number;
   readonly quantityGrams: number;
+  readonly resolvedEntriesCount: number;
 };
 
 export const NutrientTargetSemanticsByName = {
@@ -155,14 +163,14 @@ export const calculateEntriesNutrientTotals = ({
 }: {
   readonly entries: readonly {
     readonly food: Food;
-    readonly quantityGrams: QuantityGrams;
+    readonly nutritionMultiplier: NutritionMultiplier;
   }[];
 }): EntriesNutrientTotals =>
   entries.reduce<EntriesNutrientTotals>(
     (aggregate, entry) => {
       const nutrients = calculateEntryNutrients({
         food: entry.food,
-        quantityGrams: entry.quantityGrams,
+        nutritionMultiplier: entry.nutritionMultiplier,
       });
 
       return NutrientNames.reduce<EntriesNutrientTotals>(
@@ -215,7 +223,7 @@ export const calculateMealEntriesNutrientTotals = ({
         : [
             {
               food,
-              quantityGrams: mealEntry.quantityGrams,
+              nutritionMultiplier: mealEntry.nutritionMultiplier,
             },
           ];
     }),
@@ -225,29 +233,51 @@ export const calculateEntriesWeightTotals = ({
   entries,
 }: {
   readonly entries: readonly {
-    readonly quantityGrams: QuantityGrams;
+    readonly food: Food;
+    readonly quantity: LoggedFoodQuantity;
   }[];
 }): EntriesWeightTotals =>
   entries.reduce<EntriesWeightTotals>(
-    (totals, entry) => ({
-      entriesCount: totals.entriesCount + 1,
-      quantityGrams: totals.quantityGrams + entry.quantityGrams,
-    }),
+    (totals, entry) => {
+      const quantityGrams = massGramsFromQuantity({
+        food: entry.food,
+        quantity: entry.quantity,
+      });
+
+      return {
+        entriesCount: totals.entriesCount + 1,
+        quantityGrams: totals.quantityGrams + (quantityGrams ?? 0),
+        resolvedEntriesCount:
+          totals.resolvedEntriesCount + (quantityGrams === undefined ? 0 : 1),
+      };
+    },
     {
       entriesCount: 0,
       quantityGrams: 0,
+      resolvedEntriesCount: 0,
     }
   );
 
 export const calculateMealEntriesWeightTotals = ({
+  foods,
   mealEntries,
 }: {
+  readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
 }): EntriesWeightTotals =>
   calculateEntriesWeightTotals({
-    entries: mealEntries.map((mealEntry) => ({
-      quantityGrams: mealEntry.quantityGrams,
-    })),
+    entries: mealEntries.flatMap((mealEntry) => {
+      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
+
+      return food === undefined
+        ? []
+        : [
+            {
+              food,
+              quantity: mealEntry.quantity,
+            },
+          ];
+    }),
   });
 
 export const calculateCaloriesPerGram = ({

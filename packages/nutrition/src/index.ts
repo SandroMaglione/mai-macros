@@ -15,6 +15,7 @@ export * as DefaultFoods from "./default-foods.ts";
 export * as Domain from "./domain.ts";
 export * as FoodQuickInput from "./food-quick-input.ts";
 export * as Metadata from "./metadata.ts";
+export * as Measurements from "./measurements.ts";
 export * as Migrations from "./migrations/index.ts";
 export * as Reporting from "./reporting.ts";
 export * as Utils from "./utils.ts";

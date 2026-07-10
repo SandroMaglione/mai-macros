@@ -4,8 +4,8 @@ import type {
   DateKey,
   EntryNutrients,
   Food,
+  NutritionMultiplier,
   Plan,
-  QuantityGrams,
 } from "./domain.ts";
 import { DateKey as DateKeySchema } from "./domain.ts";
 
@@ -48,22 +48,19 @@ export const calculatePlanEnergyKcal = ({
 export const findDominantMacronutrients = ({
   food,
 }: {
-  readonly food: Pick<
-    Food,
-    "carbsGramsPer100g" | "fatGramsPer100g" | "proteinGramsPer100g"
-  >;
+  readonly food: Pick<Food, "carbsGrams" | "fatGrams" | "proteinGrams">;
 }): readonly DominantMacronutrient[] => {
   const macronutrientGrams = [
     {
-      grams: food.proteinGramsPer100g,
+      grams: food.proteinGrams,
       macronutrient: "protein",
     },
     {
-      grams: food.carbsGramsPer100g,
+      grams: food.carbsGrams,
       macronutrient: "carbs",
     },
     {
-      grams: food.fatGramsPer100g,
+      grams: food.fatGrams,
       macronutrient: "fat",
     },
   ] satisfies readonly {
@@ -87,30 +84,30 @@ export const findDominantMacronutrients = ({
 
 export const calculateEntryNutrients = ({
   food,
-  quantityGrams,
+  nutritionMultiplier,
 }: {
   readonly food: Food;
-  readonly quantityGrams: QuantityGrams;
+  readonly nutritionMultiplier: NutritionMultiplier;
 }): typeof EntryNutrients.Encoded => {
-  const multiplier = quantityGrams / 100;
-
   return {
-    energyKcal: food.energyKcalPer100g * multiplier,
-    proteinGrams: food.proteinGramsPer100g * multiplier,
-    carbsGrams: food.carbsGramsPer100g * multiplier,
-    fatGrams: food.fatGramsPer100g * multiplier,
-    ...(food.fiberGramsPer100g === undefined
+    energyKcal: food.energyKcal * nutritionMultiplier,
+    proteinGrams: food.proteinGrams * nutritionMultiplier,
+    carbsGrams: food.carbsGrams * nutritionMultiplier,
+    fatGrams: food.fatGrams * nutritionMultiplier,
+    ...(food.fiberGrams === undefined
       ? {}
-      : { fiberGrams: food.fiberGramsPer100g * multiplier }),
-    ...(food.sugarGramsPer100g === undefined
+      : { fiberGrams: food.fiberGrams * nutritionMultiplier }),
+    ...(food.sugarGrams === undefined
       ? {}
-      : { sugarGrams: food.sugarGramsPer100g * multiplier }),
-    ...(food.saturatedFatGramsPer100g === undefined
+      : { sugarGrams: food.sugarGrams * nutritionMultiplier }),
+    ...(food.saturatedFatGrams === undefined
       ? {}
-      : { saturatedFatGrams: food.saturatedFatGramsPer100g * multiplier }),
-    ...(food.saltGramsPer100g === undefined
+      : {
+          saturatedFatGrams: food.saturatedFatGrams * nutritionMultiplier,
+        }),
+    ...(food.saltGrams === undefined
       ? {}
-      : { saltGrams: food.saltGramsPer100g * multiplier }),
+      : { saltGrams: food.saltGrams * nutritionMultiplier }),
   };
 };
 

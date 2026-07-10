@@ -1,7 +1,7 @@
 import { Crypto, Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import { Domain, Foods, MealPlans, Store } from "../src/index.ts";
+import { Domain, Foods, MealEntries, MealPlans, Store } from "../src/index.ts";
 
 const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
@@ -13,14 +13,14 @@ const emptyStores: Store.NutritionStores = {
 };
 
 const foodInput: typeof Domain.Food.Encoded = {
-  carbsGramsPer100g: 3.6,
+  carbsGrams: 3.6,
   createdAt: 0,
-  energyKcalPer100g: 59,
-  fatGramsPer100g: 0.4,
+  energyKcal: 59,
+  fatGrams: 0.4,
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
   origin: "user",
-  proteinGramsPer100g: 10,
+  proteinGrams: 10,
   updatedAt: 0,
 };
 
@@ -48,6 +48,75 @@ const planInput: typeof Domain.Plan.Encoded = {
 };
 
 describe("nutrition revisions", () => {
+  it("logs fractional named portions with their physical-size snapshot", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...foodInput,
+          nutritionReference: { amount: 100, unit: "ml" },
+          portions: [
+            {
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
+              name: "X",
+              position: 0,
+              size: { amount: 250, unit: "ml" },
+            },
+          ],
+        });
+        const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+        const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+          createdAt: 0,
+          dateKey: "2026-06-20",
+          planId: plan.id,
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const mealEntries = yield* MealEntries.MealEntries;
+          const store = yield* Store.NutritionStore;
+          const created = yield* mealEntries.create({
+            input: {
+              dateKey: dailyLog.dateKey,
+              foodId: food.id,
+              mealId: plan.meals[0]?.id ?? "",
+              quantity: {
+                _tag: "PortionFoodQuantity",
+                count: "2.5",
+                portionId: food.portions[0]?.id ?? "",
+              },
+            },
+          });
+
+          return {
+            created,
+            stores: yield* store.readStores,
+          };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: {
+                ...emptyStores,
+                dailyLogs: [dailyLog],
+                foods: [food],
+                plans: [plan],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.created.mealEntry.nutritionMultiplier, 6.25);
+    assert.equal(result.created.mealEntry.quantity._tag, "PortionFoodQuantity");
+    if (result.created.mealEntry.quantity._tag === "PortionFoodQuantity") {
+      assert.equal(result.created.mealEntry.quantity.count, 2.5);
+      assert.equal(result.created.mealEntry.quantity.portionName, "X");
+      assert.equal(result.created.mealEntry.quantity.portionSize.amount, 250);
+      assert.equal(result.created.mealEntry.quantity.portionSize.unit, "ml");
+    }
+    assert.equal(result.stores.mealEntries.length, 1);
+  });
+
   it("updates unused foods in place without growing the catalog", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -61,10 +130,10 @@ describe("nutrition revisions", () => {
             input: {
               foodId: food.id,
               name: "Greek yogurt 2%",
-              energyKcalPer100g: "61",
-              proteinGramsPer100g: "11",
-              carbsGramsPer100g: "3.8",
-              fatGramsPer100g: "0.5",
+              energyKcal: "61",
+              proteinGrams: "11",
+              carbsGrams: "3.8",
+              fatGrams: "0.5",
             },
           });
           const stores = yield* store.readStores;
@@ -109,10 +178,10 @@ describe("nutrition revisions", () => {
             input: {
               foodId: food.id,
               name: "Greek yogurt 2%",
-              energyKcalPer100g: "61",
-              proteinGramsPer100g: "11",
-              carbsGramsPer100g: "3.8",
-              fatGramsPer100g: "0.5",
+              energyKcal: "61",
+              proteinGrams: "11",
+              carbsGrams: "3.8",
+              fatGrams: "0.5",
             },
           });
           const stores = yield* store.readStores;
@@ -652,10 +721,11 @@ function _revisionTestLayer({
     })
   );
 
-  return Layer.mergeAll(Foods.Foods.layer, MealPlans.MealPlans.layer).pipe(
-    Layer.provideMerge(storeLayer),
-    Layer.provideMerge(cryptoLayer)
-  );
+  return Layer.mergeAll(
+    Foods.Foods.layer,
+    MealEntries.MealEntries.layer,
+    MealPlans.MealPlans.layer
+  ).pipe(Layer.provideMerge(storeLayer), Layer.provideMerge(cryptoLayer));
 }
 
 function _mealEntry({
@@ -671,7 +741,12 @@ function _mealEntry({
     foodId,
     id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
     mealId,
-    quantityGrams: 150,
+    quantity: {
+      _tag: "MeasuredFoodQuantity",
+      amount: 150,
+      unit: "g",
+    },
+    nutritionMultiplier: 1.5,
     updatedAt: 0,
   });
 }

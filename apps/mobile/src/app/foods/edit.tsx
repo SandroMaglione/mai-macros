@@ -3,6 +3,7 @@ import {
   AppScreen,
   BottomActionBar,
   Button,
+  DisclosureCard,
   Field,
   IconButton,
   LoadingView,
@@ -15,6 +16,7 @@ import {
   FoodNutrientOverview,
   FoodSearchField,
   FoodSearchResults,
+  MeasurementUnitSelect,
 } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import {
@@ -22,6 +24,7 @@ import {
   foodNutrientOverviewPrimaryLabel,
   formatNumber,
 } from "@/lib/format";
+import { measurementUnitFromValue } from "@/lib/food-measurements";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent, FoodFormMachine, FoodSearchMachine } from "@mai/machines";
@@ -29,7 +32,15 @@ import { Domain, Foods, MealEntries } from "@mai/nutrition";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array, Effect, Match, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
-import { ChevronLeft, Pencil, RotateCcw, Save } from "lucide-react-native";
+import {
+  ChevronLeft,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Scale,
+  Trash2,
+} from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Actor, createAsyncLogic, setup } from "xstate";
@@ -39,14 +50,44 @@ type EditFoodsLayout = "screen" | "embedded";
 const FoodFormInputFields = {
   name: Schema.String,
   brand: Schema.optionalKey(Schema.String),
-  energyKcalPer100g: Schema.String,
-  proteinGramsPer100g: Schema.String,
-  carbsGramsPer100g: Schema.String,
-  fatGramsPer100g: Schema.String,
-  fiberGramsPer100g: Schema.optionalKey(Schema.String),
-  sugarGramsPer100g: Schema.optionalKey(Schema.String),
-  saturatedFatGramsPer100g: Schema.optionalKey(Schema.String),
-  saltGramsPer100g: Schema.optionalKey(Schema.String),
+  energyKcal: Schema.String,
+  proteinGrams: Schema.String,
+  carbsGrams: Schema.String,
+  fatGrams: Schema.String,
+  fiberGrams: Schema.optionalKey(Schema.String),
+  sugarGrams: Schema.optionalKey(Schema.String),
+  saturatedFatGrams: Schema.optionalKey(Schema.String),
+  saltGrams: Schema.optionalKey(Schema.String),
+  nutritionReference: Schema.optionalKey(
+    Schema.Struct({
+      amount: Schema.String,
+      unit: Domain.MeasurementUnit,
+    })
+  ),
+  portions: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.optionalKey(Schema.String),
+        name: Schema.String,
+        size: Schema.Struct({
+          amount: Schema.String,
+          unit: Domain.MeasurementUnit,
+        }),
+      })
+    )
+  ),
+  massVolumeConversion: Schema.optionalKey(
+    Schema.Struct({
+      mass: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MassUnit,
+      }),
+      volume: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.VolumeUnit,
+      }),
+    })
+  ),
 };
 
 const ReviseFoodInput = Schema.Struct({
@@ -56,10 +97,11 @@ const ReviseFoodInput = Schema.Struct({
 
 const MealFoodUsage = Schema.Struct({
   foodId: Domain.FoodId,
-  latestQuantityGrams: Domain.QuantityGrams,
+  latestQuantity: Domain.LoggedFoodQuantity,
   latestUsedAt: Schema.DateTimeUtc,
   meals: Schema.Array(
     Schema.Struct({
+      latestQuantity: Domain.LoggedFoodQuantity,
       latestUsedAt: Schema.DateTimeUtc,
       mealId: Domain.MealId,
     })
@@ -113,63 +155,60 @@ type FoodNutrientField = {
   readonly unit: "g" | "kcal";
 };
 
-const macroFields: readonly FoodNutrientField[] = [
+const nutritionFields: readonly FoodNutrientField[] = [
   {
     accentColor: color.nutritionEnergy,
     label: "Calories",
-    name: "energyKcalPer100g",
+    name: "energyKcal",
     placeholder: "62",
     unit: "kcal",
   },
   {
-    accentColor: color.nutritionProtein,
-    label: "Protein",
-    name: "proteinGramsPer100g",
-    placeholder: "10",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionCarbs,
-    label: "Carbs",
-    name: "carbsGramsPer100g",
-    placeholder: "3.6",
-    unit: "g",
-  },
-  {
     accentColor: color.nutritionFat,
     label: "Fat",
-    name: "fatGramsPer100g",
+    name: "fatGrams",
     placeholder: "0.4",
-    unit: "g",
-  },
-];
-
-const nutrientFields: readonly FoodNutrientField[] = [
-  {
-    accentColor: color.nutritionFiber,
-    label: "Fiber",
-    name: "fiberGramsPer100g",
-    placeholder: "0",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionSugar,
-    label: "Sugar",
-    name: "sugarGramsPer100g",
-    placeholder: "3.2",
     unit: "g",
   },
   {
     accentColor: color.nutritionFat,
     label: "Saturated fat",
-    name: "saturatedFatGramsPer100g",
+    name: "saturatedFatGrams",
     placeholder: "0.1",
+    unit: "g",
+  },
+  {
+    accentColor: color.nutritionCarbs,
+    label: "Carbs",
+    name: "carbsGrams",
+    placeholder: "3.6",
+    unit: "g",
+  },
+  {
+    accentColor: color.nutritionCarbs,
+    label: "Sugar",
+    name: "sugarGrams",
+    placeholder: "3.2",
+    unit: "g",
+  },
+  {
+    accentColor: color.nutritionCarbs,
+    label: "Fiber",
+    name: "fiberGrams",
+    placeholder: "0",
+    unit: "g",
+  },
+  {
+    accentColor: color.nutritionEnergy,
+    label: "Protein",
+    name: "proteinGrams",
+    placeholder: "10",
     unit: "g",
   },
   {
     accentColor: color.nutritionSalt,
     label: "Salt",
-    name: "saltGramsPer100g",
+    name: "saltGrams",
     placeholder: "0.1",
     unit: "g",
   },
@@ -607,7 +646,7 @@ function ReadyEditFoodsRoute({
             getPrimaryLabel={(food) =>
               `${formatNumber({
                 maximumFractionDigits: 0,
-                value: food.energyKcalPer100g,
+                value: food.energyKcal,
               })} kcal`
             }
             getSecondaryLabel={(food) =>
@@ -674,6 +713,9 @@ function FoodEditForm({
     },
   });
   const { formValues, numberWarnings } = snapshot.context;
+  const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
+    portions: snapshot.context.portions,
+  });
   const changeFoodButton = (
     <Button
       disabled={disabled}
@@ -689,13 +731,16 @@ function FoodEditForm({
   );
   const saveFoodButton = (
     <Button
-      disabled={disabled}
+      disabled={disabled || !portionsAreValid}
       icon={Save}
       loading={disabled}
       onPress={() => {
         onReviseFood({
           input: {
-            ...FoodFormMachine.createFoodInputFromFormValues({ formValues }),
+            ...FoodFormMachine.createFoodInputFromFormValues({
+              formValues,
+              portions: snapshot.context.portions,
+            }),
             foodId: selectedFood.id,
           },
         });
@@ -727,20 +772,24 @@ function FoodEditForm({
         <FoodFormFields
           actor={formActor}
           disabled={disabled}
+          portions={snapshot.context.portions}
           selectedFood={selectedFood}
           values={formValues}
         />
-        <FoodNutrientOverview
-          brand={_optionalTrimmedText(formValues.brand)}
-          name={_optionalTrimmedText(formValues.name) ?? selectedFood.name}
-          nutrients={foodNutrientOverviewFromFormValues({
-            values: formValues,
-          })}
-          primaryLabel={foodNutrientOverviewPrimaryLabel({
-            values: formValues,
-          })}
-          secondaryLabel="per 100g"
-        />
+        <View style={styles.reviewSection}>
+          <View style={styles.reviewDivider} />
+          <FoodNutrientOverview
+            brand={_optionalTrimmedText(formValues.brand)}
+            name={_optionalTrimmedText(formValues.name) ?? selectedFood.name}
+            nutrients={foodNutrientOverviewFromFormValues({
+              values: formValues,
+            })}
+            primaryLabel={foodNutrientOverviewPrimaryLabel({
+              values: formValues,
+            })}
+            secondaryLabel={`per ${formValues.nutritionReferenceAmount || "…"} ${formValues.nutritionReferenceUnit}`}
+          />
+        </View>
         <FoodNumberWarnings warnings={numberWarnings} />
         {layout === "embedded" ? (
           <View style={styles.inlineActions}>{saveFoodButton}</View>
@@ -760,17 +809,26 @@ function FoodEditForm({
 function FoodFormFields({
   actor,
   disabled,
+  portions,
   selectedFood,
   values,
 }: {
   readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
+  readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
   readonly selectedFood: Domain.Food;
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
+  const portionErrors = FoodFormMachine.foodPortionFormErrorsFromValues({
+    portions,
+  });
+  const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
+    portions,
+  });
+
   return (
     <View style={styles.formSections}>
-      <SectionCard style={styles.card} title="Details">
+      <SectionCard style={styles.card}>
         <View style={styles.fieldGroup}>
           <Field
             autoCapitalize="words"
@@ -807,9 +865,40 @@ function FoodFormFields({
         </View>
       </SectionCard>
 
-      <SectionCard style={styles.card} title="Calories and macros per 100g">
+      <SectionCard style={styles.card}>
         <View style={styles.fieldGroup}>
-          {macroFields.map((field) => (
+          <NumberField
+            editable={!disabled}
+            label="Nutrition values per"
+            onChangeText={(value) => {
+              _sendFoodFormValueChange({
+                actor,
+                name: "nutritionReferenceAmount",
+                value,
+              });
+            }}
+            placeholder="100"
+            rightElement={
+              <MeasurementUnitSelect
+                disabled={disabled}
+                onSelect={(unit) => {
+                  _sendFoodFormValueChange({
+                    actor,
+                    name: "nutritionReferenceUnit",
+                    value: unit,
+                  });
+                }}
+                selectedUnit={measurementUnitFromValue({
+                  fallback: "g",
+                  value: values.nutritionReferenceUnit,
+                })}
+                title="Nutrition reference unit"
+                units={["g", "kg", "oz", "lb", "ml", "l"]}
+              />
+            }
+            value={values.nutritionReferenceAmount}
+          />
+          {nutritionFields.map((field) => (
             <FoodNutrientInput
               actor={actor}
               disabled={disabled}
@@ -822,20 +911,157 @@ function FoodFormFields({
         </View>
       </SectionCard>
 
-      <SectionCard style={styles.card} title="Nutrient details per 100g">
+      <SectionCard
+        style={styles.card}
+        subtitle="Define any name you use for this food and the physical amount that one portion represents."
+        title="Custom portions"
+      >
         <View style={styles.fieldGroup}>
-          {nutrientFields.map((field) => (
-            <FoodNutrientInput
-              actor={actor}
-              disabled={disabled}
-              field={field}
-              key={field.name}
-              selectedFood={selectedFood}
-              value={values[field.name]}
-            />
+          {portions.map((portion, index) => (
+            <View key={portion.id ?? `new-${index}`} style={styles.portionCard}>
+              <Field
+                editable={!disabled}
+                error={portionErrors[index]?.name}
+                label="Portion name"
+                onChangeText={(value) => {
+                  actor.send({
+                    type: "changePortion",
+                    field: "name",
+                    index,
+                    value,
+                  });
+                }}
+                placeholder="X"
+                value={portion.name}
+              />
+              <NumberField
+                editable={!disabled}
+                error={portionErrors[index]?.amount}
+                label={`One ${portion.name.trim() || "portion"} equals`}
+                onChangeText={(value) => {
+                  actor.send({
+                    type: "changePortion",
+                    field: "amount",
+                    index,
+                    value,
+                  });
+                }}
+                placeholder="250"
+                rightElement={
+                  <MeasurementUnitSelect
+                    disabled={disabled}
+                    onSelect={(unit) => {
+                      actor.send({
+                        type: "changePortion",
+                        field: "unit",
+                        index,
+                        value: unit,
+                      });
+                    }}
+                    selectedUnit={portion.unit}
+                    title={`${portion.name.trim() || "Portion"} unit`}
+                    units={["g", "kg", "oz", "lb", "ml", "l"]}
+                  />
+                }
+                value={portion.amount}
+              />
+              <Button
+                disabled={disabled}
+                icon={Trash2}
+                onPress={() => {
+                  actor.send({ type: "removePortion", index });
+                }}
+                variant="ghost"
+              >
+                Remove portion
+              </Button>
+            </View>
           ))}
+          <Button
+            disabled={disabled || !portionsAreValid}
+            icon={Plus}
+            onPress={() => {
+              actor.send({ type: "addPortion" });
+            }}
+            variant="secondary"
+          >
+            Add portion
+          </Button>
         </View>
       </SectionCard>
+
+      <DisclosureCard icon={Scale} title="Weight and volume conversion">
+        <View style={styles.disclosureContent}>
+          <Text style={styles.helperText}>
+            Optional. Add this when you want to enter the same food using both a
+            scale and a volume measure.
+          </Text>
+          <View style={styles.fieldGroup}>
+            <NumberField
+              editable={!disabled}
+              label="Mass amount"
+              onChangeText={(value) => {
+                _sendFoodFormValueChange({
+                  actor,
+                  name: "conversionMassAmount",
+                  value,
+                });
+              }}
+              placeholder="103"
+              rightElement={
+                <MeasurementUnitSelect
+                  disabled={disabled}
+                  onSelect={(unit) => {
+                    _sendFoodFormValueChange({
+                      actor,
+                      name: "conversionMassUnit",
+                      value: unit,
+                    });
+                  }}
+                  selectedUnit={measurementUnitFromValue({
+                    fallback: "g",
+                    value: values.conversionMassUnit,
+                  })}
+                  title="Mass unit"
+                  units={["g", "kg", "oz", "lb"]}
+                />
+              }
+              value={values.conversionMassAmount}
+            />
+            <NumberField
+              editable={!disabled}
+              label="Equivalent volume"
+              onChangeText={(value) => {
+                _sendFoodFormValueChange({
+                  actor,
+                  name: "conversionVolumeAmount",
+                  value,
+                });
+              }}
+              placeholder="100"
+              rightElement={
+                <MeasurementUnitSelect
+                  disabled={disabled}
+                  onSelect={(unit) => {
+                    _sendFoodFormValueChange({
+                      actor,
+                      name: "conversionVolumeUnit",
+                      value: unit,
+                    });
+                  }}
+                  selectedUnit={measurementUnitFromValue({
+                    fallback: "ml",
+                    value: values.conversionVolumeUnit,
+                  })}
+                  title="Volume unit"
+                  units={["ml", "l"]}
+                />
+              }
+              value={values.conversionVolumeAmount}
+            />
+          </View>
+        </View>
+      </DisclosureCard>
     </View>
   );
 }
@@ -969,6 +1195,22 @@ function _optionalTrimmedText(value: string) {
   return trimmedValue === "" ? undefined : trimmedValue;
 }
 
+function _sendFoodFormValueChange({
+  actor,
+  name,
+  value,
+}: {
+  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly name: keyof FoodFormMachine.FoodFormValues;
+  readonly value: string;
+}) {
+  actor.send({
+    type: "changeFormValue",
+    name,
+    value,
+  });
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1044,6 +1286,9 @@ const styles = StyleSheet.create({
   fieldGroup: {
     gap: spacing.md,
   },
+  disclosureContent: {
+    gap: spacing.xl,
+  },
   nutrientField: {
     gap: spacing.xs,
   },
@@ -1058,8 +1303,27 @@ const styles = StyleSheet.create({
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.xs,
   },
+  helperText: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.sm,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  portionCard: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: color.divider,
+    paddingTop: spacing.md,
+  },
   warnings: {
     gap: spacing.sm,
+  },
+  reviewSection: {
+    gap: spacing.xxl,
+    paddingTop: spacing.xl,
+  },
+  reviewDivider: {
+    height: 1,
+    backgroundColor: color.divider,
   },
   footerButton: {
     flex: 1,

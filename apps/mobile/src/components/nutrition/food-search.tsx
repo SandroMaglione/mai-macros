@@ -472,10 +472,13 @@ function FoodSearchResult({
 }) {
   const brandLabel =
     food.brand === undefined || food.brand.trim() === "" ? null : food.brand;
-  const per100gLabel = `${formatNumber({
+  const perReferenceLabel = `${formatNumber({
     maximumFractionDigits: 0,
-    value: food.energyKcalPer100g,
-  })} kcal / 100 g`;
+    value: food.energyKcal,
+  })} kcal / ${formatNumber({
+    maximumFractionDigits: 2,
+    value: food.nutritionReference.amount,
+  })} ${food.nutritionReference.unit === "l" ? "L" : food.nutritionReference.unit}`;
   const dominantMacronutrientMetas = Utils.findDominantMacronutrients({
     food,
   }).map((macronutrient) => dominantMacronutrientIndicator[macronutrient]);
@@ -495,7 +498,7 @@ function FoodSearchResult({
     `${food.name}${defaultFoodAccessibilityLabel}`,
     brandLabel,
     dominantMacronutrientLabel,
-    primaryLabel ?? per100gLabel,
+    primaryLabel ?? perReferenceLabel,
     secondaryLabel,
   ]
     .filter(
@@ -547,7 +550,7 @@ function FoodSearchResult({
       </View>
       <View style={styles.resultMetrics}>
         <Text numberOfLines={1} style={styles.primaryMetric}>
-          {primaryLabel ?? per100gLabel}
+          {primaryLabel ?? perReferenceLabel}
         </Text>
         <Text
           accessible={secondaryLabel !== undefined}

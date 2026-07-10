@@ -1,4 +1,9 @@
-import { NutritionReports, Reporting, type Domain } from "@mai/nutrition";
+import {
+  Measurements,
+  NutritionReports,
+  Reporting,
+  type Domain,
+} from "@mai/nutrition";
 
 import { insightNutrients } from "./constants.ts";
 import type {
@@ -25,10 +30,19 @@ export function buildInsightContext({
     (rangeTotal, day) =>
       rangeTotal +
       day.entries.reduce(
-        (dayTotal, entry) => dayTotal + entry.mealEntry.quantityGrams,
+        (dayTotal, entry) => dayTotal + _entryMassGrams({ entry }),
         0
       ),
     0
+  );
+  const weightCoverageComplete = report.days.every((day) =>
+    day.entries.every(
+      (entry) =>
+        Measurements.massGramsFromQuantity({
+          food: entry.food,
+          quantity: entry.mealEntry.quantity,
+        }) !== undefined
+    )
   );
   const averageTotals =
     dayCount === 0
@@ -83,7 +97,7 @@ export function buildInsightContext({
                   },
                 },
                 quantityGrams:
-                  current.quantityGrams + entry.mealEntry.quantityGrams,
+                  current.quantityGrams + _entryMassGrams({ entry }),
                 totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: _entryTotals({ entry }),
@@ -116,7 +130,7 @@ export function buildInsightContext({
               [mealId]: {
                 ...current,
                 quantityGrams:
-                  current.quantityGrams + entry.mealEntry.quantityGrams,
+                  current.quantityGrams + _entryMassGrams({ entry }),
                 totals: Reporting.addNutrientTotals({
                   left: current.totals,
                   right: _entryTotals({ entry }),
@@ -133,7 +147,7 @@ export function buildInsightContext({
     dateKey: day.dateKey,
     energyKcal: day.totals.energyKcal,
     quantityGrams: day.entries.reduce(
-      (total, entry) => total + entry.mealEntry.quantityGrams,
+      (total, entry) => total + _entryMassGrams({ entry }),
       0
     ),
   }));
@@ -197,7 +211,21 @@ export function buildInsightContext({
     report,
     totalQuantityGrams,
     totals,
+    weightCoverageComplete,
   };
+}
+
+function _entryMassGrams({
+  entry,
+}: {
+  readonly entry: NutritionReports.NutritionReportRange["days"][number]["entries"][number];
+}) {
+  return (
+    Measurements.massGramsFromQuantity({
+      food: entry.food,
+      quantity: entry.mealEntry.quantity,
+    }) ?? 0
+  );
 }
 
 function _entryTotals({

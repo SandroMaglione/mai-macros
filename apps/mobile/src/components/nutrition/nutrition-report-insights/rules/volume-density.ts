@@ -9,8 +9,12 @@ import type {
 export const volumeDensityInsightModule = {
   id: "volume-density",
   defaultSummaryLimit: 1,
-  collect: (context) =>
-    sortedByScore({
+  collect: (context) => {
+    if (!context.weightCoverageComplete) {
+      return [];
+    }
+
+    return sortedByScore({
       insights: [
         ...(() => {
           const topFood = context.foodContributors
@@ -166,5 +170,6 @@ export const volumeDensityInsightModule = {
           ];
         }),
       ],
-    }),
+    });
+  },
 } satisfies NutritionReportInsightModule;

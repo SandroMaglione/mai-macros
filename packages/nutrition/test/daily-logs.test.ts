@@ -274,7 +274,12 @@ describe("DailyLogs", () => {
           dateKey: dailyLog.dateKey,
           mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
           foodId: "9535a059-a61f-42e1-a2e0-35ec87203c55",
-          quantityGrams: 100,
+          quantity: {
+            _tag: "MeasuredFoodQuantity",
+            amount: 100,
+            unit: "g",
+          },
+          nutritionMultiplier: 1,
           createdAt: 0,
           updatedAt: 0,
         });

@@ -14,6 +14,7 @@ import { assert, describe, it } from "vitest";
 import migration001 from "../src/migrations/001-initial.ts";
 import migration002 from "../src/migrations/002-custom-plan-meals.ts";
 import migration003 from "../src/migrations/003-body-weight-entries.ts";
+import migration004 from "../src/migrations/004-food-measurements.ts";
 import {
   TestSqliteClientLayer,
   TestSqliteDataLayer,
@@ -80,14 +81,23 @@ describe("SqliteNutritionStore", () => {
 
     assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.count, 1);
-    assert.isDefined(
-      result.foods.find(
-        (food) =>
-          food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24" &&
-          food.origin === "import"
-      )
+    const persistedFood = result.foods.find(
+      (food) =>
+        food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24" &&
+        food.origin === "import"
     );
-    assert.equal(result.mealEntries[0]?.quantityGrams, 150);
+    assert.isDefined(persistedFood);
+    assert.equal(persistedFood.nutritionReference.amount, 100);
+    assert.equal(persistedFood.nutritionReference.unit, "ml");
+    assert.equal(persistedFood.portions[0]?.name, "X");
+    assert.equal(persistedFood.portions[0]?.size.amount, 250);
+    assert.equal(persistedFood.massVolumeConversion?.mass.amount, 103);
+    assert.equal(
+      result.mealEntries[0]?.quantity._tag === "MeasuredFoodQuantity"
+        ? result.mealEntries[0].quantity.amount
+        : undefined,
+      150
+    );
   });
 
   it("removes stale plan meals when a plan is updated in place", async () => {
@@ -292,7 +302,7 @@ describe("SqliteNutritionStore", () => {
     ]);
   });
 
-  it("adds body weight entries without rewriting existing nutrition tables", async () => {
+  it("migrates legacy gram entries and food references without losing data", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -300,13 +310,38 @@ describe("SqliteNutritionStore", () => {
           Request: Schema.Struct({}),
           Result: Schema.Struct({
             id: Schema.String,
-            quantityGrams: Schema.Number,
+            nutritionMultiplier: Schema.Number,
+            quantityAmount: Schema.Number,
+            quantityKind: Schema.String,
+            quantityUnit: Schema.NullOr(Schema.String),
           }),
           execute: () =>
             sql`
-              SELECT id, quantity_grams AS quantityGrams
+              SELECT
+                id,
+                nutrition_multiplier AS nutritionMultiplier,
+                quantity_amount AS quantityAmount,
+                quantity_kind AS quantityKind,
+                quantity_unit AS quantityUnit
               FROM meal_entries
               ORDER BY id
+            `,
+        });
+        const findFoods = SqlSchema.findAll({
+          Request: Schema.Struct({}),
+          Result: Schema.Struct({
+            id: Schema.String,
+            referenceAmount: Schema.Number,
+            referenceUnit: Schema.String,
+          }),
+          execute: () =>
+            sql`
+              SELECT
+                id,
+                nutrition_reference_amount AS referenceAmount,
+                nutrition_reference_unit AS referenceUnit
+              FROM foods
+              WHERE id = '9535a059-a61f-42e1-a2e0-35ec87203c24'
             `,
         });
         const findBodyWeightEntries = SqlSchema.findAll({
@@ -378,9 +413,11 @@ describe("SqliteNutritionStore", () => {
             weight_kilograms: 82.4,
           })}
         `;
+        yield* migration004;
 
         return {
           bodyWeightEntries: yield* findBodyWeightEntries({}),
+          foods: yield* findFoods({}),
           mealEntries: yield* findMealEntries({}),
         };
       }).pipe(Effect.provide(TestSqliteClientLayer))
@@ -389,7 +426,17 @@ describe("SqliteNutritionStore", () => {
     assert.deepStrictEqual(result.mealEntries, [
       {
         id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
-        quantityGrams: 150,
+        nutritionMultiplier: 1.5,
+        quantityAmount: 150,
+        quantityKind: "measured",
+        quantityUnit: "g",
+      },
+    ]);
+    assert.deepStrictEqual(result.foods, [
+      {
+        id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
+        referenceAmount: 100,
+        referenceUnit: "g",
       },
     ]);
     assert.deepStrictEqual(result.bodyWeightEntries, [
@@ -452,9 +499,19 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":5', '"databaseVersion":4')
+          .replace('"databaseVersion":6', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
-          .replace('"bodyWeightEntries":[],', "");
+          .replace('"bodyWeightEntries":[],', "")
+          .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")
+          .replaceAll('"energyKcal":', '"energyKcalPer100g":')
+          .replaceAll('"proteinGrams":', '"proteinGramsPer100g":')
+          .replaceAll('"carbsGrams":', '"carbsGramsPer100g":')
+          .replaceAll('"fatGrams":', '"fatGramsPer100g":')
+          .replaceAll('"fiberGrams":', '"fiberGramsPer100g":')
+          .replaceAll('"sugarGrams":', '"sugarGramsPer100g":')
+          .replaceAll('"saturatedFatGrams":', '"saturatedFatGramsPer100g":')
+          .replaceAll('"saltGrams":', '"saltGramsPer100g":')
+          .replaceAll('"portions":[],', "");
 
         yield* store.replaceStores({
           activeMealPlanSelections: [],
@@ -505,14 +562,27 @@ describe("SqliteNutritionStore", () => {
 });
 
 const testFood = Schema.decodeEffect(Domain.Food)({
-  carbsGramsPer100g: 3.6,
+  carbsGrams: 3.6,
   createdAt: 0,
-  energyKcalPer100g: 59,
-  fatGramsPer100g: 0.4,
+  energyKcal: 59,
+  fatGrams: 0.4,
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Greek yogurt",
+  nutritionReference: { amount: 100, unit: "ml" },
   origin: "import",
-  proteinGramsPer100g: 10,
+  portions: [
+    {
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
+      name: "X",
+      position: 0,
+      size: { amount: 250, unit: "ml" },
+    },
+  ],
+  massVolumeConversion: {
+    mass: { amount: 103, unit: "g" },
+    volume: { amount: 100, unit: "ml" },
+  },
+  proteinGrams: 10,
   updatedAt: 0,
 });
 
@@ -592,7 +662,12 @@ const testMealEntry = Schema.decodeEffect(Domain.MealEntry)({
   foodId: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
-  quantityGrams: 150,
+  quantity: {
+    _tag: "MeasuredFoodQuantity",
+    amount: 150,
+    unit: "g",
+  },
+  nutritionMultiplier: 1.5,
   updatedAt: 0,
 });
 

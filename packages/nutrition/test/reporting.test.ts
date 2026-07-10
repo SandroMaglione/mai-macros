@@ -29,14 +29,14 @@ const completeFoodInput: typeof Domain.Food.Encoded = {
   name: "Greek yogurt",
   brand: "Mai",
   origin: "user",
-  energyKcalPer100g: 59,
-  proteinGramsPer100g: 10,
-  carbsGramsPer100g: 3.6,
-  fatGramsPer100g: 0.4,
-  fiberGramsPer100g: 0,
-  sugarGramsPer100g: 3.2,
-  saturatedFatGramsPer100g: 0.1,
-  saltGramsPer100g: 0.04,
+  energyKcal: 59,
+  proteinGrams: 10,
+  carbsGrams: 3.6,
+  fatGrams: 0.4,
+  fiberGrams: 0,
+  sugarGrams: 3.2,
+  saturatedFatGrams: 0.1,
+  saltGrams: 0.04,
   createdAt: 0,
   updatedAt: 0,
 };
@@ -45,10 +45,10 @@ const partialFoodInput: typeof Domain.Food.Encoded = {
   id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
   name: "Rice",
   origin: "user",
-  energyKcalPer100g: 130,
-  proteinGramsPer100g: 2.7,
-  carbsGramsPer100g: 28,
-  fatGramsPer100g: 0.3,
+  energyKcal: 130,
+  proteinGrams: 2.7,
+  carbsGrams: 28,
+  fatGrams: 0.3,
   createdAt: 0,
   updatedAt: 0,
 };
@@ -205,14 +205,14 @@ describe("nutrition reporting", () => {
       const partialFood = yield* Schema.decodeEffect(Domain.Food)(
         partialFoodInput
       );
-      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
-        100
-      );
+      const nutritionMultiplier = yield* Schema.decodeEffect(
+        Domain.NutritionMultiplier
+      )(1);
 
       return Reporting.calculateEntriesNutrientTotals({
         entries: [
-          { food: completeFood, quantityGrams },
-          { food: partialFood, quantityGrams },
+          { food: completeFood, nutritionMultiplier },
+          { food: partialFood, nutritionMultiplier },
         ],
       });
     });
@@ -229,17 +229,18 @@ describe("nutrition reporting", () => {
 
   it("aggregates entry weight and density ratios", async () => {
     const program = Effect.gen(function* () {
-      const firstQuantity = yield* Schema.decodeEffect(Domain.QuantityGrams)(
-        100
-      );
-      const secondQuantity = yield* Schema.decodeEffect(Domain.QuantityGrams)(
-        250
-      );
+      const food = yield* Schema.decodeEffect(Domain.Food)(completeFoodInput);
+      const firstQuantity = yield* Schema.decodeEffect(
+        Domain.LoggedFoodQuantity
+      )({ _tag: "MeasuredFoodQuantity", amount: 100, unit: "g" });
+      const secondQuantity = yield* Schema.decodeEffect(
+        Domain.LoggedFoodQuantity
+      )({ _tag: "MeasuredFoodQuantity", amount: 250, unit: "g" });
 
       return Reporting.calculateEntriesWeightTotals({
         entries: [
-          { quantityGrams: firstQuantity },
-          { quantityGrams: secondQuantity },
+          { food, quantity: firstQuantity },
+          { food, quantity: secondQuantity },
         ],
       });
     });

@@ -14,6 +14,9 @@ import {
   Food,
   FoodCategory,
   FoodId,
+  FoodMassVolumeConversion,
+  FoodPortion,
+  MeasuredQuantity,
   NonEmptyString,
   NonNegativeNumber,
 } from "../domain.ts";
@@ -42,14 +45,17 @@ export class FoodCatalogFood extends Schema.Class<FoodCatalogFood>(
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
   origin: FoodCatalogFoodOrigin,
-  energyKcalPer100g: NonNegativeNumber,
-  proteinGramsPer100g: NonNegativeNumber,
-  carbsGramsPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
-  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  nutritionReference: MeasuredQuantity,
+  energyKcal: NonNegativeNumber,
+  proteinGrams: NonNegativeNumber,
+  carbsGrams: NonNegativeNumber,
+  fatGrams: NonNegativeNumber,
+  fiberGrams: Schema.optional(NonNegativeNumber),
+  sugarGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatGrams: Schema.optional(NonNegativeNumber),
+  saltGrams: Schema.optional(NonNegativeNumber),
+  portions: Schema.Array(FoodPortion),
+  massVolumeConversion: Schema.optional(FoodMassVolumeConversion),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
@@ -104,6 +110,20 @@ export class MaiFoodCatalogStores extends Schema.Class<MaiFoodCatalogStores>(
 class MaiFoodCatalogImportStores extends Schema.Class<MaiFoodCatalogImportStores>(
   "MaiFoodCatalogImportStores"
 )({
+  foods: Schema.Array(FoodCatalogFood),
+}) {}
+
+class LegacyMaiFoodCatalogSourceV5 extends Schema.Class<LegacyMaiFoodCatalogSourceV5>(
+  "LegacyMaiFoodCatalogSourceV5"
+)({
+  databaseName: Schema.Literal(DatabaseName),
+  databaseVersion: Schema.Literal(5),
+  exportedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+class LegacyMaiFoodCatalogImportStoresV5 extends Schema.Class<LegacyMaiFoodCatalogImportStoresV5>(
+  "LegacyMaiFoodCatalogImportStoresV5"
+)({
   foods: Schema.Array(FoodCatalogImportFood),
 }) {}
 
@@ -127,13 +147,29 @@ class MaiFoodCatalogV1Import extends Schema.Class<MaiFoodCatalogV1Import>(
   stores: MaiFoodCatalogImportStores,
 }) {}
 
+class LegacyMaiFoodCatalogV1ImportV5 extends Schema.Class<LegacyMaiFoodCatalogV1ImportV5>(
+  "LegacyMaiFoodCatalogV1ImportV5"
+)({
+  format: MaiFoodCatalogFormat,
+  formatVersion: MaiFoodCatalogFormatVersion,
+  integrity: MaiFoodCatalogIntegrity,
+  source: LegacyMaiFoodCatalogSourceV5,
+  stores: LegacyMaiFoodCatalogImportStoresV5,
+}) {}
+
 export type MaiFoodCatalog = typeof MaiFoodCatalogV1.Type;
 
 export type MaiFoodCatalogEncoded = typeof MaiFoodCatalogV1.Encoded;
 
 export const MaiFoodCatalogJson = Schema.fromJsonString(MaiFoodCatalogV1);
 
-const MaiFoodCatalogImportJson = Schema.fromJsonString(MaiFoodCatalogV1Import);
+const MaiFoodCatalogImportJson = Schema.fromJsonString(
+  Schema.Union([LegacyMaiFoodCatalogV1ImportV5, MaiFoodCatalogV1Import])
+);
+
+const isLegacyMaiFoodCatalogV1ImportV5 = Schema.is(
+  LegacyMaiFoodCatalogV1ImportV5
+);
 
 const FoodCatalogJsonInputSchema = Schema.Struct({
   json: Schema.String,
@@ -444,20 +480,55 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
   const catalogImport = yield* Schema.decodeEffect(MaiFoodCatalogImportJson)(
     json
   );
-  const foods = yield* Effect.forEach(
-    catalogImport.stores.foods,
-    Effect.fn("_foodCatalogFoodFromImportFood")(function* (
-      food: FoodCatalogImportFood
-    ) {
-      const encodedFood = yield* Schema.encodeEffect(FoodCatalogImportFood)(
-        food
-      );
-      const { basedOnFoodId, ...foodWithoutLineage } = encodedFood;
-      void basedOnFoodId;
+  const foods = isLegacyMaiFoodCatalogV1ImportV5(catalogImport)
+    ? yield* Effect.forEach(
+        catalogImport.stores.foods,
+        Effect.fn("_foodCatalogFoodFromImportFood")(function* (
+          food: FoodCatalogImportFood
+        ) {
+          const encodedFood = yield* Schema.encodeEffect(FoodCatalogImportFood)(
+            food
+          );
+          const { basedOnFoodId, ...foodWithoutLineage } = encodedFood;
+          void basedOnFoodId;
 
-      return yield* Schema.decodeEffect(FoodCatalogFood)(foodWithoutLineage);
-    })
-  );
+          return yield* Schema.decodeEffect(FoodCatalogFood)({
+            id: foodWithoutLineage.id,
+            name: foodWithoutLineage.name,
+            ...(foodWithoutLineage.brand === undefined
+              ? {}
+              : { brand: foodWithoutLineage.brand }),
+            ...(foodWithoutLineage.category === undefined
+              ? {}
+              : { category: foodWithoutLineage.category }),
+            origin: foodWithoutLineage.origin,
+            nutritionReference: { amount: 100, unit: "g" },
+            energyKcal: foodWithoutLineage.energyKcalPer100g,
+            proteinGrams: foodWithoutLineage.proteinGramsPer100g,
+            carbsGrams: foodWithoutLineage.carbsGramsPer100g,
+            fatGrams: foodWithoutLineage.fatGramsPer100g,
+            ...(foodWithoutLineage.fiberGramsPer100g === undefined
+              ? {}
+              : { fiberGrams: foodWithoutLineage.fiberGramsPer100g }),
+            ...(foodWithoutLineage.sugarGramsPer100g === undefined
+              ? {}
+              : { sugarGrams: foodWithoutLineage.sugarGramsPer100g }),
+            ...(foodWithoutLineage.saturatedFatGramsPer100g === undefined
+              ? {}
+              : {
+                  saturatedFatGrams:
+                    foodWithoutLineage.saturatedFatGramsPer100g,
+                }),
+            ...(foodWithoutLineage.saltGramsPer100g === undefined
+              ? {}
+              : { saltGrams: foodWithoutLineage.saltGramsPer100g }),
+            portions: [],
+            createdAt: foodWithoutLineage.createdAt,
+            updatedAt: foodWithoutLineage.updatedAt,
+          });
+        })
+      )
+    : catalogImport.stores.foods;
   const encodedFoods = yield* Schema.encodeEffect(
     Schema.Array(FoodCatalogFood)
   )(foods);
@@ -467,7 +538,7 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
     integrity: catalogImport.integrity,
     source: {
       databaseName: catalogImport.source.databaseName,
-      databaseVersion: catalogImport.source.databaseVersion,
+      databaseVersion: CurrentDatabaseVersion,
       exportedAt: DateTime.toEpochMillis(catalogImport.source.exportedAt),
     },
     stores: {

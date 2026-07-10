@@ -1,5 +1,5 @@
 import type { FoodFormMachine } from "@mai/machines";
-import type { Domain } from "@mai/nutrition";
+import { Measurements, type Domain } from "@mai/nutrition";
 
 export type FoodNutrientOverviewNutrients = {
   readonly carbsGrams?: number | undefined;
@@ -57,14 +57,14 @@ export function foodNutrientOverviewFromFormValues({
   readonly values: FoodFormMachine.FoodFormValues;
 }): FoodNutrientOverviewNutrients {
   return {
-    carbsGrams: _nonNegativeFormNumber(values.carbsGramsPer100g),
-    energyKcal: _nonNegativeFormNumber(values.energyKcalPer100g),
-    fatGrams: _nonNegativeFormNumber(values.fatGramsPer100g),
-    fiberGrams: _nonNegativeFormNumber(values.fiberGramsPer100g),
-    proteinGrams: _nonNegativeFormNumber(values.proteinGramsPer100g),
-    saltGrams: _nonNegativeFormNumber(values.saltGramsPer100g),
-    saturatedFatGrams: _nonNegativeFormNumber(values.saturatedFatGramsPer100g),
-    sugarGrams: _nonNegativeFormNumber(values.sugarGramsPer100g),
+    carbsGrams: _nonNegativeFormNumber(values.carbsGrams),
+    energyKcal: _nonNegativeFormNumber(values.energyKcal),
+    fatGrams: _nonNegativeFormNumber(values.fatGrams),
+    fiberGrams: _nonNegativeFormNumber(values.fiberGrams),
+    proteinGrams: _nonNegativeFormNumber(values.proteinGrams),
+    saltGrams: _nonNegativeFormNumber(values.saltGrams),
+    saturatedFatGrams: _nonNegativeFormNumber(values.saturatedFatGrams),
+    sugarGrams: _nonNegativeFormNumber(values.sugarGrams),
   };
 }
 
@@ -73,11 +73,41 @@ export function foodNutrientOverviewPrimaryLabel({
 }: {
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
-  const energyKcal = _nonNegativeFormNumber(values.energyKcalPer100g);
+  const energyKcal = _nonNegativeFormNumber(values.energyKcal);
 
   return energyKcal === undefined
     ? "Partial"
     : `${formatFoodNutrientNumber({ value: energyKcal })} kcal`;
+}
+
+export function formatLoggedFoodQuantity({
+  quantity,
+}: {
+  readonly quantity: Domain.LoggedFoodQuantity;
+}) {
+  const value =
+    quantity._tag === "MeasuredFoodQuantity" ? quantity.amount : quantity.count;
+  const unit =
+    quantity._tag === "MeasuredFoodQuantity"
+      ? quantity.unit === "l"
+        ? "L"
+        : quantity.unit
+      : `× ${quantity.portionName}`;
+
+  return `${formatNumber({ maximumFractionDigits: 2, value })} ${unit}`;
+}
+
+export function mealEntryMassGrams({
+  food,
+  mealEntry,
+}: {
+  readonly food: Domain.Food;
+  readonly mealEntry: Domain.MealEntry;
+}) {
+  return Measurements.massGramsFromQuantity({
+    food,
+    quantity: mealEntry.quantity,
+  });
 }
 
 function _nonNegativeFormNumber(value: string) {

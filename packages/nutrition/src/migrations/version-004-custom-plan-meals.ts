@@ -220,7 +220,12 @@ export const migrateMealEntriesToCustomPlanMeals = Effect.fn(
           planId: dailyLog.planId,
         }),
         foodId: encodedMealEntry.foodId,
-        quantityGrams: encodedMealEntry.quantityGrams,
+        quantity: {
+          _tag: "MeasuredFoodQuantity",
+          amount: encodedMealEntry.quantityGrams,
+          unit: "g",
+        },
+        nutritionMultiplier: encodedMealEntry.quantityGrams / 100,
         createdAt: encodedMealEntry.createdAt,
         updatedAt: encodedMealEntry.updatedAt,
       });

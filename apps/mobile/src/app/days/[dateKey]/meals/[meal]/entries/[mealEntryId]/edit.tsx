@@ -5,16 +5,19 @@ import {
   BottomActionBar,
   Button,
   IconButton,
+  InputSelect,
   LoadingView,
   Notice,
   NumberField,
 } from "@/components/ui";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
+import * as FoodMeasurements from "@/lib/food-measurements";
+import { formatLoggedFoodQuantity } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines";
-import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
+import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Match, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
@@ -193,12 +196,20 @@ const editMealEntryRouteMachine = setup({
       Schema.Struct({
         data: EditMealEntryRouteData,
         notice: Schema.NullOr(Schema.String),
-        quantityGrams: Schema.String,
+        portionId: Schema.NullOr(Domain.FoodPortionId),
+        quantityAmount: Schema.String,
+        quantityUnit: Domain.MeasurementUnit,
       })
     ),
     events: {
       changeQuantity: Schema.toStandardSchemaV1(
-        Schema.Struct({ quantityGrams: Schema.String })
+        Schema.Struct({ quantityAmount: Schema.String })
+      ),
+      selectMeasurementUnit: Schema.toStandardSchemaV1(
+        Schema.Struct({ unit: Domain.MeasurementUnit })
+      ),
+      selectPortion: Schema.toStandardSchemaV1(
+        Schema.Struct({ portionId: Domain.FoodPortionId })
       ),
       delete: Schema.toStandardSchemaV1(EmptyEvent),
       submit: Schema.toStandardSchemaV1(EmptyEvent),
@@ -262,7 +273,7 @@ const editMealEntryRouteMachine = setup({
         input: Schema.toStandardSchemaV1(
           Schema.Struct({
             mealEntryId: Domain.MealEntryId,
-            quantityGrams: Schema.String,
+            quantity: FoodMeasurements.MealEntryQuantityFormInput,
           })
         ),
         output: Schema.toStandardSchemaV1(MealEntryMutationResult),
@@ -275,7 +286,7 @@ const editMealEntryRouteMachine = setup({
             yield* mealEntries.revise({
               input: {
                 mealEntryId: input.mealEntryId,
-                quantityGrams: input.quantityGrams,
+                quantity: input.quantity,
               },
             });
 
@@ -298,11 +309,25 @@ const editMealEntryRouteMachine = setup({
     }),
   },
 }).createMachine({
-  context: ({ input }) => ({
-    data: input,
-    notice: null,
-    quantityGrams: `${input.mealEntry.quantityGrams}`,
-  }),
+  context: ({ input }) => {
+    const quantity = input.mealEntry.quantity;
+
+    return {
+      data: input,
+      notice: null,
+      portionId:
+        quantity._tag === "PortionFoodQuantity" ? quantity.portionId : null,
+      quantityAmount: `${
+        quantity._tag === "MeasuredFoodQuantity"
+          ? quantity.amount
+          : quantity.count
+      }`,
+      quantityUnit:
+        quantity._tag === "MeasuredFoodQuantity"
+          ? quantity.unit
+          : quantity.portionSize.unit,
+    };
+  },
   initial: "Ready",
   on: {
     replaceDay: ({ actions, event }, enq) => {
@@ -313,7 +338,16 @@ const editMealEntryRouteMachine = setup({
     Ready: {
       on: {
         changeQuantity: ({ event }) => ({
-          context: { quantityGrams: event.quantityGrams },
+          context: { quantityAmount: event.quantityAmount },
+        }),
+        selectMeasurementUnit: ({ event }) => ({
+          context: {
+            portionId: null,
+            quantityUnit: event.unit,
+          },
+        }),
+        selectPortion: ({ event }) => ({
+          context: { portionId: event.portionId },
         }),
         delete: {
           target: "Deleting",
@@ -362,7 +396,18 @@ const editMealEntryRouteMachine = setup({
         src: "reviseMealEntry",
         input: ({ context }) => ({
           mealEntryId: context.data.mealEntry.id,
-          quantityGrams: context.quantityGrams,
+          quantity:
+            context.portionId === null
+              ? {
+                  _tag: "MeasuredFoodQuantity" as const,
+                  amount: context.quantityAmount,
+                  unit: context.quantityUnit,
+                }
+              : {
+                  _tag: "PortionFoodQuantity" as const,
+                  count: context.quantityAmount,
+                  portionId: context.portionId,
+                },
         }),
         onDone: ({ context, event, actions }, enq) =>
           Match.value(event.output).pipe(
@@ -445,18 +490,55 @@ function ReadyEditMealEntryScreen({
     routeState === "Deleting" ||
     routeState === "Deleted";
   const food = data.food;
+  const selectedPortion =
+    food === undefined || snapshot.context.portionId === null
+      ? undefined
+      : food.portions.find(
+          (portion) => portion.id === snapshot.context.portionId
+        );
+  const selectedMeasureLabel =
+    selectedPortion?.name ??
+    (snapshot.context.quantityUnit === "l"
+      ? "L"
+      : snapshot.context.quantityUnit);
+  const measureOptions =
+    food === undefined
+      ? []
+      : [
+          ...FoodMeasurements.availableMeasurementUnits({ food }).map(
+            (unit) => ({
+              _tag: "MeasurementUnit" as const,
+              label: unit === "l" ? "L" : unit,
+              unit,
+              value: `unit:${unit}`,
+            })
+          ),
+          ...food.portions.map((portion) => ({
+            _tag: "Portion" as const,
+            label: portion.name,
+            portionId: portion.id,
+            value: `portion:${portion.id}`,
+          })),
+        ];
+  const selectedMeasureValue =
+    selectedPortion === undefined
+      ? `unit:${snapshot.context.quantityUnit}`
+      : `portion:${selectedPortion.id}`;
   const selectedFoodNutrients =
     food === undefined
       ? undefined
-      : Schema.decodeOption(Domain.QuantityGrams)(
-          Number(snapshot.context.quantityGrams)
-        ).pipe(
+      : FoodMeasurements.loggedQuantityFromForm({
+          food,
+          portionId: snapshot.context.portionId,
+          quantityAmount: snapshot.context.quantityAmount,
+          quantityUnit: snapshot.context.quantityUnit,
+        }).pipe(
           Option.match({
             onNone: () => undefined,
-            onSome: (quantityGrams) =>
-              Utils.calculateEntryNutrients({
+            onSome: (quantity) =>
+              FoodMeasurements.nutrientsFromLoggedQuantity({
                 food,
-                quantityGrams,
+                quantity,
               }),
           })
         );
@@ -491,17 +573,43 @@ function ReadyEditMealEntryScreen({
 
         <View style={styles.body}>
           <NumberField
-            accessibilityLabel={`${mealLabel} quantity in grams`}
+            accessibilityLabel={`${mealLabel} quantity in ${selectedMeasureLabel}`}
             autoFocus
             editable={!disabled}
-            label="Grams"
-            onChangeText={(quantityGrams) => {
-              actor.trigger.changeQuantity({ quantityGrams });
+            label="Amount"
+            onChangeText={(quantityAmount) => {
+              actor.trigger.changeQuantity({ quantityAmount });
             }}
-            placeholder="150"
-            rightElement={<Text style={styles.unitLabel}>g</Text>}
+            placeholder={selectedPortion === undefined ? "150" : "1"}
+            rightElement={
+              food === undefined ? (
+                <Text style={styles.unitLabel}>{selectedMeasureLabel}</Text>
+              ) : (
+                <InputSelect
+                  disabled={disabled}
+                  onSelect={(value) => {
+                    const selectedOption = measureOptions.find(
+                      (option) => option.value === value
+                    );
+
+                    if (selectedOption?._tag === "MeasurementUnit") {
+                      actor.trigger.selectMeasurementUnit({
+                        unit: selectedOption.unit,
+                      });
+                    } else if (selectedOption?._tag === "Portion") {
+                      actor.trigger.selectPortion({
+                        portionId: selectedOption.portionId,
+                      });
+                    }
+                  }}
+                  options={measureOptions}
+                  selectedValue={selectedMeasureValue}
+                  title="Measure amount as"
+                />
+              )
+            }
             selectTextOnFocus
-            value={snapshot.context.quantityGrams}
+            value={snapshot.context.quantityAmount}
           />
 
           {data.food === undefined ? (
@@ -514,7 +622,9 @@ function ReadyEditMealEntryScreen({
               brand={data.food.brand}
               name={data.food.name}
               nutrients={selectedFoodNutrients}
-              secondaryLabel={`${data.mealEntry.quantityGrams} g logged`}
+              secondaryLabel={`${formatLoggedFoodQuantity({
+                quantity: data.mealEntry.quantity,
+              })} logged`}
             />
           )}
         </View>
@@ -549,7 +659,7 @@ function ReadyEditMealEntryScreen({
           Delete
         </Button>
         <Button
-          disabled={disabled || snapshot.context.quantityGrams.trim() === ""}
+          disabled={disabled || snapshot.context.quantityAmount.trim() === ""}
           icon={Save}
           loading={routeState === "Saving"}
           onPress={() => {

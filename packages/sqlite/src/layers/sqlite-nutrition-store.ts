@@ -1,5 +1,5 @@
 import { Domain, Store } from "@mai/nutrition";
-import { Effect, Layer, Schema } from "effect";
+import { Array, Effect, Layer, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
@@ -23,20 +23,35 @@ const _mapStoreError = <Value, Error, Requirements>(
 
 const FoodRow = Schema.Struct({
   brand: Schema.NullOr(Domain.NonEmptyString),
-  carbsGramsPer100g: Domain.NonNegativeNumber,
+  carbsGrams: Domain.NonNegativeNumber,
   category: Schema.NullOr(Domain.FoodCategory),
+  conversionMassAmount: Schema.NullOr(Domain.PositiveNumber),
+  conversionMassUnit: Schema.NullOr(Domain.MassUnit),
+  conversionVolumeAmount: Schema.NullOr(Domain.PositiveNumber),
+  conversionVolumeUnit: Schema.NullOr(Domain.VolumeUnit),
   createdAt: Schema.Number,
-  energyKcalPer100g: Domain.NonNegativeNumber,
-  fatGramsPer100g: Domain.NonNegativeNumber,
-  fiberGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
+  energyKcal: Domain.NonNegativeNumber,
+  fatGrams: Domain.NonNegativeNumber,
+  fiberGrams: Schema.NullOr(Domain.NonNegativeNumber),
   id: Domain.FoodId,
   name: Domain.NonEmptyString,
+  nutritionReferenceAmount: Domain.PositiveNumber,
+  nutritionReferenceUnit: Domain.MeasurementUnit,
   origin: Domain.FoodOrigin,
-  proteinGramsPer100g: Domain.NonNegativeNumber,
-  saltGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
-  sugarGramsPer100g: Schema.NullOr(Domain.NonNegativeNumber),
+  proteinGrams: Domain.NonNegativeNumber,
+  saltGrams: Schema.NullOr(Domain.NonNegativeNumber),
+  saturatedFatGrams: Schema.NullOr(Domain.NonNegativeNumber),
+  sugarGrams: Schema.NullOr(Domain.NonNegativeNumber),
   updatedAt: Schema.Number,
+});
+
+const FoodPortionRow = Schema.Struct({
+  foodId: Domain.FoodId,
+  id: Domain.FoodPortionId,
+  name: Domain.NonEmptyString,
+  position: Domain.FoodPortionPosition,
+  sizeAmount: Domain.PositiveNumber,
+  sizeUnit: Domain.MeasurementUnit,
 });
 
 const PlanRow = Schema.Struct({
@@ -86,7 +101,14 @@ const MealEntryRow = Schema.Struct({
   foodId: Domain.FoodId,
   id: Domain.MealEntryId,
   mealId: Domain.MealId,
-  quantityGrams: Domain.PositiveNumber,
+  nutritionMultiplier: Domain.NutritionMultiplier,
+  portionId: Schema.NullOr(Domain.FoodPortionId),
+  portionName: Schema.NullOr(Domain.NonEmptyString),
+  portionSizeAmount: Schema.NullOr(Domain.PositiveNumber),
+  portionSizeUnit: Schema.NullOr(Domain.MeasurementUnit),
+  quantityAmount: Domain.PositiveNumber,
+  quantityKind: Schema.Literals(["measured", "portion"]),
+  quantityUnit: Schema.NullOr(Domain.MeasurementUnit),
   updatedAt: Schema.Number,
 });
 
@@ -96,16 +118,31 @@ const selectFoodColumns = `
   brand,
   category,
   origin,
-  energy_kcal_per_100g AS energyKcalPer100g,
-  protein_grams_per_100g AS proteinGramsPer100g,
-  carbs_grams_per_100g AS carbsGramsPer100g,
-  fat_grams_per_100g AS fatGramsPer100g,
-  fiber_grams_per_100g AS fiberGramsPer100g,
-  sugar_grams_per_100g AS sugarGramsPer100g,
-  saturated_fat_grams_per_100g AS saturatedFatGramsPer100g,
-  salt_grams_per_100g AS saltGramsPer100g,
+  nutrition_reference_amount AS nutritionReferenceAmount,
+  nutrition_reference_unit AS nutritionReferenceUnit,
+  conversion_mass_amount AS conversionMassAmount,
+  conversion_mass_unit AS conversionMassUnit,
+  conversion_volume_amount AS conversionVolumeAmount,
+  conversion_volume_unit AS conversionVolumeUnit,
+  energy_kcal_per_100g AS energyKcal,
+  protein_grams_per_100g AS proteinGrams,
+  carbs_grams_per_100g AS carbsGrams,
+  fat_grams_per_100g AS fatGrams,
+  fiber_grams_per_100g AS fiberGrams,
+  sugar_grams_per_100g AS sugarGrams,
+  saturated_fat_grams_per_100g AS saturatedFatGrams,
+  salt_grams_per_100g AS saltGrams,
   created_at AS createdAt,
   updated_at AS updatedAt
+`;
+
+const selectFoodPortionColumns = `
+  id,
+  food_id AS foodId,
+  name,
+  size_amount AS sizeAmount,
+  size_unit AS sizeUnit,
+  position
 `;
 
 const selectPlanColumns = `
@@ -154,7 +191,14 @@ const selectMealEntryColumns = `
   date_key AS dateKey,
   meal_id AS mealId,
   food_id AS foodId,
-  quantity_grams AS quantityGrams,
+  quantity_kind AS quantityKind,
+  quantity_amount AS quantityAmount,
+  quantity_unit AS quantityUnit,
+  portion_id AS portionId,
+  portion_name AS portionName,
+  portion_size_amount AS portionSizeAmount,
+  portion_size_unit AS portionSizeUnit,
+  nutrition_multiplier AS nutritionMultiplier,
   created_at AS createdAt,
   updated_at AS updatedAt
 `;
@@ -164,25 +208,71 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
   yield* sql`PRAGMA foreign_keys = ON`;
 
-  const decodeFoodRow = ({
-    brand,
-    category,
-    fiberGramsPer100g,
-    saltGramsPer100g,
-    saturatedFatGramsPer100g,
-    sugarGramsPer100g,
+  const decodeFoodPortionRow = ({
+    foodId: _foodId,
+    sizeAmount,
+    sizeUnit,
     ...row
-  }: typeof FoodRow.Type) =>
+  }: typeof FoodPortionRow.Type) =>
+    Schema.decodeEffect(Domain.FoodPortion)({
+      ...row,
+      size: {
+        amount: sizeAmount,
+        unit: sizeUnit,
+      },
+    });
+
+  const decodeFoodRow = ({
+    portions,
+    row: {
+      brand,
+      category,
+      conversionMassAmount,
+      conversionMassUnit,
+      conversionVolumeAmount,
+      conversionVolumeUnit,
+      fiberGrams,
+      nutritionReferenceAmount,
+      nutritionReferenceUnit,
+      saltGrams,
+      saturatedFatGrams,
+      sugarGrams,
+      ...row
+    },
+  }: {
+    readonly portions: readonly (typeof Domain.FoodPortion.Encoded)[];
+    readonly row: typeof FoodRow.Type;
+  }) =>
     Schema.decodeEffect(Domain.Food)({
       ...row,
+      nutritionReference: {
+        amount: nutritionReferenceAmount,
+        unit: nutritionReferenceUnit,
+      },
+      portions,
       ...(brand === null ? {} : { brand }),
       ...(category === null ? {} : { category }),
-      ...(fiberGramsPer100g === null ? {} : { fiberGramsPer100g }),
-      ...(saltGramsPer100g === null ? {} : { saltGramsPer100g }),
-      ...(saturatedFatGramsPer100g === null
+      ...(fiberGrams === null ? {} : { fiberGrams }),
+      ...(saltGrams === null ? {} : { saltGrams }),
+      ...(saturatedFatGrams === null ? {} : { saturatedFatGrams }),
+      ...(sugarGrams === null ? {} : { sugarGrams }),
+      ...(conversionMassAmount === null ||
+      conversionMassUnit === null ||
+      conversionVolumeAmount === null ||
+      conversionVolumeUnit === null
         ? {}
-        : { saturatedFatGramsPer100g }),
-      ...(sugarGramsPer100g === null ? {} : { sugarGramsPer100g }),
+        : {
+            massVolumeConversion: {
+              mass: {
+                amount: conversionMassAmount,
+                unit: conversionMassUnit,
+              },
+              volume: {
+                amount: conversionVolumeAmount,
+                unit: conversionVolumeUnit,
+              },
+            },
+          }),
     });
 
   const decodePlanMealRow = (row: typeof PlanMealRow.Type) =>
@@ -220,13 +310,104 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     row: typeof ActiveMealPlanSelectionRow.Type
   ) => Schema.decodeEffect(Domain.ActiveMealPlanSelection)(row);
 
-  const decodeMealEntryRow = (row: typeof MealEntryRow.Type) =>
-    Schema.decodeEffect(Domain.MealEntry)(row);
+  const decodeMealEntryRow = ({
+    portionId,
+    portionName,
+    portionSizeAmount,
+    portionSizeUnit,
+    quantityAmount,
+    quantityKind,
+    quantityUnit,
+    ...row
+  }: typeof MealEntryRow.Type) =>
+    Effect.gen(function* () {
+      if (quantityKind === "measured") {
+        if (quantityUnit === null) {
+          return yield* Effect.fail(
+            "Measured meal entry is missing its measurement unit."
+          );
+        }
+
+        const unit = yield* Schema.decodeEffect(Domain.MeasurementUnit)(
+          quantityUnit
+        );
+
+        return yield* Schema.decodeEffect(Domain.MealEntry)({
+          ...row,
+          quantity: {
+            _tag: "MeasuredFoodQuantity",
+            amount: quantityAmount,
+            unit,
+          },
+        });
+      }
+
+      if (
+        portionId === null ||
+        portionName === null ||
+        portionSizeAmount === null ||
+        portionSizeUnit === null
+      ) {
+        return yield* Effect.fail(
+          "Portion meal entry is missing its portion snapshot."
+        );
+      }
+
+      const decodedPortionId = yield* Schema.decodeEffect(Domain.FoodPortionId)(
+        portionId
+      );
+      const decodedPortionName = yield* Schema.decodeEffect(
+        Domain.NonEmptyString
+      )(portionName);
+      const decodedPortionSizeAmount = yield* Schema.decodeEffect(
+        Domain.PositiveNumber
+      )(portionSizeAmount);
+      const decodedPortionSizeUnit = yield* Schema.decodeEffect(
+        Domain.MeasurementUnit
+      )(portionSizeUnit);
+
+      return yield* Schema.decodeEffect(Domain.MealEntry)({
+        ...row,
+        quantity: {
+          _tag: "PortionFoodQuantity",
+          count: quantityAmount,
+          portionId: decodedPortionId,
+          portionName: decodedPortionName,
+          portionSize: {
+            amount: decodedPortionSizeAmount,
+            unit: decodedPortionSizeUnit,
+          },
+        },
+      });
+    });
 
   const listFoodRows = SqlSchema.findAll({
     Request: EmptyRequest,
     Result: FoodRow,
     execute: () => sql`SELECT ${sql.literal(selectFoodColumns)} FROM foods`,
+  });
+
+  const listFoodPortionRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: FoodPortionRow,
+    execute: () =>
+      sql`
+        SELECT ${sql.literal(selectFoodPortionColumns)}
+        FROM food_portions
+        ORDER BY food_id, position
+      `,
+  });
+
+  const findFoodPortionRowsByFood = SqlSchema.findAll({
+    Request: Domain.FoodId,
+    Result: FoodPortionRow,
+    execute: (foodId) =>
+      sql`
+        SELECT ${sql.literal(selectFoodPortionColumns)}
+        FROM food_portions
+        WHERE food_id = ${foodId}
+        ORDER BY position
+      `,
   });
 
   const findFoodByIdRows = SqlSchema.findAll({
@@ -395,9 +576,46 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       sql`SELECT COUNT(*) AS count FROM meal_entries WHERE meal_id = ${mealId}`,
   });
 
-  const listFoods = listFoodRows({}).pipe(
-    Effect.flatMap((rows) => Effect.forEach(rows, decodeFoodRow))
-  );
+  const decodeFoodRows = (rows: readonly (typeof FoodRow.Type)[]) =>
+    Effect.gen(function* () {
+      const portionRows = yield* listFoodPortionRows({});
+      const portions = yield* Effect.forEach(portionRows, decodeFoodPortionRow);
+      const encodedPortions = yield* Schema.encodeEffect(
+        Schema.Array(Domain.FoodPortion)
+      )(portions);
+
+      return yield* Effect.forEach(rows, (row) =>
+        decodeFoodRow({
+          row,
+          portions: encodedPortions.filter((portion) =>
+            portionRows.some(
+              (portionRow) =>
+                portionRow.id === portion.id && portionRow.foodId === row.id
+            )
+          ),
+        })
+      );
+    });
+
+  const decodeFoodRowsWithPortionQuery = (
+    rows: readonly (typeof FoodRow.Type)[]
+  ) =>
+    Effect.forEach(rows, (row) =>
+      Effect.gen(function* () {
+        const portionRows = yield* findFoodPortionRowsByFood(row.id);
+        const portions = yield* Effect.forEach(
+          portionRows,
+          decodeFoodPortionRow
+        );
+        const encodedPortions = yield* Schema.encodeEffect(
+          Schema.Array(Domain.FoodPortion)
+        )(portions);
+
+        return yield* decodeFoodRow({ row, portions: encodedPortions });
+      })
+    );
+
+  const listFoods = listFoodRows({}).pipe(Effect.flatMap(decodeFoodRows));
 
   const decodePlanRows = (rows: readonly (typeof PlanRow.Type)[]) =>
     Effect.gen(function* () {
@@ -450,20 +668,41 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
   const foodRowValues = (food: typeof Domain.Food.Encoded) => ({
     brand: food.brand ?? null,
-    carbs_grams_per_100g: food.carbsGramsPer100g,
+    carbs_grams_per_100g: food.carbsGrams,
     category: food.category ?? null,
+    conversion_mass_amount: food.massVolumeConversion?.mass.amount ?? null,
+    conversion_mass_unit: food.massVolumeConversion?.mass.unit ?? null,
+    conversion_volume_amount: food.massVolumeConversion?.volume.amount ?? null,
+    conversion_volume_unit: food.massVolumeConversion?.volume.unit ?? null,
     created_at: food.createdAt,
-    energy_kcal_per_100g: food.energyKcalPer100g,
-    fat_grams_per_100g: food.fatGramsPer100g,
-    fiber_grams_per_100g: food.fiberGramsPer100g ?? null,
+    energy_kcal_per_100g: food.energyKcal,
+    fat_grams_per_100g: food.fatGrams,
+    fiber_grams_per_100g: food.fiberGrams ?? null,
     id: food.id,
     name: food.name,
+    nutrition_reference_amount: food.nutritionReference?.amount ?? 100,
+    nutrition_reference_unit: food.nutritionReference?.unit ?? "g",
     origin: food.origin,
-    protein_grams_per_100g: food.proteinGramsPer100g,
-    salt_grams_per_100g: food.saltGramsPer100g ?? null,
-    saturated_fat_grams_per_100g: food.saturatedFatGramsPer100g ?? null,
-    sugar_grams_per_100g: food.sugarGramsPer100g ?? null,
+    protein_grams_per_100g: food.proteinGrams,
+    salt_grams_per_100g: food.saltGrams ?? null,
+    saturated_fat_grams_per_100g: food.saturatedFatGrams ?? null,
+    sugar_grams_per_100g: food.sugarGrams ?? null,
     updated_at: food.updatedAt,
+  });
+
+  const foodPortionRowValues = ({
+    foodId,
+    portion,
+  }: {
+    readonly foodId: Domain.FoodId | string;
+    readonly portion: typeof Domain.FoodPortion.Encoded;
+  }) => ({
+    food_id: foodId,
+    id: portion.id,
+    name: portion.name,
+    position: portion.position,
+    size_amount: portion.size.amount,
+    size_unit: portion.size.unit,
   });
 
   const planRowValues = (plan: typeof Domain.Plan.Encoded) => ({
@@ -523,7 +762,35 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     food_id: mealEntry.foodId,
     id: mealEntry.id,
     meal_id: mealEntry.mealId,
-    quantity_grams: mealEntry.quantityGrams,
+    nutrition_multiplier: mealEntry.nutritionMultiplier,
+    portion_id:
+      mealEntry.quantity._tag === "PortionFoodQuantity"
+        ? mealEntry.quantity.portionId
+        : null,
+    portion_name:
+      mealEntry.quantity._tag === "PortionFoodQuantity"
+        ? mealEntry.quantity.portionName
+        : null,
+    portion_size_amount:
+      mealEntry.quantity._tag === "PortionFoodQuantity"
+        ? mealEntry.quantity.portionSize.amount
+        : null,
+    portion_size_unit:
+      mealEntry.quantity._tag === "PortionFoodQuantity"
+        ? mealEntry.quantity.portionSize.unit
+        : null,
+    quantity_amount:
+      mealEntry.quantity._tag === "MeasuredFoodQuantity"
+        ? mealEntry.quantity.amount
+        : mealEntry.quantity.count,
+    quantity_kind:
+      mealEntry.quantity._tag === "MeasuredFoodQuantity"
+        ? "measured"
+        : "portion",
+    quantity_unit:
+      mealEntry.quantity._tag === "MeasuredFoodQuantity"
+        ? mealEntry.quantity.unit
+        : null,
     updated_at: mealEntry.updatedAt,
   });
 
@@ -531,12 +798,40 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Schema.encodeEffect(Domain.Food)(food).pipe(
       Effect.flatMap((encodedFood) => {
         const row = foodRowValues(encodedFood);
+        const portionRows = (encodedFood.portions ?? []).map((portion) =>
+          foodPortionRowValues({ foodId: encodedFood.id, portion })
+        );
 
-        return sql`
-          INSERT INTO foods ${sql.insert(row)}
-          ON CONFLICT(id) DO UPDATE SET
-            ${sql.update(row, ["id"])}
-        `;
+        return Effect.gen(function* () {
+          yield* sql`
+            INSERT INTO foods ${sql.insert(row)}
+            ON CONFLICT(id) DO UPDATE SET
+              ${sql.update(row, ["id"])}
+          `;
+          yield* Effect.forEach(
+            portionRows,
+            (portionRow) =>
+              sql`
+                INSERT INTO food_portions ${sql.insert(portionRow)}
+                ON CONFLICT(id) DO UPDATE SET
+                  ${sql.update(portionRow, ["id"])}
+              `,
+            { discard: true }
+          );
+
+          if (!Array.isReadonlyArrayNonEmpty(portionRows)) {
+            yield* sql`
+              DELETE FROM food_portions
+              WHERE food_id = ${encodedFood.id}
+            `;
+          } else {
+            yield* sql`
+              DELETE FROM food_portions
+              WHERE food_id = ${encodedFood.id}
+                AND id NOT IN ${sql.in(portionRows.map((portionRow) => portionRow.id))}
+            `;
+          }
+        });
       })
     );
 
@@ -706,14 +1001,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     findFoodById: (foodId) =>
       _mapStoreError(
         findFoodByIdRows(foodId).pipe(
-          Effect.flatMap((rows) => Effect.forEach(rows, decodeFoodRow))
+          Effect.flatMap(decodeFoodRowsWithPortionQuery)
         )
       ),
 
     findFoodsByName: (name) =>
       _mapStoreError(
         findFoodsByNameRows(name).pipe(
-          Effect.flatMap((rows) => Effect.forEach(rows, decodeFoodRow))
+          Effect.flatMap(decodeFoodRowsWithPortionQuery)
         )
       ),
 
@@ -801,6 +1096,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
             yield* sql`DELETE FROM active_meal_plan_selections`;
             yield* sql`DELETE FROM daily_logs`;
             yield* sql`DELETE FROM plan_meals`;
+            yield* sql`DELETE FROM food_portions`;
             yield* sql`DELETE FROM foods`;
             yield* sql`DELETE FROM plans`;
             yield* Effect.forEach(stores.plans, upsertPlan, { discard: true });

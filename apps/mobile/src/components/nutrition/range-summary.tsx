@@ -15,7 +15,7 @@ import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { setup } from "xstate";
 
-import { formatNumber } from "@/lib/format";
+import { formatNumber, mealEntryMassGrams } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 
 import {
@@ -137,8 +137,20 @@ export function RangeSummary({
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
   const totalQuantityGrams = entries.reduce(
-    (total, entry) => total + entry.mealEntry.quantityGrams,
+    (total, entry) =>
+      total +
+      (mealEntryMassGrams({
+        food: entry.food,
+        mealEntry: entry.mealEntry,
+      }) ?? 0),
     0
+  );
+  const weightCoverageComplete = entries.every(
+    (entry) =>
+      mealEntryMassGrams({
+        food: entry.food,
+        mealEntry: entry.mealEntry,
+      }) !== undefined
   );
   const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
@@ -162,7 +174,7 @@ export function RangeSummary({
     quantityGrams: averageQuantityGrams,
   });
   const averageGramsPerCalorieLabel =
-    averageGramsPerCalorie === null
+    !weightCoverageComplete || averageGramsPerCalorie === null
       ? "- g/kcal"
       : `${formatNumber({
           maximumFractionDigits: averageGramsPerCalorie < 1 ? 2 : 1,
@@ -216,7 +228,12 @@ export function RangeSummary({
         ...contributors,
         [entry.food.id]: {
           ...current,
-          quantityGrams: current.quantityGrams + entry.mealEntry.quantityGrams,
+          quantityGrams:
+            current.quantityGrams +
+            (mealEntryMassGrams({
+              food: entry.food,
+              mealEntry: entry.mealEntry,
+            }) ?? 0),
           totals: Reporting.addNutrientTotals({
             left: current.totals,
             right: {
@@ -262,11 +279,15 @@ export function RangeSummary({
             />
           ))}
           <SecondaryMetricBalanceCard
-            label="Food weight"
+            label={weightCoverageComplete ? "Food weight" : "Resolved weight"}
             value={_formatWeight({ value: averageQuantityGrams })}
           />
           <SecondaryMetricBalanceCard
-            label="Weight / calorie"
+            label={
+              weightCoverageComplete
+                ? "Weight / calorie"
+                : "Resolved weight / calorie"
+            }
             value={averageGramsPerCalorieLabel}
           />
         </View>
@@ -300,6 +321,7 @@ export function RangeSummary({
               .filter((food) => food.quantityGrams > 0)
               .sort((left, right) => right.quantityGrams - left.quantityGrams)
               .slice(0, 3)}
+            isComplete={weightCoverageComplete}
           />
         </View>
       </View>
@@ -481,13 +503,15 @@ function TargetTrendIcon({ trend }: { readonly trend: TargetTrendKind }) {
 
 function FoodWeightContributorGroup({
   foods,
+  isComplete,
 }: {
   readonly foods: readonly FoodContributor[];
+  readonly isComplete: boolean;
 }) {
   return (
     <View style={styles.foodGroup}>
       <Text style={[styles.foodGroupTitle, { color: color.secondaryMetric }]}>
-        Food weight
+        {isComplete ? "Food weight" : "Resolved food weight"}
       </Text>
       {!Array.isReadonlyArrayNonEmpty(foods) ? (
         <Text style={styles.emptyText}>No tracked foods.</Text>

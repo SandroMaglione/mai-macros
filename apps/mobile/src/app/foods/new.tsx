@@ -21,14 +21,40 @@ const SearchParams = Schema.Struct({
 const FoodFormInput = Schema.Struct({
   name: Schema.String,
   brand: Schema.optionalKey(Schema.String),
-  energyKcalPer100g: Schema.String,
-  proteinGramsPer100g: Schema.String,
-  carbsGramsPer100g: Schema.String,
-  fatGramsPer100g: Schema.String,
-  fiberGramsPer100g: Schema.optionalKey(Schema.String),
-  sugarGramsPer100g: Schema.optionalKey(Schema.String),
-  saturatedFatGramsPer100g: Schema.optionalKey(Schema.String),
-  saltGramsPer100g: Schema.optionalKey(Schema.String),
+  energyKcal: Schema.String,
+  proteinGrams: Schema.String,
+  carbsGrams: Schema.String,
+  fatGrams: Schema.String,
+  fiberGrams: Schema.optionalKey(Schema.String),
+  sugarGrams: Schema.optionalKey(Schema.String),
+  saturatedFatGrams: Schema.optionalKey(Schema.String),
+  saltGrams: Schema.optionalKey(Schema.String),
+  nutritionReference: Schema.Struct({
+    amount: Schema.String,
+    unit: Domain.MeasurementUnit,
+  }),
+  portions: Schema.Array(
+    Schema.Struct({
+      id: Schema.optionalKey(Domain.FoodPortionId),
+      name: Schema.String,
+      size: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MeasurementUnit,
+      }),
+    })
+  ),
+  massVolumeConversion: Schema.optionalKey(
+    Schema.Struct({
+      mass: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MassUnit,
+      }),
+      volume: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.VolumeUnit,
+      }),
+    })
+  ),
 });
 
 const SubmitFoodInput = Schema.Struct({
@@ -78,7 +104,7 @@ const createFoodRouteMachine = setup({
     alertCreateFoodValidationError: () => {
       Alert.alert(
         "Food not saved",
-        "Check that the name is filled and every required nutrient is a non-negative number."
+        "Check the name, required nutrients, and any custom portions."
       );
     },
     alertCreateFoodFailure: () => {
@@ -216,7 +242,7 @@ const createFoodRouteMachine = setup({
                   target: "Failure" as const,
                   context: {
                     notice:
-                      "Check that the name is filled and every required nutrient is a non-negative number.",
+                      "Check the name, required nutrients, and any custom portions.",
                   },
                 };
               },
@@ -322,13 +348,32 @@ export function CreateFoodPanel({
   const { foodFormActor } = rawSnapshot.context;
   const routeState = rawSnapshot.value;
   const isSubmitting = routeState === "Submitting" || routeState === "Created";
+  const notice = rawSnapshot.context.notice;
+  const feedback =
+    notice === null
+      ? undefined
+      : routeState === "Failure"
+        ? {
+            message: notice,
+            title: "Food not saved",
+            tone: "danger" as const,
+          }
+        : notice === "Food created."
+          ? {
+              message: notice,
+              tone: "success" as const,
+            }
+          : {
+              message: notice,
+              tone: "neutral" as const,
+            };
 
   return (
     <FoodForm
       action="create"
       actor={foodFormActor}
       disabled={isSubmitting}
-      errorMessage={rawSnapshot.context.notice ?? undefined}
+      feedback={feedback}
       hasFailed={routeState === "Failure"}
       layout={mode}
       onBack={onBack}

@@ -5,12 +5,21 @@ import {
   Data,
   DateTime,
   Effect,
+  HashSet,
   Layer,
   Option,
   Schema,
 } from "effect";
 
-import { Food, FoodId } from "../domain.ts";
+import {
+  Food,
+  FoodId,
+  FoodPortion,
+  FoodPortionId,
+  MassUnit,
+  MeasurementUnit,
+  VolumeUnit,
+} from "../domain.ts";
 import { NutritionStore } from "./store.ts";
 
 const _FormNonNegativeNumber = Schema.NumberFromString.check(
@@ -18,17 +27,65 @@ const _FormNonNegativeNumber = Schema.NumberFromString.check(
   Schema.isGreaterThanOrEqualTo(0)
 );
 
+const _FormPositiveNumber = Schema.NumberFromString.check(
+  Schema.isFinite(),
+  Schema.isGreaterThan(0)
+);
+
+const _FoodPortionInput = Schema.Struct({
+  id: Schema.optional(FoodPortionId),
+  name: Schema.Trim.check(Schema.isNonEmpty()),
+  size: Schema.Struct({
+    amount: _FormPositiveNumber,
+    unit: MeasurementUnit,
+  }),
+});
+
+const _FoodPortionsInput = Schema.Array(_FoodPortionInput).check(
+  Schema.makeFilter((portions) => {
+    const normalizedNames = portions.map((portion) =>
+      portion.name.toLocaleLowerCase()
+    );
+
+    return HashSet.size(HashSet.fromIterable(normalizedNames)) ===
+      normalizedNames.length
+      ? undefined
+      : "Portion names must be unique for a food.";
+  })
+);
+
+const _MassVolumeConversionInput = Schema.Struct({
+  mass: Schema.Struct({
+    amount: _FormPositiveNumber,
+    unit: MassUnit,
+  }),
+  volume: Schema.Struct({
+    amount: _FormPositiveNumber,
+    unit: VolumeUnit,
+  }),
+});
+
 const foodInputFields = {
   name: Schema.Trim.check(Schema.isNonEmpty()),
   brand: Schema.optional(Schema.Trim.check(Schema.isNonEmpty())),
-  energyKcalPer100g: _FormNonNegativeNumber,
-  proteinGramsPer100g: _FormNonNegativeNumber,
-  carbsGramsPer100g: _FormNonNegativeNumber,
-  fatGramsPer100g: _FormNonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(_FormNonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(_FormNonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(_FormNonNegativeNumber),
-  saltGramsPer100g: Schema.optional(_FormNonNegativeNumber),
+  nutritionReference: Schema.Struct({
+    amount: _FormPositiveNumber,
+    unit: MeasurementUnit,
+  }).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({ amount: "100", unit: "g" }))
+  ),
+  energyKcal: _FormNonNegativeNumber,
+  proteinGrams: _FormNonNegativeNumber,
+  carbsGrams: _FormNonNegativeNumber,
+  fatGrams: _FormNonNegativeNumber,
+  fiberGrams: Schema.optional(_FormNonNegativeNumber),
+  sugarGrams: Schema.optional(_FormNonNegativeNumber),
+  saturatedFatGrams: Schema.optional(_FormNonNegativeNumber),
+  saltGrams: Schema.optional(_FormNonNegativeNumber),
+  portions: _FoodPortionsInput.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([]))
+  ),
+  massVolumeConversion: Schema.optional(_MassVolumeConversionInput),
 };
 
 const _CreateFoodInput = Schema.Struct(foodInputFields);
@@ -98,16 +155,26 @@ export class Foods extends Context.Service<Foods>()("Foods", {
         const decodedInput =
           yield* Schema.decodeEffect(_CreateFoodInput)(input);
         const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const portions = yield* _foodPortionsFromInput({
+          crypto,
+          portions: decodedInput.portions,
+          replaceIds: true,
+        });
         const food = yield* Schema.decodeEffect(Food)({
           id: yield* crypto.randomUUIDv4,
           name: decodedInput.name,
           brand: decodedInput.brand,
           origin: "user",
-          energyKcalPer100g: decodedInput.energyKcalPer100g,
-          proteinGramsPer100g: decodedInput.proteinGramsPer100g,
-          carbsGramsPer100g: decodedInput.carbsGramsPer100g,
-          fatGramsPer100g: decodedInput.fatGramsPer100g,
+          nutritionReference: decodedInput.nutritionReference,
+          energyKcal: decodedInput.energyKcal,
+          proteinGrams: decodedInput.proteinGrams,
+          carbsGrams: decodedInput.carbsGrams,
+          fatGrams: decodedInput.fatGrams,
           ..._optionalNutrientFields(decodedInput),
+          portions,
+          ...(decodedInput.massVolumeConversion === undefined
+            ? {}
+            : { massVolumeConversion: decodedInput.massVolumeConversion }),
           createdAt: now,
           updatedAt: now,
         });
@@ -147,6 +214,11 @@ export class Foods extends Context.Service<Foods>()("Foods", {
                 const foodId = shouldCreateRevision
                   ? yield* crypto.randomUUIDv4
                   : previousFood.id;
+                const portions = yield* _foodPortionsFromInput({
+                  crypto,
+                  portions: decodedInput.portions,
+                  replaceIds: shouldCreateRevision,
+                });
                 const food = yield* Schema.decodeEffect(Food)({
                   id: foodId,
                   name: decodedInput.name,
@@ -155,11 +227,18 @@ export class Foods extends Context.Service<Foods>()("Foods", {
                     ? {}
                     : { category: encodedPreviousFood.category }),
                   origin: "user",
-                  energyKcalPer100g: decodedInput.energyKcalPer100g,
-                  proteinGramsPer100g: decodedInput.proteinGramsPer100g,
-                  carbsGramsPer100g: decodedInput.carbsGramsPer100g,
-                  fatGramsPer100g: decodedInput.fatGramsPer100g,
+                  nutritionReference: decodedInput.nutritionReference,
+                  energyKcal: decodedInput.energyKcal,
+                  proteinGrams: decodedInput.proteinGrams,
+                  carbsGrams: decodedInput.carbsGrams,
+                  fatGrams: decodedInput.fatGrams,
                   ..._optionalNutrientFields(decodedInput),
+                  portions,
+                  ...(decodedInput.massVolumeConversion === undefined
+                    ? {}
+                    : {
+                        massVolumeConversion: decodedInput.massVolumeConversion,
+                      }),
                   createdAt: shouldCreateRevision
                     ? now
                     : encodedPreviousFood.createdAt,
@@ -186,23 +265,49 @@ export class Foods extends Context.Service<Foods>()("Foods", {
   static readonly layer = Layer.effect(this)(this.make);
 }
 
+const _foodPortionsFromInput = Effect.fn("Foods.foodPortionsFromInput")(
+  function* ({
+    crypto,
+    portions,
+    replaceIds,
+  }: {
+    readonly crypto: Crypto.Crypto;
+    readonly portions: readonly (typeof _FoodPortionInput.Type)[];
+    readonly replaceIds: boolean;
+  }) {
+    return yield* Effect.forEach(portions, (portion, position) =>
+      Effect.gen(function* () {
+        const id =
+          replaceIds || portion.id === undefined
+            ? yield* crypto.randomUUIDv4
+            : portion.id;
+
+        return yield* Schema.decodeEffect(FoodPortion)({
+          id,
+          name: portion.name,
+          position,
+          size: portion.size,
+        });
+      })
+    );
+  }
+);
+
 function _optionalNutrientFields({
-  fiberGramsPer100g,
-  saltGramsPer100g,
-  saturatedFatGramsPer100g,
-  sugarGramsPer100g,
+  fiberGrams,
+  saltGrams,
+  saturatedFatGrams,
+  sugarGrams,
 }: {
-  readonly fiberGramsPer100g?: number | undefined;
-  readonly saltGramsPer100g?: number | undefined;
-  readonly saturatedFatGramsPer100g?: number | undefined;
-  readonly sugarGramsPer100g?: number | undefined;
+  readonly fiberGrams?: number | undefined;
+  readonly saltGrams?: number | undefined;
+  readonly saturatedFatGrams?: number | undefined;
+  readonly sugarGrams?: number | undefined;
 }) {
   return {
-    ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
-    ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
-    ...(saturatedFatGramsPer100g === undefined
-      ? {}
-      : { saturatedFatGramsPer100g }),
-    ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
+    ...(fiberGrams === undefined ? {} : { fiberGrams }),
+    ...(sugarGrams === undefined ? {} : { sugarGrams }),
+    ...(saturatedFatGrams === undefined ? {} : { saturatedFatGrams }),
+    ...(saltGrams === undefined ? {} : { saltGrams }),
   };
 }

@@ -57,6 +57,7 @@ export type InsightContext = {
   readonly report: NutritionReports.NutritionReportRange;
   readonly totalQuantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
+  readonly weightCoverageComplete: boolean;
 };
 
 export type NutritionReportInsightModule = {

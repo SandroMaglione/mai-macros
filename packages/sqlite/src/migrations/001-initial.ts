@@ -145,20 +145,19 @@ export default Effect.gen(function* () {
           INSERT INTO foods ${sql.insert({
             based_on_food_id: null,
             brand: encodedFood.brand ?? null,
-            carbs_grams_per_100g: encodedFood.carbsGramsPer100g,
+            carbs_grams_per_100g: encodedFood.carbsGrams,
             category: encodedFood.category ?? null,
             created_at: encodedFood.createdAt,
-            energy_kcal_per_100g: encodedFood.energyKcalPer100g,
-            fat_grams_per_100g: encodedFood.fatGramsPer100g,
-            fiber_grams_per_100g: encodedFood.fiberGramsPer100g ?? null,
+            energy_kcal_per_100g: encodedFood.energyKcal,
+            fat_grams_per_100g: encodedFood.fatGrams,
+            fiber_grams_per_100g: encodedFood.fiberGrams ?? null,
             id: encodedFood.id,
             name: encodedFood.name,
             origin: encodedFood.origin,
-            protein_grams_per_100g: encodedFood.proteinGramsPer100g,
-            salt_grams_per_100g: encodedFood.saltGramsPer100g ?? null,
-            saturated_fat_grams_per_100g:
-              encodedFood.saturatedFatGramsPer100g ?? null,
-            sugar_grams_per_100g: encodedFood.sugarGramsPer100g ?? null,
+            protein_grams_per_100g: encodedFood.proteinGrams,
+            salt_grams_per_100g: encodedFood.saltGrams ?? null,
+            saturated_fat_grams_per_100g: encodedFood.saturatedFatGrams ?? null,
+            sugar_grams_per_100g: encodedFood.sugarGrams ?? null,
             updated_at: encodedFood.updatedAt,
           })}
         `;

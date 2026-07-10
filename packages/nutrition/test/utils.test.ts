@@ -8,14 +8,14 @@ const foodInput: typeof Domain.Food.Encoded = {
   name: "Greek yogurt",
   brand: "Mai",
   origin: "user",
-  energyKcalPer100g: 59,
-  proteinGramsPer100g: 10,
-  carbsGramsPer100g: 3.6,
-  fatGramsPer100g: 0.4,
-  fiberGramsPer100g: 0,
-  sugarGramsPer100g: 3.2,
-  saturatedFatGramsPer100g: 0.1,
-  saltGramsPer100g: 0.04,
+  energyKcal: 59,
+  proteinGrams: 10,
+  carbsGrams: 3.6,
+  fatGrams: 0.4,
+  fiberGrams: 0,
+  sugarGrams: 3.2,
+  saturatedFatGrams: 0.1,
+  saltGrams: 0.04,
   createdAt: 0,
   updatedAt: 0,
 };
@@ -74,9 +74,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 8,
-          carbsGramsPer100g: 6,
-          fatGramsPer100g: 5,
+          proteinGrams: 8,
+          carbsGrams: 6,
+          fatGrams: 5,
         },
       }),
       ["protein"]
@@ -85,9 +85,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 12,
-          carbsGramsPer100g: 5,
-          fatGramsPer100g: 1,
+          proteinGrams: 12,
+          carbsGrams: 5,
+          fatGrams: 1,
         },
       }),
       ["protein"]
@@ -96,9 +96,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 4,
-          carbsGramsPer100g: 16,
-          fatGramsPer100g: 2,
+          proteinGrams: 4,
+          carbsGrams: 16,
+          fatGrams: 2,
         },
       }),
       ["carbs"]
@@ -107,9 +107,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 4,
-          carbsGramsPer100g: 5,
-          fatGramsPer100g: 9,
+          proteinGrams: 4,
+          carbsGrams: 5,
+          fatGrams: 9,
         },
       }),
       ["fat"]
@@ -121,9 +121,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 0,
-          carbsGramsPer100g: 0,
-          fatGramsPer100g: 0,
+          proteinGrams: 0,
+          carbsGrams: 0,
+          fatGrams: 0,
         },
       }),
       []
@@ -132,9 +132,9 @@ describe("nutrition utils", () => {
       Utils.findDominantMacronutrients({
         food: {
           ...foodInput,
-          proteinGramsPer100g: 9,
-          carbsGramsPer100g: 9,
-          fatGramsPer100g: 4,
+          proteinGrams: 9,
+          carbsGrams: 9,
+          fatGrams: 4,
         },
       }),
       ["protein", "carbs"]
@@ -144,12 +144,12 @@ describe("nutrition utils", () => {
   it("calculates entry nutrients and validates the result", async () => {
     const program = Effect.gen(function* () {
       const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
-      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
-        150
-      );
+      const nutritionMultiplier = yield* Schema.decodeEffect(
+        Domain.NutritionMultiplier
+      )(1.5);
       const calculatedNutrients = Utils.calculateEntryNutrients({
         food,
-        quantityGrams,
+        nutritionMultiplier,
       });
       const validatedNutrients = yield* Schema.decodeEffect(
         Domain.EntryNutrients
@@ -232,10 +232,10 @@ describe("nutrition utils", () => {
       name: foodInput.name,
       brand: foodInput.brand,
       origin: foodInput.origin,
-      energyKcalPer100g: foodInput.energyKcalPer100g,
-      proteinGramsPer100g: foodInput.proteinGramsPer100g,
-      carbsGramsPer100g: foodInput.carbsGramsPer100g,
-      fatGramsPer100g: foodInput.fatGramsPer100g,
+      energyKcal: foodInput.energyKcal,
+      proteinGrams: foodInput.proteinGrams,
+      carbsGrams: foodInput.carbsGrams,
+      fatGrams: foodInput.fatGrams,
       createdAt: foodInput.createdAt,
       updatedAt: foodInput.updatedAt,
     };
@@ -243,12 +243,12 @@ describe("nutrition utils", () => {
       const food = yield* Schema.decodeEffect(Domain.Food)(
         foodWithoutSecondaryNutrients
       );
-      const quantityGrams = yield* Schema.decodeEffect(Domain.QuantityGrams)(
-        100
-      );
+      const nutritionMultiplier = yield* Schema.decodeEffect(
+        Domain.NutritionMultiplier
+      )(1);
       const calculatedNutrients = Utils.calculateEntryNutrients({
         food,
-        quantityGrams,
+        nutritionMultiplier,
       });
       const validatedNutrients = yield* Schema.decodeEffect(
         Domain.EntryNutrients
@@ -269,7 +269,7 @@ describe("nutrition utils", () => {
     const program = Effect.gen(function* () {
       const failure = yield* Schema.decodeEffect(Domain.Food)({
         ...foodInput,
-        energyKcalPer100g: -1,
+        energyKcal: -1,
       }).pipe(Effect.flip);
 
       assert.isTrue(Schema.isSchemaError(failure));

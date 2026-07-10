@@ -5,42 +5,39 @@ import { NonEmptyString, NonNegativeNumber } from "./domain.ts";
 const nutrientNumberPattern = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 const positionalNutrientFields = [
-  "energyKcalPer100g",
-  "fatGramsPer100g",
-  "saturatedFatGramsPer100g",
-  "carbsGramsPer100g",
-  "sugarGramsPer100g",
-  "fiberGramsPer100g",
-  "proteinGramsPer100g",
-  "saltGramsPer100g",
+  "energyKcal",
+  "fatGrams",
+  "saturatedFatGrams",
+  "carbsGrams",
+  "sugarGrams",
+  "fiberGrams",
+  "proteinGrams",
+  "saltGrams",
 ] satisfies readonly FoodQuickInputNutrientFieldName[];
 
 const nutrientFieldCount = positionalNutrientFields.length;
 
 const requiredNutrients = [
   {
-    field: "energyKcalPer100g",
+    field: "energyKcal",
     label: "calories",
   },
   {
-    field: "fatGramsPer100g",
+    field: "fatGrams",
     label: "fat",
   },
   {
-    field: "carbsGramsPer100g",
+    field: "carbsGrams",
     label: "carbs",
   },
   {
-    field: "proteinGramsPer100g",
+    field: "proteinGrams",
     label: "protein",
   },
 ] satisfies readonly {
   readonly field: Extract<
     FoodQuickInputNutrientFieldName,
-    | "carbsGramsPer100g"
-    | "energyKcalPer100g"
-    | "fatGramsPer100g"
-    | "proteinGramsPer100g"
+    "carbsGrams" | "energyKcal" | "fatGrams" | "proteinGrams"
   >;
   readonly label: string;
 }[];
@@ -49,14 +46,14 @@ const taggedNutrientFieldsByTag: Record<
   string,
   FoodQuickInputNutrientFieldName | undefined
 > = {
-  c: "carbsGramsPer100g",
-  f: "fatGramsPer100g",
-  fi: "fiberGramsPer100g",
-  k: "energyKcalPer100g",
-  p: "proteinGramsPer100g",
-  sa: "saltGramsPer100g",
-  sf: "saturatedFatGramsPer100g",
-  su: "sugarGramsPer100g",
+  c: "carbsGrams",
+  f: "fatGrams",
+  fi: "fiberGrams",
+  k: "energyKcal",
+  p: "proteinGrams",
+  sa: "saltGrams",
+  sf: "saturatedFatGrams",
+  su: "sugarGrams",
 };
 
 const taggedNutrientPattern =
@@ -81,27 +78,27 @@ export type FoodQuickInputParseErrorReason =
 
 export type FoodQuickInputFieldName =
   | "brand"
-  | "carbsGramsPer100g"
-  | "energyKcalPer100g"
-  | "fatGramsPer100g"
-  | "fiberGramsPer100g"
+  | "carbsGrams"
+  | "energyKcal"
+  | "fatGrams"
+  | "fiberGrams"
   | "name"
-  | "proteinGramsPer100g"
-  | "saltGramsPer100g"
-  | "saturatedFatGramsPer100g"
-  | "sugarGramsPer100g";
+  | "proteinGrams"
+  | "saltGrams"
+  | "saturatedFatGrams"
+  | "sugarGrams";
 
 export type FoodQuickInputPartial = {
   readonly name?: string;
   readonly brand?: string;
-  readonly energyKcalPer100g?: number;
-  readonly proteinGramsPer100g?: number;
-  readonly carbsGramsPer100g?: number;
-  readonly fatGramsPer100g?: number;
-  readonly fiberGramsPer100g?: number;
-  readonly sugarGramsPer100g?: number;
-  readonly saturatedFatGramsPer100g?: number;
-  readonly saltGramsPer100g?: number;
+  readonly energyKcal?: number;
+  readonly proteinGrams?: number;
+  readonly carbsGrams?: number;
+  readonly fatGrams?: number;
+  readonly fiberGrams?: number;
+  readonly sugarGrams?: number;
+  readonly saturatedFatGrams?: number;
+  readonly saltGrams?: number;
 };
 
 export type FoodQuickInputParseIssue = {
@@ -135,14 +132,14 @@ type FoodQuickInputNutrientFieldName = Exclude<
 export const FoodQuickInput = Schema.Struct({
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
-  energyKcalPer100g: NonNegativeNumber,
-  proteinGramsPer100g: NonNegativeNumber,
-  carbsGramsPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
-  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  energyKcal: NonNegativeNumber,
+  proteinGrams: NonNegativeNumber,
+  carbsGrams: NonNegativeNumber,
+  fatGrams: NonNegativeNumber,
+  fiberGrams: Schema.optional(NonNegativeNumber),
+  sugarGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatGrams: Schema.optional(NonNegativeNumber),
+  saltGrams: Schema.optional(NonNegativeNumber),
 });
 
 export class FoodQuickInputParseError extends Data.TaggedError(
@@ -158,14 +155,14 @@ export const parseFoodQuickInput = Effect.fn("parseFoodQuickInput")(function* ({
   const partial: {
     name?: string;
     brand?: string;
-    energyKcalPer100g?: number;
-    proteinGramsPer100g?: number;
-    carbsGramsPer100g?: number;
-    fatGramsPer100g?: number;
-    fiberGramsPer100g?: number;
-    sugarGramsPer100g?: number;
-    saturatedFatGramsPer100g?: number;
-    saltGramsPer100g?: number;
+    energyKcal?: number;
+    proteinGrams?: number;
+    carbsGrams?: number;
+    fatGrams?: number;
+    fiberGrams?: number;
+    sugarGrams?: number;
+    saturatedFatGrams?: number;
+    saltGrams?: number;
   } = {};
   const issues: FoodQuickInputParseIssue[] = [];
 

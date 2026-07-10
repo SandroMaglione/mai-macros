@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 export const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 
@@ -43,6 +43,100 @@ export type ActiveMealPlanSelectionId = typeof ActiveMealPlanSelectionId.Type;
 export const QuantityGrams = PositiveNumber.pipe(Schema.brand("QuantityGrams"));
 
 export type QuantityGrams = typeof QuantityGrams.Type;
+
+export const MeasurementAmount = PositiveNumber.pipe(
+  Schema.brand("MeasurementAmount")
+);
+
+export type MeasurementAmount = typeof MeasurementAmount.Type;
+
+export const MassUnit = Schema.Literals(["g", "kg", "oz", "lb"]);
+
+export type MassUnit = typeof MassUnit.Type;
+
+export const VolumeUnit = Schema.Literals(["ml", "l"]);
+
+export type VolumeUnit = typeof VolumeUnit.Type;
+
+export const MeasurementUnit = Schema.Union([MassUnit, VolumeUnit]);
+
+export type MeasurementUnit = typeof MeasurementUnit.Type;
+
+export class MeasuredQuantity extends Schema.Class<MeasuredQuantity>(
+  "MeasuredQuantity"
+)({
+  amount: MeasurementAmount,
+  unit: MeasurementUnit,
+}) {}
+
+export class MassQuantity extends Schema.Class<MassQuantity>("MassQuantity")({
+  amount: MeasurementAmount,
+  unit: MassUnit,
+}) {}
+
+export class VolumeQuantity extends Schema.Class<VolumeQuantity>(
+  "VolumeQuantity"
+)({
+  amount: MeasurementAmount,
+  unit: VolumeUnit,
+}) {}
+
+export const FoodPortionId = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("FoodPortionId")
+);
+
+export type FoodPortionId = typeof FoodPortionId.Type;
+
+export const FoodPortionPosition = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0)
+).pipe(Schema.brand("FoodPortionPosition"));
+
+export type FoodPortionPosition = typeof FoodPortionPosition.Type;
+
+export class FoodPortion extends Schema.Class<FoodPortion>("FoodPortion")({
+  id: FoodPortionId,
+  name: NonEmptyString,
+  size: MeasuredQuantity,
+  position: FoodPortionPosition,
+}) {}
+
+export class FoodMassVolumeConversion extends Schema.Class<FoodMassVolumeConversion>(
+  "FoodMassVolumeConversion"
+)({
+  mass: MassQuantity,
+  volume: VolumeQuantity,
+}) {}
+
+export class MeasuredFoodQuantity extends Schema.TaggedClass<MeasuredFoodQuantity>()(
+  "MeasuredFoodQuantity",
+  {
+    amount: MeasurementAmount,
+    unit: MeasurementUnit,
+  }
+) {}
+
+export class PortionFoodQuantity extends Schema.TaggedClass<PortionFoodQuantity>()(
+  "PortionFoodQuantity",
+  {
+    count: PositiveNumber,
+    portionId: FoodPortionId,
+    portionName: NonEmptyString,
+    portionSize: MeasuredQuantity,
+  }
+) {}
+
+export const LoggedFoodQuantity = Schema.Union([
+  MeasuredFoodQuantity,
+  PortionFoodQuantity,
+]);
+
+export type LoggedFoodQuantity = typeof LoggedFoodQuantity.Type;
+
+export const NutritionMultiplier = PositiveNumber.pipe(
+  Schema.brand("NutritionMultiplier")
+);
+
+export type NutritionMultiplier = typeof NutritionMultiplier.Type;
 
 export const BodyWeightKilograms = PositiveNumber.pipe(
   Schema.brand("BodyWeightKilograms")
@@ -93,14 +187,21 @@ export class Food extends Schema.Class<Food>("Food")({
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
   origin: FoodOrigin,
-  energyKcalPer100g: NonNegativeNumber,
-  proteinGramsPer100g: NonNegativeNumber,
-  carbsGramsPer100g: NonNegativeNumber,
-  fatGramsPer100g: NonNegativeNumber,
-  fiberGramsPer100g: Schema.optional(NonNegativeNumber),
-  sugarGramsPer100g: Schema.optional(NonNegativeNumber),
-  saturatedFatGramsPer100g: Schema.optional(NonNegativeNumber),
-  saltGramsPer100g: Schema.optional(NonNegativeNumber),
+  nutritionReference: MeasuredQuantity.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({ amount: 100, unit: "g" }))
+  ),
+  energyKcal: NonNegativeNumber,
+  proteinGrams: NonNegativeNumber,
+  carbsGrams: NonNegativeNumber,
+  fatGrams: NonNegativeNumber,
+  fiberGrams: Schema.optional(NonNegativeNumber),
+  sugarGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatGrams: Schema.optional(NonNegativeNumber),
+  saltGrams: Schema.optional(NonNegativeNumber),
+  portions: Schema.Array(FoodPortion).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([]))
+  ),
+  massVolumeConversion: Schema.optional(FoodMassVolumeConversion),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
@@ -146,7 +247,8 @@ export class MealEntry extends Schema.Class<MealEntry>("MealEntry")({
   dateKey: DateKey,
   mealId: MealId,
   foodId: FoodId,
-  quantityGrams: QuantityGrams,
+  quantity: LoggedFoodQuantity,
+  nutritionMultiplier: NutritionMultiplier,
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}

@@ -12,14 +12,14 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Yogurt greco 0%",
       brand: "Fage",
-      energyKcalPer100g: 59,
-      fatGramsPer100g: 0.4,
-      saturatedFatGramsPer100g: 0.1,
-      carbsGramsPer100g: 3.6,
-      sugarGramsPer100g: 3.2,
-      fiberGramsPer100g: 0,
-      proteinGramsPer100g: 10,
-      saltGramsPer100g: 0.1,
+      energyKcal: 59,
+      fatGrams: 0.4,
+      saturatedFatGrams: 0.1,
+      carbsGrams: 3.6,
+      sugarGrams: 3.2,
+      fiberGrams: 0,
+      proteinGrams: 10,
+      saltGrams: 0.1,
     });
   });
 
@@ -31,11 +31,11 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Tonno al naturale",
       brand: "Rio Mare",
-      energyKcalPer100g: 103,
-      fatGramsPer100g: 0.8,
-      carbsGramsPer100g: 0,
-      proteinGramsPer100g: 24,
-      saltGramsPer100g: 0.9,
+      energyKcal: 103,
+      fatGrams: 0.8,
+      carbsGrams: 0,
+      proteinGrams: 24,
+      saltGrams: 0.9,
     });
   });
 
@@ -46,12 +46,12 @@ describe("food quick input parser", () => {
 
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Banana",
-      energyKcalPer100g: 89,
-      fatGramsPer100g: 0.3,
-      carbsGramsPer100g: 23,
-      sugarGramsPer100g: 12,
-      fiberGramsPer100g: 2.6,
-      proteinGramsPer100g: 1.1,
+      energyKcal: 89,
+      fatGrams: 0.3,
+      carbsGrams: 23,
+      sugarGrams: 12,
+      fiberGrams: 2.6,
+      proteinGrams: 1.1,
     });
   });
 
@@ -63,14 +63,14 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Yogurt greco 0%",
       brand: "Fage",
-      energyKcalPer100g: 59,
-      fatGramsPer100g: 0.4,
-      saturatedFatGramsPer100g: 0.1,
-      carbsGramsPer100g: 3.6,
-      sugarGramsPer100g: 3.2,
-      fiberGramsPer100g: 0,
-      proteinGramsPer100g: 10,
-      saltGramsPer100g: 0.1,
+      energyKcal: 59,
+      fatGrams: 0.4,
+      saturatedFatGrams: 0.1,
+      carbsGrams: 3.6,
+      sugarGrams: 3.2,
+      fiberGrams: 0,
+      proteinGrams: 10,
+      saltGrams: 0.1,
     });
   });
 
@@ -82,10 +82,10 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Skyr bianco",
       brand: "Milbona",
-      energyKcalPer100g: 63,
-      fatGramsPer100g: 0.2,
-      carbsGramsPer100g: 4,
-      proteinGramsPer100g: 11,
+      energyKcal: 63,
+      fatGrams: 0.2,
+      carbsGrams: 4,
+      proteinGrams: 11,
     });
   });
 
@@ -97,12 +97,12 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(_expectComplete({ result }), {
       name: "Pane di segale",
       brand: "Lidl",
-      energyKcalPer100g: 215,
-      fatGramsPer100g: 1.2,
-      carbsGramsPer100g: 42,
-      fiberGramsPer100g: 6.1,
-      proteinGramsPer100g: 8.5,
-      saltGramsPer100g: 1.1,
+      energyKcal: 215,
+      fatGrams: 1.2,
+      carbsGrams: 42,
+      fiberGrams: 6.1,
+      proteinGrams: 8.5,
+      saltGrams: 1.1,
     });
   });
 
@@ -131,10 +131,10 @@ describe("food quick input parser", () => {
       "missing-required-nutrient",
     ]);
     assert.deepStrictEqual(_issueFields({ issues: result.issues }), [
-      "energyKcalPer100g",
-      "fatGramsPer100g",
-      "carbsGramsPer100g",
-      "proteinGramsPer100g",
+      "energyKcal",
+      "fatGrams",
+      "carbsGrams",
+      "proteinGrams",
     ]);
   });
 
@@ -144,44 +144,36 @@ describe("food quick input parser", () => {
         input: "Banana,,89",
         partial: {
           name: "Banana",
-          energyKcalPer100g: 89,
+          energyKcal: 89,
         },
-        missingFields: [
-          "fatGramsPer100g",
-          "carbsGramsPer100g",
-          "proteinGramsPer100g",
-        ],
+        missingFields: ["fatGrams", "carbsGrams", "proteinGrams"],
       },
       {
         input: "Banana,,89,",
         partial: {
           name: "Banana",
-          energyKcalPer100g: 89,
+          energyKcal: 89,
         },
-        missingFields: [
-          "fatGramsPer100g",
-          "carbsGramsPer100g",
-          "proteinGramsPer100g",
-        ],
+        missingFields: ["fatGrams", "carbsGrams", "proteinGrams"],
       },
       {
         input: "Banana,,89,0.3,",
         partial: {
           name: "Banana",
-          energyKcalPer100g: 89,
-          fatGramsPer100g: 0.3,
+          energyKcal: 89,
+          fatGrams: 0.3,
         },
-        missingFields: ["carbsGramsPer100g", "proteinGramsPer100g"],
+        missingFields: ["carbsGrams", "proteinGrams"],
       },
       {
         input: "Banana,,89,0.3,,23,",
         partial: {
           name: "Banana",
-          energyKcalPer100g: 89,
-          fatGramsPer100g: 0.3,
-          carbsGramsPer100g: 23,
+          energyKcal: 89,
+          fatGrams: 0.3,
+          carbsGrams: 23,
         },
-        missingFields: ["proteinGramsPer100g"],
+        missingFields: ["proteinGrams"],
       },
     ] satisfies readonly {
       readonly input: string;
@@ -213,12 +205,12 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(result.partial, {
       name: "Crackers integrali",
       brand: "Misura",
-      energyKcalPer100g: 430,
-      fatGramsPer100g: 12,
-      carbsGramsPer100g: 65,
+      energyKcal: 430,
+      fatGrams: 12,
+      carbsGrams: 65,
     });
     assert.deepStrictEqual(_issueFields({ issues: result.issues }), [
-      "proteinGramsPer100g",
+      "proteinGrams",
     ]);
   });
 
@@ -230,16 +222,16 @@ describe("food quick input parser", () => {
     assert.equal(result.status, "invalid");
     assert.deepStrictEqual(result.partial, {
       name: "Banana",
-      energyKcalPer100g: 89,
-      carbsGramsPer100g: 23,
+      energyKcal: 89,
+      carbsGrams: 23,
     });
     assert.deepStrictEqual(_issueReasons({ issues: result.issues }), [
       "invalid-number",
       "missing-required-nutrient",
     ]);
     assert.deepStrictEqual(_issueFields({ issues: result.issues }), [
-      "fatGramsPer100g",
-      "proteinGramsPer100g",
+      "fatGrams",
+      "proteinGrams",
     ]);
   });
 
@@ -252,14 +244,14 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(result.partial, {
       name: "Skyr bianco",
       brand: "Milbona",
-      energyKcalPer100g: 63,
-      fatGramsPer100g: 0.2,
-      carbsGramsPer100g: 4,
-      proteinGramsPer100g: 11,
+      energyKcal: 63,
+      fatGrams: 0.2,
+      carbsGrams: 4,
+      proteinGrams: 11,
     });
     assert.deepStrictEqual(result.issues, [
       {
-        field: "proteinGramsPer100g",
+        field: "proteinGrams",
         input: "Skyr bianco, Milbona, k63 f0.2 c4 p11 p12",
         message: "Food quick input repeats the p nutrient tag.",
         reason: "duplicate-tag",
@@ -276,10 +268,10 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(result.partial, {
       name: "Biscotti secchi",
       brand: "Oro Saiwa",
-      energyKcalPer100g: 425,
-      fatGramsPer100g: 10,
-      carbsGramsPer100g: 72,
-      proteinGramsPer100g: 8,
+      energyKcal: 425,
+      fatGrams: 10,
+      carbsGrams: 72,
+      proteinGrams: 8,
     });
     assert.deepStrictEqual(_issueReasons({ issues: result.issues }), [
       "unrecognized-token",
@@ -295,14 +287,14 @@ describe("food quick input parser", () => {
     assert.deepStrictEqual(result.partial, {
       name: "Yogurt greco 0%",
       brand: "Fage",
-      energyKcalPer100g: 59,
-      fatGramsPer100g: 0.4,
-      saturatedFatGramsPer100g: 0.1,
-      carbsGramsPer100g: 3.6,
-      sugarGramsPer100g: 3.2,
-      fiberGramsPer100g: 0,
-      proteinGramsPer100g: 10,
-      saltGramsPer100g: 0.1,
+      energyKcal: 59,
+      fatGrams: 0.4,
+      saturatedFatGrams: 0.1,
+      carbsGrams: 3.6,
+      sugarGrams: 3.2,
+      fiberGrams: 0,
+      proteinGrams: 10,
+      saltGrams: 0.1,
     });
     assert.deepStrictEqual(result.issues, [
       {

@@ -1,4 +1,4 @@
-import { Domain } from "@mai/nutrition";
+import { Domain, Measurements } from "@mai/nutrition";
 import { Array, Order, Schema } from "effect";
 import { setup, type ActorRefFrom } from "xstate";
 import { EmptyEvent } from "./schemas";
@@ -109,26 +109,26 @@ const foodOriginThenNameOrder = Order.combineAll([
   foodLowercaseNameOrder,
 ]);
 const foodMacroOrderValueKey = {
-  carbs: "carbsGramsPer100g",
-  calorieDensityHigh: "energyKcalPer100g",
-  calorieDensityLow: "energyKcalPer100g",
-  energy: "energyKcalPer100g",
-  fat: "fatGramsPer100g",
-  fiber: "fiberGramsPer100g",
-  protein: "proteinGramsPer100g",
-  salt: "saltGramsPer100g",
-  saturatedFat: "saturatedFatGramsPer100g",
-  sugar: "sugarGramsPer100g",
+  carbs: "carbsGrams",
+  calorieDensityHigh: "energyKcal",
+  calorieDensityLow: "energyKcal",
+  energy: "energyKcal",
+  fat: "fatGrams",
+  fiber: "fiberGrams",
+  protein: "proteinGrams",
+  salt: "saltGrams",
+  saturatedFat: "saturatedFatGrams",
+  sugar: "sugarGrams",
 } satisfies Record<
   FoodSearchMacroOrder,
-  | "carbsGramsPer100g"
-  | "energyKcalPer100g"
-  | "fatGramsPer100g"
-  | "fiberGramsPer100g"
-  | "proteinGramsPer100g"
-  | "saltGramsPer100g"
-  | "saturatedFatGramsPer100g"
-  | "sugarGramsPer100g"
+  | "carbsGrams"
+  | "energyKcal"
+  | "fatGrams"
+  | "fiberGrams"
+  | "proteinGrams"
+  | "saltGrams"
+  | "saturatedFatGrams"
+  | "sugarGrams"
 >;
 
 const foodMacroOrderValueDirection = {
@@ -214,8 +214,11 @@ export function sortFoodsByMacroOrder({
           foodUserOriginOrder,
           Order.mapInput(valueOrder, (food: Domain.Food) => {
             const valueKey = foodMacroOrderValueKey[macroOrder];
+            const referenceBaseAmount = Measurements.baseMeasurementAmount({
+              quantity: food.nutritionReference,
+            });
 
-            return food[valueKey] ?? 0;
+            return (food[valueKey] ?? 0) / referenceBaseAmount;
           }),
           foodLowercaseNameOrder,
         ])

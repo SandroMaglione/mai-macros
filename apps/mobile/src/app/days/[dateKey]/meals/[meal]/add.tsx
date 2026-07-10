@@ -4,6 +4,7 @@ import {
   BottomActionBar,
   Button,
   IconButton,
+  InputSelect,
   LoadingView,
   Notice,
   NumberField,
@@ -14,26 +15,28 @@ import {
   FoodSearchResults,
 } from "@/components/nutrition";
 import { todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
+import * as FoodMeasurements from "@/lib/food-measurements";
+import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { DailyLogs, Domain, Foods, MealEntries, Utils } from "@mai/nutrition";
+import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
 import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
 import { useMachine } from "@xstate/react";
 import { Array, Effect, Match, Option, Order, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { Check, ChevronLeft, Plus } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Actor, createAsyncLogic, setup } from "xstate";
 
 const MealFoodUsage = Schema.Struct({
   foodId: Domain.FoodId,
-  latestQuantityGrams: Domain.QuantityGrams,
+  latestQuantity: Domain.LoggedFoodQuantity,
   latestUsedAt: Schema.DateTimeUtcFromMillis,
   meals: Schema.Array(
     Schema.Struct({
+      latestQuantity: Domain.LoggedFoodQuantity,
       latestUsedAt: Schema.DateTimeUtcFromMillis,
       mealId: Domain.MealId,
     })
@@ -54,7 +57,7 @@ const AddMealEntryInput = Schema.Struct({
   dateKey: Domain.DateKey,
   foodId: Domain.FoodId,
   mealId: Domain.MealId,
-  quantityGrams: Schema.String,
+  quantity: FoodMeasurements.MealEntryQuantityFormInput,
 });
 
 const AddMealEntryResult = Schema.Union([
@@ -110,13 +113,21 @@ const addMealFoodRouteMachine = setup({
         meal: Domain.MealId,
         mealLabel: Schema.NonEmptyString,
         notice: Schema.NullOr(Schema.String),
-        quantityGrams: Schema.String,
+        quantityAmount: Schema.String,
+        quantityUnit: Domain.MeasurementUnit,
+        portionId: Schema.NullOr(Domain.FoodPortionId),
         selectedFood: Schema.NullOr(Domain.Food),
       })
     ),
     events: {
       changeQuantity: Schema.toStandardSchemaV1(
-        Schema.Struct({ quantityGrams: Schema.String })
+        Schema.Struct({ quantityAmount: Schema.String })
+      ),
+      selectMeasurementUnit: Schema.toStandardSchemaV1(
+        Schema.Struct({ unit: Domain.MeasurementUnit })
+      ),
+      selectPortion: Schema.toStandardSchemaV1(
+        Schema.Struct({ portionId: Domain.FoodPortionId })
       ),
       clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
       clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
@@ -207,7 +218,9 @@ const addMealFoodRouteMachine = setup({
       meal: input.meal,
       mealLabel: input.mealLabel,
       notice: null,
-      quantityGrams: "",
+      quantityAmount: "",
+      quantityUnit: "g",
+      portionId: null,
       selectedFood: null,
     };
   },
@@ -234,24 +247,31 @@ const addMealFoodRouteMachine = setup({
             foodUsage === undefined
               ? undefined
               : foodUsage.meals.find((usage) => usage.mealId === context.meal);
-          const previousQuantityGrams = context.quantityGrams.trim();
-          const recentQuantityGrams =
+          const previousQuantityAmount = context.quantityAmount.trim();
+          const recentQuantity =
             foodUsage === undefined || mealUsage === undefined
-              ? ""
-              : _formatPreciseNumber({
-                  value: foodUsage.latestQuantityGrams,
-                });
-          const quantityGrams =
+              ? undefined
+              : mealUsage.latestQuantity;
+          const recentSelection =
+            FoodMeasurements.quantitySelectionFromLoggedQuantity({
+              food: selectedFood,
+              quantity: recentQuantity,
+            });
+          const quantitySelection =
             event.selection === "firstMatching" &&
-            (event.food === null || previousQuantityGrams !== "")
-              ? context.quantityGrams
-              : recentQuantityGrams;
+            (event.food === null || previousQuantityAmount !== "")
+              ? {
+                  quantityAmount: context.quantityAmount,
+                  quantityUnit: context.quantityUnit,
+                  portionId: context.portionId,
+                }
+              : recentSelection;
 
           return {
             target: "EnteringQuantity",
             context: {
               notice: null,
-              quantityGrams,
+              ...quantitySelection,
               selectedFood,
             },
           };
@@ -262,7 +282,18 @@ const addMealFoodRouteMachine = setup({
       on: {
         changeQuantity: ({ event }) => ({
           context: {
-            quantityGrams: event.quantityGrams,
+            quantityAmount: event.quantityAmount,
+          },
+        }),
+        selectMeasurementUnit: ({ event }) => ({
+          context: {
+            portionId: null,
+            quantityUnit: event.unit,
+          },
+        }),
+        selectPortion: ({ event }) => ({
+          context: {
+            portionId: event.portionId,
           },
         }),
         clearNotice: {
@@ -281,7 +312,7 @@ const addMealFoodRouteMachine = setup({
           };
         },
         submit: ({ context }) =>
-          context.selectedFood !== null && context.quantityGrams.trim() !== ""
+          context.selectedFood !== null && context.quantityAmount.trim() !== ""
             ? { target: "Submitting" }
             : undefined,
       },
@@ -298,7 +329,11 @@ const addMealFoodRouteMachine = setup({
             dateKey: context.dateKey,
             foodId: context.selectedFood.id,
             mealId: context.meal,
-            quantityGrams: context.quantityGrams,
+            quantity: FoodMeasurements.mealEntryQuantityInputFromSelection({
+              quantityAmount: context.quantityAmount,
+              quantityUnit: context.quantityUnit,
+              portionId: context.portionId,
+            }),
           };
         },
         onDone: ({ actions, context, event }, enq) =>
@@ -560,14 +595,16 @@ function ReadyAddMealFoodRoute({
     meal,
     mealLabel,
     notice,
-    quantityGrams,
+    portionId,
+    quantityAmount,
+    quantityUnit,
   } = snapshot.context;
   const selectedFood = snapshot.context.selectedFood;
   const routeState = snapshot.value;
   const disabled = routeState === "Submitting" || routeState === "Submitted";
   const canClearSelectedFood = routeState === "EnteringQuantity";
   const submitDisabled =
-    disabled || selectedFood === null || quantityGrams.trim() === "";
+    disabled || selectedFood === null || quantityAmount.trim() === "";
   const selectedFoodUsage =
     selectedFood === null
       ? undefined
@@ -581,19 +618,24 @@ function ReadyAddMealFoodRoute({
   const selectedFoodQuantityLabel =
     selectedFoodUsage === undefined || selectedMealUsage === undefined
       ? undefined
-      : `${_formatPreciseNumber({
-          value: selectedFoodUsage.latestQuantityGrams,
-        })} g previous`;
+      : `${formatLoggedFoodQuantity({
+          quantity: selectedMealUsage.latestQuantity,
+        })} previous`;
   const selectedFoodNutrients =
     selectedFood === null
       ? undefined
-      : Schema.decodeOption(Domain.QuantityGrams)(Number(quantityGrams)).pipe(
+      : FoodMeasurements.loggedQuantityFromForm({
+          food: selectedFood,
+          portionId,
+          quantityAmount,
+          quantityUnit,
+        }).pipe(
           Option.match({
             onNone: () => undefined,
-            onSome: (validatedQuantityGrams) =>
-              Utils.calculateEntryNutrients({
+            onSome: (quantity) =>
+              FoodMeasurements.nutrientsFromLoggedQuantity({
                 food: selectedFood,
-                quantityGrams: validatedQuantityGrams,
+                quantity,
               }),
           })
         );
@@ -688,9 +730,9 @@ function ReadyAddMealFoodRoute({
                 const nutrients =
                   foodHistory === undefined || mealHistory === undefined
                     ? undefined
-                    : Utils.calculateEntryNutrients({
+                    : FoodMeasurements.nutrientsFromLoggedQuantity({
                         food,
-                        quantityGrams: foodHistory.latestQuantityGrams,
+                        quantity: mealHistory.latestQuantity,
                       });
 
                 return nutrients === undefined
@@ -711,20 +753,30 @@ function ReadyAddMealFoodRoute({
 
                 return foodHistory === undefined || mealHistory === undefined
                   ? undefined
-                  : `${_formatPreciseNumber({
-                      value: foodHistory.latestQuantityGrams,
-                    })} g`;
+                  : formatLoggedFoodQuantity({
+                      quantity: mealHistory.latestQuantity,
+                    });
               }}
             />
           </View>
         ) : (
           <QuantityEntry
             changeQuantity={(value) => {
-              actor.trigger.changeQuantity({ quantityGrams: value });
+              actor.trigger.changeQuantity({ quantityAmount: value });
             }}
             disabled={disabled}
             mealLabel={mealLabel}
-            quantityGrams={quantityGrams}
+            portionId={portionId}
+            quantityAmount={quantityAmount}
+            quantityUnit={quantityUnit}
+            selectMeasurementUnit={(unit) => {
+              actor.trigger.selectMeasurementUnit({ unit });
+            }}
+            selectPortion={(selectedPortionId) => {
+              actor.trigger.selectPortion({
+                portionId: selectedPortionId,
+              });
+            }}
             selectedFood={selectedFood}
             selectedFoodNutrients={selectedFoodNutrients}
             selectedFoodQuantityLabel={selectedFoodQuantityLabel}
@@ -741,40 +793,94 @@ function QuantityEntry({
   changeQuantity,
   disabled,
   mealLabel,
-  quantityGrams,
+  portionId,
+  quantityAmount,
+  quantityUnit,
+  selectMeasurementUnit,
+  selectPortion,
   selectedFood,
   selectedFoodNutrients,
   selectedFoodQuantityLabel,
   submit,
   submitDisabled,
 }: {
-  readonly changeQuantity: (quantityGrams: string) => void;
+  readonly changeQuantity: (quantityAmount: string) => void;
   readonly disabled: boolean;
   readonly mealLabel: string;
-  readonly quantityGrams: string;
+  readonly portionId: Domain.FoodPortionId | null;
+  readonly quantityAmount: string;
+  readonly quantityUnit: Domain.MeasurementUnit;
+  readonly selectMeasurementUnit: (unit: Domain.MeasurementUnit) => void;
+  readonly selectPortion: (portionId: Domain.FoodPortionId) => void;
   readonly selectedFood: Domain.Food;
-  readonly selectedFoodNutrients:
-    | ReturnType<typeof Utils.calculateEntryNutrients>
-    | undefined;
+  readonly selectedFoodNutrients: ReturnType<
+    typeof FoodMeasurements.nutrientsFromLoggedQuantity
+  >;
   readonly selectedFoodQuantityLabel: string | undefined;
   readonly submit: () => void;
   readonly submitDisabled: boolean;
 }) {
+  const selectedPortion =
+    portionId === null
+      ? undefined
+      : selectedFood.portions.find((portion) => portion.id === portionId);
+  const selectedMeasureLabel =
+    selectedPortion?.name ?? (quantityUnit === "l" ? "L" : quantityUnit);
+  const measurementUnits = FoodMeasurements.availableMeasurementUnits({
+    food: selectedFood,
+  });
+  const measureOptions = [
+    ...measurementUnits.map((unit) => ({
+      _tag: "MeasurementUnit" as const,
+      label: unit === "l" ? "L" : unit,
+      unit,
+      value: `unit:${unit}`,
+    })),
+    ...selectedFood.portions.map((portion) => ({
+      _tag: "Portion" as const,
+      label: portion.name,
+      portionId: portion.id,
+      value: `portion:${portion.id}`,
+    })),
+  ];
+  const selectedMeasureValue =
+    selectedPortion === undefined
+      ? `unit:${quantityUnit}`
+      : `portion:${selectedPortion.id}`;
+
   return (
     <View style={styles.quantityLayout}>
       <View style={styles.quantityBody}>
         <NumberField
-          accessibilityLabel={`${mealLabel} quantity in grams`}
+          accessibilityLabel={`${mealLabel} quantity in ${selectedMeasureLabel}`}
           autoFocus
           editable={!disabled}
-          label="Grams"
+          label="Amount"
           onChangeText={(value) => {
             changeQuantity(value);
           }}
-          placeholder="150"
-          rightElement={<Text style={styles.unitLabel}>g</Text>}
+          placeholder={selectedPortion === undefined ? "150" : "1"}
+          rightElement={
+            <InputSelect
+              disabled={disabled}
+              onSelect={(value) => {
+                const selectedOption = measureOptions.find(
+                  (option) => option.value === value
+                );
+
+                if (selectedOption?._tag === "MeasurementUnit") {
+                  selectMeasurementUnit(selectedOption.unit);
+                } else if (selectedOption?._tag === "Portion") {
+                  selectPortion(selectedOption.portionId);
+                }
+              }}
+              options={measureOptions}
+              selectedValue={selectedMeasureValue}
+              title="Measure amount as"
+            />
+          }
           selectTextOnFocus
-          value={quantityGrams}
+          value={quantityAmount}
         />
         <FoodNutrientOverview
           brand={selectedFood.brand}
@@ -815,13 +921,6 @@ function _replacePath(path: Parameters<typeof router.replace>[0]) {
   router.replace(path);
 }
 
-function _formatPreciseNumber({ value }: { readonly value: number }) {
-  return formatNumber({
-    maximumFractionDigits: 2,
-    value,
-  });
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -859,11 +958,6 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-  },
-  unitLabel: {
-    color: color.textMuted,
-    fontSize: 13,
-    fontWeight: "900",
   },
   footerButton: {
     flex: 1,

@@ -21,14 +21,14 @@ const planInput: typeof Domain.Plan.Encoded = {
 };
 
 const foodInput: typeof Domain.Food.Encoded = {
-  carbsGramsPer100g: 12,
+  carbsGrams: 12,
   createdAt: 0,
-  energyKcalPer100g: 100,
-  fatGramsPer100g: 1,
+  energyKcal: 100,
+  fatGrams: 1,
   id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
   name: "Rice",
   origin: "user",
-  proteinGramsPer100g: 4,
+  proteinGrams: 4,
   updatedAt: 0,
 };
 
@@ -129,7 +129,12 @@ describe("NutritionReports", () => {
         foodId: food.id,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c23",
         mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
-        quantityGrams: 100,
+        quantity: {
+          _tag: "MeasuredFoodQuantity",
+          amount: 100,
+          unit: "g",
+        },
+        nutritionMultiplier: 1,
         updatedAt: 0,
       });
       const uncreatedDayMealEntry = yield* Schema.decodeEffect(
@@ -140,7 +145,12 @@ describe("NutritionReports", () => {
         foodId: food.id,
         id: "9535a059-a61f-42e1-a2e0-35ec87203c22",
         mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
-        quantityGrams: 100,
+        quantity: {
+          _tag: "MeasuredFoodQuantity",
+          amount: 100,
+          unit: "g",
+        },
+        nutritionMultiplier: 1,
         updatedAt: 0,
       });
       const stores: Store.NutritionStores = {

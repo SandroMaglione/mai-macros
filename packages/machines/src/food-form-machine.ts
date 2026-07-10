@@ -4,19 +4,63 @@ import { setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
 import { EmptyEvent } from "./schemas";
 
 export type FoodNutrientFieldName =
-  | "energyKcalPer100g"
-  | "proteinGramsPer100g"
-  | "carbsGramsPer100g"
-  | "fatGramsPer100g"
-  | "fiberGramsPer100g"
-  | "sugarGramsPer100g"
-  | "saturatedFatGramsPer100g"
-  | "saltGramsPer100g";
+  | "energyKcal"
+  | "proteinGrams"
+  | "carbsGrams"
+  | "fatGrams"
+  | "fiberGrams"
+  | "sugarGrams"
+  | "saturatedFatGrams"
+  | "saltGrams";
 
 export type FoodFormValues = Record<
-  "brand" | "name" | FoodNutrientFieldName,
+  | "brand"
+  | "conversionMassAmount"
+  | "conversionMassUnit"
+  | "conversionVolumeAmount"
+  | "conversionVolumeUnit"
+  | "name"
+  | "nutritionReferenceAmount"
+  | "nutritionReferenceUnit"
+  | FoodNutrientFieldName,
   string
 >;
+
+export type FoodPortionFormValue = {
+  readonly id?: Domain.FoodPortionId | undefined;
+  readonly name: string;
+  readonly amount: string;
+  readonly unit: Domain.MeasurementUnit;
+};
+
+export type FoodPortionFormError = {
+  readonly amount?: string;
+  readonly name?: string;
+};
+
+const measurementUnitByValue: Record<
+  string,
+  Domain.MeasurementUnit | undefined
+> = {
+  g: "g",
+  kg: "kg",
+  l: "l",
+  lb: "lb",
+  ml: "ml",
+  oz: "oz",
+};
+
+const massUnitByValue: Record<string, Domain.MassUnit | undefined> = {
+  g: "g",
+  kg: "kg",
+  lb: "lb",
+  oz: "oz",
+};
+
+const volumeUnitByValue: Record<string, Domain.VolumeUnit | undefined> = {
+  l: "l",
+  ml: "ml",
+};
 
 export type FoodNumberWarning = {
   readonly field?: FoodNutrientFieldName;
@@ -24,41 +68,62 @@ export type FoodNumberWarning = {
 };
 
 const FoodNutrientFieldNameSchema = Schema.Literals([
-  "energyKcalPer100g",
-  "proteinGramsPer100g",
-  "carbsGramsPer100g",
-  "fatGramsPer100g",
-  "fiberGramsPer100g",
-  "sugarGramsPer100g",
-  "saturatedFatGramsPer100g",
-  "saltGramsPer100g",
+  "energyKcal",
+  "proteinGrams",
+  "carbsGrams",
+  "fatGrams",
+  "fiberGrams",
+  "sugarGrams",
+  "saturatedFatGrams",
+  "saltGrams",
 ]);
 
 const FoodFormValuesSchema = Schema.Struct({
   brand: Schema.String,
   name: Schema.String,
-  energyKcalPer100g: Schema.String,
-  proteinGramsPer100g: Schema.String,
-  carbsGramsPer100g: Schema.String,
-  fatGramsPer100g: Schema.String,
-  fiberGramsPer100g: Schema.String,
-  sugarGramsPer100g: Schema.String,
-  saturatedFatGramsPer100g: Schema.String,
-  saltGramsPer100g: Schema.String,
+  energyKcal: Schema.String,
+  proteinGrams: Schema.String,
+  carbsGrams: Schema.String,
+  fatGrams: Schema.String,
+  fiberGrams: Schema.String,
+  sugarGrams: Schema.String,
+  saturatedFatGrams: Schema.String,
+  saltGrams: Schema.String,
+  nutritionReferenceAmount: Schema.String,
+  nutritionReferenceUnit: Schema.String,
+  conversionMassAmount: Schema.String,
+  conversionMassUnit: Schema.String,
+  conversionVolumeAmount: Schema.String,
+  conversionVolumeUnit: Schema.String,
+});
+
+const FoodPortionFormValueSchema = Schema.Struct({
+  id: Schema.optionalKey(Domain.FoodPortionId),
+  name: Schema.String,
+  amount: Schema.String,
+  unit: Domain.MeasurementUnit,
 });
 
 const FoodFormValueNameSchema = Schema.Literals([
   "brand",
   "name",
-  "energyKcalPer100g",
-  "proteinGramsPer100g",
-  "carbsGramsPer100g",
-  "fatGramsPer100g",
-  "fiberGramsPer100g",
-  "sugarGramsPer100g",
-  "saturatedFatGramsPer100g",
-  "saltGramsPer100g",
+  "energyKcal",
+  "proteinGrams",
+  "carbsGrams",
+  "fatGrams",
+  "fiberGrams",
+  "sugarGrams",
+  "saturatedFatGrams",
+  "saltGrams",
+  "nutritionReferenceAmount",
+  "nutritionReferenceUnit",
+  "conversionMassAmount",
+  "conversionMassUnit",
+  "conversionVolumeAmount",
+  "conversionVolumeUnit",
 ]);
+
+const FoodPortionFormFieldSchema = Schema.Literals(["amount", "name", "unit"]);
 
 const FoodNumberWarningSchema = Schema.Struct({
   field: Schema.optionalKey(FoodNutrientFieldNameSchema),
@@ -67,6 +132,7 @@ const FoodNumberWarningSchema = Schema.Struct({
 
 const FoodFormMachineContextSchema = Schema.Struct({
   formValues: FoodFormValuesSchema,
+  portions: Schema.Array(FoodPortionFormValueSchema),
   numberWarnings: Schema.Array(FoodNumberWarningSchema),
   quickInput: Schema.String,
   quickInputParseResult: Schema.Any,
@@ -92,6 +158,17 @@ export const foodFormMachine = setup({
         Schema.Struct({
           input: Schema.String,
         })
+      ),
+      addPortion: Schema.toStandardSchemaV1(EmptyEvent),
+      changePortion: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          field: FoodPortionFormFieldSchema,
+          index: Schema.Int,
+          value: Schema.String,
+        })
+      ),
+      removePortion: Schema.toStandardSchemaV1(
+        Schema.Struct({ index: Schema.Int })
       ),
       reset: Schema.toStandardSchemaV1(EmptyEvent),
       submit: Schema.toStandardSchemaV1(EmptyEvent),
@@ -119,7 +196,10 @@ export const foodFormMachine = setup({
           }),
         }),
         submit: ({ context, parent }, enq) => {
-          if (parent === undefined) {
+          if (
+            parent === undefined ||
+            !foodPortionFormValuesAreValid({ portions: context.portions })
+          ) {
             return;
           }
 
@@ -127,9 +207,40 @@ export const foodFormMachine = setup({
             type: "submit",
             input: createFoodInputFromFormValues({
               formValues: context.formValues,
+              portions: context.portions,
             }),
           } satisfies FoodFormSubmitEvent);
         },
+        addPortion: ({ context }) => ({
+          context: {
+            portions: [
+              ...context.portions,
+              { name: "", amount: "", unit: "g" },
+            ],
+          },
+        }),
+        changePortion: ({ context, event }) => ({
+          context: {
+            portions: context.portions.map((portion, index) =>
+              index === event.index
+                ? {
+                    ...portion,
+                    [event.field]:
+                      event.field === "unit"
+                        ? (measurementUnitByValue[event.value] ?? portion.unit)
+                        : event.value,
+                  }
+                : portion
+            ),
+          },
+        }),
+        removePortion: ({ context, event }) => ({
+          context: {
+            portions: context.portions.filter(
+              (_portion, index) => index !== event.index
+            ),
+          },
+        }),
         changeFormValue: ({ context, event }) => {
           const formValues = {
             ...context.formValues,
@@ -140,35 +251,35 @@ export const foodFormMachine = setup({
           const nutrients = [
             _quickNutrientTag({
               tag: "k",
-              value: formValues.energyKcalPer100g,
+              value: formValues.energyKcal,
             }),
             _quickNutrientTag({
               tag: "f",
-              value: formValues.fatGramsPer100g,
+              value: formValues.fatGrams,
             }),
             _quickNutrientTag({
               tag: "sf",
-              value: formValues.saturatedFatGramsPer100g,
+              value: formValues.saturatedFatGrams,
             }),
             _quickNutrientTag({
               tag: "c",
-              value: formValues.carbsGramsPer100g,
+              value: formValues.carbsGrams,
             }),
             _quickNutrientTag({
               tag: "su",
-              value: formValues.sugarGramsPer100g,
+              value: formValues.sugarGrams,
             }),
             _quickNutrientTag({
               tag: "fi",
-              value: formValues.fiberGramsPer100g,
+              value: formValues.fiberGrams,
             }),
             _quickNutrientTag({
               tag: "p",
-              value: formValues.proteinGramsPer100g,
+              value: formValues.proteinGrams,
             }),
             _quickNutrientTag({
               tag: "sa",
-              value: formValues.saltGramsPer100g,
+              value: formValues.saltGrams,
             }),
           ].filter((value): value is string => value !== undefined);
           const quickInput = context.syncQuickInputFromFields
@@ -190,7 +301,7 @@ export const foodFormMachine = setup({
             },
           };
         },
-        changeQuickInput: ({ event }) => {
+        changeQuickInput: ({ context, event }) => {
           const quickInputParseResult = Effect.runSync(
             FoodQuickInput.parseFoodQuickInput({ input: event.input })
           );
@@ -198,38 +309,33 @@ export const foodFormMachine = setup({
           const formValues = {
             name: partial.name ?? "",
             brand: partial.brand ?? "",
-            energyKcalPer100g:
-              partial.energyKcalPer100g === undefined
+            energyKcal:
+              partial.energyKcal === undefined ? "" : `${partial.energyKcal}`,
+            proteinGrams:
+              partial.proteinGrams === undefined
                 ? ""
-                : `${partial.energyKcalPer100g}`,
-            proteinGramsPer100g:
-              partial.proteinGramsPer100g === undefined
+                : `${partial.proteinGrams}`,
+            carbsGrams:
+              partial.carbsGrams === undefined ? "" : `${partial.carbsGrams}`,
+            fatGrams:
+              partial.fatGrams === undefined ? "" : `${partial.fatGrams}`,
+            fiberGrams:
+              partial.fiberGrams === undefined ? "" : `${partial.fiberGrams}`,
+            sugarGrams:
+              partial.sugarGrams === undefined ? "" : `${partial.sugarGrams}`,
+            saturatedFatGrams:
+              partial.saturatedFatGrams === undefined
                 ? ""
-                : `${partial.proteinGramsPer100g}`,
-            carbsGramsPer100g:
-              partial.carbsGramsPer100g === undefined
-                ? ""
-                : `${partial.carbsGramsPer100g}`,
-            fatGramsPer100g:
-              partial.fatGramsPer100g === undefined
-                ? ""
-                : `${partial.fatGramsPer100g}`,
-            fiberGramsPer100g:
-              partial.fiberGramsPer100g === undefined
-                ? ""
-                : `${partial.fiberGramsPer100g}`,
-            sugarGramsPer100g:
-              partial.sugarGramsPer100g === undefined
-                ? ""
-                : `${partial.sugarGramsPer100g}`,
-            saturatedFatGramsPer100g:
-              partial.saturatedFatGramsPer100g === undefined
-                ? ""
-                : `${partial.saturatedFatGramsPer100g}`,
-            saltGramsPer100g:
-              partial.saltGramsPer100g === undefined
-                ? ""
-                : `${partial.saltGramsPer100g}`,
+                : `${partial.saturatedFatGrams}`,
+            saltGrams:
+              partial.saltGrams === undefined ? "" : `${partial.saltGrams}`,
+            nutritionReferenceAmount:
+              context.formValues.nutritionReferenceAmount,
+            nutritionReferenceUnit: context.formValues.nutritionReferenceUnit,
+            conversionMassAmount: context.formValues.conversionMassAmount,
+            conversionMassUnit: context.formValues.conversionMassUnit,
+            conversionVolumeAmount: context.formValues.conversionVolumeAmount,
+            conversionVolumeUnit: context.formValues.conversionVolumeUnit,
           } satisfies FoodFormValues;
 
           return {
@@ -258,6 +364,7 @@ function _foodFormContextFromInput({
 }): {
   readonly formValues: FoodFormValues;
   readonly numberWarnings: readonly FoodNumberWarning[];
+  readonly portions: readonly FoodPortionFormValue[];
   readonly quickInput: string;
   readonly quickInputParseResult: FoodQuickInput.FoodQuickInputParseResult;
   readonly syncQuickInputFromFields: boolean;
@@ -266,26 +373,40 @@ function _foodFormContextFromInput({
   const formValues = {
     name: food?.name ?? "",
     brand: food?.brand ?? "",
-    energyKcalPer100g: food === null ? "" : `${food.energyKcalPer100g}`,
-    proteinGramsPer100g: food === null ? "" : `${food.proteinGramsPer100g}`,
-    carbsGramsPer100g: food === null ? "" : `${food.carbsGramsPer100g}`,
-    fatGramsPer100g: food === null ? "" : `${food.fatGramsPer100g}`,
-    fiberGramsPer100g:
-      food?.fiberGramsPer100g === undefined ? "" : `${food.fiberGramsPer100g}`,
-    sugarGramsPer100g:
-      food?.sugarGramsPer100g === undefined ? "" : `${food.sugarGramsPer100g}`,
-    saturatedFatGramsPer100g:
-      food?.saturatedFatGramsPer100g === undefined
+    energyKcal: food === null ? "" : `${food.energyKcal}`,
+    proteinGrams: food === null ? "" : `${food.proteinGrams}`,
+    carbsGrams: food === null ? "" : `${food.carbsGrams}`,
+    fatGrams: food === null ? "" : `${food.fatGrams}`,
+    fiberGrams: food?.fiberGrams === undefined ? "" : `${food.fiberGrams}`,
+    sugarGrams: food?.sugarGrams === undefined ? "" : `${food.sugarGrams}`,
+    saturatedFatGrams:
+      food?.saturatedFatGrams === undefined ? "" : `${food.saturatedFatGrams}`,
+    saltGrams: food?.saltGrams === undefined ? "" : `${food.saltGrams}`,
+    nutritionReferenceAmount: `${food?.nutritionReference.amount ?? 100}`,
+    nutritionReferenceUnit: food?.nutritionReference.unit ?? "g",
+    conversionMassAmount:
+      food?.massVolumeConversion === undefined
         ? ""
-        : `${food.saturatedFatGramsPer100g}`,
-    saltGramsPer100g:
-      food?.saltGramsPer100g === undefined ? "" : `${food.saltGramsPer100g}`,
+        : `${food.massVolumeConversion.mass.amount}`,
+    conversionMassUnit: food?.massVolumeConversion?.mass.unit ?? "g",
+    conversionVolumeAmount:
+      food?.massVolumeConversion === undefined
+        ? ""
+        : `${food.massVolumeConversion.volume.amount}`,
+    conversionVolumeUnit: food?.massVolumeConversion?.volume.unit ?? "ml",
   } satisfies FoodFormValues;
   const quickInput = "";
 
   return {
     formValues,
     numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+    portions:
+      food?.portions.map((portion) => ({
+        id: portion.id,
+        name: portion.name,
+        amount: `${portion.size.amount}`,
+        unit: portion.size.unit,
+      })) ?? [],
     quickInput,
     quickInputParseResult: Effect.runSync(
       FoodQuickInput.parseFoodQuickInput({ input: quickInput })
@@ -300,28 +421,48 @@ export function foodNumberWarningsFromFormValues({
   readonly formValues: FoodFormValues;
 }) {
   const warnings: FoodNumberWarning[] = [];
-  const energyKcal = _formNumber(formValues.energyKcalPer100g);
-  const proteinGrams = _formNumber(formValues.proteinGramsPer100g);
-  const carbsGrams = _formNumber(formValues.carbsGramsPer100g);
-  const fatGrams = _formNumber(formValues.fatGramsPer100g);
-  const sugarGrams = _formNumber(formValues.sugarGramsPer100g);
-  const saturatedFatGrams = _formNumber(formValues.saturatedFatGramsPer100g);
-  const saltGrams = _formNumber(formValues.saltGramsPer100g);
+  const energyKcal = _formNumber(formValues.energyKcal);
+  const proteinGrams = _formNumber(formValues.proteinGrams);
+  const carbsGrams = _formNumber(formValues.carbsGrams);
+  const fatGrams = _formNumber(formValues.fatGrams);
+  const sugarGrams = _formNumber(formValues.sugarGrams);
+  const saturatedFatGrams = _formNumber(formValues.saturatedFatGrams);
+  const saltGrams = _formNumber(formValues.saltGrams);
   const macroTotalGrams =
     (proteinGrams ?? 0) + (carbsGrams ?? 0) + (fatGrams ?? 0);
   const macroEnergyKcal =
     (proteinGrams ?? 0) * 4 + (carbsGrams ?? 0) * 4 + (fatGrams ?? 0) * 9;
 
-  if (macroTotalGrams > 100) {
+  const referenceAmount = _formNumber(formValues.nutritionReferenceAmount);
+  const referenceMassMultiplier = {
+    g: 1,
+    kg: 1_000,
+    oz: 28.349_523_125,
+    lb: 453.592_37,
+  }[formValues.nutritionReferenceUnit];
+  const referenceMassGrams =
+    referenceAmount === undefined || referenceMassMultiplier === undefined
+      ? undefined
+      : referenceAmount * referenceMassMultiplier;
+
+  if (
+    referenceMassGrams !== undefined &&
+    macroTotalGrams > referenceMassGrams
+  ) {
     warnings.push({
-      message: "Protein, carbs, and fat add up to more than 100g per 100g.",
+      message:
+        "Protein, carbs, and fat add up to more than the reference weight.",
     });
   }
 
-  if (energyKcal !== undefined && energyKcal > 900) {
+  if (
+    energyKcal !== undefined &&
+    referenceMassGrams !== undefined &&
+    (energyKcal / referenceMassGrams) * 100 > 900
+  ) {
     warnings.push({
-      field: "energyKcalPer100g",
-      message: "Calories are above 900 kcal per 100g.",
+      field: "energyKcal",
+      message: "Calories are above 900 kcal per 100 g.",
     });
   }
 
@@ -343,7 +484,7 @@ export function foodNumberWarningsFromFormValues({
     sugarGrams > carbsGrams
   ) {
     warnings.push({
-      field: "sugarGramsPer100g",
+      field: "sugarGrams",
       message: "Sugar is greater than total carbs.",
     });
   }
@@ -354,47 +495,130 @@ export function foodNumberWarningsFromFormValues({
     saturatedFatGrams > fatGrams
   ) {
     warnings.push({
-      field: "saturatedFatGramsPer100g",
+      field: "saturatedFatGrams",
       message: "Saturated fat is greater than total fat.",
     });
   }
 
-  if (saltGrams !== undefined && saltGrams > 20) {
+  if (
+    saltGrams !== undefined &&
+    referenceMassGrams !== undefined &&
+    (saltGrams / referenceMassGrams) * 100 > 20
+  ) {
     warnings.push({
-      field: "saltGramsPer100g",
-      message: "Salt is above 20g per 100g.",
+      field: "saltGrams",
+      message: "Salt is above 20 g per 100 g.",
     });
   }
 
   return warnings;
 }
 
+export function foodPortionFormErrorsFromValues({
+  portions,
+}: {
+  readonly portions: readonly FoodPortionFormValue[];
+}): readonly FoodPortionFormError[] {
+  const normalizedNames = portions.map((portion) =>
+    portion.name.trim().toLocaleLowerCase()
+  );
+
+  return portions.map((portion, index) => {
+    const normalizedName = normalizedNames[index] ?? "";
+    const amount = _formNumber(portion.amount);
+    const duplicateName =
+      normalizedName !== "" &&
+      normalizedNames.some(
+        (otherName, otherIndex) =>
+          otherIndex !== index && otherName === normalizedName
+      );
+
+    return {
+      ...(normalizedName === ""
+        ? { name: "Add a name or remove this portion." }
+        : duplicateName
+          ? { name: "Use a unique name for each portion." }
+          : {}),
+      ...(amount === undefined || amount <= 0
+        ? { amount: "Enter an amount greater than zero." }
+        : {}),
+    };
+  });
+}
+
+export function foodPortionFormValuesAreValid({
+  portions,
+}: {
+  readonly portions: readonly FoodPortionFormValue[];
+}) {
+  return foodPortionFormErrorsFromValues({ portions }).every(
+    (error) => error.name === undefined && error.amount === undefined
+  );
+}
+
 export function createFoodInputFromFormValues({
   formValues,
+  portions,
 }: {
   readonly formValues: FoodFormValues;
+  readonly portions: readonly FoodPortionFormValue[];
 }): Foods.CreateFoodInput {
   const brand = formValues.brand.trim();
-  const fiberGramsPer100g = _optionalFormValue(formValues.fiberGramsPer100g);
-  const sugarGramsPer100g = _optionalFormValue(formValues.sugarGramsPer100g);
-  const saturatedFatGramsPer100g = _optionalFormValue(
-    formValues.saturatedFatGramsPer100g
+  const fiberGrams = _optionalFormValue(formValues.fiberGrams);
+  const sugarGrams = _optionalFormValue(formValues.sugarGrams);
+  const saturatedFatGrams = _optionalFormValue(formValues.saturatedFatGrams);
+  const saltGrams = _optionalFormValue(formValues.saltGrams);
+  const nutritionReferenceUnit =
+    measurementUnitByValue[formValues.nutritionReferenceUnit] ?? "g";
+  const conversionMassUnit =
+    massUnitByValue[formValues.conversionMassUnit] ?? "g";
+  const conversionVolumeUnit =
+    volumeUnitByValue[formValues.conversionVolumeUnit] ?? "ml";
+  const conversionMassAmount = _optionalFormValue(
+    formValues.conversionMassAmount
   );
-  const saltGramsPer100g = _optionalFormValue(formValues.saltGramsPer100g);
+  const conversionVolumeAmount = _optionalFormValue(
+    formValues.conversionVolumeAmount
+  );
 
   return {
     name: formValues.name.trim(),
     ...(brand === "" ? {} : { brand }),
-    energyKcalPer100g: formValues.energyKcalPer100g,
-    proteinGramsPer100g: formValues.proteinGramsPer100g,
-    carbsGramsPer100g: formValues.carbsGramsPer100g,
-    fatGramsPer100g: formValues.fatGramsPer100g,
-    ...(fiberGramsPer100g === undefined ? {} : { fiberGramsPer100g }),
-    ...(sugarGramsPer100g === undefined ? {} : { sugarGramsPer100g }),
-    ...(saturatedFatGramsPer100g === undefined
+    nutritionReference: {
+      amount: formValues.nutritionReferenceAmount,
+      unit: nutritionReferenceUnit,
+    },
+    energyKcal: formValues.energyKcal,
+    proteinGrams: formValues.proteinGrams,
+    carbsGrams: formValues.carbsGrams,
+    fatGrams: formValues.fatGrams,
+    ...(fiberGrams === undefined ? {} : { fiberGrams }),
+    ...(sugarGrams === undefined ? {} : { sugarGrams }),
+    ...(saturatedFatGrams === undefined ? {} : { saturatedFatGrams }),
+    ...(saltGrams === undefined ? {} : { saltGrams }),
+    portions: portions.map((portion) => ({
+      ...(portion.id === undefined ? {} : { id: portion.id }),
+      name: portion.name,
+      size: {
+        amount: portion.amount,
+        unit: portion.unit,
+      },
+    })),
+    ...(conversionMassAmount === undefined &&
+    conversionVolumeAmount === undefined
       ? {}
-      : { saturatedFatGramsPer100g }),
-    ...(saltGramsPer100g === undefined ? {} : { saltGramsPer100g }),
+      : {
+          massVolumeConversion: {
+            mass: {
+              amount: conversionMassAmount ?? "",
+              unit: conversionMassUnit,
+            },
+            volume: {
+              amount: conversionVolumeAmount ?? "",
+              unit: conversionVolumeUnit,
+            },
+          },
+        }),
   };
 }
 

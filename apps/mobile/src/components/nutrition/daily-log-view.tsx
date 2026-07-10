@@ -8,7 +8,7 @@ import {
 } from "@/components/ui";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
+import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
@@ -1169,6 +1169,7 @@ function MealSection({
     mealEntries,
   }).totals;
   const weightTotals = Reporting.calculateMealEntriesWeightTotals({
+    foods,
     mealEntries,
   });
 
@@ -1233,6 +1234,9 @@ function MealSection({
       <MealNutrientColumns nutrients={nutrients} />
       <MealCalorieWeightRatio
         energyKcal={nutrients.energyKcal}
+        isComplete={
+          weightTotals.resolvedEntriesCount === weightTotals.entriesCount
+        }
         quantityGrams={weightTotals.quantityGrams}
       />
 
@@ -1263,9 +1267,11 @@ function MealSection({
 
 function MealCalorieWeightRatio({
   energyKcal,
+  isComplete,
   quantityGrams,
 }: {
   readonly energyKcal: number;
+  readonly isComplete: boolean;
   readonly quantityGrams: number;
 }) {
   const gramsPerCalorie = Reporting.calculateGramsPerCalorie({
@@ -1273,7 +1279,7 @@ function MealCalorieWeightRatio({
     quantityGrams,
   });
   const ratioLabel =
-    gramsPerCalorie === null
+    !isComplete || gramsPerCalorie === null
       ? "- g/kcal"
       : `${formatNumber({
           maximumFractionDigits: gramsPerCalorie < 1 ? 2 : 1,
@@ -1285,7 +1291,7 @@ function MealCalorieWeightRatio({
     <View style={styles.mealWeightRatioColumns}>
       <MealNutrientColumn
         colorValue={color.secondaryMetric}
-        label="Total volume"
+        label={isComplete ? "Food weight" : "Resolved weight"}
         value={weightLabel}
       />
       <MealNutrientColumn
@@ -1467,11 +1473,11 @@ function MealEntryRow({
       ? undefined
       : Utils.calculateEntryNutrients({
           food,
-          quantityGrams: mealEntry.quantityGrams,
+          nutritionMultiplier: mealEntry.nutritionMultiplier,
         });
-  const quantityLabel = `${_formatMacroValue({
-    value: mealEntry.quantityGrams,
-  })} g`;
+  const quantityLabel = formatLoggedFoodQuantity({
+    quantity: mealEntry.quantity,
+  });
   const dominantMacronutrientColorsForFood =
     food === undefined
       ? []

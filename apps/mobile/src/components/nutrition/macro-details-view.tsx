@@ -7,7 +7,7 @@ import {
   Notice,
 } from "@/components/ui";
 import { todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, mealEntryMassGrams } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import {
@@ -447,12 +447,13 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
             mealEntry,
             nutrients: Utils.calculateEntryNutrients({
               food,
-              quantityGrams: mealEntry.quantityGrams,
+              nutritionMultiplier: mealEntry.nutritionMultiplier,
             }),
           },
         ];
   });
   const weightTotals = Reporting.calculateMealEntriesWeightTotals({
+    foods: data.foods,
     mealEntries,
   });
   const title =
@@ -539,6 +540,9 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
 
         <View style={styles.nutrientGroup}>
           <WeightRow
+            isComplete={
+              weightTotals.resolvedEntriesCount === weightTotals.entriesCount
+            }
             onPress={() => {
               actor.trigger.selectMetric({
                 metricName: FoodWeightMetricName,
@@ -649,10 +653,12 @@ function NutrientRow({
 }
 
 function WeightRow({
+  isComplete,
   onPress,
   selected,
   total,
 }: {
+  readonly isComplete: boolean;
   readonly onPress: () => void;
   readonly selected: boolean;
   readonly total: number;
@@ -661,7 +667,7 @@ function WeightRow({
 
   return (
     <Pressable
-      accessibilityLabel="Food weight details"
+      accessibilityLabel={`${isComplete ? "Food" : "Resolved food"} weight details`}
       accessibilityRole="button"
       accessibilityState={{ expanded: selected }}
       onPress={onPress}
@@ -682,7 +688,7 @@ function WeightRow({
             numberOfLines={1}
             style={[styles.nutrientLabel, { color: color.secondaryMetric }]}
           >
-            Food weight
+            {isComplete ? "Food weight" : "Resolved weight"}
           </Text>
         </View>
         <Text
@@ -972,12 +978,18 @@ function _calculateFoodNutrientContributions({
       );
 
       if (previousContribution === undefined) {
+        const quantityGrams =
+          mealEntryMassGrams({
+            food: entry.food,
+            mealEntry: entry.mealEntry,
+          }) ?? 0;
+
         return [
           ...contributions,
           {
             entries: [entry],
             food: entry.food,
-            quantityGrams: entry.mealEntry.quantityGrams,
+            quantityGrams,
             totals: entryTotals,
           },
         ];
@@ -989,7 +1001,11 @@ function _calculateFoodNutrientContributions({
               ...contribution,
               entries: [...contribution.entries, entry],
               quantityGrams:
-                contribution.quantityGrams + entry.mealEntry.quantityGrams,
+                contribution.quantityGrams +
+                (mealEntryMassGrams({
+                  food: entry.food,
+                  mealEntry: entry.mealEntry,
+                }) ?? 0),
               totals: Reporting.addNutrientTotals({
                 left: contribution.totals,
                 right: entryTotals,

@@ -1,4 +1,14 @@
-import { DateKey, FoodId, MealEntry, MealEntryId, MealId } from "../domain.ts";
+import {
+  DateKey,
+  type Food,
+  FoodId,
+  FoodPortionId,
+  LoggedFoodQuantity,
+  MealEntry,
+  MealEntryId,
+  MealId,
+  MeasurementUnit,
+} from "../domain.ts";
 import {
   Array,
   Context,
@@ -13,17 +23,31 @@ import {
 } from "effect";
 
 import { NutritionStore } from "./store.ts";
+import * as Measurements from "../measurements.ts";
 
 const _FormPositiveNumber = Schema.NumberFromString.check(
   Schema.isFinite(),
   Schema.isGreaterThan(0)
 );
 
+export const MealEntryQuantityInput = Schema.Union([
+  Schema.TaggedStruct("MeasuredFoodQuantity", {
+    amount: _FormPositiveNumber,
+    unit: MeasurementUnit,
+  }),
+  Schema.TaggedStruct("PortionFoodQuantity", {
+    count: _FormPositiveNumber,
+    portionId: FoodPortionId,
+  }),
+]);
+
+export type MealEntryQuantityInput = typeof MealEntryQuantityInput.Encoded;
+
 const _CreateMealEntryInputSchema = Schema.Struct({
   dateKey: DateKey,
   mealId: MealId,
   foodId: FoodId,
-  quantityGrams: _FormPositiveNumber,
+  quantity: MealEntryQuantityInput,
 });
 
 const _ListMealEntriesForDayInput = Schema.Struct({
@@ -32,7 +56,7 @@ const _ListMealEntriesForDayInput = Schema.Struct({
 
 const _ReviseMealEntryInput = Schema.Struct({
   mealEntryId: MealEntryId,
-  quantityGrams: _FormPositiveNumber,
+  quantity: MealEntryQuantityInput,
 });
 
 const _DeleteMealEntryInput = Schema.Struct({
@@ -44,12 +68,7 @@ const _mealEntryCreatedAtOrder = Order.mapInput(
   (mealEntry: MealEntry) => mealEntry.createdAt.epochMilliseconds
 );
 
-export type CreateMealEntryInput = {
-  readonly dateKey: string;
-  readonly mealId: string;
-  readonly foodId: string;
-  readonly quantityGrams: string;
-};
+export type CreateMealEntryInput = typeof _CreateMealEntryInputSchema.Encoded;
 
 export type DeleteMealEntryInput = typeof _DeleteMealEntryInput.Encoded;
 
@@ -60,9 +79,10 @@ export type ReviseMealEntryInput = typeof _ReviseMealEntryInput.Encoded;
 
 export type MealFoodUsage = {
   readonly foodId: FoodId;
-  readonly latestQuantityGrams: MealEntry["quantityGrams"];
+  readonly latestQuantity: MealEntry["quantity"];
   readonly latestUsedAt: MealEntry["createdAt"];
   readonly meals: readonly {
+    readonly latestQuantity: MealEntry["quantity"];
     readonly latestUsedAt: MealEntry["createdAt"];
     readonly mealId: MealEntry["mealId"];
   }[];
@@ -78,6 +98,13 @@ export class DeletedMealEntry extends Data.TaggedClass("DeletedMealEntry")<{
 
 export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
   readonly foodId: FoodId;
+}> {}
+
+export class FoodPortionNotFound extends Data.TaggedError(
+  "FoodPortionNotFound"
+)<{
+  readonly foodId: FoodId;
+  readonly portionId: FoodPortionId;
 }> {}
 
 export class MealEntryNotFound extends Data.TaggedError("MealEntryNotFound")<{
@@ -128,10 +155,11 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                 ...foodUsage,
                 {
                   foodId: mealEntry.foodId,
-                  latestQuantityGrams: mealEntry.quantityGrams,
+                  latestQuantity: mealEntry.quantity,
                   latestUsedAt: mealEntry.createdAt,
                   meals: [
                     {
+                      latestQuantity: mealEntry.quantity,
                       latestUsedAt: mealEntry.createdAt,
                       mealId: mealEntry.mealId,
                     },
@@ -144,7 +172,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               mealEntry.createdAt.epochMilliseconds >=
               existingFoodUsage.latestUsedAt.epochMilliseconds
                 ? {
-                    latestQuantityGrams: mealEntry.quantityGrams,
+                    latestQuantity: mealEntry.quantity,
                     latestUsedAt: mealEntry.createdAt,
                   }
                 : {};
@@ -156,6 +184,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                 ? [
                     ...existingFoodUsage.meals,
                     {
+                      latestQuantity: mealEntry.quantity,
                       latestUsedAt: mealEntry.createdAt,
                       mealId: mealEntry.mealId,
                     },
@@ -165,6 +194,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                     mealEntry.createdAt.epochMilliseconds >=
                       usage.latestUsedAt.epochMilliseconds
                       ? {
+                          latestQuantity: mealEntry.quantity,
                           latestUsedAt: mealEntry.createdAt,
                           mealId: mealEntry.mealId,
                         }
@@ -202,7 +232,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               new FoodNotFound({
                 foodId: decodedInput.foodId,
               }),
-            onSome: () =>
+            onSome: (food) =>
               Effect.gen(function* () {
                 const dailyLogs = yield* store.findDailyLogByDateKey(
                   decodedInput.dateKey
@@ -235,13 +265,23 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   });
                 }
 
+                const quantity = yield* _loggedQuantityFromInput({
+                  food,
+                  input: decodedInput.quantity,
+                });
+                const nutritionMultiplier =
+                  yield* Measurements.nutritionMultiplierFromQuantity({
+                    food,
+                    quantity,
+                  });
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
                 const mealEntry = yield* Schema.decodeEffect(MealEntry)({
                   id: yield* crypto.randomUUIDv4,
                   dateKey: decodedInput.dateKey,
                   mealId: decodedInput.mealId,
                   foodId: decodedInput.foodId,
-                  quantityGrams: decodedInput.quantityGrams,
+                  quantity,
+                  nutritionMultiplier,
                   createdAt: now,
                   updatedAt: now,
                 });
@@ -276,11 +316,33 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               }),
             onSome: (previousMealEntry) =>
               Effect.gen(function* () {
+                const foods = yield* store.findFoodById(
+                  previousMealEntry.foodId
+                );
+                const food = yield* Array.head(foods).pipe(
+                  Option.match({
+                    onNone: () =>
+                      new FoodNotFound({
+                        foodId: previousMealEntry.foodId,
+                      }),
+                    onSome: Effect.succeed,
+                  })
+                );
+                const quantity = yield* _loggedQuantityFromInput({
+                  food,
+                  input: decodedInput.quantity,
+                });
+                const nutritionMultiplier =
+                  yield* Measurements.nutritionMultiplierFromQuantity({
+                    food,
+                    quantity,
+                  });
                 const encodedPreviousMealEntry =
                   yield* Schema.encodeEffect(MealEntry)(previousMealEntry);
                 const mealEntry = yield* Schema.decodeEffect(MealEntry)({
                   ...encodedPreviousMealEntry,
-                  quantityGrams: decodedInput.quantityGrams,
+                  quantity,
+                  nutritionMultiplier,
                   updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
                 });
 
@@ -329,3 +391,36 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
 }) {
   static readonly layer = Layer.effect(this)(this.make);
 }
+
+const _loggedQuantityFromInput = Effect.fn(
+  "MealEntries.loggedQuantityFromInput"
+)(function* ({
+  food,
+  input,
+}: {
+  readonly food: Food;
+  readonly input: typeof MealEntryQuantityInput.Type;
+}) {
+  if (input._tag === "MeasuredFoodQuantity") {
+    return yield* Schema.decodeEffect(LoggedFoodQuantity)(input);
+  }
+
+  const portion = food.portions.find(
+    (candidate) => candidate.id === input.portionId
+  );
+
+  if (portion === undefined) {
+    return yield* new FoodPortionNotFound({
+      foodId: food.id,
+      portionId: input.portionId,
+    });
+  }
+
+  return yield* Schema.decodeEffect(LoggedFoodQuantity)({
+    _tag: "PortionFoodQuantity",
+    count: input.count,
+    portionId: portion.id,
+    portionName: portion.name,
+    portionSize: portion.size,
+  });
+});
