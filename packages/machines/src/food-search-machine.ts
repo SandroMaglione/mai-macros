@@ -26,6 +26,8 @@ export type FoodSearchSelectedEvent = {
   readonly selection: "explicit" | "firstMatching";
 };
 
+export type FoodNameGroupLabel = "Newest" | "Older";
+
 export type FoodSearchMacroOrder =
   | "carbs"
   | "calorieDensityHigh"
@@ -190,7 +192,35 @@ export function sortFoodsByOriginAndName({
 }: {
   readonly foods: readonly Domain.Food[];
 }) {
-  return Array.sort(foods, foodOriginThenNameOrder);
+  return [...foods].sort((left, right) => {
+    if (_foodsShareNameGroup({ left, right })) {
+      return _compareFoodsNewestFirst({ left, right });
+    }
+
+    return foodOriginThenNameOrder(left, right);
+  });
+}
+
+export function getFoodNameGroupLabel({
+  food,
+  foods,
+}: {
+  readonly food: Domain.Food;
+  readonly foods: readonly Domain.Food[];
+}): FoodNameGroupLabel | null {
+  const group = foods.filter((candidate) =>
+    _foodsShareNameGroup({ left: candidate, right: food })
+  );
+
+  if (group.length <= 1) {
+    return null;
+  }
+
+  const newestFood = [...group].sort((left, right) =>
+    _compareFoodsNewestFirst({ left, right })
+  )[0];
+
+  return newestFood?.id === food.id ? "Newest" : "Older";
 }
 
 export function sortFoodsByMacroOrder({
@@ -207,7 +237,7 @@ export function sortFoodsByMacroOrder({
       : Order.flip(Order.Number);
 
   return macroOrder === null
-    ? foods
+    ? sortFoodsByOriginAndName({ foods })
     : Array.sort(
         foods,
         Order.combineAll([
@@ -223,6 +253,40 @@ export function sortFoodsByMacroOrder({
           foodLowercaseNameOrder,
         ])
       );
+}
+
+function _foodsShareNameGroup({
+  left,
+  right,
+}: {
+  readonly left: Domain.Food;
+  readonly right: Domain.Food;
+}) {
+  return (
+    _normalizeFoodNameGroupValue(left.name) ===
+      _normalizeFoodNameGroupValue(right.name) &&
+    _normalizeFoodNameGroupValue(left.brand ?? "") ===
+      _normalizeFoodNameGroupValue(right.brand ?? "")
+  );
+}
+
+function _normalizeFoodNameGroupValue(value: string) {
+  return value.trim().normalize("NFKC").toLocaleLowerCase();
+}
+
+function _compareFoodsNewestFirst({
+  left,
+  right,
+}: {
+  readonly left: Domain.Food;
+  readonly right: Domain.Food;
+}) {
+  const createdAtDifference =
+    right.createdAt.epochMilliseconds - left.createdAt.epochMilliseconds;
+
+  return createdAtDifference === 0
+    ? right.id.localeCompare(left.id)
+    : createdAtDifference;
 }
 
 const _foodSearchContextFromInput = ({

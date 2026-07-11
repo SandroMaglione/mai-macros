@@ -333,6 +333,7 @@ function _dailyLogsTestLayer({
 }) {
   let currentStores = stores;
   const storeLayer = Layer.succeed(Store.NutritionStore, {
+    applyFoodEdit: () => Effect.void,
     countMealEntriesByDate: (dateKey) =>
       Effect.sync(
         () =>

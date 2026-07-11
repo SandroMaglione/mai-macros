@@ -1,99 +1,27 @@
 import {
   AppHeader,
   AppScreen,
-  BottomActionBar,
   Button,
-  DisclosureCard,
-  Field,
   IconButton,
   LoadingView,
   MaiHeader,
   Notice,
-  NumberField,
-  SectionCard,
 } from "@/components/ui";
-import {
-  FoodNutrientOverview,
-  FoodSearchField,
-  FoodSearchResults,
-  MeasurementUnitSelect,
-} from "@/components/nutrition";
+import { FoodSearchField, FoodSearchResults } from "@/components/nutrition";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import {
-  foodNutrientOverviewFromFormValues,
-  foodNutrientOverviewPrimaryLabel,
-  formatNumber,
-} from "@/lib/format";
-import { measurementUnitFromValue } from "@/lib/food-measurements";
+import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent, FoodFormMachine, FoodSearchMachine } from "@mai/machines";
+import { color, spacing } from "@/theme/tokens";
+import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
-import { useMachine, useSelector } from "@xstate/react";
-import { Array, Effect, Match, Option, Schema } from "effect";
+import { useMachine } from "@xstate/react";
+import { Effect, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
-import {
-  ChevronLeft,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Save,
-  Scale,
-  Trash2,
-} from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { ChevronLeft, RotateCcw } from "lucide-react-native";
+import { StyleSheet, View } from "react-native";
 import { Actor, createAsyncLogic, setup } from "xstate";
 
-type EditFoodsLayout = "screen" | "embedded";
-
-const FoodFormInputFields = {
-  name: Schema.String,
-  brand: Schema.optionalKey(Schema.String),
-  energyKcal: Schema.String,
-  proteinGrams: Schema.String,
-  carbsGrams: Schema.String,
-  fatGrams: Schema.String,
-  fiberGrams: Schema.optionalKey(Schema.String),
-  sugarGrams: Schema.optionalKey(Schema.String),
-  saturatedFatGrams: Schema.optionalKey(Schema.String),
-  saltGrams: Schema.optionalKey(Schema.String),
-  nutritionReference: Schema.optionalKey(
-    Schema.Struct({
-      amount: Schema.String,
-      unit: Domain.MeasurementUnit,
-    })
-  ),
-  portions: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.optionalKey(Schema.String),
-        name: Schema.String,
-        size: Schema.Struct({
-          amount: Schema.String,
-          unit: Domain.MeasurementUnit,
-        }),
-      })
-    )
-  ),
-  massVolumeConversion: Schema.optionalKey(
-    Schema.Struct({
-      mass: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MassUnit,
-      }),
-      volume: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.VolumeUnit,
-      }),
-    })
-  ),
-};
-
-const ReviseFoodInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  ...FoodFormInputFields,
-});
+type ManageFoodsLayout = "screen" | "embedded";
 
 const MealFoodUsage = Schema.Struct({
   foodId: Domain.FoodId,
@@ -108,36 +36,13 @@ const MealFoodUsage = Schema.Struct({
   ),
 });
 
-const FoodLibraryData = Schema.Struct({
-  foods: Schema.Array(Domain.Food),
-  foodUsage: Schema.Array(MealFoodUsage),
-});
-
-type FoodLibraryData = typeof FoodLibraryData.Type;
-
-const EditFoodsRouteData = Schema.Struct({
+const ManageFoodsData = Schema.Struct({
   dateKey: Schema.UndefinedOr(Domain.DateKey),
   foods: Schema.Array(Domain.Food),
   foodUsage: Schema.Array(MealFoodUsage),
 });
 
-type EditFoodsRouteData = typeof EditFoodsRouteData.Type;
-
-const EditFoodsRouteLoaderInput = Schema.Struct({
-  dateKey: Schema.UndefinedOr(Domain.DateKey),
-});
-
-const EditFoodsRouteLoaderContext = Schema.Struct({
-  dateKey: Schema.UndefinedOr(Domain.DateKey),
-});
-
-const EditFoodsRouteLoaderFailureContext = Schema.Struct({
-  message: Schema.String,
-});
-
-const EditFoodsRouteLoaderReadyContext = Schema.Struct({
-  data: EditFoodsRouteData,
-});
+type ManageFoodsData = typeof ManageFoodsData.Type;
 
 const FoodSearchActorSchema =
   Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
@@ -147,382 +52,166 @@ const FoodSearchActorSchema =
     { expected: "FoodSearchActor" }
   );
 
-type FoodNutrientField = {
-  readonly accentColor: string;
-  readonly label: string;
-  readonly name: FoodFormMachine.FoodNutrientFieldName;
-  readonly placeholder: string;
-  readonly unit: "g" | "kcal";
-};
-
-const nutritionFields: readonly FoodNutrientField[] = [
-  {
-    accentColor: color.nutritionEnergy,
-    label: "Calories",
-    name: "energyKcal",
-    placeholder: "62",
-    unit: "kcal",
-  },
-  {
-    accentColor: color.nutritionFat,
-    label: "Fat",
-    name: "fatGrams",
-    placeholder: "0.4",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionFat,
-    label: "Saturated fat",
-    name: "saturatedFatGrams",
-    placeholder: "0.1",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionCarbs,
-    label: "Carbs",
-    name: "carbsGrams",
-    placeholder: "3.6",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionCarbs,
-    label: "Sugar",
-    name: "sugarGrams",
-    placeholder: "3.2",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionCarbs,
-    label: "Fiber",
-    name: "fiberGrams",
-    placeholder: "0",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionEnergy,
-    label: "Protein",
-    name: "proteinGrams",
-    placeholder: "10",
-    unit: "g",
-  },
-  {
-    accentColor: color.nutritionSalt,
-    label: "Salt",
-    name: "saltGrams",
-    placeholder: "0.1",
-    unit: "g",
-  },
-];
-
-const editFoodsRouteMachine = setup({
+const manageFoodsMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(
       Schema.Struct({
         dateKey: Schema.UndefinedOr(Domain.DateKey),
-        foods: Schema.Array(Domain.Food),
         foodSearchActor: FoodSearchActorSchema,
         foodUsage: Schema.Array(MealFoodUsage),
-        notice: Schema.NullOr(Schema.String),
-        selectedFood: Schema.NullOr(Domain.Food),
       })
     ),
     events: {
-      clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
-      clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
       foodSearchSelected: Schema.toStandardSchemaV1(
         Schema.Struct({
           food: Schema.NullOr(Domain.Food),
           selection: Schema.Literals(["explicit", "firstMatching"]),
         })
       ),
-      reviseFood: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          input: ReviseFoodInput,
-        })
-      ),
     },
-    input: Schema.toStandardSchemaV1(EditFoodsRouteData),
-  },
-  states: {
-    Idle: {},
-    RevisingFood: {},
+    input: Schema.toStandardSchemaV1(ManageFoodsData),
   },
   actorSources: {
     foodSearch: FoodSearchMachine.foodSearchMachine,
-    reviseFood: createAsyncLogic({
+  },
+  actions: {
+    openFood: ({
+      dateKey,
+      foodId,
+    }: {
+      readonly dateKey: Domain.DateKey | undefined;
+      readonly foodId: Domain.FoodId;
+    }) => {
+      router.push({
+        pathname: "/foods/[id]",
+        params: {
+          id: foodId,
+          ...(dateKey === undefined ? {} : { dateKey }),
+        },
+      });
+    },
+  },
+}).createMachine({
+  context: ({ actorSources, input, spawn }) => ({
+    dateKey: input.dateKey,
+    foodSearchActor: spawn(actorSources.foodSearch, {
+      id: "manageFoodsSearch",
+      input: { foods: input.foods },
+    }),
+    foodUsage: input.foodUsage,
+  }),
+  initial: "Ready",
+  states: {
+    Ready: {
+      on: {
+        foodSearchSelected: ({ actions, context, event }, enq) => {
+          if (event.food === null) {
+            return;
+          }
+
+          enq(actions.openFood, {
+            dateKey: context.dateKey,
+            foodId: event.food.id,
+          });
+          enq.sendTo(context.foodSearchActor, {
+            type: "clearSelectedFood",
+          } satisfies FoodSearchMachine.FoodSearchEvent);
+        },
+      },
+    },
+  },
+});
+
+const ManageFoodsLoaderInput = Schema.Struct({
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
+});
+
+const manageFoodsLoaderMachine = setup({
+  schemas: {
+    context: Schema.toStandardSchemaV1(
+      Schema.Struct({ dateKey: Schema.UndefinedOr(Domain.DateKey) })
+    ),
+    events: {
+      retry: Schema.toStandardSchemaV1(EmptyEvent),
+    },
+    input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
+  },
+  actorSources: {
+    load: createAsyncLogic({
       schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            input: ReviseFoodInput,
-          })
-        ),
+        input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
+        output: Schema.toStandardSchemaV1(ManageFoodsData),
       },
       run: ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const foods = yield* Foods.Foods;
-
-            yield* foods.revise({
-              input: input.input,
-            });
-
-            return {
-              _tag: "Revised" as const,
-              data: yield* _loadFoodLibraryData(),
-            };
-          }).pipe(
-            Effect.catchTag("FoodNotFound", () =>
-              _loadFoodLibraryData().pipe(
-                Effect.map((data) => ({
-                  _tag: "FoodNotFound" as const,
-                  data,
-                }))
-              )
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
-    dateKey: input.dateKey,
-    foods: input.foods,
-    foodSearchActor: spawn(actorSources.foodSearch, {
-      id: "editFoodsRouteFoodSearch",
-      input: {
-        foods: input.foods,
-      },
-    }),
-    foodUsage: input.foodUsage,
-    notice: null,
-    selectedFood: null,
-  }),
-  initial: "Idle",
-  on: {
-    clearNotice: () => ({
-      context: {
-        notice: null,
-      },
-    }),
-    clearSelectedFood: ({ context }, enq) => {
-      enq.sendTo(context.foodSearchActor, {
-        type: "clearSelectedFood",
-      } satisfies FoodSearchMachine.FoodSearchEvent);
-
-      return {
-        context: {
-          selectedFood: null,
-        },
-      };
-    },
-    foodSearchSelected: ({ event }) => ({
-      context: {
-        notice: null,
-        selectedFood: event.food,
-      },
-    }),
-  },
-  states: {
-    Idle: {
-      on: {
-        reviseFood: {
-          target: "RevisingFood",
-        },
-      },
-    },
-    RevisingFood: {
-      invoke: {
-        src: "reviseFood",
-        input: ({ event }) => {
-          if (event.type !== "reviseFood") {
-            throw new Error("Expected food revision input.");
-          }
-
-          return {
-            input: event.input,
-          };
-        },
-        onDone: ({ context, event }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              FoodNotFound: ({ data }) => {
-                enq.sendTo(context.foodSearchActor, {
-                  type: "reset",
-                  foods: data.foods,
-                  query: "",
-                  selectedFoodId: null,
-                } satisfies FoodSearchMachine.FoodSearchEvent);
-
-                return {
-                  target: "Idle" as const,
-                  context: {
-                    foods: data.foods,
-                    foodUsage: data.foodUsage,
-                    notice:
-                      "Could not find that food. Pick another food and try again.",
-                    selectedFood: null,
-                  },
-                };
-              },
-              Revised: ({ data }) => {
-                enq.sendTo(context.foodSearchActor, {
-                  type: "reset",
-                  foods: data.foods,
-                  query: "",
-                  selectedFoodId: null,
-                } satisfies FoodSearchMachine.FoodSearchEvent);
-
-                return {
-                  target: "Idle" as const,
-                  context: {
-                    foods: data.foods,
-                    foodUsage: data.foodUsage,
-                    notice: "Food saved.",
-                    selectedFood: null,
-                  },
-                };
-              },
-              SchemaError: () => ({
-                target: "Idle" as const,
-                context: {
-                  notice:
-                    "Check that the name is filled and every nutrient is a non-negative number.",
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Idle",
-          context: {
-            notice: "Could not update the food. Try again.",
-          },
-        },
-      },
-    },
-  },
-});
-
-const EditFoodsSearchParams = Schema.Struct({
-  dateKey: Schema.optionalKey(Domain.DateKey),
-});
-
-const editFoodsRouteLoaderMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderContext),
-    events: {
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(EditFoodsRouteLoaderInput),
-  },
-  states: {
-    Loading: {},
-    Failed: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderFailureContext),
-      },
-    },
-    Ready: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(EditFoodsRouteLoaderReadyContext),
-      },
-    },
-    Redirected: {},
-  },
-  actorSources: {
-    loadRouteData: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(EditFoodsRouteLoaderInput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const data = yield* _loadFoodLibraryData();
+            const mealEntries = yield* MealEntries.MealEntries;
 
             return {
               dateKey: input.dateKey,
-              ...data,
+              foods: [...(yield* foods.list())],
+              foodUsage: yield* mealEntries.listFoodUsage(),
             };
           })
         ),
     }),
   },
 }).createMachine({
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-  }),
+  context: ({ input }) => ({ dateKey: input.dateKey }),
   initial: "Loading",
   states: {
     Loading: {
       invoke: {
-        src: "loadRouteData",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-        }),
+        src: "load",
+        input: ({ context }) => ({ dateKey: context.dateKey }),
         onDone: ({ event }) => ({
           target: "Ready",
-          context: {
-            data: event.output,
-          },
+          context: { data: event.output },
         }),
         onError: {
           target: "Failed",
-          context: {
-            message: "Could not load foods. Please try again.",
-          },
+          context: { message: "Could not load foods. Please try again." },
         },
       },
     },
     Failed: {
-      on: {
-        retry: {
-          target: "Loading",
-        },
-      },
+      on: { retry: { target: "Loading" } },
     },
     Ready: {},
-    Redirected: {},
   },
 });
 
-export default function EditFoodsRoute() {
-  const search = useSchemaLocalSearchParams(EditFoodsSearchParams);
+const ManageFoodsSearchParams = Schema.Struct({
+  dateKey: Schema.optionalKey(Domain.DateKey),
+});
 
-  if (Option.isNone(search)) {
-    return <Redirect href="/" />;
-  }
+export default function ManageFoodsRoute() {
+  const search = useSchemaLocalSearchParams(ManageFoodsSearchParams);
 
-  return (
-    <EditFoodsPanelLoader dateKey={search.value.dateKey} layout="screen" />
+  return Option.isNone(search) ? (
+    <Redirect href="/" />
+  ) : (
+    <ManageFoodsPanelLoader dateKey={search.value.dateKey} layout="screen" />
   );
 }
 
-export function EditFoodsPanelLoader({
+export function ManageFoodsPanelLoader({
   dateKey,
   layout,
 }: {
   readonly dateKey: Domain.DateKey | undefined;
-  readonly layout: EditFoodsLayout;
+  readonly layout: ManageFoodsLayout;
 }) {
-  const [snapshot, , actor] = useMachine(editFoodsRouteLoaderMachine, {
-    input: {
-      dateKey,
-    },
+  const [snapshot, , actor] = useMachine(manageFoodsLoaderMachine, {
+    input: { dateKey },
   });
 
-  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
-    const loading = (
+  if (snapshot.matches("Loading")) {
+    return layout === "embedded" ? (
       <View style={styles.centered}>
         <LoadingView message="Loading foods" />
       </View>
-    );
-
-    return layout === "embedded" ? (
-      loading
     ) : (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading foods" />
@@ -540,9 +229,7 @@ export function EditFoodsPanelLoader({
         />
         <Button
           icon={RotateCcw}
-          onPress={() => {
-            actor.trigger.retry();
-          }}
+          onPress={actor.trigger.retry}
           variant="secondary"
         >
           Try again
@@ -555,583 +242,71 @@ export function EditFoodsPanelLoader({
     ) : (
       <AppScreen contentStyle={styles.content}>
         <MaiHeader
-          action={<BackButton dateKey={undefined} />}
-          title="Edit foods"
+          action={<BackButton dateKey={dateKey} />}
+          title="Manage foods"
         />
         {failure}
       </AppScreen>
     );
   }
 
-  return <ReadyEditFoodsRoute data={snapshot.context.data} layout={layout} />;
+  return <ManageFoodsPanel data={snapshot.context.data} layout={layout} />;
 }
 
-function ReadyEditFoodsRoute({
+function ManageFoodsPanel({
   data,
   layout,
 }: {
-  readonly data: EditFoodsRouteData;
-  readonly layout: EditFoodsLayout;
+  readonly data: ManageFoodsData;
+  readonly layout: ManageFoodsLayout;
 }) {
-  const [snapshot, , actor] = useMachine(editFoodsRouteMachine, {
-    input: data,
-  });
-  const { dateKey, foodSearchActor, foodUsage, notice, selectedFood } =
-    snapshot.context;
-  const disabled = snapshot.value === "RevisingFood";
-  const selectedFoodUsage =
-    selectedFood === null
-      ? undefined
-      : _findFoodUsage({
-          foodId: selectedFood.id,
-          foodUsage,
-        });
-  const revisionMessage =
-    selectedFood === null
-      ? ""
-      : selectedFood.origin === "app-default"
-        ? "Saving creates your copy. The pre-installed food stays unchanged."
-        : selectedFoodUsage === undefined
-          ? "Saving replaces this unused food."
-          : "Saving creates a revised copy. Existing logs keep the original food.";
-  const submitLabel =
-    selectedFood !== null &&
-    (selectedFood.origin === "app-default" || selectedFoodUsage !== undefined)
-      ? "Save revised copy"
-      : "Save food";
-  const content = (
+  const [snapshot] = useMachine(manageFoodsMachine, { input: data });
+  const { foodSearchActor, foodUsage } = snapshot.context;
+  const body = (
     <>
       {layout === "screen" ? (
         <AppHeader
           embedded
-          leading={<BackButton dateKey={dateKey} />}
+          leading={<BackButton dateKey={data.dateKey} />}
           shadow
-          style={selectedFood === null ? styles.searchHeader : undefined}
-          title={selectedFood === null ? "Edit foods" : "Edit food"}
+          style={styles.searchHeader}
+          title="Manage foods"
         >
-          {selectedFood === null ? (
-            <FoodSearchField actor={foodSearchActor} disabled={disabled} />
-          ) : null}
+          <FoodSearchField actor={foodSearchActor} disabled={false} />
         </AppHeader>
-      ) : selectedFood === null ? (
-        <View style={styles.embeddedSearchHeader}>
-          <FoodSearchField actor={foodSearchActor} disabled={disabled} />
-        </View>
-      ) : null}
-
-      {notice === null ? null : (
-        <Notice
-          message={notice}
-          tone={notice === "Food saved." ? "success" : "danger"}
-          style={[
-            styles.notice,
-            layout === "embedded" ? styles.embeddedNotice : null,
-          ]}
-        />
-      )}
-
-      {selectedFood === null ? (
-        <View
-          style={
-            layout === "embedded"
-              ? styles.embeddedSearchBody
-              : styles.searchBody
-          }
-        >
-          <FoodSearchResults
-            actor={foodSearchActor}
-            disabled={disabled}
-            emptyFoodsText="Create a food before editing it."
-            emptySearchText="No foods found."
-            getPrimaryLabel={(food) =>
-              `${formatNumber({
-                maximumFractionDigits: 0,
-                value: food.energyKcal,
-              })} kcal`
-            }
-            getSecondaryLabel={(food) =>
-              _findFoodUsage({
-                foodId: food.id,
-                foodUsage,
-              }) === undefined
-                ? "Unused"
-                : "Used"
-            }
-          />
-        </View>
       ) : (
-        <FoodEditForm
-          disabled={disabled}
-          layout={layout}
-          onChangeFood={actor.trigger.clearSelectedFood}
-          onReviseFood={actor.trigger.reviseFood}
-          revisionMessage={revisionMessage}
-          selectedFood={selectedFood}
-          submitLabel={submitLabel}
-        />
+        <View style={styles.embeddedSearchHeader}>
+          <FoodSearchField actor={foodSearchActor} disabled={false} />
+        </View>
       )}
+      <View
+        style={layout === "embedded" ? styles.embeddedBody : styles.searchBody}
+      >
+        <FoodSearchResults
+          actor={foodSearchActor}
+          disabled={false}
+          emptyFoodsText="Create a food before managing it."
+          emptySearchText="No foods found."
+          getPrimaryLabel={(food) =>
+            `${formatNumber({
+              maximumFractionDigits: 0,
+              value: food.energyKcal,
+            })} kcal`
+          }
+          getSecondaryLabel={(food) =>
+            foodUsage.some((usage) => usage.foodId === food.id)
+              ? "Used"
+              : "Unused"
+          }
+        />
+      </View>
     </>
   );
 
-  if (layout === "embedded") {
-    return <View style={styles.embeddedRoot}>{content}</View>;
-  }
-
-  return (
-    <AppScreen
-      contentStyle={styles.content}
-      safeAreaEdges={selectedFood === null ? ["top", "bottom"] : ["top"]}
-    >
-      {content}
-    </AppScreen>
-  );
-}
-
-function FoodEditForm({
-  disabled,
-  layout,
-  onChangeFood,
-  onReviseFood,
-  revisionMessage,
-  selectedFood,
-  submitLabel,
-}: {
-  readonly disabled: boolean;
-  readonly layout: EditFoodsLayout;
-  readonly onChangeFood: () => void;
-  readonly onReviseFood: (params: {
-    readonly input: typeof ReviseFoodInput.Type;
-  }) => void;
-  readonly revisionMessage: string;
-  readonly selectedFood: Domain.Food;
-  readonly submitLabel: string;
-}) {
-  const [snapshot, , formActor] = useMachine(FoodFormMachine.foodFormMachine, {
-    input: {
-      initialFood: selectedFood,
-      syncQuickInputFromFields: false,
-    },
-  });
-  const { formValues, numberWarnings } = snapshot.context;
-  const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
-    portions: snapshot.context.portions,
-  });
-  const changeFoodButton = (
-    <Button
-      disabled={disabled}
-      icon={Pencil}
-      onPress={() => {
-        onChangeFood();
-      }}
-      style={styles.footerButton}
-      variant="secondary"
-    >
-      Change food
-    </Button>
-  );
-  const saveFoodButton = (
-    <Button
-      disabled={disabled || !portionsAreValid}
-      icon={Save}
-      loading={disabled}
-      onPress={() => {
-        onReviseFood({
-          input: {
-            ...FoodFormMachine.createFoodInputFromFormValues({
-              formValues,
-              portions: snapshot.context.portions,
-            }),
-            foodId: selectedFood.id,
-          },
-        });
-      }}
-      style={styles.footerButton}
-    >
-      {submitLabel}
-    </Button>
-  );
-
-  return (
-    <View
-      style={
-        layout === "embedded" ? styles.embeddedFormLayout : styles.formLayout
-      }
-    >
-      {layout === "embedded" ? (
-        <View style={styles.stickyAction}>{changeFoodButton}</View>
-      ) : null}
-
-      <KeyboardAwareScrollView
-        alwaysBounceVertical={false}
-        bottomOffset={spacing.lg}
-        contentContainerStyle={styles.formContent}
-        keyboardShouldPersistTaps="handled"
-        style={styles.formScroll}
-      >
-        <Notice message={revisionMessage} tone="neutral" />
-        <FoodFormFields
-          actor={formActor}
-          disabled={disabled}
-          portions={snapshot.context.portions}
-          selectedFood={selectedFood}
-          values={formValues}
-        />
-        <View style={styles.reviewSection}>
-          <View style={styles.reviewDivider} />
-          <FoodNutrientOverview
-            brand={_optionalTrimmedText(formValues.brand)}
-            name={_optionalTrimmedText(formValues.name) ?? selectedFood.name}
-            nutrients={foodNutrientOverviewFromFormValues({
-              values: formValues,
-            })}
-            primaryLabel={foodNutrientOverviewPrimaryLabel({
-              values: formValues,
-            })}
-            secondaryLabel={`per ${formValues.nutritionReferenceAmount || "…"} ${formValues.nutritionReferenceUnit}`}
-          />
-        </View>
-        <FoodNumberWarnings warnings={numberWarnings} />
-        {layout === "embedded" ? (
-          <View style={styles.inlineActions}>{saveFoodButton}</View>
-        ) : null}
-      </KeyboardAwareScrollView>
-
-      {layout === "screen" ? (
-        <BottomActionBar>
-          {changeFoodButton}
-          {saveFoodButton}
-        </BottomActionBar>
-      ) : null}
-    </View>
-  );
-}
-
-function FoodFormFields({
-  actor,
-  disabled,
-  portions,
-  selectedFood,
-  values,
-}: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
-  readonly disabled: boolean;
-  readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
-  readonly selectedFood: Domain.Food;
-  readonly values: FoodFormMachine.FoodFormValues;
-}) {
-  const portionErrors = FoodFormMachine.foodPortionFormErrorsFromValues({
-    portions,
-  });
-  const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
-    portions,
-  });
-
-  return (
-    <View style={styles.formSections}>
-      <SectionCard style={styles.card}>
-        <View style={styles.fieldGroup}>
-          <Field
-            autoCapitalize="words"
-            autoCorrect={false}
-            editable={!disabled}
-            label="Name"
-            onChangeText={(value) => {
-              actor.send({
-                type: "changeFormValue",
-                name: "name",
-                value,
-              });
-            }}
-            placeholder="Greek yogurt"
-            returnKeyType="next"
-            value={values.name}
-          />
-          <Field
-            autoCapitalize="words"
-            autoCorrect={false}
-            editable={!disabled}
-            label="Brand"
-            onChangeText={(value) => {
-              actor.send({
-                type: "changeFormValue",
-                name: "brand",
-                value,
-              });
-            }}
-            placeholder="Mai"
-            returnKeyType="next"
-            value={values.brand}
-          />
-        </View>
-      </SectionCard>
-
-      <SectionCard style={styles.card}>
-        <View style={styles.fieldGroup}>
-          <NumberField
-            editable={!disabled}
-            label="Nutrition values per"
-            onChangeText={(value) => {
-              _sendFoodFormValueChange({
-                actor,
-                name: "nutritionReferenceAmount",
-                value,
-              });
-            }}
-            placeholder="100"
-            rightElement={
-              <MeasurementUnitSelect
-                disabled={disabled}
-                onSelect={(unit) => {
-                  _sendFoodFormValueChange({
-                    actor,
-                    name: "nutritionReferenceUnit",
-                    value: unit,
-                  });
-                }}
-                selectedUnit={measurementUnitFromValue({
-                  fallback: "g",
-                  value: values.nutritionReferenceUnit,
-                })}
-                title="Nutrition reference unit"
-                units={["g", "kg", "oz", "lb", "ml", "l"]}
-              />
-            }
-            value={values.nutritionReferenceAmount}
-          />
-          {nutritionFields.map((field) => (
-            <FoodNutrientInput
-              actor={actor}
-              disabled={disabled}
-              field={field}
-              key={field.name}
-              selectedFood={selectedFood}
-              value={values[field.name]}
-            />
-          ))}
-        </View>
-      </SectionCard>
-
-      <SectionCard
-        style={styles.card}
-        subtitle="Define any name you use for this food and the physical amount that one portion represents."
-        title="Custom portions"
-      >
-        <View style={styles.fieldGroup}>
-          {portions.map((portion, index) => (
-            <View key={portion.id ?? `new-${index}`} style={styles.portionCard}>
-              <Field
-                editable={!disabled}
-                error={portionErrors[index]?.name}
-                label="Portion name"
-                onChangeText={(value) => {
-                  actor.send({
-                    type: "changePortion",
-                    field: "name",
-                    index,
-                    value,
-                  });
-                }}
-                placeholder="X"
-                value={portion.name}
-              />
-              <NumberField
-                editable={!disabled}
-                error={portionErrors[index]?.amount}
-                label={`One ${portion.name.trim() || "portion"} equals`}
-                onChangeText={(value) => {
-                  actor.send({
-                    type: "changePortion",
-                    field: "amount",
-                    index,
-                    value,
-                  });
-                }}
-                placeholder="250"
-                rightElement={
-                  <MeasurementUnitSelect
-                    disabled={disabled}
-                    onSelect={(unit) => {
-                      actor.send({
-                        type: "changePortion",
-                        field: "unit",
-                        index,
-                        value: unit,
-                      });
-                    }}
-                    selectedUnit={portion.unit}
-                    title={`${portion.name.trim() || "Portion"} unit`}
-                    units={["g", "kg", "oz", "lb", "ml", "l"]}
-                  />
-                }
-                value={portion.amount}
-              />
-              <Button
-                disabled={disabled}
-                icon={Trash2}
-                onPress={() => {
-                  actor.send({ type: "removePortion", index });
-                }}
-                variant="ghost"
-              >
-                Remove portion
-              </Button>
-            </View>
-          ))}
-          <Button
-            disabled={disabled || !portionsAreValid}
-            icon={Plus}
-            onPress={() => {
-              actor.send({ type: "addPortion" });
-            }}
-            variant="secondary"
-          >
-            Add portion
-          </Button>
-        </View>
-      </SectionCard>
-
-      <DisclosureCard icon={Scale} title="Weight and volume conversion">
-        <View style={styles.disclosureContent}>
-          <Text style={styles.helperText}>
-            Optional. Add this when you want to enter the same food using both a
-            scale and a volume measure.
-          </Text>
-          <View style={styles.fieldGroup}>
-            <NumberField
-              editable={!disabled}
-              label="Mass amount"
-              onChangeText={(value) => {
-                _sendFoodFormValueChange({
-                  actor,
-                  name: "conversionMassAmount",
-                  value,
-                });
-              }}
-              placeholder="103"
-              rightElement={
-                <MeasurementUnitSelect
-                  disabled={disabled}
-                  onSelect={(unit) => {
-                    _sendFoodFormValueChange({
-                      actor,
-                      name: "conversionMassUnit",
-                      value: unit,
-                    });
-                  }}
-                  selectedUnit={measurementUnitFromValue({
-                    fallback: "g",
-                    value: values.conversionMassUnit,
-                  })}
-                  title="Mass unit"
-                  units={["g", "kg", "oz", "lb"]}
-                />
-              }
-              value={values.conversionMassAmount}
-            />
-            <NumberField
-              editable={!disabled}
-              label="Equivalent volume"
-              onChangeText={(value) => {
-                _sendFoodFormValueChange({
-                  actor,
-                  name: "conversionVolumeAmount",
-                  value,
-                });
-              }}
-              placeholder="100"
-              rightElement={
-                <MeasurementUnitSelect
-                  disabled={disabled}
-                  onSelect={(unit) => {
-                    _sendFoodFormValueChange({
-                      actor,
-                      name: "conversionVolumeUnit",
-                      value: unit,
-                    });
-                  }}
-                  selectedUnit={measurementUnitFromValue({
-                    fallback: "ml",
-                    value: values.conversionVolumeUnit,
-                  })}
-                  title="Volume unit"
-                  units={["ml", "l"]}
-                />
-              }
-              value={values.conversionVolumeAmount}
-            />
-          </View>
-        </View>
-      </DisclosureCard>
-    </View>
-  );
-}
-
-function FoodNutrientInput({
-  actor,
-  disabled,
-  field,
-  selectedFood,
-  value,
-}: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
-  readonly disabled: boolean;
-  readonly field: FoodNutrientField;
-  readonly selectedFood: Domain.Food;
-  readonly value: string;
-}) {
-  const fieldWarning = useSelector(actor, (snapshot) =>
-    snapshot.context.numberWarnings.find(
-      (warning) => warning.field === field.name
-    )
-  );
-
-  return (
-    <View style={styles.nutrientField}>
-      <Text style={[styles.nutrientLabel, { color: field.accentColor }]}>
-        {field.label}
-      </Text>
-      <NumberField
-        accessibilityLabel={`${selectedFood.name} ${field.label}`}
-        editable={!disabled}
-        error={fieldWarning?.message}
-        onChangeText={(nextValue) => {
-          actor.send({
-            type: "changeFormValue",
-            name: field.name,
-            value: nextValue,
-          });
-        }}
-        placeholder={field.placeholder}
-        rightElement={<Text style={styles.unitLabel}>{field.unit}</Text>}
-        value={value}
-      />
-    </View>
-  );
-}
-
-function FoodNumberWarnings({
-  warnings,
-}: {
-  readonly warnings: readonly FoodFormMachine.FoodNumberWarning[];
-}) {
-  const generalWarnings = warnings.filter(
-    (warning) => warning.field === undefined
-  );
-
-  if (!Array.isReadonlyArrayNonEmpty(generalWarnings)) {
-    return null;
-  }
-
-  return (
-    <View style={styles.warnings}>
-      {generalWarnings.map((warning) => (
-        <Notice
-          key={warning.message}
-          message={warning.message}
-          tone="warning"
-        />
-      ))}
-    </View>
+  return layout === "embedded" ? (
+    <View style={styles.embeddedRoot}>{body}</View>
+  ) : (
+    <AppScreen contentStyle={styles.content}>{body}</AppScreen>
   );
 }
 
@@ -1142,190 +317,52 @@ function BackButton({
 }) {
   return (
     <IconButton
-      accessibilityLabel={
-        dateKey === undefined ? "Back to home" : "Back to day"
-      }
+      accessibilityLabel="Back to day"
       icon={ChevronLeft}
       onPress={() => {
-        router.replace(
-          dateKey === undefined
-            ? "/"
-            : {
-                pathname: "/days/[dateKey]",
-                params: {
-                  dateKey,
-                },
-              }
-        );
+        if (dateKey === undefined) {
+          router.replace("/");
+        } else {
+          router.replace({
+            pathname: "/days/[dateKey]",
+            params: { dateKey },
+          });
+        }
       }}
       variant="ghost"
     />
   );
 }
 
-function _loadFoodLibraryData() {
-  return Effect.gen(function* () {
-    const foodsService = yield* Foods.Foods;
-    const mealEntriesService = yield* MealEntries.MealEntries;
-    const foods = FoodSearchMachine.sortFoodsByOriginAndName({
-      foods: yield* foodsService.list(),
-    });
-    const foodUsage = yield* mealEntriesService.listFoodUsage();
-
-    return {
-      foods,
-      foodUsage,
-    } satisfies FoodLibraryData;
-  });
-}
-
-function _findFoodUsage({
-  foodId,
-  foodUsage,
-}: {
-  readonly foodId: Domain.Food["id"];
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-}) {
-  return foodUsage.find((usage) => usage.foodId === foodId);
-}
-
-function _optionalTrimmedText(value: string) {
-  const trimmedValue = value.trim();
-
-  return trimmedValue === "" ? undefined : trimmedValue;
-}
-
-function _sendFoodFormValueChange({
-  actor,
-  name,
-  value,
-}: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
-  readonly name: keyof FoodFormMachine.FoodFormValues;
-  readonly value: string;
-}) {
-  actor.send({
-    type: "changeFormValue",
-    name,
-    value,
-  });
-}
-
 const styles = StyleSheet.create({
-  screen: {
+  centered: {
     flex: 1,
-    backgroundColor: color.bg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.lg,
+    padding: spacing.xl,
   },
   content: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 0,
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   searchHeader: {
-    marginBottom: 0,
-  },
-  embeddedRoot: {
-    flex: 1,
-  },
-  embeddedSearchHeader: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  notice: {
-    marginBottom: spacing.md,
-  },
-  embeddedNotice: {
-    marginHorizontal: spacing.lg,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    gap: spacing.lg,
+    marginHorizontal: 0,
   },
   searchBody: {
     flex: 1,
-    marginHorizontal: -spacing.lg,
-  },
-  embeddedSearchBody: {
-    flex: 1,
-  },
-  formLayout: {
-    flex: 1,
-    marginHorizontal: -spacing.lg,
-  },
-  embeddedFormLayout: {
-    flex: 1,
-  },
-  formScroll: {
-    flex: 1,
-  },
-  formContent: {
-    gap: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  formSections: {
-    gap: spacing.lg,
-  },
-  inlineActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  stickyAction: {
-    flexDirection: "row",
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  card: {
-    borderRadius: radius.md,
-    backgroundColor: color.surface,
-    ...shadow.card,
-  },
-  fieldGroup: {
-    gap: spacing.md,
-  },
-  disclosureContent: {
-    gap: spacing.xl,
-  },
-  nutrientField: {
-    gap: spacing.xs,
-  },
-  nutrientLabel: {
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  unitLabel: {
-    color: color.textMuted,
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xs,
-  },
-  helperText: {
-    color: color.textMuted,
-    fontSize: tokens.type.size.sm,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  portionCard: {
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: color.divider,
     paddingTop: spacing.md,
   },
-  warnings: {
-    gap: spacing.sm,
-  },
-  reviewSection: {
-    gap: spacing.xxl,
-    paddingTop: spacing.xl,
-  },
-  reviewDivider: {
-    height: 1,
-    backgroundColor: color.divider,
-  },
-  footerButton: {
+  embeddedRoot: {
     flex: 1,
+    backgroundColor: color.bg,
+  },
+  embeddedSearchHeader: {
+    paddingHorizontal: spacing.lg,
+  },
+  embeddedBody: {
+    flex: 1,
+    paddingTop: spacing.md,
   },
 });

@@ -12,7 +12,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "safe";
 
 export function Button({
   children,
@@ -67,6 +67,7 @@ const textColor: Record<ButtonVariant, string> = {
   danger: color.dangerText,
   ghost: color.textMuted,
   primary: color.white,
+  safe: color.safeText,
   secondary: color.text,
 };
 
@@ -105,6 +106,10 @@ const variantStyles = StyleSheet.create({
   primary: {
     borderColor: color.primary,
     backgroundColor: color.primary,
+  },
+  safe: {
+    borderColor: color.safeBorder,
+    backgroundColor: color.safeBg,
   },
   secondary: {
     borderColor: color.divider,

@@ -120,6 +120,7 @@ function BodyWeightsTestContext({
   const layer = BodyWeights.BodyWeights.layer.pipe(
     Layer.provide(
       Layer.succeed(Store.NutritionStore, {
+        applyFoodEdit: () => Effect.void,
         countMealEntriesByDate: () => Effect.succeed(0),
         countMealEntriesByFood: () => Effect.succeed(0),
         countMealEntriesByMealIds: () => Effect.succeed(0),

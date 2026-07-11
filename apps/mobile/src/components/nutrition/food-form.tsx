@@ -18,9 +18,10 @@ import {
 import { measurementUnitFromValue } from "@/lib/food-measurements";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { FoodFormMachine } from "@mai/machines";
-import type { FoodQuickInput } from "@mai/nutrition";
+import type { FoodQuickInput, Foods } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
 import { Array } from "effect";
+import type { ReactNode } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -116,9 +117,14 @@ export function FoodForm({
   disabled,
   feedback,
   hasFailed,
+  heading,
   actor,
   layout = "screen",
   onBack,
+  portionUsage = [],
+  showPortions = true,
+  submitLabel,
+  intro,
 }: {
   readonly action: "create" | "edit";
   readonly actor: FoodFormMachine.FoodFormActorRef;
@@ -129,8 +135,13 @@ export function FoodForm({
     readonly tone: "danger" | "neutral" | "success";
   };
   readonly hasFailed: boolean;
+  readonly heading?: string;
+  readonly intro?: ReactNode;
   readonly layout?: "screen" | "embedded";
   readonly onBack: () => void;
+  readonly portionUsage?: readonly Foods.FoodPortionUsage[];
+  readonly showPortions?: boolean;
+  readonly submitLabel?: string;
 }) {
   const snapshot = useSelector(
     actor,
@@ -147,8 +158,10 @@ export function FoodForm({
   const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
     portions,
   });
-  const title = isCreating ? "Create food" : "Edit food";
-  const submitText = hasFailed ? "Try again" : isCreating ? title : "Save food";
+  const title = heading ?? (isCreating ? "Create food" : "Edit food");
+  const submitText =
+    submitLabel ??
+    (hasFailed ? "Try again" : isCreating ? title : "Review changes");
   const SubmitIcon = hasFailed ? RotateCcw : isCreating ? Plus : Save;
   const form = (
     <View style={styles.form}>
@@ -160,10 +173,14 @@ export function FoodForm({
         />
       ) : null}
 
+      {intro}
+
       <FoodFormFields
         actor={actor}
         disabled={disabled}
         portions={portions}
+        portionUsage={portionUsage}
+        showPortions={showPortions}
         values={formValues}
       />
 
@@ -177,13 +194,6 @@ export function FoodForm({
       {isCreating ? (
         <FoodQuickInputFeedback parseResult={quickInputParseResult} />
       ) : null}
-
-      {isCreating ? null : (
-        <Notice
-          message="Saving replaces this food when it is unused. Existing logs stay on the original food and future logs use the revised copy."
-          tone="neutral"
-        />
-      )}
 
       {feedback === undefined ? null : (
         <Notice
@@ -231,6 +241,7 @@ export function FoodForm({
         safeAreaEdges={["top"]}
         scroll
         contentStyle={styles.content}
+        topSafeAreaColor={color.primary}
         scrollProps={{
           keyboardShouldPersistTaps: "handled",
         }}
@@ -289,11 +300,15 @@ function FoodFormFields({
   actor,
   disabled,
   portions,
+  portionUsage,
+  showPortions,
   values,
 }: {
   readonly actor: FoodFormMachine.FoodFormActorRef;
   readonly disabled: boolean;
   readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
+  readonly portionUsage: readonly Foods.FoodPortionUsage[];
+  readonly showPortions: boolean;
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
   const portionErrors = FoodFormMachine.foodPortionFormErrorsFromValues({
@@ -387,84 +402,112 @@ function FoodFormFields({
         </View>
       </SectionCard>
 
-      <SectionCard
-        style={styles.card}
-        subtitle="Define any name you use for this food and the physical amount that one portion represents."
-        title="Custom portions"
-      >
-        <View style={styles.fieldGroup}>
-          {portions.map((portion, index) => (
-            <View key={portion.id ?? `new-${index}`} style={styles.portionCard}>
-              <Field
-                editable={!disabled}
-                error={portionErrors[index]?.name}
-                label="Portion name"
-                onChangeText={(value) => {
-                  actor.send({
-                    type: "changePortion",
-                    field: "name",
-                    index,
-                    value,
-                  });
-                }}
-                placeholder="X"
-                value={portion.name}
-              />
-              <NumberField
-                editable={!disabled}
-                error={portionErrors[index]?.amount}
-                label={`One ${portion.name.trim() || "portion"} equals`}
-                onChangeText={(value) => {
-                  actor.send({
-                    type: "changePortion",
-                    field: "amount",
-                    index,
-                    value,
-                  });
-                }}
-                placeholder="250"
-                rightElement={
-                  <MeasurementUnitSelect
-                    disabled={disabled}
-                    onSelect={(unit) => {
+      {showPortions ? (
+        <SectionCard
+          style={styles.card}
+          subtitle="Define any name you use for this food and the physical amount that one portion represents."
+          title="Custom portions"
+        >
+          <View style={styles.fieldGroup}>
+            {portions.map((portion, index) => {
+              const usage =
+                portion.id === undefined
+                  ? undefined
+                  : portionUsage.find(
+                      (candidate) => candidate.portionId === portion.id
+                    );
+              const isUsed = (usage?.mealEntryCount ?? 0) > 0;
+
+              return (
+                <View
+                  key={portion.id ?? `new-${index}`}
+                  style={styles.portionCard}
+                >
+                  {isUsed ? (
+                    <Notice
+                      message={`Used in ${usage?.mealEntryCount ?? 0} meal ${usage?.mealEntryCount === 1 ? "entry" : "entries"}. This portion cannot be changed or removed.`}
+                      tone="neutral"
+                    />
+                  ) : portion.id === undefined ? null : (
+                    <Notice
+                      message="Never used. You can edit or remove this portion freely."
+                      tone="neutral"
+                    />
+                  )}
+                  <Field
+                    editable={!disabled && !isUsed}
+                    error={portionErrors[index]?.name}
+                    label="Portion name"
+                    onChangeText={(value) => {
                       actor.send({
                         type: "changePortion",
-                        field: "unit",
+                        field: "name",
                         index,
-                        value: unit,
+                        value,
                       });
                     }}
-                    selectedUnit={portion.unit}
-                    title={`${portion.name.trim() || "Portion"} unit`}
-                    units={["g", "kg", "oz", "lb", "ml", "l"]}
+                    placeholder="X"
+                    value={portion.name}
                   />
-                }
-                value={portion.amount}
-              />
-              <Button
-                disabled={disabled}
-                icon={Trash2}
-                onPress={() => {
-                  actor.send({ type: "removePortion", index });
-                }}
-                variant="ghost"
-              >
-                Remove portion
-              </Button>
-            </View>
-          ))}
-          <Button
-            disabled={disabled || !portionsAreValid}
-            icon={Plus}
-            onPress={() => {
-              actor.send({ type: "addPortion" });
-            }}
-            variant="secondary"
-          >
-            Add portion
-          </Button>
-        </View>
-      </SectionCard>
+                  <NumberField
+                    editable={!disabled && !isUsed}
+                    error={portionErrors[index]?.amount}
+                    label={`One ${portion.name.trim() || "portion"} equals`}
+                    onChangeText={(value) => {
+                      actor.send({
+                        type: "changePortion",
+                        field: "amount",
+                        index,
+                        value,
+                      });
+                    }}
+                    placeholder="250"
+                    rightElement={
+                      <MeasurementUnitSelect
+                        disabled={disabled || isUsed}
+                        onSelect={(unit) => {
+                          actor.send({
+                            type: "changePortion",
+                            field: "unit",
+                            index,
+                            value: unit,
+                          });
+                        }}
+                        selectedUnit={portion.unit}
+                        title={`${portion.name.trim() || "Portion"} unit`}
+                        units={["g", "kg", "oz", "lb", "ml", "l"]}
+                      />
+                    }
+                    value={portion.amount}
+                  />
+                  {isUsed ? null : (
+                    <Button
+                      disabled={disabled}
+                      icon={Trash2}
+                      onPress={() => {
+                        actor.send({ type: "removePortion", index });
+                      }}
+                      variant="ghost"
+                    >
+                      Remove portion
+                    </Button>
+                  )}
+                </View>
+              );
+            })}
+            <Button
+              disabled={disabled || !portionsAreValid}
+              icon={Plus}
+              onPress={() => {
+                actor.send({ type: "addPortion" });
+              }}
+              variant="secondary"
+            >
+              Add portion
+            </Button>
+          </View>
+        </SectionCard>
+      ) : null}
 
       <DisclosureCard icon={Scale} title="Weight and volume conversion">
         <View style={styles.disclosureContent}>

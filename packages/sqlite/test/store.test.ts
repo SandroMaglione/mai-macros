@@ -100,6 +100,104 @@ describe("SqliteNutritionStore", () => {
     );
   });
 
+  it("atomically updates a portion snapshot and can leave an ordering gap", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const baseFood = yield* testFood;
+        const encodedFood = yield* Schema.encodeEffect(Domain.Food)(baseFood);
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...encodedFood,
+          portions: [
+            ...(encodedFood.portions ?? []),
+            {
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+              name: "Bottle",
+              position: 1,
+              size: { amount: 500, unit: "ml" },
+            },
+          ],
+        });
+        const plan = yield* testPlan;
+        const dailyLog = yield* testDailyLog;
+        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          createdAt: 0,
+          dateKey: dailyLog.dateKey,
+          foodId: food.id,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
+          mealId: plan.meals[0]?.id ?? "",
+          quantity: {
+            _tag: "PortionFoodQuantity",
+            count: 2,
+            portionId: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+            portionName: "Bottle",
+            portionSize: { amount: 500, unit: "ml" },
+          },
+          nutritionMultiplier: 10,
+          updatedAt: 0,
+        });
+
+        yield* store.insertPlan(plan);
+        yield* store.insertFood(food);
+        yield* store.upsertDailyLog(dailyLog);
+        yield* store.insertMealEntry(mealEntry);
+
+        const revisedFood = yield* Schema.decodeEffect(Domain.Food)({
+          ...encodedFood,
+          portions: [
+            {
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+              name: "Small bottle",
+              position: 1,
+              size: { amount: 330, unit: "ml" },
+            },
+          ],
+          updatedAt: 1,
+        });
+        const encodedEntry = yield* Schema.encodeEffect(Domain.MealEntry)(
+          mealEntry
+        );
+        const revisedEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          ...encodedEntry,
+          nutritionMultiplier: 6.6,
+          quantity: {
+            _tag: "PortionFoodQuantity",
+            count: 2,
+            portionId: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+            portionName: "Small bottle",
+            portionSize: { amount: 330, unit: "ml" },
+          },
+          updatedAt: 1,
+        });
+
+        yield* store.applyFoodEdit({
+          food: revisedFood,
+          mealEntries: [revisedEntry],
+        });
+
+        return {
+          foods: yield* store.findFoodById(food.id),
+          mealEntries: yield* store.findMealEntriesByDate(dailyLog.dateKey),
+        };
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    assert.deepEqual(
+      result.foods[0]?.portions.map(({ name, position }) => ({
+        name,
+        position,
+      })),
+      [{ name: "Small bottle", position: 1 }]
+    );
+    const quantity = result.mealEntries[0]?.quantity;
+    assert.equal(quantity?._tag, "PortionFoodQuantity");
+    if (quantity?._tag === "PortionFoodQuantity") {
+      assert.equal(quantity.portionName, "Small bottle");
+      assert.equal(quantity.portionSize.amount, 330);
+    }
+    assert.equal(result.mealEntries[0]?.nutritionMultiplier, 6.6);
+  });
+
   it("removes stale plan meals when a plan is updated in place", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

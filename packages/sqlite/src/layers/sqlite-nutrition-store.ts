@@ -923,6 +923,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     );
 
   return Store.NutritionStore.of({
+    applyFoodEdit: ({ food, mealEntries }) =>
+      _mapStoreError(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            yield* upsertFood(food);
+            yield* Effect.forEach(mealEntries, upsertMealEntry, {
+              discard: true,
+            });
+          })
+        )
+      ),
+
     countMealEntriesByDate: (dateKey) =>
       _mapStoreError(
         countMealEntriesByDateRows(dateKey).pipe(Effect.map((row) => row.count))

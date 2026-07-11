@@ -9,11 +9,12 @@ import { ChevronLeft } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
 import { setup } from "xstate";
 
-import { EditFoodsPanelLoader } from "./edit";
+import { ManageFoodsPanelLoader } from "./edit";
 import { CreateFoodPanel } from "./new";
 
 const FoodsSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  tab: Schema.optionalKey(Schema.Literals(["create", "manage"])),
 });
 
 const foodsHubMachine = setup({
@@ -30,11 +31,12 @@ const foodsHubMachine = setup({
         })
       ),
     },
+    input: Schema.toStandardSchemaV1(
+      Schema.Struct({ activeTab: Schema.Literals([0, 1]) })
+    ),
   },
 }).createMachine({
-  context: {
-    activeTab: 0,
-  },
+  context: ({ input }) => ({ activeTab: input.activeTab }),
   on: {
     selectTab: ({ event }) => ({
       context: {
@@ -50,15 +52,17 @@ export default function FoodsScreen() {
       onNone: () => ({
         _tag: "Invalid" as const,
       }),
-      onSome: ({ dateKey }) => ({
+      onSome: ({ dateKey, tab }) => ({
         _tag: "Valid" as const,
         dateKey,
+        tab,
       }),
     })
   ) satisfies
     | {
         readonly _tag: "Valid";
         readonly dateKey: Domain.DateKey | undefined;
+        readonly tab: "create" | "manage" | undefined;
       }
     | {
         readonly _tag: "Invalid";
@@ -67,7 +71,14 @@ export default function FoodsScreen() {
     dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
   const panelDateKeyParam =
     dateKeyResult._tag === "Valid" ? dateKey : undefined;
-  const [snapshot, , actor] = useMachine(foodsHubMachine);
+  const [snapshot, , actor] = useMachine(foodsHubMachine, {
+    input: {
+      activeTab:
+        dateKeyResult._tag === "Valid" && dateKeyResult.tab === "manage"
+          ? 1
+          : 0,
+    },
+  });
   const activeTab = snapshot.context.activeTab;
   const tabs = [
     {
@@ -76,9 +87,9 @@ export default function FoodsScreen() {
       label: "Create",
     },
     {
-      accessibilityLabel: "Edit foods",
+      accessibilityLabel: "Manage foods",
       key: "edit",
-      label: "Edit",
+      label: "Manage",
     },
   ] as const;
 
@@ -155,7 +166,7 @@ export default function FoodsScreen() {
             {
               ...tabs[1],
               content: (
-                <EditFoodsPanelLoader
+                <ManageFoodsPanelLoader
                   dateKey={panelDateKeyParam}
                   layout="embedded"
                 />

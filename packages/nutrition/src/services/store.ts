@@ -36,6 +36,11 @@ export type NutritionStores = {
 export class NutritionStore extends Context.Service<
   NutritionStore,
   {
+    readonly applyFoodEdit: (input: {
+      readonly food: Food;
+      readonly mealEntries: readonly MealEntry[];
+    }) => StoreMutation;
+
     readonly countMealEntriesByDate: (dateKey: DateKey) => StoreEffect<number>;
 
     readonly countMealEntriesByFood: (foodId: FoodId) => StoreEffect<number>;

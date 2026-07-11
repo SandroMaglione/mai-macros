@@ -126,7 +126,7 @@ describe("nutrition revisions", () => {
           const foods = yield* Foods.Foods;
           const store = yield* Store.NutritionStore;
 
-          const revised = yield* foods.revise({
+          const revised = yield* foods.editFoodDetails({
             input: {
               foodId: food.id,
               name: "Greek yogurt 2%",
@@ -162,7 +162,7 @@ describe("nutrition revisions", () => {
     assert.equal(Object.keys(encodedFood).includes("basedOnFoodId"), false);
   });
 
-  it("creates a new food when meal entries already reference the old food", async () => {
+  it("copies a food without changing meal entries that reference the source", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
@@ -174,9 +174,9 @@ describe("nutrition revisions", () => {
           const foods = yield* Foods.Foods;
           const store = yield* Store.NutritionStore;
 
-          const revised = yield* foods.revise({
+          const revised = yield* foods.copy({
             input: {
-              foodId: food.id,
+              sourceFoodId: food.id,
               name: "Greek yogurt 2%",
               energyKcal: "61",
               proteinGrams: "11",
@@ -208,6 +208,232 @@ describe("nutrition revisions", () => {
     assert.equal(result.stores.foods.length, 2);
     assert.equal(result.stores.mealEntries[0]?.foodId, foodInput.id);
     assert.equal(Object.keys(encodedFood).includes("basedOnFoodId"), false);
+  });
+
+  it("edits a used food in place and recalculates its previous entries", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+        const mealEntry = yield* _mealEntry({ foodId: food.id });
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const store = yield* Store.NutritionStore;
+          const edited = yield* foods.editFoodDetails({
+            input: {
+              foodId: food.id,
+              name: "Greek yogurt corrected",
+              nutritionReference: { amount: "50", unit: "g" },
+              energyKcal: "40",
+              proteinGrams: "8",
+              carbsGrams: "2",
+              fatGrams: "0",
+            },
+          });
+
+          return { edited, stores: yield* store.readStores };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: {
+                ...emptyStores,
+                foods: [food],
+                mealEntries: [mealEntry],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.edited.food.id, foodInput.id);
+    assert.equal(result.edited.revisedMealEntryCount, 1);
+    assert.equal(result.stores.foods.length, 1);
+    assert.equal(result.stores.mealEntries[0]?.foodId, foodInput.id);
+    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 3);
+  });
+
+  it("changes a used portion everywhere but still rejects removing it", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...foodInput,
+          portions: [
+            {
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
+              name: "Scoop",
+              position: 0,
+              size: { amount: 30, unit: "g" },
+            },
+          ],
+        });
+        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          createdAt: 0,
+          dateKey: "2026-06-20",
+          foodId: food.id,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
+          mealId: planInput.meals[0]?.id ?? "",
+          quantity: {
+            _tag: "PortionFoodQuantity",
+            count: 2,
+            portionId: food.portions[0]?.id ?? "",
+            portionName: "Scoop",
+            portionSize: { amount: 30, unit: "g" },
+          },
+          nutritionMultiplier: 0.6,
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const preview = yield* foods.previewFoodPortionEdit({
+            input: {
+              foodId: food.id,
+              portionId: food.portions[0]?.id ?? "",
+              name: "Small scoop",
+              size: { amount: "25", unit: "g" },
+            },
+          });
+          const edited = yield* foods.editFoodPortionEverywhere({
+            input: {
+              foodId: food.id,
+              portionId: food.portions[0]?.id ?? "",
+              name: "Small scoop",
+              size: { amount: "25", unit: "g" },
+            },
+          });
+          const removedFailure = yield* Effect.flip(
+            foods.removeUnusedFoodPortion({
+              input: {
+                foodId: food.id,
+                portionId: food.portions[0]?.id ?? "",
+              },
+            })
+          );
+          const store = yield* Store.NutritionStore;
+
+          return {
+            edited,
+            preview,
+            removedFailure,
+            stores: yield* store.readStores,
+          };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: {
+                ...emptyStores,
+                foods: [food],
+                mealEntries: [mealEntry],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.preview.usage.mealEntryCount, 1);
+    assert.equal(result.preview.usage.firstDateKey, "2026-06-20");
+    assert.equal(result.edited.revisedMealEntryCount, 1);
+    assert.equal(result.stores.foods[0]?.portions[0]?.name, "Small scoop");
+    const revisedEntry = result.stores.mealEntries[0];
+    assert.equal(revisedEntry?.nutritionMultiplier, 0.5);
+    assert.equal(revisedEntry?.quantity._tag, "PortionFoodQuantity");
+    if (revisedEntry?.quantity._tag === "PortionFoodQuantity") {
+      assert.equal(revisedEntry.quantity.portionName, "Small scoop");
+      assert.equal(revisedEntry.quantity.portionSize.amount, 25);
+    }
+    assert(result.removedFailure._tag === "UsedFoodPortionMutationNotAllowed");
+    assert.equal(result.removedFailure.operation, "remove");
+  });
+
+  it("copies portions with new identities that are independent from the source", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...foodInput,
+          portions: [
+            {
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
+              name: "Scoop",
+              position: 0,
+              size: { amount: 30, unit: "g" },
+            },
+          ],
+        });
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          return yield* foods.copy({
+            input: {
+              sourceFoodId: food.id,
+              name: food.name,
+              energyKcal: `${food.energyKcal}`,
+              proteinGrams: `${food.proteinGrams}`,
+              carbsGrams: `${food.carbsGrams}`,
+              fatGrams: `${food.fatGrams}`,
+            },
+          });
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: { ...emptyStores, foods: [food] },
+            })
+          )
+        );
+      })
+    );
+
+    assert.notEqual(
+      result.food.portions[0]?.id,
+      result.sourceFood.portions[0]?.id
+    );
+    assert.equal(result.food.portions[0]?.name, "Scoop");
+    assert.equal(result.sourceFood.portions[0]?.name, "Scoop");
+  });
+
+  it("adds, edits, and removes a portion that has never been used", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const store = yield* Store.NutritionStore;
+          const added = yield* foods.addFoodPortion({
+            input: {
+              foodId: food.id,
+              name: "Cup",
+              size: { amount: "240", unit: "ml" },
+            },
+          });
+          const edited = yield* foods.editFoodPortionEverywhere({
+            input: {
+              foodId: food.id,
+              portionId: added.portion.id,
+              name: "Small cup",
+              size: { amount: "200", unit: "ml" },
+            },
+          });
+          const removed = yield* foods.removeUnusedFoodPortion({
+            input: { foodId: food.id, portionId: added.portion.id },
+          });
+
+          return { added, edited, removed, stores: yield* store.readStores };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({ stores: { ...emptyStores, foods: [food] } })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.added.portion.name, "Cup");
+    assert.equal(result.edited.portion.id, result.added.portion.id);
+    assert.equal(result.edited.revisedMealEntryCount, 0);
+    assert.equal(result.removed.portion.id, result.added.portion.id);
+    assert.equal(result.stores.foods[0]?.portions.length, 0);
+    assert.equal(result.stores.mealEntries.length, 0);
   });
 
   it("updates unused plans in place without creating a daily log", async () => {
@@ -466,6 +692,27 @@ function _revisionTestLayer({
 }) {
   let currentStores = stores;
   const storeLayer = Layer.succeed(Store.NutritionStore, {
+    applyFoodEdit: ({ food, mealEntries }) =>
+      Effect.sync(() => {
+        currentStores = {
+          ...currentStores,
+          foods: [
+            ...currentStores.foods.filter(
+              (currentFood) => currentFood.id !== food.id
+            ),
+            food,
+          ],
+          mealEntries: [
+            ...currentStores.mealEntries.filter(
+              (currentMealEntry) =>
+                !mealEntries.some(
+                  (mealEntry) => mealEntry.id === currentMealEntry.id
+                )
+            ),
+            ...mealEntries,
+          ],
+        };
+      }),
     countMealEntriesByDate: (dateKey) =>
       Effect.sync(
         () =>

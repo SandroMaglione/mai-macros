@@ -205,6 +205,7 @@ function _getRange({
       NutritionReports.NutritionReports.layer.pipe(
         Layer.provide(
           Layer.succeed(Store.NutritionStore, {
+            applyFoodEdit: () => Effect.void,
             countMealEntriesByDate: (dateKey: Domain.DateKey) =>
               Effect.succeed(
                 stores.mealEntries.filter(

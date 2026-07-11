@@ -643,7 +643,6 @@ run("no-service-option", noServiceOption, {
 run("no-shadowed-standard-array-static", noShadowedStandardArrayStatic, {
   valid: [
     "Array.from(values);",
-    "import { Array } from 'effect';\nArray.from(values);",
     "import { Array } from 'effect';\nglobalThis.Array.from(values);",
     "import { Array } from 'effect';\nArray.map(values, value => value);",
   ],

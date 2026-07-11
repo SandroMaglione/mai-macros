@@ -1,8 +1,7 @@
 import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
+import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
 import { Utils, type Domain } from "@mai/nutrition";
-import { type FoodSearchMachine } from "@mai/machines";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array, Schema } from "effect";
 import { Check, ChevronDown, Search } from "lucide-react-native";
@@ -434,6 +433,10 @@ export function FoodSearchResults({
         <FoodSearchResult
           disabled={disabled}
           food={item}
+          nameGroupLabel={FoodSearchMachine.getFoodNameGroupLabel({
+            food: item,
+            foods,
+          })}
           primaryLabel={getPrimaryLabel?.(item)}
           secondaryLabel={getSecondaryLabel?.(item)}
           selected={selectedFoodId === item.id}
@@ -458,6 +461,7 @@ export function FoodSearchResults({
 function FoodSearchResult({
   disabled,
   food,
+  nameGroupLabel,
   onPress,
   primaryLabel,
   secondaryLabel,
@@ -465,6 +469,7 @@ function FoodSearchResult({
 }: {
   readonly disabled: boolean;
   readonly food: Domain.Food;
+  readonly nameGroupLabel: FoodSearchMachine.FoodNameGroupLabel | null;
   readonly onPress: () => void;
   readonly primaryLabel?: string;
   readonly secondaryLabel?: string;
@@ -497,6 +502,7 @@ function FoodSearchResult({
   const accessibilityLabel = [
     `${food.name}${defaultFoodAccessibilityLabel}`,
     brandLabel,
+    nameGroupLabel,
     dominantMacronutrientLabel,
     primaryLabel ?? perReferenceLabel,
     secondaryLabel,
@@ -526,6 +532,27 @@ function FoodSearchResult({
           <Text numberOfLines={2} style={styles.resultTitle}>
             {food.name}
           </Text>
+          {nameGroupLabel === null ? null : (
+            <View
+              style={[
+                styles.nameGroupBadge,
+                nameGroupLabel === "Newest"
+                  ? styles.nameGroupBadgeNewest
+                  : styles.nameGroupBadgeOlder,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.nameGroupBadgeText,
+                  nameGroupLabel === "Newest"
+                    ? styles.nameGroupBadgeTextNewest
+                    : styles.nameGroupBadgeTextOlder,
+                ]}
+              >
+                {nameGroupLabel}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={styles.summaryRow}>
           {!Array.isReadonlyArrayNonEmpty(dominantMacronutrientMetas) ? null : (
@@ -728,11 +755,37 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     minWidth: 0,
-    flex: 1,
+    flexShrink: 1,
     color: color.text,
     fontSize: tokens.type.size.md,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.md,
+  },
+  nameGroupBadge: {
+    flexShrink: 0,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  nameGroupBadgeNewest: {
+    borderColor: color.successBorder,
+    backgroundColor: color.successBg,
+  },
+  nameGroupBadgeOlder: {
+    borderColor: color.divider,
+    backgroundColor: color.field,
+  },
+  nameGroupBadgeText: {
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  nameGroupBadgeTextNewest: {
+    color: color.successText,
+  },
+  nameGroupBadgeTextOlder: {
+    color: color.textMuted,
   },
   resultSummary: {
     minWidth: 0,

@@ -160,6 +160,7 @@ export const foodFormMachine = setup({
         })
       ),
       addPortion: Schema.toStandardSchemaV1(EmptyEvent),
+      loadFood: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
       changePortion: Schema.toStandardSchemaV1(
         Schema.Struct({
           field: FoodPortionFormFieldSchema,
@@ -189,6 +190,12 @@ export const foodFormMachine = setup({
   states: {
     Ready: {
       on: {
+        loadFood: ({ context, event }) => ({
+          context: _foodFormContextFromInput({
+            initialFood: event.food,
+            syncQuickInputFromFields: context.syncQuickInputFromFields,
+          }),
+        }),
         reset: ({ context }) => ({
           context: _foodFormContextFromInput({
             initialFood: null,
