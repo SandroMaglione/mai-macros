@@ -3,9 +3,11 @@ import "react-native-gesture-handler";
 import { color } from "@/theme/tokens";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { StyleSheet } from "react-native";
+import { Appearance, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+
+Appearance.setColorScheme("dark");
 
 export default function RootLayout() {
   return (

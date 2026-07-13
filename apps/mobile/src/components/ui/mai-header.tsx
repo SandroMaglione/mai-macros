@@ -97,11 +97,13 @@ export function MaiHeader({
   eyebrow,
   subtitle,
   title,
+  trailing,
 }: {
   readonly action?: ReactNode;
   readonly eyebrow?: string;
   readonly subtitle?: string;
   readonly title: string;
+  readonly trailing?: ReactNode;
 }) {
   return (
     <AppHeader
@@ -111,6 +113,7 @@ export function MaiHeader({
       shadow={true}
       subtitle={subtitle}
       title={title}
+      trailing={trailing}
     />
   );
 }

@@ -1,5 +1,8 @@
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
-import { AppScreen, LoadingView, MaiHeader, Notice } from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { LoadingView } from "@/components/ui/loading-view";
+import { MaiHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";

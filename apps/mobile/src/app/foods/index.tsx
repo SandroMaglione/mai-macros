@@ -1,4 +1,7 @@
-import { AppHeader, AppScreen, IconButton, PagerTabs } from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { IconButton } from "@/components/ui/icon-button";
+import { AppHeader } from "@/components/ui/mai-header";
+import { PagerTabs } from "@/components/ui/pager-tabs";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { color, spacing } from "@/theme/tokens";
 import { Domain } from "@mai/nutrition";

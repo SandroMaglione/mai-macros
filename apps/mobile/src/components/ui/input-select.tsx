@@ -54,12 +54,14 @@ export function InputSelect<Value extends string>({
   options,
   selectedValue,
   title,
+  variant = "default",
 }: {
   readonly disabled?: boolean;
   readonly onSelect: (value: Value) => void;
   readonly options: readonly InputSelectOption<Value>[];
   readonly selectedValue: Value;
   readonly title: string;
+  readonly variant?: "default" | "header";
 }) {
   const [snapshot, , actor] = useMachine(inputSelectDialogMachine);
   const selectedOption =
@@ -101,14 +103,28 @@ export function InputSelect<Value extends string>({
         onPress={open}
         style={({ pressed }) => [
           styles.selector,
-          pressed && !disabled ? styles.selectorPressed : null,
+          variant === "header" ? styles.selectorHeader : null,
+          pressed && !disabled
+            ? variant === "header"
+              ? styles.selectorHeaderPressed
+              : styles.selectorPressed
+            : null,
           disabled ? styles.selectorDisabled : null,
         ]}
       >
-        <Text style={styles.selectorLabel}>
+        <Text
+          style={[
+            styles.selectorLabel,
+            variant === "header" ? styles.selectorLabelHeader : null,
+          ]}
+        >
           {selectedOption?.label ?? selectedValue}
         </Text>
-        <ChevronDown color={color.textSubtle} size={14} strokeWidth={3} />
+        <ChevronDown
+          color={variant === "header" ? color.white : color.textSubtle}
+          size={14}
+          strokeWidth={3}
+        />
       </Pressable>
 
       <Modal
@@ -178,6 +194,13 @@ const styles = StyleSheet.create({
   selectorPressed: {
     backgroundColor: color.surfaceRaised,
   },
+  selectorHeader: {
+    minWidth: 70,
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  selectorHeaderPressed: {
+    backgroundColor: "rgba(255,255,255,0.24)",
+  },
   selectorDisabled: {
     opacity: 0.5,
   },
@@ -186,6 +209,9 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.size.sm,
     fontWeight: tokens.type.weight.black,
     lineHeight: tokens.type.lineHeight.sm,
+  },
+  selectorLabelHeader: {
+    color: color.white,
   },
   dialogBackdrop: {
     flex: 1,

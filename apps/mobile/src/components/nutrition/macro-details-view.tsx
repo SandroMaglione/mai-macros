@@ -1,11 +1,9 @@
-import {
-  AppHeader,
-  AppScreen,
-  Button,
-  IconButton,
-  LoadingView,
-  Notice,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
 import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber, mealEntryMassGrams } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";

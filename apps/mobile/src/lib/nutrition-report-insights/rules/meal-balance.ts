@@ -32,7 +32,7 @@ export const mealBalanceInsightModule = {
                 {
                   text: ` made up ${context.formatPercent({
                     share,
-                  })} of your weekly calories.`,
+                  })} of your calories in this period.`,
                   tone: "text",
                 },
               ],

@@ -1,4 +1,4 @@
-import { InputSelect } from "@/components/ui";
+import { InputSelect } from "@/components/ui/input-select";
 import type { Domain } from "@mai/nutrition";
 
 export function MeasurementUnitSelect({

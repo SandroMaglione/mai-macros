@@ -13,7 +13,7 @@ export default {
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "mai",
-  userInterfaceStyle: "automatic",
+  userInterfaceStyle: "dark",
   ios: {
     bundleIdentifier: "app.mai.mobile",
     infoPlist: {

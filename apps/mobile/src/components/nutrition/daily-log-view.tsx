@@ -1,12 +1,11 @@
-import {
-  AppHeader,
-  AppScreen,
-  BottomActionBar,
-  Button,
-  LoadingView,
-  Notice,
-} from "@/components/ui";
+import { DailyBodyWeightInput } from "@/components/body-weight/daily-body-weight-input";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
+import { AppScreen } from "@/components/ui/app-screen";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
+import { Button } from "@/components/ui/button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
@@ -32,7 +31,6 @@ import {
   ClipboardList,
   Database,
   Plus,
-  Scale,
   Trash2,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -614,6 +612,8 @@ function RecordedDailyLogView({
 
         <DailyProgress day={data.day} nutrients={nutrients} />
 
+        <DailyBodyWeightInput dateKey={dateKey} />
+
         <Pressable
           accessibilityRole="button"
           onPress={() => {
@@ -708,6 +708,8 @@ function UnrecordedDailyLogView({
         style={styles.headerSafeArea}
       >
         <DayNavigationHeader dateKey={dateKey} />
+
+        <DailyBodyWeightInput dateKey={dateKey} />
 
         <View style={styles.unrecordedBody}>
           <Notice
@@ -863,21 +865,9 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
     <BottomActionBar variant="tab">
       <BottomAction
         icon={Activity}
-        label="Stats"
+        label="Insights"
         onPress={() => {
           router.push("/insights");
-        }}
-      />
-      <BottomAction
-        icon={Scale}
-        label="Weight"
-        onPress={() => {
-          router.push({
-            pathname: "/weight",
-            params: {
-              dateKey,
-            },
-          });
         }}
       />
       <BottomAction

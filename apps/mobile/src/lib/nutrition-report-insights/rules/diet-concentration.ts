@@ -41,7 +41,7 @@ export const dietConcentrationInsightModule = {
                   {
                     share,
                   }
-                )} of weekly calories.`,
+                )} of calories in this period.`,
                 tone: "text",
               },
             ],

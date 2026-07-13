@@ -1,15 +1,12 @@
 import { MeasurementUnitSelect } from "@/components/nutrition/measurement-unit-select";
-import {
-  AppHeader,
-  AppScreen,
-  Button,
-  Field,
-  IconButton,
-  LoadingView,
-  Notice,
-  NumberField,
-  SectionCard,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { Field, NumberField } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatShortDate } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";

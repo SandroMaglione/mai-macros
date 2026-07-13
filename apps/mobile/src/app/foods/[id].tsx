@@ -1,13 +1,11 @@
 import { FoodForm } from "@/components/nutrition/food-form";
-import {
-  AppHeader,
-  AppScreen,
-  Button,
-  IconButton,
-  LoadingView,
-  Notice,
-  SectionCard,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { describeFoodChanges } from "@/lib/food-change-summary";

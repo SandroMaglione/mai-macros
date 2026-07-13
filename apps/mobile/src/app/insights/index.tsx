@@ -1,22 +1,80 @@
+import { BodyWeightPanel } from "@/components/body-weight/body-weight-panel";
+import { NutritionTrends } from "@/components/nutrition/nutrition-trends";
 import { RangeSummary } from "@/components/nutrition/range-summary";
-import {
-  AppScreen,
-  Button,
-  LoadingView,
-  MaiHeader,
-  Notice,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
+import { Button } from "@/components/ui/button";
+import { InputSelect } from "@/components/ui/input-select";
+import { LoadingView } from "@/components/ui/loading-view";
+import { MaiHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, spacing, tokens } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines";
 import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { DateTime, Effect, Match, Schema } from "effect";
+import { DateTime, Effect, Match, Option, Schema } from "effect";
 import { router, useRouter } from "expo-router";
-import { ChevronLeft, Plus } from "lucide-react-native";
+import type { LucideIcon } from "lucide-react-native";
+import { Activity, ChevronLeft, Plus, Scale } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { createAsyncLogic, setup } from "xstate";
+
+const InsightTab = Schema.Literals(["nutrition", "weight"]);
+
+const InsightRangeDayCount = Schema.Literals([7, 30, 90]);
+type InsightRangeDayCount = typeof InsightRangeDayCount.Type;
+
+const InsightsSearchParams = Schema.Struct({
+  tab: Schema.optionalKey(InsightTab),
+});
+
+const InsightsViewInput = Schema.Struct({
+  initialTab: InsightTab,
+});
+
+const InsightsViewContext = Schema.Struct({
+  activeTab: InsightTab,
+  rangeDayCount: InsightRangeDayCount,
+});
+
+const insightsViewMachine = setup({
+  schemas: {
+    context: Schema.toStandardSchemaV1(InsightsViewContext),
+    events: {
+      selectRange: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          rangeDayCount: InsightRangeDayCount,
+        })
+      ),
+      selectTab: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          tab: InsightTab,
+        })
+      ),
+    },
+    input: Schema.toStandardSchemaV1(InsightsViewInput),
+  },
+}).createMachine({
+  context: ({ input }) => ({
+    activeTab: input.initialTab,
+    rangeDayCount: 30,
+  }),
+  on: {
+    selectRange: ({ event }) => ({
+      context: {
+        rangeDayCount: event.rangeDayCount,
+      },
+    }),
+    selectTab: ({ event }) => ({
+      context: {
+        activeTab: event.tab,
+      },
+    }),
+  },
+});
 
 const NutrientName = Schema.Literals(Reporting.NutrientNames);
 
@@ -68,17 +126,28 @@ const NutritionReportRange = Schema.Struct({
   startDateKey: Domain.DateKey,
 });
 
+const NutritionInsightsInput = Schema.Struct({
+  rangeDayCount: InsightRangeDayCount,
+});
+
 const NutritionInsightsFailureContext = Schema.Struct({
   message: Schema.String,
+  rangeDayCount: InsightRangeDayCount,
 });
 
 const NutritionInsightsLoadedContext = Schema.Struct({
-  report: NutritionReportRange,
+  currentReport: NutritionReportRange,
+  rangeDayCount: InsightRangeDayCount,
 });
 
 const NutritionInsightsNoPlansContext = Schema.Struct({
   dateKey: Domain.DateKey,
   message: Schema.String,
+  rangeDayCount: InsightRangeDayCount,
+});
+
+const LoadNutritionInsightsInput = Schema.Struct({
+  rangeDayCount: InsightRangeDayCount,
 });
 
 const nutritionInsightsRouteMachine = setup({
@@ -86,6 +155,7 @@ const nutritionInsightsRouteMachine = setup({
     events: {
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
+    input: Schema.toStandardSchemaV1(NutritionInsightsInput),
   },
   states: {
     Failure: {
@@ -106,8 +176,11 @@ const nutritionInsightsRouteMachine = setup({
     },
   },
   actorSources: {
-    loadDefaultRange: createAsyncLogic({
-      run: () =>
+    loadRange: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(LoadNutritionInsightsInput),
+      },
+      run: ({ input }) =>
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const today = yield* Schema.decodeEffect(Domain.DateKey)(
@@ -115,23 +188,25 @@ const nutritionInsightsRouteMachine = setup({
                 date: yield* DateTime.nowAsDate,
               })
             );
-            const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
+            const currentStartDateKey = yield* Schema.decodeEffect(
+              Domain.DateKey
+            )(
               shiftDateKey({
                 dateKey: today,
-                days: -6,
+                days: -(input.rangeDayCount - 1),
               })
             );
             const reports = yield* NutritionReports.NutritionReports;
-            const report = yield* reports.getRange({
+            const currentReport = yield* reports.getRange({
               input: {
                 endDateKey: today,
-                startDateKey,
+                startDateKey: currentStartDateKey,
               },
             });
 
             return {
               _tag: "Loaded" as const,
-              report,
+              currentReport,
             };
           }).pipe(
             Effect.catchTag("NoNutritionReportPlans", () =>
@@ -152,19 +227,19 @@ const nutritionInsightsRouteMachine = setup({
               InvalidNutritionReportRange: () =>
                 Effect.succeed({
                   _tag: "Failure" as const,
-                  message: "The default 7-day range is invalid. Please retry.",
+                  message: "The selected nutrition range is invalid.",
                 }),
               SchemaError: () =>
                 Effect.succeed({
                   _tag: "Failure" as const,
-                  message: "The default date range could not be validated.",
+                  message: "The selected date range could not be validated.",
                 }),
             }),
             Effect.catch(() =>
               Effect.succeed({
                 _tag: "Failure" as const,
                 message:
-                  "Something went wrong while loading your nutrition report.",
+                  "Something went wrong while loading nutrition insights.",
               })
             )
           )
@@ -172,29 +247,35 @@ const nutritionInsightsRouteMachine = setup({
     }),
   },
 }).createMachine({
-  context: () => ({
+  context: ({ input }) => ({
+    currentReport: null,
     dateKey: null,
     message: null,
-    report: null,
+    rangeDayCount: input.rangeDayCount,
   }),
   initial: "Loading",
   states: {
     Loading: {
       invoke: {
-        src: "loadDefaultRange",
-        onDone: ({ event }) =>
+        src: "loadRange",
+        input: ({ context }) => ({
+          rangeDayCount: context.rangeDayCount,
+        }),
+        onDone: ({ context, event }) =>
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Failure: ({ message }) => ({
                 target: "Failure" as const,
                 context: {
                   message,
+                  rangeDayCount: context.rangeDayCount,
                 },
               }),
-              Loaded: ({ report }) => ({
+              Loaded: ({ currentReport }) => ({
                 target: "Loaded" as const,
                 context: {
-                  report,
+                  currentReport,
+                  rangeDayCount: context.rangeDayCount,
                 },
               }),
               NoPlans: ({ dateKey }) => ({
@@ -202,17 +283,18 @@ const nutritionInsightsRouteMachine = setup({
                 context: {
                   dateKey,
                   message: "Create a meal plan to unlock nutrition insights.",
+                  rangeDayCount: context.rangeDayCount,
                 },
               }),
             })
           ),
-        onError: {
+        onError: ({ context }) => ({
           target: "Failure",
           context: {
-            message:
-              "Something went wrong while loading your nutrition report.",
+            message: "Something went wrong while loading nutrition insights.",
+            rangeDayCount: context.rangeDayCount,
           },
-        },
+        }),
       },
     },
     Failure: {
@@ -223,33 +305,105 @@ const nutritionInsightsRouteMachine = setup({
       },
     },
     Loaded: {},
+    NoPlans: {},
   },
 });
 
+const rangeSelectOptions = [
+  {
+    label: "7 days",
+    value: "7",
+  },
+  {
+    label: "30 days",
+    value: "30",
+  },
+  {
+    label: "90 days",
+    value: "90",
+  },
+] as const;
+
 export default function InsightsScreen() {
+  const initialTab = useSchemaLocalSearchParams(InsightsSearchParams).pipe(
+    Option.match({
+      onNone: () => "nutrition" as const,
+      onSome: ({ tab }) => tab ?? "nutrition",
+    })
+  );
+  const [snapshot, , actor] = useMachine(insightsViewMachine, {
+    input: {
+      initialTab,
+    },
+  });
   const appRouter = useRouter();
 
   return (
-    <AppScreen
-      scroll
-      contentStyle={styles.content}
-      scrollProps={{
-        showsVerticalScrollIndicator: false,
-      }}
-      topSafeAreaColor={color.primary}
-    >
-      <StatsHeader
-        onBackToToday={() => {
-          appRouter.replace("/");
+    <View style={styles.screen}>
+      <AppScreen
+        scroll
+        contentStyle={styles.content}
+        safeAreaEdges={["top"]}
+        scrollProps={{
+          showsVerticalScrollIndicator: false,
         }}
-      />
-      <NutritionInsightsPanel />
-    </AppScreen>
+        topSafeAreaColor={color.primary}
+      >
+        <InsightsHeader
+          activeRange={snapshot.context.rangeDayCount}
+          onBackToToday={() => {
+            appRouter.replace("/");
+          }}
+          onSelectRange={(rangeDayCount) => {
+            actor.trigger.selectRange({ rangeDayCount });
+          }}
+        />
+        {snapshot.context.activeTab === "nutrition" ? (
+          <NutritionInsightsPanel
+            key={`nutrition-${snapshot.context.rangeDayCount}`}
+            rangeDayCount={snapshot.context.rangeDayCount}
+          />
+        ) : (
+          <BodyWeightPanel
+            calendarPosition="bottom"
+            key={`weight-${snapshot.context.rangeDayCount}`}
+            reportDayCount={snapshot.context.rangeDayCount}
+            showImport
+          />
+        )}
+      </AppScreen>
+      <BottomActionBar variant="tab">
+        <InsightsBottomTab
+          active={snapshot.context.activeTab === "nutrition"}
+          icon={Activity}
+          label="Nutrition"
+          onPress={() => {
+            actor.trigger.selectTab({ tab: "nutrition" });
+          }}
+        />
+        <InsightsBottomTab
+          active={snapshot.context.activeTab === "weight"}
+          icon={Scale}
+          label="Weight"
+          onPress={() => {
+            actor.trigger.selectTab({ tab: "weight" });
+          }}
+        />
+      </BottomActionBar>
+    </View>
   );
 }
 
-function NutritionInsightsPanel() {
-  const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine);
+function NutritionInsightsPanel({
+  rangeDayCount,
+}: {
+  readonly rangeDayCount: InsightRangeDayCount;
+}) {
+  const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine, {
+    input: {
+      rangeDayCount,
+    },
+  });
 
   if (snapshot.matches("Loading")) {
     return (
@@ -262,18 +416,12 @@ function NutritionInsightsPanel() {
   if (snapshot.matches("Failure")) {
     return (
       <View style={styles.failure}>
-        <Text style={styles.failureTitle}>Insights unavailable</Text>
         <Notice
           message={snapshot.context.message}
-          title="Range summary could not load"
+          title="Nutrition insights unavailable"
           tone="warning"
         />
-        <Button
-          onPress={() => {
-            actor.trigger.retry();
-          }}
-          variant="secondary"
-        >
+        <Button onPress={actor.trigger.retry} variant="secondary">
           Retry
         </Button>
       </View>
@@ -305,13 +453,74 @@ function NutritionInsightsPanel() {
     );
   }
 
-  return <RangeSummary report={snapshot.context.report} />;
+  return (
+    <View style={styles.nutritionStack}>
+      <NutritionTrends
+        currentReport={snapshot.context.currentReport}
+        onSelectDate={(dateKey) => {
+          router.push({
+            pathname: "/days/[dateKey]",
+            params: {
+              dateKey,
+            },
+          });
+        }}
+      />
+      <RangeSummary
+        rangeDayCount={snapshot.context.rangeDayCount}
+        report={snapshot.context.currentReport}
+      />
+    </View>
+  );
 }
 
-function StatsHeader({
-  onBackToToday,
+function InsightsBottomTab({
+  active,
+  icon: Icon,
+  label,
+  onPress,
 }: {
+  readonly active: boolean;
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.bottomTab,
+        active ? styles.bottomTabActive : null,
+        pressed ? styles.pressed : null,
+      ]}
+    >
+      <Icon
+        color={active ? color.primary : color.actionSheetText}
+        size={20}
+        strokeWidth={2.8}
+      />
+      <Text
+        style={[
+          styles.bottomTabLabel,
+          active ? styles.bottomTabLabelActive : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function InsightsHeader({
+  activeRange,
+  onBackToToday,
+  onSelectRange,
+}: {
+  readonly activeRange: InsightRangeDayCount;
   readonly onBackToToday: () => void;
+  readonly onSelectRange: (rangeDayCount: InsightRangeDayCount) => void;
 }) {
   return (
     <MaiHeader
@@ -322,18 +531,35 @@ function StatsHeader({
           onPress={onBackToToday}
           style={({ pressed }) => [
             styles.headerAction,
-            pressed ? styles.headerActionPressed : null,
+            pressed ? styles.pressed : null,
           ]}
         >
           <ChevronLeft color={color.white} size={31} strokeWidth={2.6} />
         </Pressable>
       }
-      title="Stats"
+      title="Insights"
+      trailing={
+        <InputSelect
+          onSelect={(value) => {
+            onSelectRange(value === "7" ? 7 : value === "30" ? 30 : 90);
+          }}
+          options={rangeSelectOptions}
+          selectedValue={
+            activeRange === 7 ? "7" : activeRange === 30 ? "30" : "90"
+          }
+          title="Report range"
+          variant="header"
+        />
+      }
     />
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: color.bg,
+  },
   content: {
     gap: spacing.lg,
     paddingBottom: spacing.xxxl,
@@ -344,22 +570,43 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 999,
-  },
-  headerActionPressed: {
-    opacity: 0.82,
+    borderRadius: radius.pill,
   },
   centered: {
-    minHeight: 220,
+    minHeight: 260,
     justifyContent: "center",
   },
   failure: {
     gap: spacing.lg,
+    paddingVertical: spacing.xl,
   },
-  failureTitle: {
-    color: color.text,
-    fontSize: tokens.type.size.xl,
+  nutritionStack: {
+    gap: spacing.xxxl,
+  },
+  pressed: {
+    opacity: 0.82,
+  },
+  bottomTab: {
+    minHeight: 52,
+    minWidth: 0,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xxs,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  bottomTabActive: {
+    backgroundColor: color.primarySoft,
+  },
+  bottomTabLabel: {
+    color: color.actionSheetText,
+    fontSize: tokens.type.size.xs,
     fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xl,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  bottomTabLabelActive: {
+    color: color.primary,
   },
 });

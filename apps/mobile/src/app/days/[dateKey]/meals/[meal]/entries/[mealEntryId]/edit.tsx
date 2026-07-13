@@ -1,15 +1,13 @@
-import { FoodNutrientOverview } from "@/components/nutrition";
-import {
-  AppHeader,
-  AppScreen,
-  BottomActionBar,
-  Button,
-  IconButton,
-  InputSelect,
-  LoadingView,
-  Notice,
-  NumberField,
-} from "@/components/ui";
+import { FoodNutrientOverview } from "@/components/nutrition/food-nutrient-overview";
+import { AppScreen } from "@/components/ui/app-screen";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
+import { Button } from "@/components/ui/button";
+import { NumberField } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { InputSelect } from "@/components/ui/input-select";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import * as FoodMeasurements from "@/lib/food-measurements";

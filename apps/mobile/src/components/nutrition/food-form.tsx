@@ -1,16 +1,12 @@
-import {
-  AppHeader,
-  AppScreen,
-  BottomActionBar,
-  Button,
-  DisclosureCard,
-  Field,
-  IconButton,
-  Notice,
-  NumberField,
-  SectionCard,
-  TextArea,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
+import { Button } from "@/components/ui/button";
+import { DisclosureCard } from "@/components/ui/disclosure-card";
+import { Field, NumberField, TextArea } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { SectionCard } from "@/components/ui/section-card";
 import {
   foodNutrientOverviewFromFormValues,
   foodNutrientOverviewPrimaryLabel,

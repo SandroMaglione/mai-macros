@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/button";
 import { EmptyEvent } from "@mai/machines";
 import { NutritionReports, Reporting } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
@@ -21,7 +21,11 @@ import { color, radius, spacing, tokens } from "@/theme/tokens";
 import {
   getNutritionReportInsights,
   type NutritionReportInsight,
-} from "./nutrition-report-insights.ts";
+} from "@/lib/nutrition-report-insights";
+import {
+  getNutritionTargetTrend,
+  type NutritionTargetTrend,
+} from "@/lib/nutrition-target-trend";
 
 type FoodContributor = {
   readonly foodId: string;
@@ -64,9 +68,8 @@ const nutrientColors = {
 } satisfies Record<Reporting.NutrientName, string>;
 
 const summaryInsightLimit = 5;
-const targetTrendMarginFraction = 0.05;
 
-type TargetTrendKind = "above" | "below" | "inside" | "none";
+type TargetTrendKind = NutritionTargetTrend | "none";
 
 const targetTrendIndicators = {
   above: {
@@ -130,8 +133,10 @@ const summaryInsightsVisibilityMachine = setup({
 });
 
 export function RangeSummary({
+  rangeDayCount,
   report,
 }: {
+  readonly rangeDayCount: 7 | 30 | 90;
   readonly report: NutritionReports.NutritionReportRange;
 }) {
   const dayCount = report.days.length;
@@ -266,7 +271,7 @@ export function RangeSummary({
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle="Average daily intake across recorded days in the last 7 days, compared with daily targets when available."
+          subtitle={`Average daily intake across ${dayCount} recorded days in the selected ${rangeDayCount}-day period, compared with daily targets when available.`}
           title="Recorded-day average"
         />
         <View style={styles.nutrientGrid}>
@@ -351,7 +356,7 @@ function SummaryInsights({
       <View style={styles.insightList}>
         {!Array.isReadonlyArrayNonEmpty(visibleInsights) ? (
           <Text style={styles.emptyText}>
-            Log more meals to surface weekly food and meal patterns.
+            Log more meals to surface food and meal patterns for this period.
           </Text>
         ) : (
           visibleInsights.map((insight) => (
@@ -409,17 +414,7 @@ function NutrientBalanceCard({
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
   const signedValue = target === null ? null : actual - target;
   const trend =
-    target === null
-      ? "none"
-      : target <= 0
-        ? actual > 0
-          ? "above"
-          : "inside"
-        : actual >= target * (1 + targetTrendMarginFraction)
-          ? "above"
-          : actual <= target * (1 - targetTrendMarginFraction)
-            ? "below"
-            : "inside";
+    target === null ? "none" : getNutritionTargetTrend({ actual, target });
   const formattedSignedValue =
     signedValue === null
       ? null

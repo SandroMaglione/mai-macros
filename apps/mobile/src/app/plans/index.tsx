@@ -1,15 +1,12 @@
-import {
-  AppHeader,
-  AppScreen,
-  Button,
-  IconButton,
-  LoadingOverlay,
-  LoadingView,
-  Notice,
-  PagerTabs,
-} from "@/components/ui";
 import { MealPlanForm } from "@/components/nutrition/meal-plan-form";
-import { MealPlanSummaryCard } from "@/components/nutrition";
+import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingOverlay, LoadingView } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { PagerTabs } from "@/components/ui/pager-tabs";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
 import { RuntimeClient } from "@/lib/runtime-client";

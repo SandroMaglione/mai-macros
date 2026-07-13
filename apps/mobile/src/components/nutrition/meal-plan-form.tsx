@@ -2,17 +2,14 @@ import { MealPlanFormMachine } from "@mai/machines";
 import type { Domain, MealPlans } from "@mai/nutrition";
 import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
-import {
-  AppScreen,
-  BottomActionBar,
-  Button,
-  Field,
-  IconButton,
-  MaiHeader,
-  Notice,
-  NumberField,
-  SectionCard,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
+import { Button } from "@/components/ui/button";
+import { Field, NumberField } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { MaiHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { SectionCard } from "@/components/ui/section-card";
 import { useMachine, useSelector } from "@xstate/react";
 import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";

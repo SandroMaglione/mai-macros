@@ -1,13 +1,13 @@
 import {
-  AppHeader,
-  AppScreen,
-  Button,
-  IconButton,
-  LoadingView,
-  MaiHeader,
-  Notice,
-} from "@/components/ui";
-import { FoodSearchField, FoodSearchResults } from "@/components/nutrition";
+  FoodSearchField,
+  FoodSearchResults,
+} from "@/components/nutrition/food-search";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { AppHeader, MaiHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";

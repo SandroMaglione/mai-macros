@@ -1,13 +1,11 @@
-import {
-  AppHeader,
-  AppScreen,
-  Button,
-  Field,
-  IconButton,
-  LoadingOverlay,
-  Notice,
-  SectionCard,
-} from "@/components/ui";
+import { AppScreen } from "@/components/ui/app-screen";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingOverlay } from "@/components/ui/loading-view";
+import { AppHeader } from "@/components/ui/mai-header";
+import { Notice } from "@/components/ui/notice";
+import { SectionCard } from "@/components/ui/section-card";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent, LocalDataResetMachine } from "@mai/machines";

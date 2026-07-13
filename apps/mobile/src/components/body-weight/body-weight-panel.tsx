@@ -23,14 +23,11 @@ import {
 import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
 import { Actor, createAsyncLogic, setup, type ActorRefFromLogic } from "xstate";
 
-import {
-  Button,
-  IconButton,
-  LoadingView,
-  Notice,
-  NumberField,
-  TextArea,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { NumberField, TextArea } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
+import { Notice } from "@/components/ui/notice";
 import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
@@ -75,12 +72,18 @@ type BodyWeightReportRange = typeof BodyWeightReportRange.Type;
 
 const estimateWeightWindowDays = 14;
 
+const BodyWeightReportDayCount = Schema.Literals([7, 30, 90]);
+
+export type BodyWeightReportDayCount = typeof BodyWeightReportDayCount.Type;
+
 const BodyWeightRouteInput = Schema.Struct({
   dateKey: Domain.DateKey,
+  reportDayCount: BodyWeightReportDayCount,
 });
 
 const LoadBodyWeightInput = Schema.Struct({
   dateKey: Domain.DateKey,
+  reportDayCount: BodyWeightReportDayCount,
 });
 
 const LoadBodyWeightOutput = Schema.Struct({
@@ -135,6 +138,7 @@ const BodyWeightRouteContext = Schema.Struct({
   message: Schema.NullOr(Schema.String),
   monthEntries: Schema.Array(Domain.BodyWeightEntry),
   report: Schema.NullOr(BodyWeightReportRange),
+  reportDayCount: BodyWeightReportDayCount,
 });
 
 type BodyWeightRouteChildEvent =
@@ -557,7 +561,7 @@ const bodyWeightRouteMachine = setup({
             const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
               shiftDateKey({
                 dateKey: endDateKey,
-                days: -89,
+                days: -(input.reportDayCount - 1),
               })
             );
             const monthEntries = yield* bodyWeights.listRange({
@@ -585,6 +589,7 @@ const bodyWeightRouteMachine = setup({
     message: null,
     monthEntries: [],
     report: null,
+    reportDayCount: input.reportDayCount,
   }),
   initial: "Loading",
   states: {
@@ -593,6 +598,7 @@ const bodyWeightRouteMachine = setup({
         src: "loadBodyWeight",
         input: ({ context }) => ({
           dateKey: context.dateKey,
+          reportDayCount: context.reportDayCount,
         }),
         onDone: ({ context, event }) => ({
           target: "Ready",
@@ -735,9 +741,17 @@ const bodyWeightRouteMachine = setup({
 });
 
 export function BodyWeightPanel({
+  calendarPosition = "top",
   initialDateKey,
+  onSelectDate,
+  reportDayCount = 90,
+  showImport = true,
 }: {
+  readonly calendarPosition?: "bottom" | "top";
   readonly initialDateKey?: Domain.DateKey;
+  readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
+  readonly reportDayCount?: BodyWeightReportDayCount;
+  readonly showImport?: boolean;
 }) {
   return Schema.decodeOption(Domain.DateKey)(
     initialDateKey ?? todayDateKey()
@@ -752,15 +766,36 @@ export function BodyWeightPanel({
           />
         </View>
       ),
-      onSome: (dateKey) => <BodyWeightRoute dateKey={dateKey} />,
+      onSome: (dateKey) => (
+        <BodyWeightRoute
+          calendarPosition={calendarPosition}
+          dateKey={dateKey}
+          onSelectDate={onSelectDate}
+          reportDayCount={reportDayCount}
+          showImport={showImport}
+        />
+      ),
     })
   );
 }
 
-function BodyWeightRoute({ dateKey }: { readonly dateKey: Domain.DateKey }) {
+function BodyWeightRoute({
+  calendarPosition,
+  dateKey,
+  onSelectDate,
+  reportDayCount,
+  showImport,
+}: {
+  readonly calendarPosition: "bottom" | "top";
+  readonly dateKey: Domain.DateKey;
+  readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
+  readonly reportDayCount: BodyWeightReportDayCount;
+  readonly showImport: boolean;
+}) {
   const [snapshot, , actor] = useMachine(bodyWeightRouteMachine, {
     input: {
       dateKey,
+      reportDayCount,
     },
   });
   const isEditing = snapshot.matches("Ready.Editing");
@@ -783,7 +818,7 @@ function BodyWeightRoute({ dateKey }: { readonly dateKey: Domain.DateKey }) {
 
   if (snapshot.matches("Failed")) {
     return (
-      <View style={styles.stack}>
+      <View style={styles.failureStack}>
         <BodyWeightMonthNavigator
           dateKey={snapshot.context.dateKey}
           disabled={false}
@@ -820,27 +855,40 @@ function BodyWeightRoute({ dateKey }: { readonly dateKey: Domain.DateKey }) {
     );
   }
 
+  const calendar = (
+    <BodyWeightCalendar
+      dateKey={snapshot.context.dateKey}
+      disabled={disabled}
+      entries={snapshot.context.monthEntries}
+      onImport={
+        showImport
+          ? () => {
+              actor.trigger.openImport();
+            }
+          : undefined
+      }
+      onNextMonth={() => {
+        actor.trigger.nextMonth();
+      }}
+      onPreviousMonth={() => {
+        actor.trigger.previousMonth();
+      }}
+      onSelectDate={(selectedDateKey) => {
+        if (onSelectDate !== undefined) {
+          onSelectDate(selectedDateKey);
+          return;
+        }
+
+        actor.trigger.selectDate({
+          dateKey: selectedDateKey,
+        });
+      }}
+    />
+  );
+
   return (
     <View style={styles.stack}>
-      <BodyWeightCalendar
-        dateKey={snapshot.context.dateKey}
-        disabled={disabled}
-        entries={snapshot.context.monthEntries}
-        onImport={() => {
-          actor.trigger.openImport();
-        }}
-        onNextMonth={() => {
-          actor.trigger.nextMonth();
-        }}
-        onPreviousMonth={() => {
-          actor.trigger.previousMonth();
-        }}
-        onSelectDate={(selectedDateKey) => {
-          actor.trigger.selectDate({
-            dateKey: selectedDateKey,
-          });
-        }}
-      />
+      {calendarPosition === "top" ? calendar : null}
       {editorActor === undefined ? null : (
         <BodyWeightEntryDialog actor={editorActor} />
       )}
@@ -850,6 +898,7 @@ function BodyWeightRoute({ dateKey }: { readonly dateKey: Domain.DateKey }) {
 
       <BodyWeightSummary report={snapshot.context.report} />
       <BodyWeightTrend report={snapshot.context.report} />
+      {calendarPosition === "bottom" ? calendar : null}
     </View>
   );
 }
@@ -920,7 +969,7 @@ function BodyWeightCalendar({
   readonly dateKey: Domain.DateKey;
   readonly disabled: boolean;
   readonly entries: readonly Domain.BodyWeightEntry[];
-  readonly onImport: () => void;
+  readonly onImport?: () => void;
   readonly onNextMonth: () => void;
   readonly onPreviousMonth: () => void;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
@@ -1771,6 +1820,7 @@ function _monthNavigationContext({
     message: null,
     monthEntries: [],
     report: null,
+    reportDayCount: context.reportDayCount,
   };
 }
 
@@ -1845,8 +1895,11 @@ const styles = StyleSheet.create({
     minHeight: 220,
     justifyContent: "center",
   },
-  stack: {
+  failureStack: {
     gap: spacing.lg,
+  },
+  stack: {
+    gap: spacing.xxxl,
   },
   monthNavigator: {
     flexDirection: "row",
@@ -2051,8 +2104,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   trendBlock: {
-    gap: spacing.md,
-    marginTop: spacing.md,
+    gap: spacing.xl,
   },
   chartShell: {
     gap: spacing.sm,
