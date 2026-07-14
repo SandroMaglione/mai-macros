@@ -28,6 +28,8 @@ export type FoodSearchSelectedEvent = {
 
 export type FoodNameGroupLabel = "Newest" | "Older";
 
+export type FoodSearchBaseOrder = "catalog" | "provided";
+
 export type FoodSearchMacroOrder =
   | "carbs"
   | "calorieDensityHigh"
@@ -53,7 +55,10 @@ const FoodSearchMacroOrderSchema = Schema.Literals([
   "sugar",
 ]);
 
+const FoodSearchBaseOrderSchema = Schema.Literals(["catalog", "provided"]);
+
 const FoodSearchContextSchema = Schema.Struct({
+  baseOrder: FoodSearchBaseOrderSchema,
   foods: Schema.Array(Domain.Food),
   macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
   matchingFoods: Schema.Array(Domain.Food),
@@ -62,6 +67,7 @@ const FoodSearchContextSchema = Schema.Struct({
 });
 
 const FoodSearchInputSchema = Schema.Struct({
+  baseOrder: Schema.optionalKey(FoodSearchBaseOrderSchema),
   foods: Schema.Array(Domain.Food),
   macroOrder: Schema.optionalKey(Schema.NullOr(FoodSearchMacroOrderSchema)),
   query: Schema.optionalKey(Schema.String),
@@ -71,6 +77,7 @@ const FoodSearchInputSchema = Schema.Struct({
 export type FoodSearchEvent =
   | {
       readonly type: "reset";
+      readonly baseOrder?: FoodSearchBaseOrder;
       readonly foods: readonly Domain.Food[];
       readonly query?: string;
       readonly selectedFoodId?: Domain.Food["id"] | null;
@@ -224,9 +231,11 @@ export function getFoodNameGroupLabel({
 }
 
 export function sortFoodsByMacroOrder({
+  baseOrder,
   foods,
   macroOrder,
 }: {
+  readonly baseOrder: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
   readonly macroOrder: FoodSearchMacroOrder | null;
 }) {
@@ -237,7 +246,9 @@ export function sortFoodsByMacroOrder({
       : Order.flip(Order.Number);
 
   return macroOrder === null
-    ? sortFoodsByOriginAndName({ foods })
+    ? baseOrder === "provided"
+      ? foods
+      : sortFoodsByOriginAndName({ foods })
     : Array.sort(
         foods,
         Order.combineAll([
@@ -290,25 +301,30 @@ function _compareFoodsNewestFirst({
 }
 
 const _foodSearchContextFromInput = ({
+  baseOrder = "catalog",
   foods,
   macroOrder = null,
   query = "",
   selectedFoodId = null,
 }: {
+  readonly baseOrder?: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
   readonly macroOrder?: FoodSearchMacroOrder | null;
   readonly query?: string;
   readonly selectedFoodId?: Domain.Food["id"] | null;
 }): {
+  readonly baseOrder: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
   readonly macroOrder: FoodSearchMacroOrder | null;
   readonly matchingFoods: readonly Domain.Food[];
   readonly query: string;
   readonly selectedFoodId: Domain.Food["id"] | null;
 } => ({
+  baseOrder,
   foods,
   macroOrder,
   matchingFoods: sortFoodsByMacroOrder({
+    baseOrder,
     foods: filterFoodsByQuery({ foods, query }),
     macroOrder,
   }),
@@ -327,6 +343,7 @@ export const foodSearchMachine = setup({
     events: {
       reset: Schema.toStandardSchemaV1(
         Schema.Struct({
+          baseOrder: Schema.optionalKey(FoodSearchBaseOrderSchema),
           foods: Schema.Array(Domain.Food),
           query: Schema.optionalKey(Schema.String),
           selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
@@ -368,6 +385,7 @@ export const foodSearchMachine = setup({
       on: {
         changeFoods: ({ context, event }) => ({
           context: _foodSearchContextFromInput({
+            baseOrder: context.baseOrder,
             foods: event.foods,
             macroOrder: context.macroOrder,
             query: context.query,
@@ -378,6 +396,7 @@ export const foodSearchMachine = setup({
           context: {
             macroOrder: event.macroOrder,
             matchingFoods: sortFoodsByMacroOrder({
+              baseOrder: context.baseOrder,
               foods: filterFoodsByQuery({
                 foods: context.foods,
                 query: context.query,
@@ -389,6 +408,7 @@ export const foodSearchMachine = setup({
         changeQuery: ({ context, event }) => ({
           context: {
             matchingFoods: sortFoodsByMacroOrder({
+              baseOrder: context.baseOrder,
               foods: filterFoodsByQuery({
                 foods: context.foods,
                 query: event.query,
@@ -403,8 +423,11 @@ export const foodSearchMachine = setup({
             selectedFoodId: null,
           },
         }),
-        reset: ({ event }) => ({
-          context: _foodSearchContextFromInput(event),
+        reset: ({ context, event }) => ({
+          context: _foodSearchContextFromInput({
+            ...event,
+            baseOrder: event.baseOrder ?? context.baseOrder,
+          }),
         }),
         selectFirstMatchingFood: ({ context, parent }, enq) => {
           const food = context.matchingFoods[0] ?? null;

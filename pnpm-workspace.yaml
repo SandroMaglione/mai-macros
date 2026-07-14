@@ -13,6 +13,7 @@ ignoredBuiltDependencies:
   - msgpackr-extract
 
 allowBuilds:
+  "@shopify/react-native-skia": false
   better-sqlite3: true
   dtrace-provider: false
   esbuild: true

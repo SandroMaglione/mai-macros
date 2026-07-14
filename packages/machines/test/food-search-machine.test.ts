@@ -1,8 +1,10 @@
 import { Domain } from "@mai/nutrition";
 import { Effect, Schema } from "effect";
 import { assert, describe, it } from "vitest";
+import { createActor } from "xstate";
 
 import {
+  foodSearchMachine,
   getFoodNameGroupLabel,
   sortFoodsByOriginAndName,
 } from "../src/food-search-machine.ts";
@@ -38,6 +40,69 @@ describe("food search name groups", () => {
         )
         .map((food) => food.id),
       [newest.id, older.id]
+    );
+  });
+});
+
+describe("food search base order", () => {
+  it("preserves a caller-provided order through filtering", async () => {
+    const eggs = await _food({
+      createdAt: 100,
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Eggs",
+    });
+    const apple = await _food({
+      createdAt: 200,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Apple",
+    });
+    const actor = createActor(foodSearchMachine, {
+      input: {
+        baseOrder: "provided",
+        foods: [eggs, apple],
+      },
+    });
+
+    actor.start();
+
+    assert.deepEqual(
+      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      [eggs.id, apple.id]
+    );
+
+    actor.send({ type: "changeQuery", query: "e" });
+
+    assert.deepEqual(
+      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      [eggs.id, apple.id]
+    );
+  });
+
+  it("restores a caller-provided order after clearing a macro order", async () => {
+    const eggs = await _food({
+      createdAt: 100,
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Eggs",
+    });
+    const apple = await _food({
+      createdAt: 200,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Apple",
+    });
+    const actor = createActor(foodSearchMachine, {
+      input: {
+        baseOrder: "provided",
+        foods: [eggs, apple],
+      },
+    });
+
+    actor.start();
+    actor.send({ type: "changeMacroOrder", macroOrder: "energy" });
+    actor.send({ type: "changeMacroOrder", macroOrder: null });
+
+    assert.deepEqual(
+      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      [eggs.id, apple.id]
     );
   });
 });

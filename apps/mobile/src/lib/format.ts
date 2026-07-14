@@ -1,6 +1,47 @@
 import type { FoodFormMachine } from "@mai/machines";
 import { Measurements, type Domain } from "@mai/nutrition";
 
+export type ChartDomain = readonly [minimum: number, maximum: number];
+
+export function niceLinearDomain({
+  domain,
+}: {
+  readonly domain: ChartDomain;
+}): [number, number] {
+  let minimum = Math.min(domain[0], domain[1]);
+  let maximum = Math.max(domain[0], domain[1]);
+
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) {
+    return [0, 1];
+  }
+
+  if (minimum === maximum) {
+    const padding = Math.max(1, Math.abs(minimum) * 0.1);
+
+    return [minimum - padding, maximum + padding];
+  }
+
+  for (let iteration = 0; iteration < 2; iteration += 1) {
+    const approximateStep = (maximum - minimum) / 10;
+    const magnitude = 10 ** Math.floor(Math.log10(approximateStep));
+    const normalizedStep = approximateStep / magnitude;
+    const multiplier =
+      normalizedStep >= Math.sqrt(50)
+        ? 10
+        : normalizedStep >= Math.sqrt(10)
+          ? 5
+          : normalizedStep >= Math.sqrt(2)
+            ? 2
+            : 1;
+    const step = multiplier * magnitude;
+
+    minimum = Math.floor(minimum / step) * step;
+    maximum = Math.ceil(maximum / step) * step;
+  }
+
+  return [minimum, maximum];
+}
+
 export type FoodNutrientOverviewNutrients = {
   readonly carbsGrams?: number | undefined;
   readonly energyKcal?: number | undefined;

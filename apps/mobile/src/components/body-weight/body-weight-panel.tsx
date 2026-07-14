@@ -1,5 +1,10 @@
 import { EmptyEvent } from "@mai/machines";
 import { BodyWeightReports, BodyWeights, Domain } from "@mai/nutrition";
+import {
+  Circle as SkiaCircle,
+  DashPathEffect,
+  Rect as SkiaRect,
+} from "@shopify/react-native-skia";
 import { useMachine, useSelector } from "@xstate/react";
 import { Array, DateTime, Effect, Match, Option, Schema } from "effect";
 import {
@@ -20,7 +25,13 @@ import {
   Text,
   View,
 } from "react-native";
-import Svg, { Circle, G, Line, Path, Text as SvgText } from "react-native-svg";
+import {
+  Bar,
+  CartesianChart,
+  Line,
+  Scatter,
+  useChartPressState,
+} from "victory-native";
 import { Actor, createAsyncLogic, setup, type ActorRefFromLogic } from "xstate";
 
 import { Button } from "@/components/ui/button";
@@ -28,8 +39,9 @@ import { NumberField, TextArea } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
+import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, niceLinearDomain } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 
@@ -75,6 +87,36 @@ const estimateWeightWindowDays = 14;
 const BodyWeightReportDayCount = Schema.Literals([7, 30, 90]);
 
 export type BodyWeightReportDayCount = typeof BodyWeightReportDayCount.Type;
+
+const BodyWeightChartKind = Schema.Literals(["trend", "change"]);
+
+const BodyWeightChartContext = Schema.Struct({
+  chartKind: BodyWeightChartKind,
+});
+
+const bodyWeightChartMachine = setup({
+  schemas: {
+    context: Schema.toStandardSchemaV1(BodyWeightChartContext),
+    events: {
+      selectChartKind: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          chartKind: BodyWeightChartKind,
+        })
+      ),
+    },
+  },
+}).createMachine({
+  context: {
+    chartKind: "trend",
+  },
+  on: {
+    selectChartKind: ({ event }) => ({
+      context: {
+        chartKind: event.chartKind,
+      },
+    }),
+  },
+});
 
 const BodyWeightRouteInput = Schema.Struct({
   dateKey: Domain.DateKey,
@@ -1370,6 +1412,19 @@ function BodyWeightMetric({
   );
 }
 
+const bodyWeightChartTabs = [
+  {
+    accessibilityLabel: "Show weight trend chart",
+    key: "trend",
+    label: "Trend",
+  },
+  {
+    accessibilityLabel: "Show weights compared with the average",
+    key: "change",
+    label: "Vs average",
+  },
+];
+
 function BodyWeightTrend({
   report,
 }: {
@@ -1388,6 +1443,45 @@ function BodyWeightChart({
 }: {
   readonly report: BodyWeightReportRange;
 }) {
+  const [snapshot, , actor] = useMachine(bodyWeightChartMachine);
+  const chartKind = snapshot.context.chartKind;
+  const chart = BodyWeightChartDataModel.make({ report });
+  const { state: pressState, isActive: isPressActive } = useChartPressState({
+    x: 0,
+    y: {
+      change: 0,
+      changeDown: 0,
+      changeUp: 0,
+      estimate: 0,
+      normalRaw: 0,
+      outlierRaw: 0,
+      stable: 0,
+      trend: 0,
+    },
+  });
+  const activeDomain =
+    chartKind === "trend" ? chart.trendDomain : chart.changeDomain;
+  const activeDomainRange = activeDomain[1] - activeDomain[0];
+  const scaleValueOffset =
+    chartKind === "change" && chart.averageReference !== null
+      ? chart.averageReference.value
+      : 0;
+  const scaleSteps = [0.25, 0.5, 0.75].map((ratio) => ({
+    displayValue:
+      activeDomain[0] + activeDomainRange * ratio + scaleValueOffset,
+    ratio,
+    top: 10 + (1 - ratio) * 212 - 6,
+    value: activeDomain[0] + activeDomainRange * ratio,
+  }));
+  const maximumScaleLabel = formatNumber({
+    maximumFractionDigits: 1,
+    value: activeDomain[1] + scaleValueOffset,
+  });
+  const minimumScaleLabel = formatNumber({
+    maximumFractionDigits: 1,
+    value: activeDomain[0] + scaleValueOffset,
+  });
+
   if (!Array.isReadonlyArrayNonEmpty(report.entries)) {
     return (
       <View>
@@ -1396,120 +1490,260 @@ function BodyWeightChart({
     );
   }
 
-  const chart = ChartModel.make({ report });
   const progressDayCount = _reportTrendDayCount({ report });
 
   return (
-    <View>
-      <View style={styles.chartShell}>
-        <Svg
-          height={190}
-          style={styles.chartSvg}
-          viewBox="0 0 320 190"
-          width="100%"
-        >
-          <Line
-            stroke={color.divider}
-            strokeWidth={1}
-            x1={chart.paddingLeft}
-            x2={chart.width - chart.paddingRight}
-            y1={chart.height - chart.paddingBottom}
-            y2={chart.height - chart.paddingBottom}
-          />
-          <Line
-            stroke={color.divider}
-            strokeWidth={1}
-            x1={chart.paddingLeft}
-            x2={chart.paddingLeft}
-            y1={chart.paddingTop}
-            y2={chart.height - chart.paddingBottom}
-          />
-          {chart.estimateGuide === null ? null : (
-            <G>
-              <Line
-                opacity={0.62}
-                stroke={color.nutritionEnergy}
-                strokeDasharray={[3, 5]}
-                strokeLinecap="round"
-                strokeWidth={1.2}
-                x1={chart.paddingLeft}
-                x2={chart.width - chart.paddingRight}
-                y1={chart.estimateGuide.y}
-                y2={chart.estimateGuide.y}
-              />
-              <SvgText
-                alignmentBaseline="middle"
-                fill={color.textMuted}
-                fontSize={10}
-                fontWeight={tokens.type.weight.black}
-                textAnchor="end"
-                x={chart.paddingLeft - 5}
-                y={chart.estimateGuide.y}
+    <View style={styles.chartSection}>
+      <PagerTabBar
+        activeIndex={chartKind === "trend" ? 0 : 1}
+        onActiveIndexChange={(index) => {
+          actor.trigger.selectChartKind({
+            chartKind: index === 0 ? "trend" : "change",
+          });
+        }}
+        tabs={bodyWeightChartTabs}
+      />
+      <View
+        accessibilityLabel={`Weight ${chartKind === "trend" ? "trend" : "values compared with the weighted average"} from ${_formatChartDateLabel({ dateKey: chart.startDateKey })} to ${_formatChartDateLabel({ dateKey: chart.endDateKey })}. Touch and drag across the chart for daily values.`}
+        accessible
+        style={styles.chartShell}
+      >
+        <View style={styles.chartCanvas}>
+          <CartesianChart
+            chartPressConfig={{
+              pan: {
+                activateAfterLongPress: 80,
+                failOffsetY: [-12, 12],
+              },
+            }}
+            chartPressState={pressState}
+            data={chart.data}
+            domain={{
+              y: chartKind === "trend" ? chart.trendDomain : chart.changeDomain,
+            }}
+            domainPadding={{ left: 10, right: 10 }}
+            frame={{
+              lineColor: color.divider,
+              lineWidth: { bottom: 0, left: 0, right: 0, top: 0 },
+            }}
+            padding={{ bottom: 10, left: 58, right: 8, top: 10 }}
+            xKey="dayIndex"
+            yKeys={[
+              "change",
+              "changeDown",
+              "changeUp",
+              "estimate",
+              "normalRaw",
+              "outlierRaw",
+              "stable",
+              "trend",
+            ]}
+          >
+            {({ chartBounds, points, yScale }) => (
+              <>
+                <SkiaRect
+                  color={color.divider}
+                  height={1}
+                  opacity={0.9}
+                  width={chartBounds.right - chartBounds.left}
+                  x={chartBounds.left}
+                  y={chartBounds.top}
+                />
+                {scaleSteps.map((step) => (
+                  <SkiaRect
+                    color={color.divider}
+                    height={1}
+                    key={step.value}
+                    opacity={0.9}
+                    width={chartBounds.right - chartBounds.left}
+                    x={chartBounds.left}
+                    y={
+                      chartBounds.top +
+                      (1 - step.ratio) * (chartBounds.bottom - chartBounds.top)
+                    }
+                  />
+                ))}
+                <SkiaRect
+                  color={color.divider}
+                  height={1}
+                  opacity={0.9}
+                  width={chartBounds.right - chartBounds.left}
+                  x={chartBounds.left}
+                  y={chartBounds.bottom - 1}
+                />
+                {chartKind === "trend" ? (
+                  <>
+                    <Line
+                      color={color.primary}
+                      connectMissingData={false}
+                      curveType="linear"
+                      points={points.trend}
+                      strokeCap="round"
+                      strokeJoin="round"
+                      strokeWidth={3}
+                    />
+                    <Line
+                      color={color.nutritionEnergy}
+                      connectMissingData={false}
+                      curveType="linear"
+                      points={points.stable}
+                      strokeCap="round"
+                      strokeJoin="round"
+                      strokeWidth={2.4}
+                    />
+                    <Scatter
+                      color={color.textMuted}
+                      opacity={0.56}
+                      points={points.normalRaw}
+                      radius={2.8}
+                    />
+                    <Scatter
+                      color={color.warningText}
+                      opacity={0.78}
+                      points={points.outlierRaw}
+                      radius={3.8}
+                    />
+                    <Line
+                      color={color.nutritionEnergy}
+                      connectMissingData={false}
+                      opacity={0.62}
+                      points={points.estimate}
+                      strokeCap="round"
+                      strokeWidth={1.2}
+                    >
+                      <DashPathEffect intervals={[3, 5]} />
+                    </Line>
+                  </>
+                ) : (
+                  <>
+                    <SkiaRect
+                      color={color.textMuted}
+                      height={1}
+                      opacity={0.5}
+                      width={chartBounds.right - chartBounds.left}
+                      x={chartBounds.left}
+                      y={yScale(0)}
+                    />
+                    <Bar
+                      chartBounds={chartBounds}
+                      color={color.primary}
+                      innerPadding={0.32}
+                      points={points.changeDown}
+                      roundedCorners={{
+                        topLeft: 2,
+                        topRight: 2,
+                      }}
+                    />
+                    <Bar
+                      chartBounds={chartBounds}
+                      color={color.nutritionEnergy}
+                      innerPadding={0.32}
+                      points={points.changeUp}
+                      roundedCorners={{
+                        topLeft: 2,
+                        topRight: 2,
+                      }}
+                    />
+                  </>
+                )}
+                {isPressActive ? (
+                  <>
+                    <SkiaRect
+                      color={color.textMuted}
+                      height={chartBounds.bottom - chartBounds.top}
+                      opacity={0.42}
+                      width={1}
+                      x={pressState.x.position}
+                      y={chartBounds.top}
+                    />
+                    <SkiaCircle
+                      color={chartKind === "trend" ? color.primary : color.text}
+                      cx={pressState.x.position}
+                      cy={
+                        chartKind === "trend"
+                          ? pressState.y.trend.position
+                          : pressState.y.change.position
+                      }
+                      r={4.5}
+                    />
+                  </>
+                ) : null}
+              </>
+            )}
+          </CartesianChart>
+          <View pointerEvents="none" style={styles.chartPlotOverlay}>
+            <Text numberOfLines={1} style={styles.chartScaleMaximum}>
+              {maximumScaleLabel}
+            </Text>
+            <Text numberOfLines={1} style={styles.chartScaleMinimum}>
+              {minimumScaleLabel}
+            </Text>
+            {scaleSteps.map((step) => (
+              <Text
+                key={step.value}
+                numberOfLines={1}
+                style={[styles.chartScaleStep, { top: step.top }]}
               >
-                {chart.estimateGuide.label}
-              </SvgText>
-            </G>
-          )}
-          {chart.trendPath === "" ? null : (
-            <Path
-              d={chart.trendPath}
-              fill="none"
-              stroke={color.primary}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={3}
-            />
-          )}
-          {chart.stableTrendPath === "" ? null : (
-            <Path
-              d={chart.stableTrendPath}
-              fill="none"
-              stroke={color.nutritionEnergy}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.4}
-            />
-          )}
-          {chart.rawPoints.map((point) => (
-            <Circle
-              cx={point.x}
-              cy={point.y}
-              fill={point.isOutlier ? color.warningText : color.textMuted}
-              key={point.dateKey}
-              opacity={point.isOutlier ? 0.68 : 0.56}
-              r={point.isOutlier ? 3.8 : 2.8}
-            />
-          ))}
-        </Svg>
+                {formatNumber({
+                  maximumFractionDigits: 1,
+                  value: step.displayValue,
+                })}
+              </Text>
+            ))}
+          </View>
+        </View>
         <View style={styles.chartFooter}>
-          <Text numberOfLines={1} style={styles.chartDateRange}>
+          <Text style={styles.chartDateRange}>
             {_formatChartDateLabel({ dateKey: chart.startDateKey })}
-            {" - "}
+            {" – "}
             {_formatChartDateLabel({ dateKey: chart.endDateKey })}
           </Text>
           <View style={styles.chartLegend}>
-            <View style={styles.chartLegendItem}>
-              <View style={[styles.chartLegendMark, styles.chartLegendTrend]} />
-              <Text numberOfLines={1} style={styles.chartLegendLabel}>
-                {_formatLastDaysLabel({
-                  dayCount: progressDayCount,
-                })}
-              </Text>
-            </View>
-            <View style={styles.chartLegendItem}>
-              <View
-                style={[styles.chartLegendMark, styles.chartLegendStable]}
-              />
-              <Text numberOfLines={1} style={styles.chartLegendLabel}>
-                {_formatLastDaysLabel({
-                  dayCount: estimateWeightWindowDays,
-                  suffix: "avg",
-                })}
-              </Text>
-            </View>
+            {chartKind === "trend" ? (
+              <>
+                <BodyWeightChartLegendItem
+                  color={color.primary}
+                  label={`Trend (${progressDayCount}d)`}
+                />
+                <BodyWeightChartLegendItem
+                  color={color.nutritionEnergy}
+                  label="Average"
+                />
+              </>
+            ) : (
+              <>
+                <BodyWeightChartLegendItem
+                  color={color.primary}
+                  label="Lower"
+                />
+                <BodyWeightChartLegendItem
+                  color={color.nutritionEnergy}
+                  label="Higher"
+                />
+              </>
+            )}
           </View>
         </View>
       </View>
+    </View>
+  );
+}
+
+function BodyWeightChartLegendItem({
+  color: legendColor,
+  label,
+}: {
+  readonly color: string;
+  readonly label: string;
+}) {
+  return (
+    <View style={styles.chartLegendItem}>
+      <View
+        style={[styles.chartLegendMark, { backgroundColor: legendColor }]}
+      />
+      <Text numberOfLines={1} style={styles.chartLegendLabel}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -1702,14 +1936,81 @@ const CalendarMonthModel = {
   },
 };
 
-const ChartModel = {
+const BodyWeightChartDataModel = {
   make({ report }: { readonly report: BodyWeightReportRange }) {
-    const width = 320;
-    const height = 190;
-    const paddingTop = 14;
-    const paddingRight = 2;
-    const paddingBottom = 20;
-    const paddingLeft = 10;
+    const dateKeys = [
+      ...report.entries.map((entry) => entry.dateKey),
+      ...report.trendPoints.map((point) => point.dateKey),
+      ...report.stableTrendPoints.map((point) => point.dateKey),
+    ]
+      .filter((dateKey, index, values) => values.indexOf(dateKey) === index)
+      .sort();
+    const startDateKey = dateKeys[0] ?? report.startDateKey;
+    const endDateKey = dateKeys.at(-1) ?? report.endDateKey;
+    const latestStableTrendPoint = report.stableTrendPoints.at(-1) ?? null;
+    const averageReference =
+      report.weightedWeightKilograms === null
+        ? latestStableTrendPoint === null
+          ? null
+          : {
+              value: latestStableTrendPoint.weightKilograms,
+            }
+        : {
+            value: report.weightedWeightKilograms,
+          };
+    const data = dateKeys.map((dateKey) => {
+      const entry = report.entries.find(
+        (candidate) => candidate.dateKey === dateKey
+      );
+      const trendPoint = report.trendPoints.find(
+        (candidate) => candidate.dateKey === dateKey
+      );
+      const stablePoint = report.stableTrendPoints.find(
+        (candidate) => candidate.dateKey === dateKey
+      );
+      const isOutlier = report.outliers.some(
+        (outlier) => outlier.entry.dateKey === dateKey
+      );
+      const trend = trendPoint?.weightKilograms ?? null;
+      const stable = stablePoint?.weightKilograms ?? null;
+      const displayedWeight = entry?.weightKilograms ?? trend;
+      const comparisonWeight = entry?.weightKilograms ?? null;
+      const change =
+        comparisonWeight === null || averageReference === null
+          ? null
+          : comparisonWeight - averageReference.value;
+      const stableLabel =
+        stable === null
+          ? "No rolling average"
+          : `avg ${_formatKilograms({ value: stable })}`;
+
+      return {
+        change,
+        changeDown: change !== null && change < 0 ? change : null,
+        changeTooltip:
+          change === null
+            ? "No average comparison"
+            : `${_formatKilograms({ value: comparisonWeight ?? 0 })} · ${change === 0 ? "at" : change > 0 ? "above" : "below"} average`,
+        changeUp: change !== null && change >= 0 ? change : null,
+        dateKey,
+        dayIndex: _dateKeyToDayIndex({ dateKey }),
+        estimate: report.weightedWeightKilograms,
+        normalRaw:
+          entry === undefined || isOutlier ? null : entry.weightKilograms,
+        outlierRaw:
+          entry === undefined || !isOutlier ? null : entry.weightKilograms,
+        stable,
+        tooltipPrimary:
+          displayedWeight === null
+            ? _formatChartDateLabel({ dateKey })
+            : `${_formatChartDateLabel({ dateKey })} · ${_formatKilograms({ value: displayedWeight })}${isOutlier ? " · outlier" : ""}`,
+        trend,
+        trendTooltip:
+          trend === null
+            ? stableLabel
+            : `Trend ${_formatKilograms({ value: trend })} · ${stableLabel}`,
+      };
+    });
     const allWeights = [
       ...report.entries.map((entry) => entry.weightKilograms),
       ...report.trendPoints.map((point) => point.weightKilograms),
@@ -1718,87 +2019,34 @@ const ChartModel = {
         ? []
         : [report.weightedWeightKilograms]),
     ];
-    const dateKeys = [
-      ...report.entries.map((entry) => entry.dateKey),
-      ...report.trendPoints.map((point) => point.dateKey),
-      ...report.stableTrendPoints.map((point) => point.dateKey),
-    ].sort();
-    const startDateKey = dateKeys[0] ?? report.startDateKey;
-    const endDateKey = dateKeys.at(-1) ?? report.endDateKey;
-    const minimumWeight = Math.min(...allWeights);
-    const maximumWeight = Math.max(...allWeights);
-    const weightRange = Math.max(1, maximumWeight - minimumWeight);
-    const minimumDay = _dateKeyToDayIndex({ dateKey: startDateKey });
-    const maximumDay = _dateKeyToDayIndex({ dateKey: endDateKey });
-    const dayRange = Math.max(1, maximumDay - minimumDay);
-    const xForDateKey = ({ dateKey }: { readonly dateKey: Domain.DateKey }) =>
-      minimumDay === maximumDay
-        ? width / 2
-        : paddingLeft +
-          ((_dateKeyToDayIndex({ dateKey }) - minimumDay) / dayRange) *
-            (width - paddingLeft - paddingRight);
-    const yForWeight = ({
-      weightKilograms,
-    }: {
-      readonly weightKilograms: number;
-    }) =>
-      paddingTop +
-      ((maximumWeight - weightKilograms) / weightRange) *
-        (height - paddingTop - paddingBottom);
-    const outlierDateKeys = report.outliers.map(
-      (outlier) => outlier.entry.dateKey
-    );
-    const rawPoints = report.entries.map((entry) => ({
-      dateKey: entry.dateKey,
-      isOutlier: outlierDateKeys.includes(entry.dateKey),
-      x: xForDateKey({ dateKey: entry.dateKey }),
-      y: yForWeight({ weightKilograms: entry.weightKilograms }),
-    }));
-    const trendPath = report.trendPoints
-      .map((point, index) => {
-        const x = xForDateKey({ dateKey: point.dateKey });
-        const y = yForWeight({ weightKilograms: point.weightKilograms });
-
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-      })
-      .join(" ");
-    const stableTrendPath = report.stableTrendPoints
-      .map((point, index) => {
-        const x = xForDateKey({ dateKey: point.dateKey });
-        const y = yForWeight({ weightKilograms: point.weightKilograms });
-
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-      })
-      .join(" ");
-    const estimateGuide =
-      report.weightedWeightKilograms === null
-        ? null
-        : (() => {
-            const y = yForWeight({
-              weightKilograms: report.weightedWeightKilograms,
-            });
-
-            return {
-              label: _formatKilograms({
-                value: report.weightedWeightKilograms,
-              }),
-              y,
-            };
-          })();
+    const minimumWeight = Array.isReadonlyArrayNonEmpty(allWeights)
+      ? Math.min(...allWeights)
+      : 0;
+    const maximumWeight = Array.isReadonlyArrayNonEmpty(allWeights)
+      ? Math.max(...allWeights)
+      : 0;
+    const trendPadding = Math.max(0.5, (maximumWeight - minimumWeight) * 0.15);
+    const changes = data.map((point) => point.change ?? 0);
+    const minimumChange = Math.min(0, ...changes);
+    const maximumChange = Math.max(0, ...changes);
+    const changeRange = maximumChange - minimumChange;
+    const changePadding = Math.max(0.1, changeRange * 0.12);
+    const rawChangeDomain: [number, number] =
+      changeRange === 0
+        ? [-0.25, 0.25]
+        : [minimumChange - changePadding, maximumChange + changePadding];
+    const changeDomain = niceLinearDomain({ domain: rawChangeDomain });
+    const trendDomain = niceLinearDomain({
+      domain: [minimumWeight - trendPadding, maximumWeight + trendPadding],
+    });
 
     return {
-      estimateGuide,
-      height,
-      paddingBottom,
-      paddingLeft,
-      paddingRight,
-      paddingTop,
-      rawPoints,
+      averageReference,
+      changeDomain,
+      data,
       endDateKey,
-      stableTrendPath,
       startDateKey,
-      trendPath,
-      width,
+      trendDomain,
     };
   },
 };
@@ -2104,17 +2352,62 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   trendBlock: {
+    gap: spacing.xxxl,
+  },
+  chartSection: {
     gap: spacing.xl,
   },
   chartShell: {
-    gap: spacing.sm,
+    gap: spacing.xxxl,
+    paddingVertical: spacing.md,
   },
-  chartSvg: {
-    overflow: "visible",
+  chartCanvas: {
+    position: "relative",
+    height: 232,
+  },
+  chartPlotOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  chartScaleMaximum: {
+    position: "absolute",
+    top: 4,
+    left: 2,
+    width: 42,
+    color: color.textMuted,
+    fontSize: 10,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: 12,
+    textAlign: "right",
+  },
+  chartScaleMinimum: {
+    position: "absolute",
+    bottom: 4,
+    left: 2,
+    width: 42,
+    color: color.textMuted,
+    fontSize: 10,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: 12,
+    textAlign: "right",
+  },
+  chartScaleStep: {
+    position: "absolute",
+    left: 2,
+    width: 42,
+    color: color.textMuted,
+    fontSize: 10,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: 12,
+    textAlign: "right",
   },
   chartFooter: {
     minWidth: 0,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
@@ -2128,7 +2421,8 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.xs,
   },
   chartLegend: {
-    flexShrink: 0,
+    minWidth: 0,
+    flexShrink: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
@@ -2146,12 +2440,6 @@ const styles = StyleSheet.create({
     height: 3,
     flexShrink: 0,
     borderRadius: radius.pill,
-  },
-  chartLegendTrend: {
-    backgroundColor: color.primary,
-  },
-  chartLegendStable: {
-    backgroundColor: color.nutritionEnergy,
   },
   chartLegendLabel: {
     color: color.textSubtle,

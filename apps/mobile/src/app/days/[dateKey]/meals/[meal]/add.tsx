@@ -205,6 +205,7 @@ const addMealFoodRouteMachine = setup({
       foodSearchActor: spawn(FoodSearchMachine.foodSearchMachine, {
         id: "addMealFoodRouteFoodSearch",
         input: {
+          baseOrder: "provided",
           foods: Array.sortBy(
             mealFoodRecencyOrder,
             FoodSearchMachine.foodUserOriginOrder,

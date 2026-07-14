@@ -2,17 +2,29 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
+import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, todayDateKey } from "@/lib/date-keys";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, niceLinearDomain } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines";
-import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
+import { Domain, NutritionReports } from "@mai/nutrition";
+import {
+  Circle as SkiaCircle,
+  DashPathEffect,
+  Rect as SkiaRect,
+} from "@shopify/react-native-skia";
 import { useMachine } from "@xstate/react";
 import { Array, Effect, Option, Schema } from "effect";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
+import {
+  Bar,
+  CartesianChart,
+  Line,
+  Scatter,
+  useChartPressState,
+} from "victory-native";
 import { createAsyncLogic, setup } from "xstate";
 
 import { isInsideNutritionTargetMargin } from "@/lib/nutrition-target-trend";
@@ -30,7 +42,10 @@ const NutritionTrendMetric = Schema.Literals([
 
 type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
 
+const NutritionChartKind = Schema.Literals(["trend", "daily"]);
+
 const NutritionTrendMetricContext = Schema.Struct({
+  chartKind: NutritionChartKind,
   nutrientName: NutritionTrendMetric,
 });
 
@@ -38,6 +53,11 @@ const nutritionTrendMetricMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(NutritionTrendMetricContext),
     events: {
+      selectChartKind: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          chartKind: NutritionChartKind,
+        })
+      ),
       selectMetric: Schema.toStandardSchemaV1(
         Schema.Struct({
           nutrientName: NutritionTrendMetric,
@@ -47,9 +67,15 @@ const nutritionTrendMetricMachine = setup({
   },
 }).createMachine({
   context: {
+    chartKind: "trend",
     nutrientName: "energyKcal",
   },
   on: {
+    selectChartKind: ({ event }) => ({
+      context: {
+        chartKind: event.chartKind,
+      },
+    }),
     selectMetric: ({ event }) => ({
       context: {
         nutrientName: event.nutrientName,
@@ -251,6 +277,19 @@ const metricColors = {
   sugarGrams: color.nutritionSugar,
 } satisfies Record<NutritionTrendMetric, string>;
 
+const nutritionChartTabs = [
+  {
+    accessibilityLabel: "Show nutrition trend chart",
+    key: "trend",
+    label: "Trend",
+  },
+  {
+    accessibilityLabel: "Show daily nutrition bar chart",
+    key: "daily",
+    label: "Daily",
+  },
+] as const;
+
 export function NutritionTrends({
   currentReport,
   onSelectDate,
@@ -275,83 +314,173 @@ function NutritionTrendChart({
   readonly report: NutritionReports.NutritionReportRange;
 }) {
   const [snapshot, , actor] = useMachine(nutritionTrendMetricMachine);
+  const chartKind = snapshot.context.chartKind;
   const nutrientName = snapshot.context.nutrientName;
-  const chart = NutritionChartModel.make({
+  const chart = NutritionChartDataModel.make({
     nutrientName,
     report,
   });
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
+  const unitLabel = nutrientName === "energyKcal" ? "Kilocalories" : "Grams";
+  const { state: pressState, isActive: isPressActive } = useChartPressState({
+    x: 0,
+    y: {
+      actual: 0,
+      average: 0,
+      target: 0,
+    },
+  });
+  const scaleSteps = [0.25, 0.5, 0.75].map((ratio) => ({
+    top: 10 + (1 - ratio) * 212 - 6,
+    value: chart.maximumValue * ratio,
+  }));
 
   return (
     <View style={styles.chartSection}>
-      {!Array.isReadonlyArrayNonEmpty(chart.rawPoints) ? (
+      <PagerTabBar
+        activeIndex={chartKind === "trend" ? 0 : 1}
+        onActiveIndexChange={(index) => {
+          actor.trigger.selectChartKind({
+            chartKind: index === 0 ? "trend" : "daily",
+          });
+        }}
+        tabs={nutritionChartTabs}
+      />
+      {!Array.isReadonlyArrayNonEmpty(chart.data) ? (
         <Text style={styles.emptyText}>
           Record nutrition days to display this trend.
         </Text>
       ) : (
-        <View style={styles.chartShell}>
-          <Svg height={208} viewBox="0 0 320 208" width="100%">
-            <Line
-              stroke={color.divider}
-              strokeWidth={1}
-              x1={chart.paddingLeft}
-              x2={chart.width - chart.paddingRight}
-              y1={chart.height - chart.paddingBottom}
-              y2={chart.height - chart.paddingBottom}
-            />
-            <Line
-              stroke={color.divider}
-              strokeWidth={1}
-              x1={chart.paddingLeft}
-              x2={chart.paddingLeft}
-              y1={chart.paddingTop}
-              y2={chart.height - chart.paddingBottom}
-            />
-            <SvgText
-              fill={color.textSubtle}
-              fontSize={9}
-              textAnchor="end"
-              x={chart.paddingLeft - 5}
-              y={chart.paddingTop + 3}
+        <View
+          accessibilityLabel={`${metricLabels[nutrientName]} ${chartKind === "trend" ? "trend" : "daily bars"} from ${_formatShortDate({ dateKey: report.startDateKey })} to ${_formatShortDate({ dateKey: report.endDateKey })}. Touch and drag across the chart for daily values.`}
+          accessible
+          style={styles.chartShell}
+        >
+          <View style={styles.chartReferenceSummary}>
+            <Text style={styles.chartReferenceUnit}>{unitLabel}</Text>
+            {chart.targetReference === null ? null : (
+              <Text style={styles.chartTargetReferenceSummary}>
+                {chart.targetReference.label}
+              </Text>
+            )}
+          </View>
+          <View style={styles.chartCanvas}>
+            <CartesianChart
+              chartPressConfig={{
+                pan: {
+                  activateAfterLongPress: 80,
+                  failOffsetY: [-12, 12],
+                },
+              }}
+              chartPressState={pressState}
+              data={chart.data}
+              domain={{ y: [0, chart.maximumValue] }}
+              domainPadding={{ left: 10, right: 10 }}
+              frame={{
+                lineColor: color.divider,
+                lineWidth: { bottom: 0, left: 0, right: 0, top: 0 },
+              }}
+              padding={{ bottom: 10, left: 44, right: 24, top: 10 }}
+              xKey="dayIndex"
+              yKeys={["actual", "average", "target"]}
             >
-              {`${formatNumber({
-                maximumFractionDigits: 0,
-                value: chart.maximumValue,
-              })} ${unit}`}
-            </SvgText>
-            {chart.targetPath === "" ? null : (
-              <Path
-                d={chart.targetPath}
-                fill="none"
-                opacity={0.72}
-                stroke={color.textMuted}
-                strokeDasharray={[4, 5]}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.4}
-              />
-            )}
-            {chart.averagePath === "" ? null : (
-              <Path
-                d={chart.averagePath}
-                fill="none"
-                stroke={metricColors[nutrientName]}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-              />
-            )}
-            {chart.rawPoints.map((point) => (
-              <Circle
-                cx={point.x}
-                cy={point.y}
-                fill={metricColors[nutrientName]}
-                key={point.dateKey}
-                opacity={0.52}
-                r={3}
-              />
-            ))}
-          </Svg>
+              {({ chartBounds, points, yScale }) => (
+                <>
+                  <SkiaRect
+                    color={color.divider}
+                    height={1}
+                    opacity={0.9}
+                    width={chartBounds.right - chartBounds.left}
+                    x={chartBounds.left}
+                    y={chartBounds.top}
+                  />
+                  {scaleSteps.map((step) => (
+                    <SkiaRect
+                      color={color.divider}
+                      height={1}
+                      key={step.value}
+                      opacity={0.9}
+                      width={chartBounds.right - chartBounds.left}
+                      x={chartBounds.left}
+                      y={yScale(step.value)}
+                    />
+                  ))}
+                  {chartKind === "trend" ? (
+                    <>
+                      <Line
+                        color={metricColors[nutrientName]}
+                        connectMissingData={false}
+                        curveType="natural"
+                        points={points.average}
+                        strokeCap="round"
+                        strokeJoin="round"
+                        strokeWidth={3}
+                      />
+                      <Scatter
+                        color={metricColors[nutrientName]}
+                        opacity={0.52}
+                        points={points.actual}
+                        radius={3}
+                      />
+                    </>
+                  ) : (
+                    <Bar
+                      chartBounds={chartBounds}
+                      color={metricColors[nutrientName]}
+                      innerPadding={0.32}
+                      points={points.actual}
+                      roundedCorners={{ topLeft: 3, topRight: 3 }}
+                    />
+                  )}
+                  <Line
+                    color={color.textMuted}
+                    connectMissingData={false}
+                    opacity={0.72}
+                    points={points.target}
+                    strokeCap="round"
+                    strokeWidth={1.4}
+                  >
+                    <DashPathEffect intervals={[4, 5]} />
+                  </Line>
+                  {isPressActive ? (
+                    <>
+                      <SkiaRect
+                        color={color.textMuted}
+                        height={chartBounds.bottom - chartBounds.top}
+                        opacity={0.42}
+                        width={1}
+                        x={pressState.x.position}
+                        y={chartBounds.top}
+                      />
+                      <SkiaCircle
+                        color={metricColors[nutrientName]}
+                        cx={pressState.x.position}
+                        cy={pressState.y.actual.position}
+                        r={4.5}
+                      />
+                    </>
+                  ) : null}
+                </>
+              )}
+            </CartesianChart>
+            <View pointerEvents="none" style={styles.chartPlotOverlay}>
+              <Text numberOfLines={1} style={styles.chartScaleMaximum}>
+                {_formatNutritionChartAxisValue({
+                  unit,
+                  value: chart.maximumValue,
+                })}
+              </Text>
+              {scaleSteps.map((step) => (
+                <Text
+                  key={step.value}
+                  numberOfLines={1}
+                  style={[styles.chartScaleStep, { top: step.top }]}
+                >
+                  {_formatNutritionChartAxisValue({ unit, value: step.value })}
+                </Text>
+              ))}
+            </View>
+          </View>
           <View style={styles.chartFooter}>
             <Text style={styles.chartDateRange}>
               {_formatShortDate({ dateKey: report.startDateKey })}
@@ -359,10 +488,17 @@ function NutritionTrendChart({
               {_formatShortDate({ dateKey: report.endDateKey })}
             </Text>
             <View style={styles.chartLegend}>
-              <ChartLegendItem
-                color={metricColors[nutrientName]}
-                label="7d avg"
-              />
+              {chartKind === "trend" ? (
+                <ChartLegendItem
+                  color={metricColors[nutrientName]}
+                  label="7d avg"
+                />
+              ) : (
+                <ChartLegendItem
+                  color={metricColors[nutrientName]}
+                  label={unit}
+                />
+              )}
               <ChartLegendItem color={color.textMuted} label="Target" />
             </View>
           </View>
@@ -730,7 +866,7 @@ const CalendarMonthModel = {
   },
 };
 
-const NutritionChartModel = {
+const NutritionChartDataModel = {
   make({
     nutrientName,
     report,
@@ -738,42 +874,8 @@ const NutritionChartModel = {
     readonly nutrientName: NutritionTrendMetric;
     readonly report: NutritionReports.NutritionReportRange;
   }) {
-    const width = 320;
-    const height = 208;
-    const paddingLeft = 42;
-    const paddingRight = 12;
-    const paddingTop = 18;
-    const paddingBottom = 30;
-    const startDayIndex = _dateKeyToDayIndex({
-      dateKey: report.startDateKey,
-    });
-    const endDayIndex = _dateKeyToDayIndex({
-      dateKey: report.endDateKey,
-    });
-    const daySpan = Math.max(1, endDayIndex - startDayIndex);
-    const rawValues = report.days.map((day) => day.totals[nutrientName]);
-    const targetValues = report.days.flatMap((day) => {
-      const target = Reporting.getPlanNutrientTargetAmount({
-        nutrientName,
-        plan: day.plan,
-      });
-
-      return target === undefined ? [] : [target];
-    });
-    const maximumValue = Math.max(1, ...rawValues, ...targetValues);
-    const xForDateKey = ({ dateKey }: { readonly dateKey: Domain.DateKey }) =>
-      paddingLeft +
-      ((_dateKeyToDayIndex({ dateKey }) - startDayIndex) / daySpan) *
-        (width - paddingLeft - paddingRight);
-    const yForValue = ({ value }: { readonly value: number }) =>
-      paddingTop +
-      (1 - value / maximumValue) * (height - paddingTop - paddingBottom);
-    const rawPoints = report.days.map((day) => ({
-      dateKey: day.dateKey,
-      x: xForDateKey({ dateKey: day.dateKey }),
-      y: yForValue({ value: day.totals[nutrientName] }),
-    }));
-    const averagePoints = report.days.map((day) => {
+    const unit = nutrientName === "energyKcal" ? "kcal" : "g";
+    const data = report.days.map((day) => {
       const referenceIndex = _dateKeyToDayIndex({ dateKey: day.dateKey });
       const days = report.days.filter((candidate) => {
         const candidateIndex = _dateKeyToDayIndex({
@@ -789,71 +891,87 @@ const NutritionChartModel = {
             (total, candidate) => total + candidate.totals[nutrientName],
             0
           ) / days.length;
+      const targetStatus = day.targetStatuses.find(
+        (status) => status.nutrientName === nutrientName
+      );
+      const target = targetStatus?.amount ?? null;
+      const actual = day.totals[nutrientName];
+      const targetLabel =
+        target === null
+          ? "No target"
+          : `target ${_formatNutritionChartValue({ unit, value: target })}`;
 
       return {
+        actual,
+        average,
         dateKey: day.dateKey,
-        value: average,
+        dayIndex: referenceIndex,
+        target,
+        targetSemantics: targetStatus?.semantics ?? null,
+        tooltipPrimary: `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: actual })}`,
+        tooltipSecondary: `7d ${_formatNutritionChartValue({ unit, value: average })} · ${targetLabel}`,
       };
     });
-    const targetPoints = report.days.flatMap((day) => {
-      const target = Reporting.getPlanNutrientTargetAmount({
-        nutrientName,
-        plan: day.plan,
-      });
-
-      return target === undefined
-        ? []
-        : [
-            {
-              dateKey: day.dateKey,
-              value: target,
-            },
-          ];
+    const rawMaximumValue =
+      Math.max(
+        1,
+        ...data.flatMap((point) =>
+          [point.actual, point.average, point.target].filter(
+            (value): value is number => value !== null
+          )
+        )
+      ) * 1.08;
+    const [, maximumValue] = niceLinearDomain({
+      domain: [0, rawMaximumValue],
     });
-
+    const referencePoint = Array.findLast(
+      data,
+      (point) => point.target !== null
+    ).pipe(Option.getOrNull);
+    const targetReference =
+      referencePoint?.target === null || referencePoint?.target === undefined
+        ? null
+        : {
+            label: `${referencePoint.targetSemantics === "maximum" ? "Limit" : "Target"} ${_formatNutritionChartValue({ unit, value: referencePoint.target })}`,
+            value: referencePoint.target,
+          };
     return {
-      averagePath: _chartPath({
-        points: averagePoints,
-        xForDateKey,
-        yForValue,
-      }),
-      height,
+      data,
       maximumValue,
-      paddingBottom,
-      paddingLeft,
-      paddingRight,
-      paddingTop,
-      rawPoints,
-      targetPath: _chartPath({
-        points: targetPoints,
-        xForDateKey,
-        yForValue,
-      }),
-      width,
+      targetReference,
     };
   },
 };
 
-function _chartPath({
-  points,
-  xForDateKey,
-  yForValue,
+function _formatNutritionChartValue({
+  unit,
+  value,
 }: {
-  readonly points: readonly {
-    readonly dateKey: Domain.DateKey;
-    readonly value: number;
-  }[];
-  readonly xForDateKey: (input: { readonly dateKey: Domain.DateKey }) => number;
-  readonly yForValue: (input: { readonly value: number }) => number;
+  readonly unit: "g" | "kcal";
+  readonly value: number;
 }) {
-  return points
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"} ${xForDateKey({
-          dateKey: point.dateKey,
-        }).toFixed(2)} ${yForValue({ value: point.value }).toFixed(2)}`
-    )
-    .join(" ");
+  return `${formatNumber({
+    maximumFractionDigits: unit === "kcal" ? 0 : 1,
+    value,
+  })} ${unit}`;
+}
+
+function _formatNutritionChartAxisValue({
+  unit,
+  value,
+}: {
+  readonly unit: "g" | "kcal";
+  readonly value: number;
+}) {
+  return unit === "kcal" && value >= 1000
+    ? `${formatNumber({
+        maximumFractionDigits: value % 1000 === 0 ? 0 : 1,
+        value: value / 1000,
+      })}k`
+    : formatNumber({
+        maximumFractionDigits: unit === "kcal" ? 0 : 1,
+        value,
+      });
 }
 
 function _calendarNavigationContext({
@@ -898,7 +1016,7 @@ const styles = StyleSheet.create({
     gap: spacing.xxxl,
   },
   chartSection: {
-    gap: spacing.md,
+    gap: spacing.xl,
   },
   metricSelector: {
     flexDirection: "row",
@@ -939,21 +1057,80 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xl,
     backgroundColor: color.surface,
     ...shadow.card,
   },
-  chartFooter: {
+  chartCanvas: {
+    position: "relative",
+    height: 232,
+  },
+  chartReferenceSummary: {
+    minWidth: 0,
     flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: 36,
+  },
+  chartReferenceUnit: {
+    marginRight: "auto",
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  chartTargetReferenceSummary: {
+    color: color.text,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  chartPlotOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  chartScaleMaximum: {
+    position: "absolute",
+    top: 4,
+    left: 2,
+    width: 32,
+    color: color.textMuted,
+    fontSize: 10,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: 12,
+    textAlign: "right",
+  },
+  chartScaleStep: {
+    position: "absolute",
+    left: 2,
+    width: 32,
+    color: color.textMuted,
+    fontSize: 10,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: 12,
+    textAlign: "right",
+  },
+  chartFooter: {
+    minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
     borderTopWidth: 1,
     borderTopColor: color.sheetBorder,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    marginTop: spacing.xxxl,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.lg,
   },
   chartDateRange: {
+    flexShrink: 1,
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
     fontWeight: tokens.type.weight.semibold,
