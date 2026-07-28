@@ -33,6 +33,16 @@ const FoodFormInput = Schema.Struct({
     amount: Schema.String,
     unit: Domain.MeasurementUnit,
   }),
+  initialPrice: Schema.optionalKey(
+    Schema.Struct({
+      price: Schema.String,
+      currency: Schema.Literal("EUR"),
+      referenceQuantity: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MeasurementUnit,
+      }),
+    })
+  ),
   portions: Schema.Array(
     Schema.Struct({
       id: Schema.optionalKey(Domain.FoodPortionId),
@@ -104,7 +114,7 @@ const createFoodRouteMachine = setup({
     alertCreateFoodValidationError: () => {
       Alert.alert(
         "Food not saved",
-        "Check the name, required nutrients, and any custom portions."
+        "Check the name, required nutrients, price, and any custom portions."
       );
     },
     alertCreateFoodFailure: () => {
@@ -242,7 +252,7 @@ const createFoodRouteMachine = setup({
                   target: "Failure" as const,
                   context: {
                     notice:
-                      "Check the name, required nutrients, and any custom portions.",
+                      "Check the name, required nutrients, price, and any custom portions.",
                   },
                 };
               },

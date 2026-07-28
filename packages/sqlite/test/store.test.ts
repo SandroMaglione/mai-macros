@@ -91,6 +91,9 @@ describe("SqliteNutritionStore", () => {
     assert.equal(persistedFood.nutritionReference.unit, "ml");
     assert.equal(persistedFood.portions[0]?.name, "X");
     assert.equal(persistedFood.portions[0]?.size.amount, 250);
+    assert.equal(persistedFood.prices[0]?.priceMinor, 599);
+    assert.equal(persistedFood.prices[0]?.currency, "EUR");
+    assert.isTrue(persistedFood.prices[0]?.isCurrent);
     assert.equal(persistedFood.massVolumeConversion?.mass.amount, 103);
     assert.equal(
       result.mealEntries[0]?.quantity._tag === "MeasuredFoodQuantity"
@@ -577,11 +580,61 @@ describe("SqliteNutritionStore", () => {
     assert.equal(result.bodyWeightEntries.length, 1);
     assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.plans.length, 1);
-    assert.isDefined(
-      result.foods.find(
-        (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
-      )
+    const importedFood = result.foods.find(
+      (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
     );
+    assert.isDefined(importedFood);
+    assert.equal(importedFood.prices[0]?.priceMinor, 599);
+  });
+
+  it("imports version 6 backups through the explicit pre-price migration", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const backups = yield* Backup.Backups;
+        const plan = yield* testPlan;
+        const food = yield* testFood;
+
+        yield* store.insertPlan(plan);
+        yield* store.insertFood(food);
+
+        const exported = yield* backups.exportToJson();
+        const encoded = yield* Schema.encodeEffect(Backup.MaiBackupV1)(
+          exported.backup
+        );
+        const foodsBeforePrices = encoded.stores.foods.map(
+          ({ prices, ...food }) => {
+            void prices;
+            return food;
+          }
+        );
+        const legacyJson = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown)
+        )({
+          ...encoded,
+          source: { ...encoded.source, databaseVersion: 6 },
+          stores: { ...encoded.stores, foods: foodsBeforePrices },
+        });
+
+        yield* store.replaceStores({
+          activeMealPlanSelections: [],
+          bodyWeightEntries: [],
+          dailyLogs: [],
+          foods: [],
+          mealEntries: [],
+          plans: [],
+        });
+        yield* backups.importFromJson({ input: { json: legacyJson } });
+
+        return yield* store.readStores;
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    const importedFood = result.foods.find(
+      (food) => food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24"
+    );
+    assert.isDefined(importedFood);
+    assert.deepEqual(importedFood.prices, []);
   });
 
   it("imports version 4 backups with an empty body weight history", async () => {
@@ -597,7 +650,7 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":6', '"databaseVersion":4')
+          .replace('"databaseVersion":7', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
           .replace('"bodyWeightEntries":[],', "")
           .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")
@@ -674,6 +727,17 @@ const testFood = Schema.decodeEffect(Domain.Food)({
       name: "X",
       position: 0,
       size: { amount: 250, unit: "ml" },
+    },
+  ],
+  prices: [
+    {
+      priceMinor: 599,
+      createdAt: 0,
+      currency: "EUR",
+      id: "9535a059-a61f-42e1-a2e0-35ec87203c28",
+      isCurrent: true,
+      referenceQuantity: { amount: 1, unit: "kg" },
+      updatedAt: 0,
     },
   ],
   massVolumeConversion: {

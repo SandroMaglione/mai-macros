@@ -102,12 +102,28 @@ const NutrientTargetStatus = Schema.Struct({
 });
 
 const NutritionReportEntry = Schema.Struct({
+  cost: Schema.NullOr(
+    Schema.Struct({
+      costMinor: Schema.Number,
+      currency: Domain.CurrencyCode,
+    })
+  ),
   food: Domain.Food,
   mealEntry: Domain.MealEntry,
   nutrients: Domain.EntryNutrients,
 });
 
 const NutritionReportDay = Schema.Struct({
+  costTotals: Schema.Struct({
+    costMinorByCurrency: Schema.Struct({
+      EUR: Schema.Number,
+      JPY: Schema.Number,
+      NZD: Schema.Number,
+      USD: Schema.Number,
+    }),
+    entriesCount: Schema.Number,
+    resolvedEntriesCount: Schema.Number,
+  }),
   coverage: NutrientTotals,
   dailyLog: Domain.DailyLog,
   dateKey: Domain.DateKey,

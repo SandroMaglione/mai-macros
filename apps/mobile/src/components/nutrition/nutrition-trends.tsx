@@ -38,6 +38,7 @@ const NutritionTrendMetric = Schema.Literals([
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
+  "costEur",
 ]);
 
 type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
@@ -242,6 +243,7 @@ const trendMetrics = [
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
+  "costEur",
 ] as const satisfies readonly NutritionTrendMetric[];
 
 const metricLabels = {
@@ -253,6 +255,7 @@ const metricLabels = {
   saltGrams: "Salt",
   saturatedFatGrams: "Saturated fat",
   sugarGrams: "Sugar",
+  costEur: "Food cost",
 } satisfies Record<NutritionTrendMetric, string>;
 
 const metricAbbreviations = {
@@ -264,6 +267,7 @@ const metricAbbreviations = {
   saltGrams: "Salt",
   saturatedFatGrams: "Sat",
   sugarGrams: "Sug",
+  costEur: "Cost",
 } satisfies Record<NutritionTrendMetric, string>;
 
 const metricColors = {
@@ -275,6 +279,7 @@ const metricColors = {
   saltGrams: color.nutritionSalt,
   saturatedFatGrams: color.warningText,
   sugarGrams: color.nutritionSugar,
+  costEur: color.safeText,
 } satisfies Record<NutritionTrendMetric, string>;
 
 const nutritionChartTabs = [
@@ -320,8 +325,18 @@ function NutritionTrendChart({
     nutrientName,
     report,
   });
-  const unit = nutrientName === "energyKcal" ? "kcal" : "g";
-  const unitLabel = nutrientName === "energyKcal" ? "Kilocalories" : "Grams";
+  const unit =
+    nutrientName === "energyKcal"
+      ? "kcal"
+      : nutrientName === "costEur"
+        ? "€"
+        : "g";
+  const unitLabel =
+    nutrientName === "energyKcal"
+      ? "Kilocalories"
+      : nutrientName === "costEur"
+        ? "Euros"
+        : "Grams";
   const { state: pressState, isActive: isPressActive } = useChartPressState({
     x: 0,
     y: {
@@ -874,7 +889,12 @@ const NutritionChartDataModel = {
     readonly nutrientName: NutritionTrendMetric;
     readonly report: NutritionReports.NutritionReportRange;
   }) {
-    const unit = nutrientName === "energyKcal" ? "kcal" : "g";
+    const unit =
+      nutrientName === "energyKcal"
+        ? "kcal"
+        : nutrientName === "costEur"
+          ? "€"
+          : "g";
     const data = report.days.map((day) => {
       const referenceIndex = _dateKeyToDayIndex({ dateKey: day.dateKey });
       const days = report.days.filter((candidate) => {
@@ -888,14 +908,18 @@ const NutritionChartDataModel = {
       const average = !Array.isReadonlyArrayNonEmpty(days)
         ? 0
         : days.reduce(
-            (total, candidate) => total + candidate.totals[nutrientName],
+            (total, candidate) =>
+              total + _nutritionTrendValue({ day: candidate, nutrientName }),
             0
           ) / days.length;
-      const targetStatus = day.targetStatuses.find(
-        (status) => status.nutrientName === nutrientName
-      );
+      const targetStatus =
+        nutrientName === "costEur"
+          ? undefined
+          : day.targetStatuses.find(
+              (status) => status.nutrientName === nutrientName
+            );
       const target = targetStatus?.amount ?? null;
-      const actual = day.totals[nutrientName];
+      const actual = _nutritionTrendValue({ day, nutrientName });
       const targetLabel =
         target === null
           ? "No target"
@@ -947,20 +971,26 @@ function _formatNutritionChartValue({
   unit,
   value,
 }: {
-  readonly unit: "g" | "kcal";
+  readonly unit: "€" | "g" | "kcal";
   readonly value: number;
 }) {
-  return `${formatNumber({
-    maximumFractionDigits: unit === "kcal" ? 0 : 1,
-    value,
-  })} ${unit}`;
+  return unit === "€"
+    ? new Intl.NumberFormat(undefined, {
+        currency: "EUR",
+        maximumFractionDigits: 2,
+        style: "currency",
+      }).format(value)
+    : `${formatNumber({
+        maximumFractionDigits: unit === "kcal" ? 0 : 1,
+        value,
+      })} ${unit}`;
 }
 
 function _formatNutritionChartAxisValue({
   unit,
   value,
 }: {
-  readonly unit: "g" | "kcal";
+  readonly unit: "€" | "g" | "kcal";
   readonly value: number;
 }) {
   return unit === "kcal" && value >= 1000
@@ -968,10 +998,24 @@ function _formatNutritionChartAxisValue({
         maximumFractionDigits: value % 1000 === 0 ? 0 : 1,
         value: value / 1000,
       })}k`
-    : formatNumber({
-        maximumFractionDigits: unit === "kcal" ? 0 : 1,
-        value,
-      });
+    : unit === "€"
+      ? `€${formatNumber({ maximumFractionDigits: 1, value })}`
+      : formatNumber({
+          maximumFractionDigits: unit === "kcal" ? 0 : 1,
+          value,
+        });
+}
+
+function _nutritionTrendValue({
+  day,
+  nutrientName,
+}: {
+  readonly day: NutritionReports.NutritionReportDay;
+  readonly nutrientName: NutritionTrendMetric;
+}) {
+  return nutrientName === "costEur"
+    ? day.costTotals.costMinorByCurrency.EUR / 100
+    : day.totals[nutrientName];
 }
 
 function _calendarNavigationContext({

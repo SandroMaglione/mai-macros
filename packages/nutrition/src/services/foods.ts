@@ -17,6 +17,9 @@ import {
   FoodId,
   FoodPortion,
   FoodPortionId,
+  FoodPrice,
+  FoodPriceId,
+  CurrencyCode,
   MassUnit,
   MeasurementUnit,
   MealEntry,
@@ -72,6 +75,15 @@ const _MassVolumeConversionInput = Schema.Struct({
   }),
 });
 
+const _FoodPriceFieldsInput = Schema.Struct({
+  price: _FormPositiveNumber,
+  currency: CurrencyCode,
+  referenceQuantity: Schema.Struct({
+    amount: _FormPositiveNumber,
+    unit: MeasurementUnit,
+  }),
+});
+
 const foodDetailsInputFields = {
   name: Schema.Trim.check(Schema.isNonEmpty()),
   brand: Schema.optional(Schema.Trim.check(Schema.isNonEmpty())),
@@ -94,6 +106,7 @@ const foodDetailsInputFields = {
 
 const _CreateFoodInput = Schema.Struct({
   ...foodDetailsInputFields,
+  initialPrice: Schema.optional(_FoodPriceFieldsInput),
   portions: _FoodPortionsInput.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([]))
   ),
@@ -127,6 +140,27 @@ const _RemoveFoodPortionInput = Schema.Struct({
   portionId: FoodPortionId,
 });
 
+const _AddFoodPriceInput = Schema.Struct({
+  foodId: FoodId,
+  ..._FoodPriceFieldsInput.fields,
+});
+
+const _EditFoodPriceInput = Schema.Struct({
+  foodId: FoodId,
+  priceId: FoodPriceId,
+  ..._FoodPriceFieldsInput.fields,
+});
+
+const _RemoveFoodPriceInput = Schema.Struct({
+  foodId: FoodId,
+  priceId: FoodPriceId,
+});
+
+const _SelectCurrentFoodPriceInput = Schema.Struct({
+  foodId: FoodId,
+  priceId: Schema.NullOr(FoodPriceId),
+});
+
 export type CreateFoodInput = typeof _CreateFoodInput.Encoded;
 export type GetFoodInput = typeof _GetFoodInput.Encoded;
 export type CopyFoodInput = typeof _CopyFoodInput.Encoded;
@@ -134,6 +168,11 @@ export type EditFoodDetailsInput = typeof _EditFoodDetailsInput.Encoded;
 export type AddFoodPortionInput = typeof _AddFoodPortionInput.Encoded;
 export type EditFoodPortionInput = typeof _EditFoodPortionInput.Encoded;
 export type RemoveFoodPortionInput = typeof _RemoveFoodPortionInput.Encoded;
+export type AddFoodPriceInput = typeof _AddFoodPriceInput.Encoded;
+export type EditFoodPriceInput = typeof _EditFoodPriceInput.Encoded;
+export type RemoveFoodPriceInput = typeof _RemoveFoodPriceInput.Encoded;
+export type SelectCurrentFoodPriceInput =
+  typeof _SelectCurrentFoodPriceInput.Encoded;
 
 export class FoodPortionUsage extends Schema.Class<FoodPortionUsage>(
   "FoodPortionUsage"
@@ -197,6 +236,29 @@ export class RemovedFoodPortion extends Data.TaggedClass("RemovedFoodPortion")<{
   readonly portion: FoodPortion;
 }> {}
 
+export class AddedFoodPrice extends Data.TaggedClass("AddedFoodPrice")<{
+  readonly food: Food;
+  readonly price: FoodPrice;
+}> {}
+
+export class EditedFoodPrice extends Data.TaggedClass("EditedFoodPrice")<{
+  readonly food: Food;
+  readonly price: FoodPrice;
+  readonly previousPrice: FoodPrice;
+}> {}
+
+export class RemovedFoodPrice extends Data.TaggedClass("RemovedFoodPrice")<{
+  readonly food: Food;
+  readonly price: FoodPrice;
+}> {}
+
+export class SelectedCurrentFoodPrice extends Data.TaggedClass(
+  "SelectedCurrentFoodPrice"
+)<{
+  readonly food: Food;
+  readonly price: FoodPrice | null;
+}> {}
+
 export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
   readonly foodId: FoodId;
 }> {}
@@ -206,6 +268,11 @@ export class FoodPortionNotFound extends Data.TaggedError(
 )<{
   readonly foodId: FoodId;
   readonly portionId: FoodPortionId;
+}> {}
+
+export class FoodPriceNotFound extends Data.TaggedError("FoodPriceNotFound")<{
+  readonly foodId: FoodId;
+  readonly priceId: FoodPriceId;
 }> {}
 
 export class FoodPortionNameAlreadyExists extends Data.TaggedError(
@@ -316,6 +383,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           now,
           origin: "user",
           portions: previousFood.portions,
+          prices: previousFood.prices,
         });
 
         const previousConversion = previousFood.massVolumeConversion;
@@ -490,6 +558,21 @@ export class Foods extends Context.Service<Foods>()("Foods", {
               });
             })
         );
+        const prices =
+          decodedInput.initialPrice === undefined
+            ? []
+            : [
+                yield* Schema.decodeEffect(FoodPrice)({
+                  id: yield* crypto.randomUUIDv4,
+                  priceMinor: _priceMinor(decodedInput.initialPrice),
+                  currency: decodedInput.initialPrice.currency,
+                  referenceQuantity:
+                    decodedInput.initialPrice.referenceQuantity,
+                  isCurrent: true,
+                  createdAt: now,
+                  updatedAt: now,
+                }),
+              ];
         const food = yield* _foodFromDetailsInput({
           createdAt: now,
           id: yield* crypto.randomUUIDv4,
@@ -497,6 +580,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           now,
           origin: "user",
           portions,
+          prices,
         });
 
         yield* store.insertFood(food);
@@ -530,6 +614,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           now,
           origin: "user",
           portions,
+          prices: [],
         });
 
         yield* store.insertFood(food);
@@ -661,6 +746,141 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           return new RemovedFoodPortion({ food, portion });
         }
       ),
+
+      addFoodPrice: Effect.fn("Foods.addFoodPrice")(function* ({
+        input,
+      }: {
+        readonly input: AddFoodPriceInput;
+      }) {
+        const decodedInput =
+          yield* Schema.decodeEffect(_AddFoodPriceInput)(input);
+        const previousFood = yield* findFood(decodedInput.foodId);
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const price = yield* Schema.decodeEffect(FoodPrice)({
+          id: yield* crypto.randomUUIDv4,
+          priceMinor: _priceMinor({
+            price: decodedInput.price,
+            currency: decodedInput.currency,
+          }),
+          currency: decodedInput.currency,
+          referenceQuantity: decodedInput.referenceQuantity,
+          isCurrent: !Array.isReadonlyArrayNonEmpty(previousFood.prices),
+          createdAt: now,
+          updatedAt: now,
+        });
+        const food = yield* _foodWithPrices({
+          food: previousFood,
+          now,
+          prices: [...previousFood.prices, price],
+        });
+        yield* store.applyFoodEdit({ food, mealEntries: [] });
+        return new AddedFoodPrice({ food, price });
+      }),
+
+      editFoodPrice: Effect.fn("Foods.editFoodPrice")(function* ({
+        input,
+      }: {
+        readonly input: EditFoodPriceInput;
+      }) {
+        const decodedInput =
+          yield* Schema.decodeEffect(_EditFoodPriceInput)(input);
+        const previousFood = yield* findFood(decodedInput.foodId);
+        const previousPrice = yield* _findPrice({
+          food: previousFood,
+          priceId: decodedInput.priceId,
+        });
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const price = yield* Schema.decodeEffect(FoodPrice)({
+          id: previousPrice.id,
+          priceMinor: _priceMinor({
+            price: decodedInput.price,
+            currency: decodedInput.currency,
+          }),
+          currency: decodedInput.currency,
+          referenceQuantity: decodedInput.referenceQuantity,
+          isCurrent: previousPrice.isCurrent,
+          createdAt: DateTime.toEpochMillis(previousPrice.createdAt),
+          updatedAt: now,
+        });
+        const food = yield* _foodWithPrices({
+          food: previousFood,
+          now,
+          prices: previousFood.prices.map((candidate) =>
+            candidate.id === price.id ? price : candidate
+          ),
+        });
+        yield* store.applyFoodEdit({ food, mealEntries: [] });
+        return new EditedFoodPrice({ food, previousPrice, price });
+      }),
+
+      removeFoodPrice: Effect.fn("Foods.removeFoodPrice")(function* ({
+        input,
+      }: {
+        readonly input: RemoveFoodPriceInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_RemoveFoodPriceInput)(
+          input
+        );
+        const previousFood = yield* findFood(decodedInput.foodId);
+        const price = yield* _findPrice({
+          food: previousFood,
+          priceId: decodedInput.priceId,
+        });
+        const food = yield* _foodWithPrices({
+          food: previousFood,
+          now: DateTime.toEpochMillis(yield* DateTime.now),
+          prices: previousFood.prices.filter(
+            (candidate) => candidate.id !== price.id
+          ),
+        });
+        yield* store.applyFoodEdit({ food, mealEntries: [] });
+        return new RemovedFoodPrice({ food, price });
+      }),
+
+      selectCurrentFoodPrice: Effect.fn("Foods.selectCurrentFoodPrice")(
+        function* ({ input }: { readonly input: SelectCurrentFoodPriceInput }) {
+          const decodedInput = yield* Schema.decodeEffect(
+            _SelectCurrentFoodPriceInput
+          )(input);
+          const previousFood = yield* findFood(decodedInput.foodId);
+          const selectedPrice =
+            decodedInput.priceId === null
+              ? null
+              : yield* _findPrice({
+                  food: previousFood,
+                  priceId: decodedInput.priceId,
+                });
+          const now = DateTime.toEpochMillis(yield* DateTime.now);
+          const prices = yield* Effect.forEach(previousFood.prices, (price) =>
+            Schema.decodeEffect(FoodPrice)({
+              id: price.id,
+              priceMinor: price.priceMinor,
+              currency: price.currency,
+              referenceQuantity: price.referenceQuantity,
+              isCurrent: price.id === selectedPrice?.id,
+              createdAt: DateTime.toEpochMillis(price.createdAt),
+              updatedAt:
+                price.isCurrent === (price.id === selectedPrice?.id)
+                  ? DateTime.toEpochMillis(price.updatedAt)
+                  : now,
+            })
+          );
+          const food = yield* _foodWithPrices({
+            food: previousFood,
+            now,
+            prices,
+          });
+          yield* store.applyFoodEdit({ food, mealEntries: [] });
+          return new SelectedCurrentFoodPrice({
+            food,
+            price:
+              selectedPrice === null
+                ? null
+                : (food.prices.find((price) => price.id === selectedPrice.id) ??
+                  null),
+          });
+        }
+      ),
     };
   }),
 }) {
@@ -676,15 +896,23 @@ const _foodFromDetailsInput = Effect.fn("Foods.foodFromDetailsInput")(
     now,
     origin,
     portions,
+    prices,
   }: {
     readonly category?: Food["category"] | undefined;
     readonly createdAt: number;
     readonly id: FoodId | string;
-    readonly input: Omit<typeof _CreateFoodInput.Type, "portions">;
+    readonly input: Omit<
+      typeof _CreateFoodInput.Type,
+      "initialPrice" | "portions"
+    >;
     readonly now: number;
     readonly origin: Food["origin"];
     readonly portions: readonly FoodPortion[];
+    readonly prices: readonly FoodPrice[];
   }) {
+    const encodedPrices = yield* Schema.encodeEffect(Schema.Array(FoodPrice))(
+      prices
+    );
     return yield* Schema.decodeEffect(Food)({
       id,
       name: input.name,
@@ -707,6 +935,7 @@ const _foodFromDetailsInput = Effect.fn("Foods.foodFromDetailsInput")(
         : { saturatedFatGrams: input.saturatedFatGrams }),
       ...(input.saltGrams === undefined ? {} : { saltGrams: input.saltGrams }),
       portions,
+      prices: encodedPrices,
       ...(input.massVolumeConversion === undefined
         ? {}
         : { massVolumeConversion: input.massVolumeConversion }),
@@ -732,6 +961,61 @@ const _foodWithPortions = Effect.fn("Foods.foodWithPortions")(function* ({
     updatedAt: now,
   });
 });
+
+const _foodWithPrices = Effect.fn("Foods.foodWithPrices")(function* ({
+  food,
+  now,
+  prices,
+}: {
+  readonly food: Food;
+  readonly now: number;
+  readonly prices: readonly FoodPrice[];
+}) {
+  const encodedFood = yield* Schema.encodeEffect(Food)(food);
+  const encodedPrices = yield* Schema.encodeEffect(Schema.Array(FoodPrice))(
+    prices
+  );
+  return yield* Schema.decodeEffect(Food)({
+    ...encodedFood,
+    prices: encodedPrices,
+    updatedAt: now,
+  });
+});
+
+const _findPrice = Effect.fn("Foods.findPrice")(function* ({
+  food,
+  priceId,
+}: {
+  readonly food: Food;
+  readonly priceId: FoodPriceId;
+}) {
+  return yield* Array.findFirst(
+    food.prices,
+    (price) => price.id === priceId
+  ).pipe(
+    Option.match({
+      onNone: () => new FoodPriceNotFound({ foodId: food.id, priceId }),
+      onSome: Effect.succeed,
+    })
+  );
+});
+
+const currencyFractionDigits = {
+  EUR: 2,
+  JPY: 0,
+  NZD: 2,
+  USD: 2,
+} satisfies Record<CurrencyCode, number>;
+
+function _priceMinor({
+  price,
+  currency,
+}: {
+  readonly price: number;
+  readonly currency: CurrencyCode;
+}) {
+  return Math.round(price * 10 ** currencyFractionDigits[currency]);
+}
 
 const _mealEntryWithQuantity = Effect.fn("Foods.mealEntryWithQuantity")(
   function* ({

@@ -5,7 +5,11 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { todayDateKey } from "@/lib/date-keys";
-import { formatNumber, mealEntryMassGrams } from "@/lib/format";
+import {
+  formatCurrencyMinor,
+  formatNumber,
+  mealEntryMassGrams,
+} from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import {
@@ -71,9 +75,11 @@ const MacroDetailsRouteReadyContext = Schema.Struct({
 });
 
 const FoodWeightMetricName = "foodWeightGrams";
+const FoodCostMetricName = "foodCostEur";
 const detailMetricNames = [
   ...Reporting.NutrientNames,
   FoodWeightMetricName,
+  FoodCostMetricName,
 ] as const;
 const DetailMetricName = Schema.Literals(detailMetricNames);
 
@@ -88,6 +94,7 @@ type NutrientDetail = {
 };
 
 type FoodMealEntry = {
+  readonly cost: Reporting.EntryCost | null;
   readonly food: Domain.Food;
   readonly mealEntry: Domain.MealEntry;
   readonly nutrients: ReturnType<typeof Utils.calculateEntryNutrients>;
@@ -441,6 +448,10 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
       ? []
       : [
           {
+            cost: Reporting.calculateEntryCost({
+              food,
+              quantity: mealEntry.quantity,
+            }),
             food,
             mealEntry,
             nutrients: Utils.calculateEntryNutrients({
@@ -451,6 +462,10 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
         ];
   });
   const weightTotals = Reporting.calculateMealEntriesWeightTotals({
+    foods: data.foods,
+    mealEntries,
+  });
+  const costTotals = Reporting.calculateMealEntriesCostTotals({
     foods: data.foods,
     mealEntries,
   });
@@ -558,8 +573,192 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
             />
           ) : null}
         </View>
+        <View style={styles.nutrientGroup}>
+          <CostRow
+            isComplete={
+              costTotals.resolvedEntriesCount === costTotals.entriesCount
+            }
+            onPress={() => {
+              actor.trigger.selectMetric({ metricName: FoodCostMetricName });
+            }}
+            selected={
+              snapshot.context.selectedMetricName === FoodCostMetricName
+            }
+            totalMinor={costTotals.costMinorByCurrency.EUR}
+          />
+          {snapshot.context.selectedMetricName === FoodCostMetricName ? (
+            <CostContributors
+              entries={entries}
+              totalMinor={costTotals.costMinorByCurrency.EUR}
+            />
+          ) : null}
+        </View>
       </View>
     </AppScreen>
+  );
+}
+
+function CostRow({
+  isComplete,
+  onPress,
+  selected,
+  totalMinor,
+}: {
+  readonly isComplete: boolean;
+  readonly onPress: () => void;
+  readonly selected: boolean;
+  readonly totalMinor: number;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${isComplete ? "Food" : "Resolved food"} cost details`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.nutrientRow,
+        selected ? styles.nutrientRowSelected : null,
+        pressed ? styles.pressed : null,
+      ]}
+    >
+      <View style={styles.nutrientTopRow}>
+        {selected ? (
+          <ChevronDown color={color.textMuted} size={18} strokeWidth={2.8} />
+        ) : (
+          <ChevronRight color={color.textMuted} size={18} strokeWidth={2.8} />
+        )}
+        <View style={styles.nutrientCopy}>
+          <Text
+            numberOfLines={1}
+            style={[styles.nutrientLabel, { color: color.safeText }]}
+          >
+            {isComplete ? "Food cost" : "Resolved cost"}
+          </Text>
+        </View>
+        <Text
+          numberOfLines={1}
+          style={[styles.nutrientValue, { color: color.safeText }]}
+        >
+          {formatCurrencyMinor({ currency: "EUR", minorValue: totalMinor })}
+          {isComplete ? "" : "+"}
+        </Text>
+      </View>
+      <View style={styles.nutrientTrack}>
+        <View
+          style={[
+            styles.nutrientFill,
+            {
+              backgroundColor: color.safeText,
+              width: totalMinor <= 0 ? "0%" : "100%",
+            },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function CostContributors({
+  entries,
+  totalMinor,
+}: {
+  readonly entries: readonly FoodMealEntry[];
+  readonly totalMinor: number;
+}) {
+  const contributions = Object.values(
+    entries.reduce<
+      Record<
+        string,
+        {
+          readonly costMinor: number;
+          readonly food: Domain.Food;
+        }
+      >
+    >((costByFood, entry) => {
+      if (entry.cost?.currency !== "EUR") {
+        return costByFood;
+      }
+
+      const previous = costByFood[entry.food.id];
+      return {
+        ...costByFood,
+        [entry.food.id]: {
+          costMinor: (previous?.costMinor ?? 0) + entry.cost.costMinor,
+          food: entry.food,
+        },
+      };
+    }, {})
+  ).sort((left, right) => right.costMinor - left.costMinor);
+
+  return (
+    <View style={styles.contributors}>
+      {!Array.isReadonlyArrayNonEmpty(contributions) ? (
+        <View style={styles.emptyContributors}>
+          <Text style={styles.emptyContributorsText}>
+            No logged foods have a compatible current price.
+          </Text>
+        </View>
+      ) : (
+        contributions.map((contribution) => {
+          const share =
+            totalMinor <= 0 ? 0 : contribution.costMinor / totalMinor;
+          const clampedShare = Math.max(0, Math.min(1, share));
+          const percentLabel = formatNumber({
+            maximumFractionDigits: 0,
+            value: clampedShare * 100,
+          });
+
+          return (
+            <View key={contribution.food.id} style={styles.contributionRow}>
+              <View style={styles.contributionCopy}>
+                <Text numberOfLines={1} style={styles.contributionName}>
+                  {contribution.food.name}
+                </Text>
+                {contribution.food.brand === undefined ? null : (
+                  <Text numberOfLines={1} style={styles.contributionDetail}>
+                    {contribution.food.brand}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.contributionImpact}>
+                <View style={styles.contributionValueRow}>
+                  <Text
+                    style={[
+                      styles.contributionPercent,
+                      { color: color.safeText },
+                    ]}
+                  >
+                    ({percentLabel}%)
+                  </Text>
+                  <Text
+                    style={[
+                      styles.contributionValue,
+                      { color: color.safeText },
+                    ]}
+                  >
+                    {formatCurrencyMinor({
+                      currency: "EUR",
+                      minorValue: contribution.costMinor,
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.contributionTrack}>
+                  <View
+                    style={[
+                      styles.contributionFill,
+                      {
+                        backgroundColor: color.safeText,
+                        width: `${clampedShare * 100}%`,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            </View>
+          );
+        })
+      )}
+    </View>
   );
 }
 

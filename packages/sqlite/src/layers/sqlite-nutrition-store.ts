@@ -54,6 +54,18 @@ const FoodPortionRow = Schema.Struct({
   sizeUnit: Domain.MeasurementUnit,
 });
 
+const FoodPriceRow = Schema.Struct({
+  priceMinor: Domain.PriceMinor,
+  createdAt: Schema.Number,
+  currency: Domain.CurrencyCode,
+  foodId: Domain.FoodId,
+  id: Domain.FoodPriceId,
+  isCurrent: Schema.Number,
+  referenceAmount: Domain.PositiveNumber,
+  referenceUnit: Domain.MeasurementUnit,
+  updatedAt: Schema.Number,
+});
+
 const PlanRow = Schema.Struct({
   carbsTargetGrams: Domain.NonNegativeNumber,
   createdAt: Schema.Number,
@@ -145,6 +157,18 @@ const selectFoodPortionColumns = `
   position
 `;
 
+const selectFoodPriceColumns = `
+  id,
+  food_id AS foodId,
+  price_minor AS priceMinor,
+  currency,
+  reference_amount AS referenceAmount,
+  reference_unit AS referenceUnit,
+  is_current AS isCurrent,
+  created_at AS createdAt,
+  updated_at AS updatedAt
+`;
+
 const selectPlanColumns = `
   id,
   name,
@@ -222,7 +246,24 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       },
     });
 
+  const decodeFoodPriceRow = ({
+    foodId: _foodId,
+    isCurrent,
+    referenceAmount,
+    referenceUnit,
+    ...row
+  }: typeof FoodPriceRow.Type) =>
+    Schema.decodeEffect(Domain.FoodPrice)({
+      ...row,
+      isCurrent: isCurrent === 1,
+      referenceQuantity: {
+        amount: referenceAmount,
+        unit: referenceUnit,
+      },
+    });
+
   const decodeFoodRow = ({
+    prices,
     portions,
     row: {
       brand,
@@ -240,6 +281,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       ...row
     },
   }: {
+    readonly prices: readonly (typeof Domain.FoodPrice.Encoded)[];
     readonly portions: readonly (typeof Domain.FoodPortion.Encoded)[];
     readonly row: typeof FoodRow.Type;
   }) =>
@@ -249,6 +291,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         amount: nutritionReferenceAmount,
         unit: nutritionReferenceUnit,
       },
+      prices,
       portions,
       ...(brand === null ? {} : { brand }),
       ...(category === null ? {} : { category }),
@@ -407,6 +450,29 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         FROM food_portions
         WHERE food_id = ${foodId}
         ORDER BY position
+      `,
+  });
+
+  const listFoodPriceRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: FoodPriceRow,
+    execute: () =>
+      sql`
+        SELECT ${sql.literal(selectFoodPriceColumns)}
+        FROM food_prices
+        ORDER BY food_id, created_at DESC
+      `,
+  });
+
+  const findFoodPriceRowsByFood = SqlSchema.findAll({
+    Request: Domain.FoodId,
+    Result: FoodPriceRow,
+    execute: (foodId) =>
+      sql`
+        SELECT ${sql.literal(selectFoodPriceColumns)}
+        FROM food_prices
+        WHERE food_id = ${foodId}
+        ORDER BY created_at DESC
       `,
   });
 
@@ -583,10 +649,21 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       const encodedPortions = yield* Schema.encodeEffect(
         Schema.Array(Domain.FoodPortion)
       )(portions);
+      const priceRows = yield* listFoodPriceRows({});
+      const prices = yield* Effect.forEach(priceRows, decodeFoodPriceRow);
+      const encodedPrices = yield* Schema.encodeEffect(
+        Schema.Array(Domain.FoodPrice)
+      )(prices);
 
       return yield* Effect.forEach(rows, (row) =>
         decodeFoodRow({
           row,
+          prices: encodedPrices.filter((price) =>
+            priceRows.some(
+              (priceRow) =>
+                priceRow.id === price.id && priceRow.foodId === row.id
+            )
+          ),
           portions: encodedPortions.filter((portion) =>
             portionRows.some(
               (portionRow) =>
@@ -597,7 +674,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       );
     });
 
-  const decodeFoodRowsWithPortionQuery = (
+  const decodeFoodRowsWithRelatedQueries = (
     rows: readonly (typeof FoodRow.Type)[]
   ) =>
     Effect.forEach(rows, (row) =>
@@ -610,8 +687,17 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         const encodedPortions = yield* Schema.encodeEffect(
           Schema.Array(Domain.FoodPortion)
         )(portions);
+        const priceRows = yield* findFoodPriceRowsByFood(row.id);
+        const prices = yield* Effect.forEach(priceRows, decodeFoodPriceRow);
+        const encodedPrices = yield* Schema.encodeEffect(
+          Schema.Array(Domain.FoodPrice)
+        )(prices);
 
-        return yield* decodeFoodRow({ row, portions: encodedPortions });
+        return yield* decodeFoodRow({
+          prices: encodedPrices,
+          portions: encodedPortions,
+          row,
+        });
       })
     );
 
@@ -703,6 +789,24 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     position: portion.position,
     size_amount: portion.size.amount,
     size_unit: portion.size.unit,
+  });
+
+  const foodPriceRowValues = ({
+    foodId,
+    price,
+  }: {
+    readonly foodId: Domain.FoodId | string;
+    readonly price: typeof Domain.FoodPrice.Encoded;
+  }) => ({
+    price_minor: price.priceMinor,
+    created_at: price.createdAt,
+    currency: price.currency,
+    food_id: foodId,
+    id: price.id,
+    is_current: price.isCurrent ? 1 : 0,
+    reference_amount: price.referenceQuantity.amount,
+    reference_unit: price.referenceQuantity.unit,
+    updated_at: price.updatedAt,
   });
 
   const planRowValues = (plan: typeof Domain.Plan.Encoded) => ({
@@ -801,6 +905,9 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         const portionRows = (encodedFood.portions ?? []).map((portion) =>
           foodPortionRowValues({ foodId: encodedFood.id, portion })
         );
+        const priceRows = (encodedFood.prices ?? []).map((price) =>
+          foodPriceRowValues({ foodId: encodedFood.id, price })
+        );
 
         return Effect.gen(function* () {
           yield* sql`
@@ -818,6 +925,21 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
               `,
             { discard: true }
           );
+          yield* sql`
+            UPDATE food_prices
+            SET is_current = 0
+            WHERE food_id = ${encodedFood.id}
+          `;
+          yield* Effect.forEach(
+            priceRows,
+            (priceRow) =>
+              sql`
+                INSERT INTO food_prices ${sql.insert(priceRow)}
+                ON CONFLICT(id) DO UPDATE SET
+                  ${sql.update(priceRow, ["id"])}
+              `,
+            { discard: true }
+          );
 
           if (!Array.isReadonlyArrayNonEmpty(portionRows)) {
             yield* sql`
@@ -829,6 +951,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
               DELETE FROM food_portions
               WHERE food_id = ${encodedFood.id}
                 AND id NOT IN ${sql.in(portionRows.map((portionRow) => portionRow.id))}
+            `;
+          }
+          if (!Array.isReadonlyArrayNonEmpty(priceRows)) {
+            yield* sql`
+              DELETE FROM food_prices
+              WHERE food_id = ${encodedFood.id}
+            `;
+          } else {
+            yield* sql`
+              DELETE FROM food_prices
+              WHERE food_id = ${encodedFood.id}
+                AND id NOT IN ${sql.in(priceRows.map((priceRow) => priceRow.id))}
             `;
           }
         });
@@ -1013,14 +1147,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     findFoodById: (foodId) =>
       _mapStoreError(
         findFoodByIdRows(foodId).pipe(
-          Effect.flatMap(decodeFoodRowsWithPortionQuery)
+          Effect.flatMap(decodeFoodRowsWithRelatedQueries)
         )
       ),
 
     findFoodsByName: (name) =>
       _mapStoreError(
         findFoodsByNameRows(name).pipe(
-          Effect.flatMap(decodeFoodRowsWithPortionQuery)
+          Effect.flatMap(decodeFoodRowsWithRelatedQueries)
         )
       ),
 
@@ -1108,6 +1242,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
             yield* sql`DELETE FROM active_meal_plan_selections`;
             yield* sql`DELETE FROM daily_logs`;
             yield* sql`DELETE FROM plan_meals`;
+            yield* sql`DELETE FROM food_prices`;
             yield* sql`DELETE FROM food_portions`;
             yield* sql`DELETE FROM foods`;
             yield* sql`DELETE FROM plans`;

@@ -19,6 +19,7 @@ import { useSelector } from "@xstate/react";
 import { Array } from "effect";
 import type { ReactNode } from "react";
 import {
+  BadgeEuro,
   ChevronLeft,
   Plus,
   RotateCcw,
@@ -30,6 +31,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { FoodNutrientOverview } from "./food-nutrient-overview";
+import { FoodPriceInputFields } from "./food-price-fields";
 import { MeasurementUnitSelect } from "./measurement-unit-select";
 
 type FoodNutrientField = {
@@ -154,6 +156,10 @@ export function FoodForm({
   const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
     portions,
   });
+  const initialPriceIsValid =
+    FoodFormMachine.foodInitialPriceFormValuesAreValid({
+      formValues,
+    });
   const title = heading ?? (isCreating ? "Create food" : "Edit food");
   const submitText =
     submitLabel ??
@@ -176,6 +182,7 @@ export function FoodForm({
         disabled={disabled}
         portions={portions}
         portionUsage={portionUsage}
+        showInitialPrice={isCreating}
         showPortions={showPortions}
         values={formValues}
       />
@@ -202,7 +209,7 @@ export function FoodForm({
   );
   const submitButton = (
     <Button
-      disabled={disabled || !portionsAreValid}
+      disabled={disabled || !portionsAreValid || !initialPriceIsValid}
       icon={SubmitIcon}
       loading={disabled}
       onPress={() => {
@@ -297,6 +304,7 @@ function FoodFormFields({
   disabled,
   portions,
   portionUsage,
+  showInitialPrice,
   showPortions,
   values,
 }: {
@@ -304,6 +312,7 @@ function FoodFormFields({
   readonly disabled: boolean;
   readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
   readonly portionUsage: readonly Foods.FoodPortionUsage[];
+  readonly showInitialPrice: boolean;
   readonly showPortions: boolean;
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
@@ -313,6 +322,9 @@ function FoodFormFields({
   const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
     portions,
   });
+  const initialPriceError = FoodFormMachine.foodInitialPriceFormErrorFromValues(
+    { formValues: values }
+  );
 
   return (
     <>
@@ -503,6 +515,43 @@ function FoodFormFields({
             </Button>
           </View>
         </SectionCard>
+      ) : null}
+
+      {showInitialPrice ? (
+        <DisclosureCard icon={BadgeEuro} title="Initial price">
+          <FoodPriceInputFields
+            disabled={disabled}
+            onPriceChange={(value) => {
+              _sendFoodFormValueChange({
+                actor,
+                name: "initialPriceValue",
+                value,
+              });
+            }}
+            onQuantityChange={(value) => {
+              _sendFoodFormValueChange({
+                actor,
+                name: "initialPriceQuantity",
+                value,
+              });
+            }}
+            onQuantityUnitChange={(unit) => {
+              _sendFoodFormValueChange({
+                actor,
+                name: "initialPriceQuantityUnit",
+                value: unit,
+              });
+            }}
+            price={values.initialPriceValue}
+            priceError={initialPriceError.price}
+            quantity={values.initialPriceQuantity}
+            quantityError={initialPriceError.quantity}
+            quantityUnit={measurementUnitFromValue({
+              fallback: "kg",
+              value: values.initialPriceQuantityUnit,
+            })}
+          />
+        </DisclosureCard>
       ) : null}
 
       <DisclosureCard icon={Scale} title="Weight and volume conversion">

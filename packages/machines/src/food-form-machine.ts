@@ -19,6 +19,9 @@ export type FoodFormValues = Record<
   | "conversionMassUnit"
   | "conversionVolumeAmount"
   | "conversionVolumeUnit"
+  | "initialPriceQuantity"
+  | "initialPriceQuantityUnit"
+  | "initialPriceValue"
   | "name"
   | "nutritionReferenceAmount"
   | "nutritionReferenceUnit"
@@ -89,6 +92,9 @@ const FoodFormValuesSchema = Schema.Struct({
   sugarGrams: Schema.String,
   saturatedFatGrams: Schema.String,
   saltGrams: Schema.String,
+  initialPriceValue: Schema.String,
+  initialPriceQuantity: Schema.String,
+  initialPriceQuantityUnit: Schema.String,
   nutritionReferenceAmount: Schema.String,
   nutritionReferenceUnit: Schema.String,
   conversionMassAmount: Schema.String,
@@ -115,6 +121,9 @@ const FoodFormValueNameSchema = Schema.Literals([
   "sugarGrams",
   "saturatedFatGrams",
   "saltGrams",
+  "initialPriceValue",
+  "initialPriceQuantity",
+  "initialPriceQuantityUnit",
   "nutritionReferenceAmount",
   "nutritionReferenceUnit",
   "conversionMassAmount",
@@ -205,7 +214,10 @@ export const foodFormMachine = setup({
         submit: ({ context, parent }, enq) => {
           if (
             parent === undefined ||
-            !foodPortionFormValuesAreValid({ portions: context.portions })
+            !foodPortionFormValuesAreValid({ portions: context.portions }) ||
+            !foodInitialPriceFormValuesAreValid({
+              formValues: context.formValues,
+            })
           ) {
             return;
           }
@@ -336,6 +348,10 @@ export const foodFormMachine = setup({
                 : `${partial.saturatedFatGrams}`,
             saltGrams:
               partial.saltGrams === undefined ? "" : `${partial.saltGrams}`,
+            initialPriceValue: context.formValues.initialPriceValue,
+            initialPriceQuantity: context.formValues.initialPriceQuantity,
+            initialPriceQuantityUnit:
+              context.formValues.initialPriceQuantityUnit,
             nutritionReferenceAmount:
               context.formValues.nutritionReferenceAmount,
             nutritionReferenceUnit: context.formValues.nutritionReferenceUnit,
@@ -389,6 +405,9 @@ function _foodFormContextFromInput({
     saturatedFatGrams:
       food?.saturatedFatGrams === undefined ? "" : `${food.saturatedFatGrams}`,
     saltGrams: food?.saltGrams === undefined ? "" : `${food.saltGrams}`,
+    initialPriceValue: "",
+    initialPriceQuantity: "1",
+    initialPriceQuantityUnit: "kg",
     nutritionReferenceAmount: `${food?.nutritionReference.amount ?? 100}`,
     nutritionReferenceUnit: food?.nutritionReference.unit ?? "g",
     conversionMassAmount:
@@ -563,6 +582,44 @@ export function foodPortionFormValuesAreValid({
   );
 }
 
+export type FoodInitialPriceFormError = {
+  readonly price?: string;
+  readonly quantity?: string;
+};
+
+export function foodInitialPriceFormErrorFromValues({
+  formValues,
+}: {
+  readonly formValues: FoodFormValues;
+}): FoodInitialPriceFormError {
+  if (formValues.initialPriceValue.trim() === "") {
+    return {};
+  }
+
+  const price = _formNumber(formValues.initialPriceValue.replace(",", "."));
+  const quantity = _formNumber(
+    formValues.initialPriceQuantity.replace(",", ".")
+  );
+
+  return {
+    ...(price === undefined || price <= 0
+      ? { price: "Enter a price greater than zero." }
+      : {}),
+    ...(quantity === undefined || quantity <= 0
+      ? { quantity: "Enter a quantity greater than zero." }
+      : {}),
+  };
+}
+
+export function foodInitialPriceFormValuesAreValid({
+  formValues,
+}: {
+  readonly formValues: FoodFormValues;
+}) {
+  const error = foodInitialPriceFormErrorFromValues({ formValues });
+  return error.price === undefined && error.quantity === undefined;
+}
+
 export function createFoodInputFromFormValues({
   formValues,
   portions,
@@ -587,6 +644,9 @@ export function createFoodInputFromFormValues({
   const conversionVolumeAmount = _optionalFormValue(
     formValues.conversionVolumeAmount
   );
+  const initialPriceValue = _optionalFormValue(formValues.initialPriceValue);
+  const initialPriceQuantityUnit =
+    measurementUnitByValue[formValues.initialPriceQuantityUnit] ?? "kg";
 
   return {
     name: formValues.name.trim(),
@@ -611,6 +671,18 @@ export function createFoodInputFromFormValues({
         unit: portion.unit,
       },
     })),
+    ...(initialPriceValue === undefined
+      ? {}
+      : {
+          initialPrice: {
+            price: initialPriceValue.replace(",", "."),
+            currency: "EUR",
+            referenceQuantity: {
+              amount: formValues.initialPriceQuantity.replace(",", "."),
+              unit: initialPriceQuantityUnit,
+            },
+          },
+        }),
     ...(conversionMassAmount === undefined &&
     conversionVolumeAmount === undefined
       ? {}

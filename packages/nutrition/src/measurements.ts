@@ -86,6 +86,22 @@ export const convertMeasuredQuantity = ({
     return yield* Schema.decodeEffect(MeasurementAmount)(convertedAmount);
   });
 
+export const convertMeasuredQuantityOption = ({
+  food,
+  quantity,
+  targetUnit,
+}: {
+  readonly food: Food;
+  readonly quantity: typeof MeasuredQuantity.Encoded;
+  readonly targetUnit: MeasurementUnit;
+}) => {
+  const amount = _convertedMeasurementAmount({ food, quantity, targetUnit });
+
+  return (amount === undefined ? Option.none() : Option.some(amount)).pipe(
+    Option.flatMap(Schema.decodeOption(MeasurementAmount))
+  );
+};
+
 export const nutritionMultiplierFromQuantity = ({
   food,
   quantity,

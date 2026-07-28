@@ -11,6 +11,12 @@ A reusable nutritional definition that can be selected when recording consumptio
 A food-owned named quantity that defines the physical amount represented by one portion.
 _Avoid_: Global portion, serving unit
 
+**Food Price**:
+A food-owned monetary amount for a reference quantity. A food may keep several prices, but at most one is its **Current Price**.
+
+**Current Price**:
+The optional food price used to estimate spending. The first price added to a food becomes current automatically; afterward the user may select another price or clear the selection entirely.
+
 **Meal Entry**:
 A record that a quantity of a food was consumed in a meal on a particular day.
 _Avoid_: Food instance
@@ -43,6 +49,7 @@ Any food other than the newest food in a food name group containing multiple foo
 ## Relationships
 
 - A **Food** owns zero or more **Food Portions**
+- A **Food** owns zero or more **Food Prices** and has zero or one **Current Price**
 - A **Meal Entry** refers to exactly one **Food**
 - A **Meal Entry** may record exactly one **Food Portion**
 - **Copy Food** creates a new **Food** without changing the source **Food**
@@ -51,6 +58,9 @@ Any food other than the newest food in a food name group containing multiple foo
 - A **Used Portion** cannot be deleted
 - **Change Portion Everywhere** preserves the **Food Portion** identity and updates its matching **Meal Entries**
 - **Create New Portion** leaves existing **Food Portions** and **Meal Entries** unchanged
+- Meal, day, and insight spending is recalculated from each food's **Current Price**; meal entries do not snapshot prices
+- Entries without a compatible **Current Price** are unpriced and excluded from cost totals, with coverage reported separately
+- Food-price currency is stored in the domain and database as EUR, USD, JPY, or NZD; the current UI creates EUR prices only
 - A **Food Name Group** has exactly one **Newest Food** and zero or more **Older Foods**
 
 ## Example dialogue

@@ -19,7 +19,11 @@ import {
   type Plan,
 } from "../domain.ts";
 import {
+  calculateEntriesCostTotals,
   calculateEntriesNutrientTotals,
+  calculateEntryCost,
+  type EntriesCostTotals,
+  type EntryCost,
   type NutrientCoverage,
   type NutrientTargetStatus,
   type NutrientTotals,
@@ -38,12 +42,14 @@ export type GetNutritionReportRangeInput =
   typeof _GetNutritionReportRangeInput.Encoded;
 
 export type NutritionReportEntry = {
+  readonly cost: EntryCost | null;
   readonly food: Food;
   readonly mealEntry: MealEntry;
   readonly nutrients: ReturnType<typeof calculateEntryNutrients>;
 };
 
 export type NutritionReportDay = {
+  readonly costTotals: EntriesCostTotals;
   readonly coverage: NutrientCoverage;
   readonly dailyLog: DailyLog;
   readonly dateKey: DateKey;
@@ -170,6 +176,10 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                         onNone: () => [],
                         onSome: (food) => [
                           {
+                            cost: calculateEntryCost({
+                              food,
+                              quantity: mealEntry.quantity,
+                            }),
                             food,
                             mealEntry,
                             nutrients: calculateEntryNutrients({
@@ -188,6 +198,12 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                       nutritionMultiplier: entry.mealEntry.nutritionMultiplier,
                     })),
                   });
+                  const costTotals = calculateEntriesCostTotals({
+                    entries: entries.map((entry) => ({
+                      food: entry.food,
+                      quantity: entry.mealEntry.quantity,
+                    })),
+                  });
                   const targetStatuses = evaluatePlanNutrientTargets({
                     plan,
                     totals: aggregate.totals,
@@ -195,6 +211,7 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
 
                   return [
                     {
+                      costTotals,
                       coverage: aggregate.coverage,
                       dailyLog,
                       dateKey,

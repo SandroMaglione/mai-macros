@@ -1,7 +1,8 @@
-import { Array } from "effect";
+import { Array, Option } from "effect";
 
 import type {
   Food,
+  CurrencyCode,
   LoggedFoodQuantity,
   MealEntry,
   NutritionMultiplier,
@@ -9,6 +10,10 @@ import type {
 } from "./domain.ts";
 import { calculateEntryNutrients, calculatePlanEnergyKcal } from "./utils.ts";
 import { massGramsFromQuantity } from "./measurements.ts";
+import {
+  convertMeasuredQuantityOption,
+  measuredQuantityFromLoggedQuantity,
+} from "./measurements.ts";
 
 export const NutrientNames = [
   "energyKcal",
@@ -66,6 +71,99 @@ export type EntriesWeightTotals = {
   readonly quantityGrams: number;
   readonly resolvedEntriesCount: number;
 };
+
+export type EntryCost = {
+  readonly costMinor: number;
+  readonly currency: CurrencyCode;
+};
+
+export type EntriesCostTotals = {
+  readonly costMinorByCurrency: Readonly<Record<CurrencyCode, number>>;
+  readonly entriesCount: number;
+  readonly resolvedEntriesCount: number;
+};
+
+const zeroCostMinorByCurrency = {
+  EUR: 0,
+  JPY: 0,
+  NZD: 0,
+  USD: 0,
+} satisfies Record<CurrencyCode, number>;
+
+export const emptyEntriesCostTotals = (): EntriesCostTotals => ({
+  costMinorByCurrency: { ...zeroCostMinorByCurrency },
+  entriesCount: 0,
+  resolvedEntriesCount: 0,
+});
+
+export const calculateEntryCost = ({
+  food,
+  quantity,
+}: {
+  readonly food: Food;
+  readonly quantity: LoggedFoodQuantity;
+}): EntryCost | null => {
+  const currentPrice = food.prices.find((price) => price.isCurrent);
+
+  if (currentPrice === undefined) {
+    return null;
+  }
+
+  return convertMeasuredQuantityOption({
+    food,
+    quantity: measuredQuantityFromLoggedQuantity({ quantity }),
+    targetUnit: currentPrice.referenceQuantity.unit,
+  }).pipe(
+    Option.map((amount) => ({
+      costMinor:
+        currentPrice.priceMinor *
+        (amount / currentPrice.referenceQuantity.amount),
+      currency: currentPrice.currency,
+    })),
+    Option.getOrNull
+  );
+};
+
+export const calculateEntriesCostTotals = ({
+  entries,
+}: {
+  readonly entries: readonly {
+    readonly food: Food;
+    readonly quantity: LoggedFoodQuantity;
+  }[];
+}): EntriesCostTotals =>
+  entries.reduce<EntriesCostTotals>((totals, entry) => {
+    const cost = calculateEntryCost(entry);
+
+    return {
+      costMinorByCurrency:
+        cost === null
+          ? totals.costMinorByCurrency
+          : {
+              ...totals.costMinorByCurrency,
+              [cost.currency]:
+                totals.costMinorByCurrency[cost.currency] + cost.costMinor,
+            },
+      entriesCount: totals.entriesCount + 1,
+      resolvedEntriesCount:
+        totals.resolvedEntriesCount + (cost === null ? 0 : 1),
+    };
+  }, emptyEntriesCostTotals());
+
+export const calculateMealEntriesCostTotals = ({
+  foods,
+  mealEntries,
+}: {
+  readonly foods: readonly Food[];
+  readonly mealEntries: readonly MealEntry[];
+}): EntriesCostTotals =>
+  calculateEntriesCostTotals({
+    entries: mealEntries.flatMap((mealEntry) => {
+      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
+
+      return food === undefined ? [] : [{ food, quantity: mealEntry.quantity }];
+    }),
+  });
 
 export const NutrientTargetSemanticsByName = {
   carbsGrams: "range",

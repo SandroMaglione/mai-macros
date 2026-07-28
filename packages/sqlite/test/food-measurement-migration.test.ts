@@ -260,6 +260,8 @@ const _readMigratedState = Effect.fn("_readMigratedState")(function* () {
         UNION ALL
         SELECT 'foodPortions', COUNT(*) FROM food_portions
         UNION ALL
+        SELECT 'foodPrices', COUNT(*) FROM food_prices
+        UNION ALL
         SELECT 'foods', COUNT(*) FROM foods
         UNION ALL
         SELECT 'mealEntries', COUNT(*) FROM meal_entries
@@ -306,6 +308,7 @@ describe("food measurement SQLite migration", () => {
       { id: 2, name: "custom-plan-meals" },
       { id: 3, name: "body-weight-entries" },
       { id: 4, name: "food-measurements" },
+      { id: 5, name: "food-prices" },
     ]);
     assert.deepStrictEqual(result.firstStartup.food, {
       brand: "Legacy brand",
@@ -368,6 +371,7 @@ describe("food measurement SQLite migration", () => {
       { count: 1, tableName: "bodyWeightEntries" },
       { count: 2, tableName: "dailyLogs" },
       { count: 0, tableName: "foodPortions" },
+      { count: 0, tableName: "foodPrices" },
       {
         count: DefaultFoods.DefaultFoods.length + 1,
         tableName: "foods",

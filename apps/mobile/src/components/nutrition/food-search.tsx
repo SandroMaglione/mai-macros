@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import { setup } from "xstate";
 
+import { FoodCurrentPriceIndicator } from "./food-current-price-indicator";
+
 const dominantMacronutrientIndicator = {
   carbs: {
     accessibilityLabel: "mostly carbs",
@@ -108,6 +110,20 @@ const foodSearchMacroOrderOptions = [
     key: "calorie-density-low",
     label: "Lowest kcal/g",
     macroOrder: "calorieDensityLow",
+  },
+  {
+    accessibilityLabel: "Order foods by least expensive current price",
+    color: color.textMuted,
+    key: "price-low",
+    label: "Least expensive",
+    macroOrder: "priceLow",
+  },
+  {
+    accessibilityLabel: "Order foods by most expensive current price",
+    color: color.safeText,
+    key: "price-high",
+    label: "Most expensive",
+    macroOrder: "priceHigh",
   },
   {
     accessibilityLabel: "Order foods by fat",
@@ -555,6 +571,7 @@ function FoodSearchResult({
           )}
         </View>
         <View style={styles.summaryRow}>
+          <FoodCurrentPriceIndicator food={food} />
           {!Array.isReadonlyArrayNonEmpty(dominantMacronutrientMetas) ? null : (
             <View accessible={false} style={styles.macronutrientDots}>
               {dominantMacronutrientMetas.map((meta) => (

@@ -67,6 +67,20 @@ export const formatNumber = ({
     minimumFractionDigits,
   }).format(value);
 
+export function formatCurrencyMinor({
+  currency,
+  minorValue,
+}: {
+  readonly currency: Domain.CurrencyCode;
+  readonly minorValue: number;
+}) {
+  const fractionDigits = currency === "JPY" ? 0 : 2;
+  return new Intl.NumberFormat(undefined, {
+    currency,
+    style: "currency",
+  }).format(minorValue / 10 ** fractionDigits);
+}
+
 export const formatDateTitle = ({
   dateKey,
 }: {

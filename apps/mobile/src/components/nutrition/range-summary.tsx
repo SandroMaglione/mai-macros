@@ -15,7 +15,11 @@ import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { setup } from "xstate";
 
-import { formatNumber, mealEntryMassGrams } from "@/lib/format";
+import {
+  formatCurrencyMinor,
+  formatNumber,
+  mealEntryMassGrams,
+} from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 
 import {
@@ -28,6 +32,7 @@ import {
 } from "@/lib/nutrition-target-trend";
 
 type FoodContributor = {
+  readonly costMinor: number;
   readonly foodId: string;
   readonly name: string;
   readonly quantityGrams: number;
@@ -157,6 +162,15 @@ export function RangeSummary({
         mealEntry: entry.mealEntry,
       }) !== undefined
   );
+  const totalCostMinor = report.days.reduce(
+    (total, day) => total + day.costTotals.costMinorByCurrency.EUR,
+    0
+  );
+  const pricedEntryCount = report.days.reduce(
+    (total, day) => total + day.costTotals.resolvedEntriesCount,
+    0
+  );
+  const costCoverageComplete = pricedEntryCount === entries.length;
   const totals = report.days.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
       Reporting.addNutrientTotals({
@@ -224,6 +238,7 @@ export function RangeSummary({
         contributors[entry.food.id] ??
         ({
           foodId: entry.food.id,
+          costMinor: 0,
           name: entry.food.name,
           quantityGrams: 0,
           totals: Reporting.emptyNutrientTotals(),
@@ -233,6 +248,9 @@ export function RangeSummary({
         ...contributors,
         [entry.food.id]: {
           ...current,
+          costMinor:
+            current.costMinor +
+            (entry.cost?.currency === "EUR" ? entry.cost.costMinor : 0),
           quantityGrams:
             current.quantityGrams +
             (mealEntryMassGrams({
@@ -294,6 +312,46 @@ export function RangeSummary({
                 : "Resolved weight / calorie"
             }
             value={averageGramsPerCalorieLabel}
+          />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionTitle
+          subtitle="Estimated from current prices. Unpriced foods are excluded."
+          title="Food spending"
+        />
+        <View style={styles.nutrientGrid}>
+          <SecondaryMetricBalanceCard
+            label={costCoverageComplete ? "Total" : "Resolved total"}
+            showTargetStatus={false}
+            value={formatCurrencyMinor({
+              currency: "EUR",
+              minorValue: totalCostMinor,
+            })}
+          />
+          <SecondaryMetricBalanceCard
+            label="Daily average"
+            showTargetStatus={false}
+            value={formatCurrencyMinor({
+              currency: "EUR",
+              minorValue: dayCount === 0 ? 0 : totalCostMinor / dayCount,
+            })}
+          />
+          <SecondaryMetricBalanceCard
+            label="Costs recorded"
+            showTargetStatus={false}
+            value={`${pricedEntryCount} / ${entries.length}`}
+          />
+          <SecondaryMetricBalanceCard
+            label="Most expensive"
+            showTargetStatus={false}
+            value={
+              foodContributors
+                .filter((food) => food.costMinor > 0)
+                .sort((left, right) => right.costMinor - left.costMinor)[0]
+                ?.name ?? "–"
+            }
           />
         </View>
       </View>
@@ -454,9 +512,11 @@ function NutrientBalanceCard({
 
 function SecondaryMetricBalanceCard({
   label,
+  showTargetStatus = true,
   value,
 }: {
   readonly label: string;
+  readonly showTargetStatus?: boolean | undefined;
   readonly value: string;
 }) {
   return (
@@ -474,9 +534,11 @@ function SecondaryMetricBalanceCard({
       >
         {value}
       </Text>
-      <Text numberOfLines={1} style={styles.nutrientDelta}>
-        No target
-      </Text>
+      {showTargetStatus ? (
+        <Text numberOfLines={1} style={styles.nutrientDelta}>
+          No target
+        </Text>
+      ) : null}
     </View>
   );
 }

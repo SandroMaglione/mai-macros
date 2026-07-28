@@ -271,4 +271,45 @@ describe("nutrition reporting", () => {
       null
     );
   });
+
+  it("prices compatible quantities and reports incomplete price coverage", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const pricedFood = yield* Schema.decodeEffect(Domain.Food)({
+          ...completeFoodInput,
+          prices: [
+            {
+              priceMinor: 400,
+              createdAt: 0,
+              currency: "EUR",
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
+              isCurrent: true,
+              referenceQuantity: { amount: 1, unit: "kg" },
+              updatedAt: 0,
+            },
+          ],
+        });
+        const unpricedFood = yield* Schema.decodeEffect(Domain.Food)(
+          partialFoodInput
+        );
+        const pricedQuantity = yield* Schema.decodeEffect(
+          Domain.LoggedFoodQuantity
+        )({ _tag: "MeasuredFoodQuantity", amount: 250, unit: "g" });
+        const unpricedQuantity = yield* Schema.decodeEffect(
+          Domain.LoggedFoodQuantity
+        )({ _tag: "MeasuredFoodQuantity", amount: 100, unit: "g" });
+
+        return Reporting.calculateEntriesCostTotals({
+          entries: [
+            { food: pricedFood, quantity: pricedQuantity },
+            { food: unpricedFood, quantity: unpricedQuantity },
+          ],
+        });
+      })
+    );
+
+    assert.equal(result.costMinorByCurrency.EUR, 100);
+    assert.equal(result.entriesCount, 2);
+    assert.equal(result.resolvedEntriesCount, 1);
+  });
 });

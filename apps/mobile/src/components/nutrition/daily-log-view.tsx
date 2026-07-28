@@ -1,4 +1,5 @@
 import { DailyBodyWeightInput } from "@/components/body-weight/daily-body-weight-input";
+import { FoodCurrentPriceIndicator } from "@/components/nutrition/food-current-price-indicator";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { AppScreen } from "@/components/ui/app-screen";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
@@ -7,7 +8,11 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
-import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
+import {
+  formatCurrencyMinor,
+  formatLoggedFoodQuantity,
+  formatNumber,
+} from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
@@ -1162,6 +1167,10 @@ function MealSection({
     foods,
     mealEntries,
   });
+  const costTotals = Reporting.calculateMealEntriesCostTotals({
+    foods,
+    mealEntries,
+  });
 
   return (
     <View style={styles.mealCard}>
@@ -1223,8 +1232,12 @@ function MealSection({
       <MealTotalColumns nutrients={nutrients} />
       <MealNutrientColumns nutrients={nutrients} />
       <MealCalorieWeightRatio
+        costIsComplete={
+          costTotals.resolvedEntriesCount === costTotals.entriesCount
+        }
+        costMinor={costTotals.costMinorByCurrency.EUR}
         energyKcal={nutrients.energyKcal}
-        isComplete={
+        weightIsComplete={
           weightTotals.resolvedEntriesCount === weightTotals.entriesCount
         }
         quantityGrams={weightTotals.quantityGrams}
@@ -1256,20 +1269,24 @@ function MealSection({
 }
 
 function MealCalorieWeightRatio({
+  costIsComplete,
+  costMinor,
   energyKcal,
-  isComplete,
   quantityGrams,
+  weightIsComplete,
 }: {
+  readonly costIsComplete: boolean;
+  readonly costMinor: number;
   readonly energyKcal: number;
-  readonly isComplete: boolean;
   readonly quantityGrams: number;
+  readonly weightIsComplete: boolean;
 }) {
   const gramsPerCalorie = Reporting.calculateGramsPerCalorie({
     energyKcal,
     quantityGrams,
   });
   const ratioLabel =
-    !isComplete || gramsPerCalorie === null
+    !weightIsComplete || gramsPerCalorie === null
       ? "- g/kcal"
       : `${formatNumber({
           maximumFractionDigits: gramsPerCalorie < 1 ? 2 : 1,
@@ -1281,13 +1298,18 @@ function MealCalorieWeightRatio({
     <View style={styles.mealWeightRatioColumns}>
       <MealNutrientColumn
         colorValue={color.secondaryMetric}
-        label={isComplete ? "Food weight" : "Resolved weight"}
+        label={weightIsComplete ? "Food weight" : "Resolved weight"}
         value={weightLabel}
       />
       <MealNutrientColumn
         colorValue={color.secondaryMetric}
         label="Weight / calorie"
         value={ratioLabel}
+      />
+      <MealNutrientColumn
+        colorValue={color.safeText}
+        label="Cost"
+        value={`${formatCurrencyMinor({ currency: "EUR", minorValue: costMinor })}${costIsComplete ? "" : "+"}`}
       />
     </View>
   );
@@ -1474,7 +1496,6 @@ function MealEntryRow({
       : Utils.findDominantMacronutrients({ food }).map(
           (macronutrient) => dominantMacronutrientColors[macronutrient]
         );
-
   return (
     <Pressable
       accessibilityRole="button"
@@ -1489,6 +1510,7 @@ function MealEntryRow({
           {food?.name ?? "Unknown food"}
         </Text>
         <View style={styles.entryDetailRow}>
+          <FoodCurrentPriceIndicator food={food} />
           {!Array.isReadonlyArrayNonEmpty(
             dominantMacronutrientColorsForFood
           ) ? null : (

@@ -121,6 +121,14 @@ class LegacyMaiFoodCatalogSourceV5 extends Schema.Class<LegacyMaiFoodCatalogSour
   exportedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+class LegacyMaiFoodCatalogSourceV6 extends Schema.Class<LegacyMaiFoodCatalogSourceV6>(
+  "LegacyMaiFoodCatalogSourceV6"
+)({
+  databaseName: Schema.Literal(DatabaseName),
+  databaseVersion: Schema.Literal(6),
+  exportedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
 class LegacyMaiFoodCatalogImportStoresV5 extends Schema.Class<LegacyMaiFoodCatalogImportStoresV5>(
   "LegacyMaiFoodCatalogImportStoresV5"
 )({
@@ -157,6 +165,16 @@ class LegacyMaiFoodCatalogV1ImportV5 extends Schema.Class<LegacyMaiFoodCatalogV1
   stores: LegacyMaiFoodCatalogImportStoresV5,
 }) {}
 
+class LegacyMaiFoodCatalogV1ImportV6 extends Schema.Class<LegacyMaiFoodCatalogV1ImportV6>(
+  "LegacyMaiFoodCatalogV1ImportV6"
+)({
+  format: MaiFoodCatalogFormat,
+  formatVersion: MaiFoodCatalogFormatVersion,
+  integrity: MaiFoodCatalogIntegrity,
+  source: LegacyMaiFoodCatalogSourceV6,
+  stores: MaiFoodCatalogImportStores,
+}) {}
+
 export type MaiFoodCatalog = typeof MaiFoodCatalogV1.Type;
 
 export type MaiFoodCatalogEncoded = typeof MaiFoodCatalogV1.Encoded;
@@ -164,7 +182,11 @@ export type MaiFoodCatalogEncoded = typeof MaiFoodCatalogV1.Encoded;
 export const MaiFoodCatalogJson = Schema.fromJsonString(MaiFoodCatalogV1);
 
 const MaiFoodCatalogImportJson = Schema.fromJsonString(
-  Schema.Union([LegacyMaiFoodCatalogV1ImportV5, MaiFoodCatalogV1Import])
+  Schema.Union([
+    LegacyMaiFoodCatalogV1ImportV5,
+    LegacyMaiFoodCatalogV1ImportV6,
+    MaiFoodCatalogV1Import,
+  ])
 );
 
 const isLegacyMaiFoodCatalogV1ImportV5 = Schema.is(
@@ -573,12 +595,18 @@ const _foodCatalogImportCandidates = Effect.fn("_foodCatalogImportCandidates")(
         const localFood = localFoods.find(
           (candidate) => candidate.id === food.id
         );
-        const status =
+        const localCatalogFood =
           localFood === undefined
+            ? undefined
+            : yield* Schema.encodeEffect(Food)(localFood).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(FoodCatalogFood))
+              );
+        const status =
+          localCatalogFood === undefined
             ? ("new" satisfies FoodCatalogImportCandidateStatus)
             : Equal.equals(
                   yield* Schema.encodeEffect(FoodCatalogFood)(food),
-                  yield* Schema.encodeEffect(Food)(localFood)
+                  yield* Schema.encodeEffect(FoodCatalogFood)(localCatalogFood)
                 )
               ? ("already-present" satisfies FoodCatalogImportCandidateStatus)
               : ("id-conflict" satisfies FoodCatalogImportCandidateStatus);

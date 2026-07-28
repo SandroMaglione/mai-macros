@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { Effect, Schema } from "effect";
 
-import { Backup, DefaultFoods, Migrations } from "../src/index.ts";
+import { Backup, DefaultFoods, Metadata, Migrations } from "../src/index.ts";
 
 const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
@@ -1155,7 +1155,7 @@ function buildBackup(): Backup.MaiBackupEncoded {
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 5,
+      databaseVersion: Metadata.CurrentDatabaseVersion,
       exportedAt: timestampForDateKey({ dateKey: todayDateKey, hour: 12 }),
     },
     stores: {

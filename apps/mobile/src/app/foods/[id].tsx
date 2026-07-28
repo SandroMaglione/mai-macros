@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   Copy,
   Pencil,
+  ReceiptEuro,
   Ruler,
   RotateCcw,
   Save,
@@ -531,27 +532,17 @@ function FoodEditorScreen({
           tone="neutral"
         />
         <SectionCard
-          subtitle="Create a separate food from these values. Previous entries stay unchanged."
-          title="Copy food"
+          subtitle="Add, update, delete, or select the price used for spending estimates."
+          title="Manage prices"
         >
-          <Button icon={Copy} onPress={actor.trigger.chooseCopy}>
-            Copy this food
+          <Button
+            icon={ReceiptEuro}
+            onPress={() => {
+              router.push(`/foods/${food.id}/prices`);
+            }}
+          >
+            Manage prices
           </Button>
-        </SectionCard>
-        <SectionCard
-          subtitle="Keep the same food identity and update every entry that uses it."
-          title="Edit food details"
-        >
-          {food.origin === "app-default" ? (
-            <Notice
-              message="Pre-installed foods cannot be edited. Create your own copy instead."
-              tone="warning"
-            />
-          ) : (
-            <Button icon={Pencil} onPress={actor.trigger.chooseEdit}>
-              Edit food details
-            </Button>
-          )}
         </SectionCard>
         <SectionCard
           subtitle="Add a portion, change one everywhere, or create a new portion while keeping earlier entries unchanged."
@@ -572,6 +563,29 @@ function FoodEditorScreen({
               Manage portions
             </Button>
           )}
+        </SectionCard>
+        <SectionCard
+          subtitle="Keep the same food identity and update every entry that uses it."
+          title="Edit food details"
+        >
+          {food.origin === "app-default" ? (
+            <Notice
+              message="Pre-installed foods cannot be edited. Create your own copy instead."
+              tone="warning"
+            />
+          ) : (
+            <Button icon={Pencil} onPress={actor.trigger.chooseEdit}>
+              Edit food details
+            </Button>
+          )}
+        </SectionCard>
+        <SectionCard
+          subtitle="Create a separate food from these values. Previous entries stay unchanged."
+          title="Copy food"
+        >
+          <Button icon={Copy} onPress={actor.trigger.chooseCopy}>
+            Copy this food
+          </Button>
         </SectionCard>
       </WorkflowPage>
     );

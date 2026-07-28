@@ -87,6 +87,22 @@ export const FoodPortionId = Schema.String.check(Schema.isUUID(4)).pipe(
 
 export type FoodPortionId = typeof FoodPortionId.Type;
 
+export const FoodPriceId = Schema.String.check(Schema.isUUID(4)).pipe(
+  Schema.brand("FoodPriceId")
+);
+
+export type FoodPriceId = typeof FoodPriceId.Type;
+
+export const CurrencyCode = Schema.Literals(["EUR", "JPY", "NZD", "USD"]);
+
+export type CurrencyCode = typeof CurrencyCode.Type;
+
+export const PriceMinor = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+  Schema.brand("PriceMinor")
+);
+
+export type PriceMinor = typeof PriceMinor.Type;
+
 export const FoodPortionPosition = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(0)
 ).pipe(Schema.brand("FoodPortionPosition"));
@@ -99,6 +115,24 @@ export class FoodPortion extends Schema.Class<FoodPortion>("FoodPortion")({
   size: MeasuredQuantity,
   position: FoodPortionPosition,
 }) {}
+
+export class FoodPrice extends Schema.Class<FoodPrice>("FoodPrice")({
+  id: FoodPriceId,
+  priceMinor: PriceMinor,
+  currency: CurrencyCode,
+  referenceQuantity: MeasuredQuantity,
+  isCurrent: Schema.Boolean,
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
+const FoodPrices = Schema.Array(FoodPrice).check(
+  Schema.makeFilter((prices) =>
+    prices.filter((price) => price.isCurrent).length <= 1
+      ? undefined
+      : "A food can have at most one current price."
+  )
+);
 
 export class FoodMassVolumeConversion extends Schema.Class<FoodMassVolumeConversion>(
   "FoodMassVolumeConversion"
@@ -201,6 +235,7 @@ export class Food extends Schema.Class<Food>("Food")({
   portions: Schema.Array(FoodPortion).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([]))
   ),
+  prices: FoodPrices.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   massVolumeConversion: Schema.optional(FoodMassVolumeConversion),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,

@@ -37,6 +37,8 @@ export type FoodSearchMacroOrder =
   | "energy"
   | "fat"
   | "fiber"
+  | "priceHigh"
+  | "priceLow"
   | "protein"
   | "salt"
   | "saturatedFat"
@@ -49,6 +51,8 @@ const FoodSearchMacroOrderSchema = Schema.Literals([
   "energy",
   "fat",
   "fiber",
+  "priceHigh",
+  "priceLow",
   "protein",
   "salt",
   "saturatedFat",
@@ -129,7 +133,7 @@ const foodMacroOrderValueKey = {
   saturatedFat: "saturatedFatGrams",
   sugar: "sugarGrams",
 } satisfies Record<
-  FoodSearchMacroOrder,
+  Exclude<FoodSearchMacroOrder, "priceHigh" | "priceLow">,
   | "carbsGrams"
   | "energyKcal"
   | "fatGrams"
@@ -147,6 +151,8 @@ const foodMacroOrderValueDirection = {
   energy: "descending",
   fat: "descending",
   fiber: "descending",
+  priceHigh: "descending",
+  priceLow: "ascending",
   protein: "descending",
   salt: "descending",
   saturatedFat: "descending",
@@ -254,6 +260,25 @@ export function sortFoodsByMacroOrder({
         Order.combineAll([
           foodUserOriginOrder,
           Order.mapInput(valueOrder, (food: Domain.Food) => {
+            if (macroOrder === "priceHigh" || macroOrder === "priceLow") {
+              const currentEuroPrice = food.prices.find(
+                (price) => price.isCurrent && price.currency === "EUR"
+              );
+
+              if (currentEuroPrice === undefined) {
+                return macroOrder === "priceLow"
+                  ? Number.POSITIVE_INFINITY
+                  : Number.NEGATIVE_INFINITY;
+              }
+
+              return (
+                currentEuroPrice.priceMinor /
+                Measurements.baseMeasurementAmount({
+                  quantity: currentEuroPrice.referenceQuantity,
+                })
+              );
+            }
+
             const valueKey = foodMacroOrderValueKey[macroOrder];
             const referenceBaseAmount = Measurements.baseMeasurementAmount({
               quantity: food.nutritionReference,

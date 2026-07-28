@@ -436,6 +436,93 @@ describe("nutrition revisions", () => {
     assert.equal(result.stores.mealEntries.length, 0);
   });
 
+  it("manages optional current food prices and selects only the first automatically", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const first = yield* foods.addFoodPrice({
+            input: {
+              currency: "EUR",
+              foodId: food.id,
+              price: "4.50",
+              referenceQuantity: { amount: "1", unit: "kg" },
+            },
+          });
+          const second = yield* foods.addFoodPrice({
+            input: {
+              currency: "EUR",
+              foodId: food.id,
+              price: "5.25",
+              referenceQuantity: { amount: "500", unit: "g" },
+            },
+          });
+          const selected = yield* foods.selectCurrentFoodPrice({
+            input: { foodId: food.id, priceId: second.price.id },
+          });
+          const cleared = yield* foods.selectCurrentFoodPrice({
+            input: { foodId: food.id, priceId: null },
+          });
+          const removed = yield* foods.removeFoodPrice({
+            input: { foodId: food.id, priceId: first.price.id },
+          });
+
+          return { cleared, first, removed, second, selected };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({ stores: { ...emptyStores, foods: [food] } })
+          )
+        );
+      })
+    );
+
+    assert.isTrue(result.first.price.isCurrent);
+    assert.isFalse(result.second.price.isCurrent);
+    assert.equal(
+      result.selected.food.prices.find((price) => price.isCurrent)?.id,
+      result.second.price.id
+    );
+    assert.isUndefined(
+      result.cleared.food.prices.find((price) => price.isCurrent)
+    );
+    assert.equal(result.removed.food.prices.length, 1);
+  });
+
+  it("creates a food with its first price selected as current", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const foods = yield* Foods.Foods;
+        const store = yield* Store.NutritionStore;
+        const created = yield* foods.create({
+          input: {
+            name: "Rice",
+            energyKcal: "350",
+            proteinGrams: "7",
+            carbsGrams: "78",
+            fatGrams: "1",
+            initialPrice: {
+              price: "4.75",
+              currency: "EUR",
+              referenceQuantity: { amount: "1", unit: "kg" },
+            },
+          },
+        });
+
+        return { created, stores: yield* store.readStores };
+      }).pipe(Effect.provide(_revisionTestLayer({ stores: emptyStores })))
+    );
+
+    assert.equal(result.created.food.prices.length, 1);
+    assert.equal(result.created.food.prices[0]?.priceMinor, 475);
+    assert.equal(result.created.food.prices[0]?.currency, "EUR");
+    assert.equal(result.created.food.prices[0]?.referenceQuantity.amount, 1);
+    assert.equal(result.created.food.prices[0]?.referenceQuantity.unit, "kg");
+    assert.isTrue(result.created.food.prices[0]?.isCurrent);
+    assert.equal(result.stores.foods[0]?.prices[0]?.priceMinor, 475);
+  });
+
   it("updates unused plans in place without creating a daily log", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
