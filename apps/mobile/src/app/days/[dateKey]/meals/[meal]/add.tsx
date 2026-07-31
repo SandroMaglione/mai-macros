@@ -16,13 +16,13 @@ import { todayDateKey } from "@/lib/date-keys";
 import * as FoodMeasurements from "@/lib/food-measurements";
 import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
 import { FoodSearchMachine } from "@mai/machines";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { type AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Order, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -266,6 +266,8 @@ const addMealFoodRouteMachine = Machine.make({
     SelectPortion,
     ClearSelectedFood,
     Submit,
+  ],
+  internalEvents: [
     RouteLoaded,
     RouteLoadFailed,
     NewPlanRequired,
@@ -311,8 +313,9 @@ const addMealFoodRouteMachine = Machine.make({
               pathname: "/plans/new",
               params: { dateKey: event.dateKey },
             })
-          )
-        ).pipe(Effect.as(target.full.Redirected(new Redirected()))),
+          ),
+          target.full.Redirected(new Redirected())
+        ),
     },
   },
   Failed: {},
@@ -412,13 +415,10 @@ const addMealFoodRouteMachine = Machine.make({
               Machine.sendTo(
                 FoodSearchMachine.FoodSearchChild,
                 new FoodSearchMachine.ClearSelectedFood()
-              )
-            ).pipe(
-              Effect.as(
-                target.full.Ready(
-                  new Ready({ ...parents.Ready, selectedFood: null }),
-                  (ready) => ready.SelectingFood(new SelectingFood())
-                )
+              ),
+              target.full.Ready(
+                new Ready({ ...parents.Ready, selectedFood: null }),
+                (ready) => ready.SelectingFood(new SelectingFood())
               )
             ),
           Submit: ({ parents, target }) =>
@@ -470,12 +470,9 @@ const addMealFoodRouteMachine = Machine.make({
                   pathname: "/days/[dateKey]",
                   params: { dateKey: parents.Ready.dateKey },
                 });
-              })
-            ).pipe(
-              Effect.as(
-                target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
-                  ready.Submitted(new Submitted())
-                )
+              }),
+              target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
+                ready.Submitted(new Submitted())
               )
             ),
           EntryRejected: ({ event, parents, target }) =>
@@ -506,7 +503,7 @@ function ValidAddMealFoodRoute({
 }: typeof AddMealFoodRouteParams.Type) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, addMealFoodRouteMachine, {
+      MobileMachine.make(addMealFoodRouteMachine, {
         dateKey,
         meal,
       }),

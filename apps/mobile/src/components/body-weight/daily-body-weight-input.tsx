@@ -4,12 +4,11 @@ import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
 import { formatNumber } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { BodyWeights, Domain } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Save, Trash2 } from "lucide-react-native";
@@ -109,11 +108,8 @@ const DailyBodyWeightStates = Machine.defineStates({
 
 const dailyBodyWeightMachine = Machine.make({
   states: DailyBodyWeightStates.states,
-  events: [
-    ChangeWeight,
-    DeleteWeight,
-    Retry,
-    SaveWeight,
+  events: [ChangeWeight, DeleteWeight, Retry, SaveWeight],
+  internalEvents: [
     WeightLoaded,
     WeightLoadFailed,
     WeightSaved,
@@ -128,19 +124,16 @@ const dailyBodyWeightMachine = Machine.make({
 }).handle({
   Loading: {
     invoke: ({ state }) =>
-      Machine.invoke({
+      Machine.invokeEffect({
         id: "loadWeight",
-        src: () =>
-          Machine.effect(
-            Effect.gen(function* () {
-              const bodyWeights = yield* BodyWeights.BodyWeights;
-              const entry = yield* bodyWeights.findByDate({
-                input: { dateKey: state.dateKey },
-              });
-
-              return new WeightLoaded({ entry });
-            }).pipe(Effect.catch(() => Effect.succeed(new WeightLoadFailed())))
-          ),
+        effect: Effect.gen(function* () {
+          const bodyWeights = yield* BodyWeights.BodyWeights;
+          return yield* bodyWeights.findByDate({
+            input: { dateKey: state.dateKey },
+          });
+        }),
+        onSuccess: (entry) => new WeightLoaded({ entry }),
+        onFailure: () => new WeightLoadFailed(),
       }),
     on: {
       WeightLoaded: ({ event, state, target }) =>
@@ -174,9 +167,9 @@ const dailyBodyWeightMachine = Machine.make({
       DeleteWeight: ({ state, target }) =>
         state.entry === null
           ? undefined
-          : target.full.Deleting(new Deleting({ ...state, _tag: undefined })),
+          : target.full.Deleting(Machine.retag(Deleting, state)),
       SaveWeight: ({ state, target }) =>
-        target.full.Saving(new Saving({ ...state, _tag: undefined })),
+        target.full.Saving(Machine.retag(Saving, state)),
     },
   },
   Saving: {
@@ -215,17 +208,13 @@ const dailyBodyWeightMachine = Machine.make({
         ),
       WeightValidationFailed: ({ state, target }) =>
         target.full.Idle(
-          new Idle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(Idle, state, {
             message: "Enter a positive weight in kilograms.",
           })
         ),
       WeightSaveFailed: ({ state, target }) =>
         target.full.Idle(
-          new Idle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(Idle, state, {
             message: "Could not save this weight.",
           })
         ),
@@ -233,20 +222,16 @@ const dailyBodyWeightMachine = Machine.make({
   },
   Deleting: {
     invoke: ({ state }) =>
-      Machine.invoke({
+      Machine.invokeEffect({
         id: "deleteWeight",
-        src: () =>
-          Machine.effect(
-            Effect.gen(function* () {
-              const bodyWeights = yield* BodyWeights.BodyWeights;
-              yield* bodyWeights.delete({
-                input: { dateKey: state.dateKey },
-              });
-              return new WeightDeleted();
-            }).pipe(
-              Effect.catch(() => Effect.succeed(new WeightDeleteFailed()))
-            )
-          ),
+        effect: Effect.gen(function* () {
+          const bodyWeights = yield* BodyWeights.BodyWeights;
+          yield* bodyWeights.delete({
+            input: { dateKey: state.dateKey },
+          });
+        }),
+        onSuccess: () => new WeightDeleted(),
+        onFailure: () => new WeightDeleteFailed(),
       }),
     on: {
       WeightDeleted: ({ state, target }) =>
@@ -260,9 +245,7 @@ const dailyBodyWeightMachine = Machine.make({
         ),
       WeightDeleteFailed: ({ state, target }) =>
         target.full.Idle(
-          new Idle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(Idle, state, {
             message: "Could not delete this weight.",
           })
         ),
@@ -282,8 +265,7 @@ export function DailyBodyWeightInput({
   readonly dateKey: Domain.DateKey;
 }) {
   const machineAtom = useMemo(
-    () =>
-      AtomMachine.make(MobileAtomRuntime, dailyBodyWeightMachine, { dateKey }),
+    () => MobileMachine.make(dailyBodyWeightMachine, { dateKey }),
     [dateKey]
   );
   const stateResult = useAtomValue(machineAtom.state);

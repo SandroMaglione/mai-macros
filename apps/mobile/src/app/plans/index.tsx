@@ -9,12 +9,11 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabs } from "@/components/ui/pager-tabs";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { DailyLogs, Domain, MealPlans } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -49,8 +48,12 @@ const PlansRouteData = Schema.Struct({
 
 type PlansRouteData = typeof PlansRouteData.Type;
 
+const PlansSource = Schema.Literal("settings");
+type PlansSource = typeof PlansSource.Type;
+
 const PlansSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  source: Schema.optionalKey(PlansSource),
 });
 
 const PlansTabIndex = Schema.Union([
@@ -103,7 +106,10 @@ const PlansReadyData = {
 
 class PlansRoute extends Schema.TaggedClass<PlansRoute>("PlansRoute")(
   "PlansRoute",
-  { dateKey: Schema.UndefinedOr(Domain.DateKey) }
+  {
+    dateKey: Schema.UndefinedOr(Domain.DateKey),
+    source: Schema.UndefinedOr(PlansSource),
+  }
 ) {}
 class PlansLoading extends Schema.TaggedClass<PlansLoading>("PlansLoading")(
   "PlansLoading",
@@ -200,6 +206,8 @@ const plansRouteMachine = Machine.make({
     RevisePlan,
     SelectEditPlan,
     SelectPlansTab,
+  ],
+  internalEvents: [
     PlansLoaded,
     PlansInvalidRoute,
     PlansMissing,
@@ -208,9 +216,12 @@ const plansRouteMachine = Machine.make({
     PlanSaved,
     PlanSaveFailed,
   ],
-  input: Schema.Struct({ dateKey: Schema.optionalKey(Domain.DateKey) }),
-  initial: ({ dateKey }) =>
-    PlansStates.initial.Route(new PlansRoute({ dateKey }), (route) =>
+  input: Schema.Struct({
+    dateKey: Schema.optionalKey(Domain.DateKey),
+    source: Schema.optionalKey(PlansSource),
+  }),
+  initial: ({ dateKey, source }) =>
+    PlansStates.initial.Route(new PlansRoute({ dateKey, source }), (route) =>
       route.Loading(new PlansLoading())
     ),
 }).handle({
@@ -258,12 +269,10 @@ const plansRouteMachine = Machine.make({
               )
             ),
           PlansInvalidRoute: ({ parents, target }) =>
-            Machine.action(Effect.sync(() => router.replace("/"))).pipe(
-              Effect.as(
-                target.full.Route(
-                  new PlansRoute({ ...parents.Route }),
-                  (route) => route.Redirecting(new PlansRedirecting())
-                )
+            Machine.action(
+              Effect.sync(() => router.replace("/")),
+              target.full.Route(new PlansRoute({ ...parents.Route }), (route) =>
+                route.Redirecting(new PlansRedirecting())
               )
             ),
           PlansMissing: ({ event, parents, target }) =>
@@ -271,15 +280,18 @@ const plansRouteMachine = Machine.make({
               Effect.sync(() => {
                 router.replace({
                   pathname: "/plans/new",
-                  params: { dateKey: event.dateKey },
+                  params:
+                    parents.Route.source === "settings"
+                      ? {
+                          dateKey: event.dateKey,
+                          returnDateKey: parents.Route.dateKey,
+                          source: parents.Route.source,
+                        }
+                      : { dateKey: event.dateKey },
                 });
-              })
-            ).pipe(
-              Effect.as(
-                target.full.Route(
-                  new PlansRoute({ ...parents.Route }),
-                  (route) => route.Redirecting(new PlansRedirecting())
-                )
+              }),
+              target.full.Route(new PlansRoute({ ...parents.Route }), (route) =>
+                route.Redirecting(new PlansRedirecting())
               )
             ),
         },
@@ -305,9 +317,7 @@ const plansRouteMachine = Machine.make({
             }
 
             return target.local.Changing(
-              new PlansChanging({
-                ...state,
-                _tag: undefined,
+              Machine.retag(PlansChanging, state, {
                 notice: null,
                 plan: event.plan,
               })
@@ -323,9 +333,7 @@ const plansRouteMachine = Machine.make({
             ),
           CreatePlan: ({ event, state, target }) =>
             target.local.Saving(
-              new PlansSaving({
-                ...state,
-                _tag: undefined,
+              Machine.retag(PlansSaving, state, {
                 notice: null,
                 save: {
                   action: "create",
@@ -337,9 +345,7 @@ const plansRouteMachine = Machine.make({
             ),
           RevisePlan: ({ event, state, target }) =>
             target.local.Saving(
-              new PlansSaving({
-                ...state,
-                _tag: undefined,
+              Machine.retag(PlansSaving, state, {
                 notice: null,
                 save: {
                   action: "revise",
@@ -548,17 +554,24 @@ export default function PlansScreen() {
     return <Redirect href="/" />;
   }
 
-  return <DecodedPlansScreen dateKey={search.value.dateKey} />;
+  return (
+    <DecodedPlansScreen
+      dateKey={search.value.dateKey}
+      source={search.value.source}
+    />
+  );
 }
 
 function DecodedPlansScreen({
   dateKey,
+  source,
 }: {
   readonly dateKey: Domain.DateKey | undefined;
+  readonly source: PlansSource | undefined;
 }) {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, plansRouteMachine, { dateKey }),
-    [dateKey]
+    () => MobileMachine.make(plansRouteMachine, { dateKey, source }),
+    [dateKey, source]
   );
   const stateResult = useAtomValue(machineAtom.state);
   const send = useAtomSet(machineAtom.send);
@@ -599,6 +612,8 @@ function DecodedPlansScreen({
       }
       editingPlan={current.editingPlan}
       notice={current.notice}
+      returnDateKey={dateKey}
+      source={source}
       onChangePlan={(plan) => {
         send(new ChangePlan({ plan }));
       }}
@@ -631,6 +646,8 @@ function ReadyPlansScreen({
   disabled,
   editingPlan,
   notice,
+  returnDateKey,
+  source,
   onChangePlan,
   onClearEditPlan,
   onCreatePlan,
@@ -643,6 +660,8 @@ function ReadyPlansScreen({
   readonly disabled: boolean;
   readonly editingPlan: Domain.Plan | null;
   readonly notice: string | null;
+  readonly returnDateKey: Domain.DateKey | undefined;
+  readonly source: PlansSource | undefined;
   readonly onChangePlan: (plan: Domain.Plan) => void;
   readonly onClearEditPlan: () => void;
   readonly onCreatePlan: (input: MealPlans.CreateMealPlanInput) => void;
@@ -682,9 +701,28 @@ function ReadyPlansScreen({
           embedded
           leading={
             <IconButton
-              accessibilityLabel="Back to day"
+              accessibilityLabel={
+                source === "settings" ? "Back to settings" : "Back to day"
+              }
               icon={ChevronLeft}
               onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                  return;
+                }
+
+                if (source === "settings") {
+                  router.replace(
+                    returnDateKey === undefined
+                      ? "/settings"
+                      : {
+                          pathname: "/settings",
+                          params: { dateKey: returnDateKey },
+                        }
+                  );
+                  return;
+                }
+
                 router.replace({
                   pathname: "/days/[dateKey]",
                   params: {

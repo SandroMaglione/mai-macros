@@ -9,12 +9,11 @@ import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatShortDate } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, Foods } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Predicate, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -288,6 +287,8 @@ const portionManagerMachine = Machine.make({
     RemovePortion,
     Retry,
     Submit,
+  ],
+  internalEvents: [
     FoodLoaded,
     PreviewSucceeded,
     PortionAdded,
@@ -646,8 +647,7 @@ export default function FoodPortionsRoute() {
 
 function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
   const machineAtom = useMemo(
-    () =>
-      AtomMachine.make(MobileAtomRuntime, portionManagerMachine, { foodId }),
+    () => MobileMachine.make(portionManagerMachine, { foodId }),
     [foodId]
   );
   const stateResult = useAtomValue(machineAtom.state);

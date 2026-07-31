@@ -5,20 +5,24 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, MealPlans } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { router } from "expo-router";
 import { useMemo } from "react";
 import { Alert, StyleSheet } from "react-native";
 
+const PlanSource = Schema.Literal("settings");
+type PlanSource = typeof PlanSource.Type;
+
 const SearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  returnDateKey: Schema.optionalKey(Domain.DateKey),
+  source: Schema.optionalKey(PlanSource),
 });
 
 const MealPlanInputMeal = Schema.Struct({
@@ -42,6 +46,8 @@ type CreateMealPlanInput = typeof CreateMealPlanInput.Type;
 const NewPlanRouteSearch = Schema.Union([
   Schema.TaggedStruct("Valid", {
     dateKey: Schema.optionalKey(Domain.DateKey),
+    returnDateKey: Schema.optionalKey(Domain.DateKey),
+    source: Schema.optionalKey(PlanSource),
   }),
   Schema.TaggedStruct("Invalid", {}),
 ]);
@@ -50,6 +56,8 @@ class NewPlanRoute extends Schema.TaggedClass<NewPlanRoute>("NewPlanRoute")(
   "NewPlanRoute",
   {
     dateKey: Schema.UndefinedOr(Domain.DateKey),
+    returnDateKey: Schema.UndefinedOr(Domain.DateKey),
+    source: Schema.UndefinedOr(PlanSource),
   }
 ) {}
 
@@ -120,7 +128,28 @@ const NewPlanStates = Machine.defineStates({
 });
 
 const newPlanOperations = {
-  replaceBack: (dateKey: Domain.DateKey | undefined) => {
+  replaceBack: ({
+    dateKey,
+    returnDateKey,
+    source,
+  }: {
+    readonly dateKey: Domain.DateKey | undefined;
+    readonly returnDateKey: Domain.DateKey | undefined;
+    readonly source: PlanSource | undefined;
+  }) => {
+    if (source === "settings") {
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+      router.replace(
+        returnDateKey === undefined
+          ? "/settings"
+          : { pathname: "/settings", params: { dateKey: returnDateKey } }
+      );
+      return;
+    }
+
     if (dateKey === undefined) {
       router.replace("/");
       return;
@@ -132,7 +161,17 @@ const newPlanOperations = {
     });
   },
 
-  replaceToDateKey: (dateKey: Domain.DateKey | undefined) => {
+  replaceToDateKey: (params: {
+    readonly dateKey: Domain.DateKey | undefined;
+    readonly returnDateKey: Domain.DateKey | undefined;
+    readonly source: PlanSource | undefined;
+  }) => {
+    if (params.source === "settings") {
+      newPlanOperations.replaceBack(params);
+      return;
+    }
+
+    const { dateKey } = params;
     const today = todayDateKey();
     const targetDateKey = dateKey ?? today;
 
@@ -207,19 +246,16 @@ const newPlanEffects = {
 
 const newPlanRouteMachine = Machine.make({
   states: NewPlanStates.states,
-  events: [
-    Back,
-    Submit,
-    ExistingPlansLoaded,
-    LoadFailed,
-    PlanCreated,
-    PlanRejected,
-  ],
+  events: [Back, Submit],
+  internalEvents: [ExistingPlansLoaded, LoadFailed, PlanCreated, PlanRejected],
   input: Schema.Struct({ search: NewPlanRouteSearch }),
   initial: ({ search }) =>
     NewPlanStates.initial.Route(
       new NewPlanRoute({
         dateKey: search._tag === "Valid" ? search.dateKey : undefined,
+        returnDateKey:
+          search._tag === "Valid" ? search.returnDateKey : undefined,
+        source: search._tag === "Valid" ? search.source : undefined,
       }),
       (route) => route.Loading(new Loading())
     ),
@@ -228,7 +264,13 @@ const newPlanRouteMachine = Machine.make({
     on: {
       Back: ({ state }) =>
         Machine.action(
-          Effect.sync(() => newPlanOperations.replaceBack(state.dateKey))
+          Effect.sync(() =>
+            newPlanOperations.replaceBack({
+              dateKey: state.dateKey,
+              returnDateKey: state.returnDateKey,
+              source: state.source,
+            })
+          )
         ),
     },
     states: {
@@ -272,20 +314,22 @@ const newPlanRouteMachine = Machine.make({
           PlanCreated: ({ parents, target }) =>
             Machine.action(
               Effect.sync(() =>
-                newPlanOperations.replaceToDateKey(parents.Route.dateKey)
-              )
-            ).pipe(Effect.as(target.local.Created(new Created()))),
+                newPlanOperations.replaceToDateKey({
+                  dateKey: parents.Route.dateKey,
+                  returnDateKey: parents.Route.returnDateKey,
+                  source: parents.Route.source,
+                })
+              ),
+              target.local.Created(new Created())
+            ),
           PlanRejected: ({ event, state, target }) =>
             Machine.action(
-              Effect.sync(() => Alert.alert("Plan not saved", event.message))
-            ).pipe(
-              Effect.as(
-                target.local.Ready(
-                  new Ready({
-                    errorMessage: event.message,
-                    hasExistingPlan: state.hasExistingPlan,
-                  })
-                )
+              Effect.sync(() => Alert.alert("Plan not saved", event.message)),
+              target.local.Ready(
+                new Ready({
+                  errorMessage: event.message,
+                  hasExistingPlan: state.hasExistingPlan,
+                })
               )
             ),
         },
@@ -302,12 +346,19 @@ export default function NewPlanScreen() {
       onSome: (params) => ({
         _tag: "Valid" as const,
         dateKey: params.dateKey,
+        returnDateKey: params.returnDateKey,
+        source: params.source,
       }),
     })
   );
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, newPlanRouteMachine, { search }),
-    [search._tag, search._tag === "Valid" ? search.dateKey : undefined]
+    () => MobileMachine.make(newPlanRouteMachine, { search }),
+    [
+      search._tag,
+      search._tag === "Valid" ? search.dateKey : undefined,
+      search._tag === "Valid" ? search.returnDateKey : undefined,
+      search._tag === "Valid" ? search.source : undefined,
+    ]
   );
   const stateResult = useAtomValue(machineAtom.state);
   const send = useAtomSet(machineAtom.send);
@@ -350,7 +401,8 @@ export default function NewPlanScreen() {
     <MealPlanForm
       action="create"
       canNavigateBack={
-        ready?.hasExistingPlan ?? submitting?.hasExistingPlan ?? true
+        (ready?.hasExistingPlan ?? submitting?.hasExistingPlan ?? true) ||
+        (search._tag === "Valid" && search.source === "settings")
       }
       errorMessage={
         ready?.errorMessage ??

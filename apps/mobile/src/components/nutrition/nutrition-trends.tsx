@@ -5,7 +5,7 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { Domain, NutritionReports } from "@mai/nutrition";
 import {
@@ -15,7 +15,6 @@ import {
 } from "@shopify/react-native-skia";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
@@ -60,17 +59,20 @@ const NutritionCalendarDay = Schema.Struct({
 
 const NutritionCalendarInput = Schema.Struct({
   dateKey: Domain.DateKey,
+  days: Schema.Array(NutritionCalendarDay),
+  loadEndDateKey: Schema.NullOr(Domain.DateKey),
+  loadStartDateKey: Schema.NullOr(Domain.DateKey),
+  shouldLoad: Schema.Boolean,
 });
 
 class NutritionCalendarLoading extends Schema.TaggedClass<NutritionCalendarLoading>(
   "NutritionCalendarLoading"
 )("NutritionCalendarLoading", {
   dateKey: Domain.DateKey,
+  days: Schema.Array(NutritionCalendarDay),
+  loadEndDateKey: Schema.NullOr(Domain.DateKey),
+  loadStartDateKey: Schema.NullOr(Domain.DateKey),
 }) {}
-
-const LoadNutritionCalendarInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-});
 
 class NutritionCalendarReady extends Schema.TaggedClass<NutritionCalendarReady>(
   "NutritionCalendarReady"
@@ -117,26 +119,22 @@ const NutritionCalendarStates = Machine.defineStates({
 });
 
 const NutritionCalendarEffects = {
-  load: ({ dateKey }: typeof LoadNutritionCalendarInput.Type) =>
+  load: ({
+    dateKey,
+    days,
+    loadEndDateKey,
+    loadStartDateKey,
+  }: NutritionCalendarLoading) =>
     Effect.gen(function* () {
       const reports = yield* NutritionReports.NutritionReports;
-      const range = CalendarMonthModel.range({ dateKey });
+      const range =
+        loadStartDateKey === null || loadEndDateKey === null
+          ? CalendarMonthModel.range({ dateKey })
+          : { endDateKey: loadEndDateKey, startDateKey: loadStartDateKey };
       const report = yield* reports.getRange({ input: range });
 
       return new NutritionCalendarLoaded({
-        days: report.days.map((day) => ({
-          dateKey: day.dateKey,
-          hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
-          isInsideTargetMargin:
-            Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
-            day.targetStatuses.every((status) =>
-              isInsideNutritionTargetMargin({
-                actual: status.value,
-                semantics: status.semantics,
-                target: status.amount,
-              })
-            ),
-        })),
+        days: [...days, ..._calendarDaysFromReport({ report })],
       });
     }).pipe(
       Effect.catch(() =>
@@ -151,18 +149,20 @@ const NutritionCalendarEffects = {
 
 const nutritionCalendarMachine = Machine.make({
   states: NutritionCalendarStates.states,
-  events: [
-    NextNutritionMonth,
-    PreviousNutritionMonth,
-    RetryNutritionMonth,
-    NutritionCalendarLoaded,
-    NutritionCalendarLoadFailed,
-  ],
+  events: [NextNutritionMonth, PreviousNutritionMonth, RetryNutritionMonth],
+  internalEvents: [NutritionCalendarLoaded, NutritionCalendarLoadFailed],
   input: NutritionCalendarInput,
   initial: (input) =>
-    NutritionCalendarStates.initial.NutritionCalendarLoading(
-      new NutritionCalendarLoading(input)
-    ),
+    input.shouldLoad
+      ? NutritionCalendarStates.initial.NutritionCalendarLoading(
+          new NutritionCalendarLoading(input)
+        )
+      : NutritionCalendarStates.initial.NutritionCalendarReady(
+          new NutritionCalendarReady({
+            dateKey: input.dateKey,
+            days: input.days,
+          })
+        ),
 }).handle({
   NutritionCalendarLoading: {
     invoke: ({ state }) =>
@@ -193,6 +193,9 @@ const nutritionCalendarMachine = Machine.make({
         target.full.NutritionCalendarLoading(
           new NutritionCalendarLoading({
             dateKey: _shiftCalendarMonth({ dateKey: state.dateKey, months: 1 }),
+            days: [],
+            loadEndDateKey: null,
+            loadStartDateKey: null,
           })
         ),
       PreviousNutritionMonth: ({ state, target }) =>
@@ -202,6 +205,9 @@ const nutritionCalendarMachine = Machine.make({
               dateKey: state.dateKey,
               months: -1,
             }),
+            days: [],
+            loadEndDateKey: null,
+            loadStartDateKey: null,
           })
         ),
     },
@@ -212,6 +218,9 @@ const nutritionCalendarMachine = Machine.make({
         target.full.NutritionCalendarLoading(
           new NutritionCalendarLoading({
             dateKey: _shiftCalendarMonth({ dateKey: state.dateKey, months: 1 }),
+            days: [],
+            loadEndDateKey: null,
+            loadStartDateKey: null,
           })
         ),
       PreviousNutritionMonth: ({ state, target }) =>
@@ -221,11 +230,19 @@ const nutritionCalendarMachine = Machine.make({
               dateKey: state.dateKey,
               months: -1,
             }),
+            days: [],
+            loadEndDateKey: null,
+            loadStartDateKey: null,
           })
         ),
       RetryNutritionMonth: ({ state, target }) =>
         target.full.NutritionCalendarLoading(
-          new NutritionCalendarLoading({ dateKey: state.dateKey })
+          new NutritionCalendarLoading({
+            dateKey: state.dateKey,
+            days: [],
+            loadEndDateKey: null,
+            loadStartDateKey: null,
+          })
         ),
     },
   },
@@ -299,12 +316,25 @@ export function NutritionTrends({
   readonly currentReport: NutritionReports.NutritionReportRange;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
 }) {
+  const initialCalendar = useMemo(
+    () =>
+      CalendarMonthModel.initialLoad({
+        dateKey: currentReport.endDateKey,
+        report: currentReport,
+      }),
+    [currentReport]
+  );
+
   return (
     <View style={styles.root}>
       <NutritionTrendChart report={currentReport} />
       <NutritionCalendar
+        initialDays={initialCalendar.days}
         initialDateKey={currentReport.endDateKey}
+        loadEndDateKey={initialCalendar.loadEndDateKey}
+        loadStartDateKey={initialCalendar.loadStartDateKey}
         onSelectDate={onSelectDate}
+        shouldLoadInitialMonth={initialCalendar.shouldLoad}
       />
     </View>
   );
@@ -325,10 +355,10 @@ function NutritionTrendChart({
   );
   const { chartKind, nutrientName } = useAtomValue(selectionAtom);
   const setSelection = useAtomSet(selectionAtom);
-  const chart = NutritionChartDataModel.make({
-    nutrientName,
-    report,
-  });
+  const chart = useMemo(
+    () => NutritionChartDataModel.make({ nutrientName, report }),
+    [nutrientName, report]
+  );
   const unit =
     nutrientName === "energyKcal"
       ? "kcal"
@@ -593,18 +623,36 @@ function ChartLegendItem({
 }
 
 function NutritionCalendar({
+  initialDays,
   initialDateKey,
+  loadEndDateKey,
+  loadStartDateKey,
   onSelectDate,
+  shouldLoadInitialMonth,
 }: {
+  readonly initialDays: readonly (typeof NutritionCalendarDay.Type)[];
   readonly initialDateKey: Domain.DateKey;
+  readonly loadEndDateKey: Domain.DateKey | null;
+  readonly loadStartDateKey: Domain.DateKey | null;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
+  readonly shouldLoadInitialMonth: boolean;
 }) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, nutritionCalendarMachine, {
+      MobileMachine.make(nutritionCalendarMachine, {
         dateKey: initialDateKey,
+        days: initialDays,
+        loadEndDateKey,
+        loadStartDateKey,
+        shouldLoad: shouldLoadInitialMonth,
       }),
-    [initialDateKey]
+    [
+      initialDateKey,
+      initialDays,
+      loadEndDateKey,
+      loadStartDateKey,
+      shouldLoadInitialMonth,
+    ]
   );
   const stateResult = useAtomValue(machineAtom.state);
   const send = useAtomSet(machineAtom.send);
@@ -643,10 +691,10 @@ function NutritionCalendar({
           ? failed.value.dateKey
           : initialDateKey;
   const days = ready._tag === "Some" ? ready.value.days : [];
-  const calendar = CalendarMonthModel.make({
-    dateKey,
-    days,
-  });
+  const calendar = useMemo(
+    () => CalendarMonthModel.make({ dateKey, days }),
+    [dateKey, days]
+  );
 
   return (
     <View style={styles.calendarSection}>
@@ -786,6 +834,25 @@ const calendarStatusStyles = StyleSheet.create({
 }) satisfies Record<Exclude<CalendarStatus, "none">, object>;
 
 const CalendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const calendarAccessibilityDateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "long",
+  weekday: "long",
+  year: "numeric",
+});
+const calendarMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
+});
+const chartShortDateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+});
+const euroChartValueFormatter = new Intl.NumberFormat(undefined, {
+  currency: "EUR",
+  maximumFractionDigits: 2,
+  style: "currency",
+});
 
 const CalendarMonthModel = {
   dateFromDateKey({ dateKey }: { readonly dateKey: Domain.DateKey }) {
@@ -831,6 +898,10 @@ const CalendarMonthModel = {
     const totalCellCount =
       firstOfMonth.getDay() + lastOfMonth.getDate() + 6 - lastOfMonth.getDay();
     const today = todayDateKey();
+    const daysByDateKey: Record<
+      string,
+      typeof NutritionCalendarDay.Type | undefined
+    > = Object.fromEntries(days.map((day) => [day.dateKey, day]));
     const cells = globalThis.Array.from(
       { length: totalCellCount },
       (_, index) => {
@@ -845,7 +916,7 @@ const CalendarMonthModel = {
         });
         const isCurrentMonth = cellDate.getMonth() === monthIndex;
         const isFuture = isCurrentMonth && cellDateKey > today;
-        const day = days.find((candidate) => candidate.dateKey === cellDateKey);
+        const day = daysByDateKey[cellDateKey];
         const status: CalendarStatus =
           !isCurrentMonth || day === undefined
             ? "none"
@@ -854,12 +925,8 @@ const CalendarMonthModel = {
               : day.isInsideTargetMargin
                 ? "inside"
                 : "outside";
-        const fullDateLabel = new Intl.DateTimeFormat("en-US", {
-          day: "numeric",
-          month: "long",
-          weekday: "long",
-          year: "numeric",
-        }).format(cellDate);
+        const fullDateLabel =
+          calendarAccessibilityDateFormatter.format(cellDate);
         const statusLabel = {
           empty: "empty nutrition log",
           inside: "inside nutrition targets",
@@ -889,10 +956,9 @@ const CalendarMonthModel = {
     };
   },
   monthLabel({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-    return new Intl.DateTimeFormat("en-US", {
-      month: "long",
-      year: "numeric",
-    }).format(CalendarMonthModel.dateFromDateKey({ dateKey }));
+    return calendarMonthFormatter.format(
+      CalendarMonthModel.dateFromDateKey({ dateKey })
+    );
   },
   range({ dateKey }: { readonly dateKey: Domain.DateKey }) {
     const date = CalendarMonthModel.dateFromDateKey({ dateKey });
@@ -906,6 +972,59 @@ const CalendarMonthModel = {
         date: new Date(date.getFullYear(), date.getMonth(), 1),
         fallbackDateKey: dateKey,
       }),
+    };
+  },
+  initialLoad({
+    dateKey,
+    report,
+  }: {
+    readonly dateKey: Domain.DateKey;
+    readonly report: NutritionReports.NutritionReportRange;
+  }) {
+    const monthRange = CalendarMonthModel.range({ dateKey });
+    const neededEndDateKey =
+      monthRange.endDateKey < todayDateKey()
+        ? monthRange.endDateKey
+        : todayDateKey();
+    const reportCoversMonthEnd = report.endDateKey >= neededEndDateKey;
+    const days = _calendarDaysFromReport({ report });
+
+    if (
+      report.startDateKey <= monthRange.startDateKey &&
+      reportCoversMonthEnd
+    ) {
+      return {
+        days,
+        loadEndDateKey: null,
+        loadStartDateKey: null,
+        shouldLoad: false,
+      };
+    }
+
+    if (report.startDateKey > monthRange.startDateKey && reportCoversMonthEnd) {
+      const reportStartDate = CalendarMonthModel.dateFromDateKey({
+        dateKey: report.startDateKey,
+      });
+      return {
+        days,
+        loadEndDateKey: CalendarMonthModel.dateKeyFromDate({
+          date: new Date(
+            reportStartDate.getFullYear(),
+            reportStartDate.getMonth(),
+            reportStartDate.getDate() - 1
+          ),
+          fallbackDateKey: monthRange.startDateKey,
+        }),
+        loadStartDateKey: monthRange.startDateKey,
+        shouldLoad: true,
+      };
+    }
+
+    return {
+      days: [],
+      loadEndDateKey: null,
+      loadStartDateKey: null,
+      shouldLoad: true,
     };
   },
   shift({
@@ -944,23 +1063,40 @@ const NutritionChartDataModel = {
         : nutrientName === "costEur"
           ? "€"
           : "g";
-    const data = report.days.map((day) => {
-      const referenceIndex = _dateKeyToDayIndex({ dateKey: day.dateKey });
-      const days = report.days.filter((candidate) => {
-        const candidateIndex = _dateKeyToDayIndex({
-          dateKey: candidate.dateKey,
-        });
-        const distance = referenceIndex - candidateIndex;
-
-        return distance >= 0 && distance <= 6;
-      });
-      const average = !Array.isReadonlyArrayNonEmpty(days)
-        ? 0
-        : days.reduce(
-            (total, candidate) =>
-              total + _nutritionTrendValue({ day: candidate, nutrientName }),
-            0
-          ) / days.length;
+    const dayValues = report.days.map((day) => {
+      const [yearString, monthString, dayString] = day.dateKey.split("-");
+      return {
+        actual:
+          nutrientName === "costEur"
+            ? day.costTotals.costMinorByCurrency.EUR / 100
+            : day.totals[nutrientName],
+        day,
+        dayIndex: Math.floor(
+          Date.UTC(
+            Number(yearString),
+            Number(monthString) - 1,
+            Number(dayString),
+            12
+          ) / 86_400_000
+        ),
+      };
+    });
+    let windowStart = 0;
+    let windowTotal = 0;
+    const data = dayValues.map(({ actual, day, dayIndex }, index) => {
+      windowTotal += actual;
+      while (true) {
+        const firstWindowDay = dayValues[windowStart];
+        if (
+          firstWindowDay === undefined ||
+          dayIndex - firstWindowDay.dayIndex <= 6
+        ) {
+          break;
+        }
+        windowTotal -= firstWindowDay.actual;
+        windowStart += 1;
+      }
+      const average = windowTotal / (index - windowStart + 1);
       const targetStatus =
         nutrientName === "costEur"
           ? undefined
@@ -968,7 +1104,6 @@ const NutritionChartDataModel = {
               (status) => status.nutrientName === nutrientName
             );
       const target = targetStatus?.amount ?? null;
-      const actual = _nutritionTrendValue({ day, nutrientName });
       const targetLabel =
         target === null
           ? "No target"
@@ -978,7 +1113,7 @@ const NutritionChartDataModel = {
         actual,
         average,
         dateKey: day.dateKey,
-        dayIndex: referenceIndex,
+        dayIndex,
         target,
         targetSemantics: targetStatus?.semantics ?? null,
         tooltipPrimary: `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: actual })}`,
@@ -1024,11 +1159,7 @@ function _formatNutritionChartValue({
   readonly value: number;
 }) {
   return unit === "€"
-    ? new Intl.NumberFormat(undefined, {
-        currency: "EUR",
-        maximumFractionDigits: 2,
-        style: "currency",
-      }).format(value)
+    ? euroChartValueFormatter.format(value)
     : `${formatNumber({
         maximumFractionDigits: unit === "kcal" ? 0 : 1,
         value,
@@ -1055,18 +1186,6 @@ function _formatNutritionChartAxisValue({
         });
 }
 
-function _nutritionTrendValue({
-  day,
-  nutrientName,
-}: {
-  readonly day: NutritionReports.NutritionReportDay;
-  readonly nutrientName: NutritionTrendMetric;
-}) {
-  return nutrientName === "costEur"
-    ? day.costTotals.costMinorByCurrency.EUR / 100
-    : day.totals[nutrientName];
-}
-
 function _shiftCalendarMonth({
   dateKey,
   months,
@@ -1077,24 +1196,30 @@ function _shiftCalendarMonth({
   return CalendarMonthModel.shift({ dateKey, months });
 }
 
-function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-  const [yearString, monthString, dayString] = dateKey.split("-");
-
-  return Math.floor(
-    Date.UTC(
-      Number(yearString),
-      Number(monthString) - 1,
-      Number(dayString),
-      12
-    ) / 86_400_000
+function _formatShortDate({ dateKey }: { readonly dateKey: Domain.DateKey }) {
+  return chartShortDateFormatter.format(
+    CalendarMonthModel.dateFromDateKey({ dateKey })
   );
 }
 
-function _formatShortDate({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    month: "short",
-  }).format(CalendarMonthModel.dateFromDateKey({ dateKey }));
+function _calendarDaysFromReport({
+  report,
+}: {
+  readonly report: NutritionReports.NutritionReportRange;
+}): readonly (typeof NutritionCalendarDay.Type)[] {
+  return report.days.map((day) => ({
+    dateKey: day.dateKey,
+    hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
+    isInsideTargetMargin:
+      Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
+      day.targetStatuses.every((status) =>
+        isInsideNutritionTargetMargin({
+          actual: status.value,
+          semantics: status.semantics,
+          target: status.amount,
+        })
+      ),
+  }));
 }
 
 const styles = StyleSheet.create({

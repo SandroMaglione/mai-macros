@@ -10,13 +10,13 @@ import { AppHeader, MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { FoodSearchMachine } from "@mai/machines";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { type AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -95,8 +95,8 @@ const ManageFoodsSearchChild = FoodSearchMachine.FoodSearchChild;
 
 const manageFoodsMachine = Machine.make({
   states: ManageFoodsStates.states,
-  events: [
-    RetryManageFoods,
+  events: [RetryManageFoods],
+  internalEvents: [
     ManageFoodsLoaded,
     ManageFoodsLoadFailed,
     ...FoodSearchMachine.foodSearchMachine.emits,
@@ -218,7 +218,7 @@ export function ManageFoodsPanelLoader({
   readonly layout: ManageFoodsLayout;
 }) {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, manageFoodsMachine, { dateKey }),
+    () => MobileMachine.make(manageFoodsMachine, { dateKey }),
     [dateKey]
   );
   const foodSearchAtom = useMemo(

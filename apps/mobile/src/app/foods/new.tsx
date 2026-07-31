@@ -1,12 +1,11 @@
 import { FoodForm } from "@/components/nutrition/food-form";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { router, useRouter } from "expo-router";
@@ -76,7 +75,8 @@ const CreateFoodStates = Machine.defineStates({
 
 const createFoodRouteMachine = Machine.make({
   states: CreateFoodStates.states,
-  events: [
+  events: [],
+  internalEvents: [
     ...FoodFormMachine.foodFormMachine.emits,
     FoodCreated,
     FoodCreateValidationFailed,
@@ -131,12 +131,9 @@ const createFoodRouteMachine = Machine.make({
                 Machine.sendTo(
                   FoodFormMachine.FoodFormChild,
                   new FoodFormMachine.ResetFoodForm()
-                )
-              ).pipe(
-                Effect.as(
-                  target.local.Idle(
-                    new CreateFoodIdle({ notice: "Food created." })
-                  )
+                ),
+                target.local.Idle(
+                  new CreateFoodIdle({ notice: "Food created." })
                 )
               );
             }
@@ -155,8 +152,9 @@ const createFoodRouteMachine = Machine.make({
                   pathname: "/days/[dateKey]",
                   params: { dateKey: targetDateKey },
                 });
-              })
-            ).pipe(Effect.as(target.local.Created(new CreateFoodCreated())));
+              }),
+              target.local.Created(new CreateFoodCreated())
+            );
           },
           FoodCreateValidationFailed: ({ target }) =>
             Machine.action(
@@ -165,15 +163,12 @@ const createFoodRouteMachine = Machine.make({
                   "Food not saved",
                   "Check the name, required nutrients, price, and any custom portions."
                 );
-              })
-            ).pipe(
-              Effect.as(
-                target.local.Failure(
-                  new CreateFoodFailure({
-                    notice:
-                      "Check the name, required nutrients, price, and any custom portions.",
-                  })
-                )
+              }),
+              target.local.Failure(
+                new CreateFoodFailure({
+                  notice:
+                    "Check the name, required nutrients, price, and any custom portions.",
+                })
               )
             ),
           FoodCreateFailed: ({ target }) =>
@@ -183,15 +178,12 @@ const createFoodRouteMachine = Machine.make({
                   "Food not saved",
                   "Something went wrong while saving the food. Please try again."
                 );
-              })
-            ).pipe(
-              Effect.as(
-                target.local.Failure(
-                  new CreateFoodFailure({
-                    notice:
-                      "Something went wrong while saving the food. Please try again.",
-                  })
-                )
+              }),
+              target.local.Failure(
+                new CreateFoodFailure({
+                  notice:
+                    "Something went wrong while saving the food. Please try again.",
+                })
               )
             ),
         },
@@ -261,7 +253,7 @@ export function CreateFoodPanel({
 }) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, createFoodRouteMachine, {
+      MobileMachine.make(createFoodRouteMachine, {
         dateKey,
         initialNotice,
         mode,

@@ -12,12 +12,11 @@ import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-para
 import { todayDateKey } from "@/lib/date-keys";
 import * as FoodMeasurements from "@/lib/food-measurements";
 import { formatLoggedFoodQuantity } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -234,6 +233,8 @@ const editMealEntryRouteMachine = Machine.make({
     DeleteEntry,
     Submit,
     Back,
+  ],
+  internalEvents: [
     RouteLoaded,
     RouteInvalid,
     MutationSucceeded,
@@ -275,8 +276,9 @@ const editMealEntryRouteMachine = Machine.make({
         );
       },
       RouteInvalid: ({ target }) =>
-        Machine.action(Effect.sync(() => router.replace("/"))).pipe(
-          Effect.as(target.full.InvalidRoute(new InvalidRoute()))
+        Machine.action(
+          Effect.sync(() => router.replace("/")),
+          target.full.InvalidRoute(new InvalidRoute())
         ),
     },
   },
@@ -351,12 +353,9 @@ const editMealEntryRouteMachine = Machine.make({
                   pathname: "/days/[dateKey]",
                   params: { dateKey: parents.Ready.data.dateKey },
                 })
-              )
-            ).pipe(
-              Effect.as(
-                target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
-                  ready.Completed(new Completed())
-                )
+              ),
+              target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
+                ready.Completed(new Completed())
               )
             ),
           MutationRejected: ({ event, parents, target }) =>
@@ -397,12 +396,9 @@ const editMealEntryRouteMachine = Machine.make({
                   pathname: "/days/[dateKey]",
                   params: { dateKey: parents.Ready.data.dateKey },
                 })
-              )
-            ).pipe(
-              Effect.as(
-                target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
-                  ready.Completed(new Completed())
-                )
+              ),
+              target.full.Ready(new Ready({ ...parents.Ready }), (ready) =>
+                ready.Completed(new Completed())
               )
             ),
           MutationRejected: ({ event, parents, target }) =>
@@ -434,7 +430,7 @@ function ValidEditMealEntryScreen({
 }: typeof EditMealEntryRouteParams.Type) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, editMealEntryRouteMachine, {
+      MobileMachine.make(editMealEntryRouteMachine, {
         dateKey,
         meal,
         mealEntryId,

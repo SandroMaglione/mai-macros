@@ -9,13 +9,12 @@ import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { describeFoodChanges } from "@/lib/food-change-summary";
 import { formatShortDate } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Predicate, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -209,6 +208,8 @@ const foodEditorMachine = Machine.make({
     BackToFoodForm,
     ApplyFoodCopy,
     ConfirmFoodEdit,
+  ],
+  internalEvents: [
     FoodEditorLoaded,
     FoodEditorLoadingFailed,
     FoodEditPreviewed,
@@ -303,16 +304,13 @@ const foodEditorMachine = Machine.make({
                     new FoodFormMachine.LoadFood({
                       food: parents["Route.Ready"].food,
                     })
-                  )
-                ).pipe(
-                  Effect.as(
-                    target.local.Copy(
-                      new FoodEditorCopy({
-                        draft: null,
-                        message: null,
-                      }),
-                      (copy) => copy.Form(new FoodEditorCopyForm())
-                    )
+                  ),
+                  target.local.Copy(
+                    new FoodEditorCopy({
+                      draft: null,
+                      message: null,
+                    }),
+                    (copy) => copy.Form(new FoodEditorCopyForm())
                   )
                 ),
               ChooseFoodEdit: ({ parents, target }) => {
@@ -325,16 +323,13 @@ const foodEditorMachine = Machine.make({
                     new FoodFormMachine.LoadFood({
                       food: parents["Route.Ready"].food,
                     })
-                  )
-                ).pipe(
-                  Effect.as(
-                    target.local.Edit(
-                      new FoodEditorEdit({
-                        draft: null,
-                        message: null,
-                      }),
-                      (edit) => edit.Warning(new FoodEditorEditWarning())
-                    )
+                  ),
+                  target.local.Edit(
+                    new FoodEditorEdit({
+                      draft: null,
+                      message: null,
+                    }),
+                    (edit) => edit.Warning(new FoodEditorEditWarning())
                   )
                 );
               },
@@ -593,7 +588,7 @@ function FoodEditorScreen({
   readonly foodId: Domain.FoodId;
 }) {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, foodEditorMachine, { foodId }),
+    () => MobileMachine.make(foodEditorMachine, { foodId }),
     [foodId]
   );
   const foodFormAtom = useMemo(

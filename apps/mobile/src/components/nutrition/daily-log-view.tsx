@@ -13,7 +13,7 @@ import {
   formatLoggedFoodQuantity,
   formatNumber,
 } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import {
   DailyLogs,
@@ -25,7 +25,6 @@ import {
 } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { router } from "expo-router";
 import { Array, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -33,11 +32,11 @@ import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
   Apple,
+  CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  Database,
   Plus,
+  Settings,
   Trash2,
 } from "lucide-react-native";
 import { useMemo } from "react";
@@ -250,9 +249,11 @@ const DailyLogEffects = {
         });
       }
 
-      const foods = yield* foodsService.list();
       const mealEntries = yield* mealEntriesService.listForDay({
         input: { dateKey: day.dailyLog.dateKey },
+      });
+      const foods = yield* foodsService.getMany({
+        input: { foodIds: mealEntries.map((entry) => entry.foodId) },
       });
 
       return new DailyLogLoaded({
@@ -283,21 +284,14 @@ const DailyLogEffects = {
   create: (data: UnrecordedDailyLogViewData) =>
     Effect.gen(function* () {
       const dailyLogs = yield* DailyLogs.DailyLogs;
-      const foodsService = yield* Foods.Foods;
-      const mealEntriesService = yield* MealEntries.MealEntries;
       const day = yield* dailyLogs.create({
         input: {
           dateKey: data.day.dateKey,
           planId: data.day.selectedPlan.id,
         },
       });
-      const foods = yield* foodsService.list();
-      const mealEntries = yield* mealEntriesService.listForDay({
-        input: { dateKey: day.dailyLog.dateKey },
-      });
-
       return new DailyLogCreated({
-        data: { _tag: "RecordedDay", day, foods, mealEntries },
+        data: { _tag: "RecordedDay", day, foods: [], mealEntries: [] },
       });
     }).pipe(
       Effect.catch(() =>
@@ -332,11 +326,8 @@ const DailyLogEffects = {
 
 const dailyLogRouteMachine = Machine.make({
   states: DailyLogRouteStates.states,
-  events: [
-    ReloadDailyLog,
-    CreateDailyLog,
-    DeleteDailyLog,
-    SelectDailyLogPlan,
+  events: [ReloadDailyLog, CreateDailyLog, DeleteDailyLog, SelectDailyLogPlan],
+  internalEvents: [
     DailyLogLoaded,
     DailyLogLoadFailed,
     DailyLogWasRedirected,
@@ -484,8 +475,7 @@ export function DailyLogRoute({
   readonly dateKey: Domain.DateKey;
 }) {
   const machineAtom = useMemo(
-    () =>
-      AtomMachine.make(MobileAtomRuntime, dailyLogRouteMachine, { dateKey }),
+    () => MobileMachine.make(dailyLogRouteMachine, { dateKey }),
     [dateKey]
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -931,11 +921,11 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
-        icon={ClipboardList}
-        label="Plans"
+        icon={CalendarCheck}
+        label="Events"
         onPress={() => {
           router.push({
-            pathname: "/plans",
+            pathname: "/events",
             params: {
               dateKey,
             },
@@ -955,10 +945,15 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
-        icon={Database}
-        label="Data"
+        icon={Settings}
+        label="Settings"
         onPress={() => {
-          router.push("/backup");
+          router.push({
+            pathname: "/settings",
+            params: {
+              dateKey,
+            },
+          });
         }}
       />
     </BottomActionBar>

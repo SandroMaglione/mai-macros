@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@mai/nutrition": "workspace:^",
-    "@typeonce/effect-machine": "0.1.0",
+    "@typeonce/effect-machine": "0.2.0",
     "effect": "4.0.0-beta.102"
   },
   "devDependencies": {

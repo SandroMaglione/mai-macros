@@ -6,7 +6,7 @@ import { LoadingOverlay } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { LocalDataResetMachine } from "@mai/machines";
 import {
@@ -18,7 +18,6 @@ import {
 import { BackupFileTransfer, FoodCatalogShare, Gzip } from "@mai/services";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { DateTime, Effect, HashSet, Match, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { router } from "expo-router";
@@ -94,13 +93,8 @@ const ExportBackupStates = Machine.defineStates({
 
 const exportBackupMachine = Machine.make({
   states: ExportBackupStates.states,
-  events: [
-    ChangeBackupName,
-    ExportBackup,
-    ExportBackupSucceeded,
-    ExportBackupFailed,
-    ClearExportStatus,
-  ],
+  events: [ChangeBackupName, ExportBackup, ClearExportStatus],
+  internalEvents: [ExportBackupSucceeded, ExportBackupFailed],
   initial: () =>
     ExportBackupStates.initial.Ready(
       new ExportReady({ backupName: "" }),
@@ -252,13 +246,8 @@ const ImportBackupStates = Machine.defineStates({
 
 const importBackupMachine = Machine.make({
   states: ImportBackupStates.states,
-  events: [
-    ImportBackupFile,
-    BackupImported,
-    BackupImportCanceled,
-    BackupImportFailed,
-    ClearBackupImportStatus,
-  ],
+  events: [ImportBackupFile, ClearBackupImportStatus],
+  internalEvents: [BackupImported, BackupImportCanceled, BackupImportFailed],
   initial: () => ImportBackupStates.initial.Idle(new BackupImportIdle()),
 }).handle({
   Idle: {
@@ -295,7 +284,9 @@ const importBackupMachine = Machine.make({
                     importedBackup.backup.integrity.counts.dailyLogs +
                     importedBackup.backup.integrity.counts.foods +
                     importedBackup.backup.integrity.counts.mealEntries +
-                    importedBackup.backup.integrity.counts.plans;
+                    importedBackup.backup.integrity.counts.plans +
+                    importedBackup.backup.integrity.counts.recordableEvents +
+                    importedBackup.backup.integrity.counts.recordedEvents;
 
                   return new BackupImported({
                     message:
@@ -397,12 +388,8 @@ const CatalogExportStates = Machine.defineStates({
 
 const catalogExportMachine = Machine.make({
   states: CatalogExportStates.states,
-  events: [
-    ExportCatalog,
-    CatalogExported,
-    CatalogExportFailed,
-    ClearCatalogExportStatus,
-  ],
+  events: [ExportCatalog, ClearCatalogExportStatus],
+  internalEvents: [CatalogExported, CatalogExportFailed],
   initial: () => CatalogExportStates.initial.Idle(new CatalogExportIdle()),
 }).handle({
   Idle: {
@@ -585,12 +572,14 @@ const catalogImportMachine = Machine.make({
     OpenCatalogPreview,
     ToggleCatalogFood,
     ImportSelectedCatalogFoods,
+    FinishCatalogImport,
+  ],
+  internalEvents: [
     CatalogPreviewCanceled,
     CatalogPreviewed,
     CatalogPreviewFailed,
     CatalogFoodsImported,
     CatalogFoodsImportFailed,
-    FinishCatalogImport,
   ],
   initial: () => CatalogImportStates.initial.Idle(new CatalogImportIdle()),
 }).handle({
@@ -838,7 +827,7 @@ export default function BackupScreen() {
 
 function ExportBackupSection() {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, exportBackupMachine),
+    () => MobileMachine.make(exportBackupMachine),
     []
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -914,7 +903,7 @@ function ExportBackupSection() {
 
 function ImportBackupSection() {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, importBackupMachine),
+    () => MobileMachine.make(importBackupMachine),
     []
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -979,7 +968,7 @@ function ImportBackupSection() {
 
 function CatalogExportSection() {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, catalogExportMachine),
+    () => MobileMachine.make(catalogExportMachine),
     []
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -1040,7 +1029,7 @@ function CatalogExportSection() {
 
 function CatalogImportSection() {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, catalogImportMachine),
+    () => MobileMachine.make(catalogImportMachine),
     []
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -1263,7 +1252,7 @@ function CatalogBadge({
 
 function ResetDataSection() {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, localDataResetMachine),
+    () => MobileMachine.make(localDataResetMachine),
     []
   );
   const stateResult = useAtomValue(machineAtom.state);
@@ -1302,7 +1291,8 @@ function ResetDataSection() {
       <BackupSettingsSection divider title="Reset">
         <View style={styles.sectionBody}>
           <Text style={styles.warningText}>
-            Delete every plan, food, daily log, and meal entry on this device.
+            Delete every plan, food, daily log, meal entry, and recorded event
+            on this device.
           </Text>
 
           {isIdle ? (

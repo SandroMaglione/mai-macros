@@ -277,13 +277,15 @@ export const foodFormMachine = Machine.make({
           return;
         }
 
-        return emit(
-          new FoodFormSubmitted({
-            input: createFoodInputFromFormValues({
-              formValues: state.formValues,
-              portions: state.portions,
-            }),
-          })
+        return Machine.action(
+          emit(
+            new FoodFormSubmitted({
+              input: createFoodInputFromFormValues({
+                formValues: state.formValues,
+                portions: state.portions,
+              }),
+            })
+          )
         );
       },
       AddFoodPortion: ({ state, target }) =>

@@ -10,12 +10,11 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { router, useRouter } from "expo-router";
@@ -222,8 +221,8 @@ const nutritionInsightsOperations = {
 
 const nutritionInsightsRouteMachine = Machine.make({
   states: NutritionInsightsStates.states,
-  events: [
-    RetryNutritionInsights,
+  events: [RetryNutritionInsights],
+  internalEvents: [
     NutritionInsightsLoadedEvent,
     NutritionInsightsNoPlansEvent,
     NutritionInsightsFailedEvent,
@@ -376,7 +375,7 @@ function NutritionInsightsPanel({
 }) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, nutritionInsightsRouteMachine, {
+      MobileMachine.make(nutritionInsightsRouteMachine, {
         rangeDayCount,
       }),
     [rangeDayCount]

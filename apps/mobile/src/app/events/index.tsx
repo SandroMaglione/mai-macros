@@ -9,14 +9,14 @@ import { PagerTabs } from "@/components/ui/pager-tabs";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate } from "@/lib/date-keys";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileMachine, RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import * as EventDomain from "@mai/event-tracking/domain";
 import * as RecordableEventsService from "@mai/event-tracking/services/recordable-events";
 import * as RecordedEventsService from "@mai/event-tracking/services/recorded-events";
-import { EmptyEvent } from "@mai/machines/schemas";
 import * as NutritionDomain from "@mai/nutrition/domain";
-import { useMachine } from "@xstate/react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
 import {
   Array,
   DateTime,
@@ -39,6 +39,7 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { memo, useMemo } from "react";
 import {
   ActivityIndicator,
@@ -53,7 +54,6 @@ import {
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { createAsyncLogic, createCallbackLogic, setup } from "xstate";
 
 const EventsSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(NutritionDomain.DateKey),
@@ -173,924 +173,912 @@ const ToggleRecordableEventResult = Schema.Union([
   }),
 ]);
 
-const eventTrackerMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        activeTab: EventTrackerTabIndex,
-        data: Schema.NullOr(EventTrackerData),
-        detailDateKey: Schema.NullOr(EventDomain.DateKey),
-        detailRecordableEventId: Schema.NullOr(EventDomain.RecordableEventId),
-        editingDateKey: Schema.NullOr(EventDomain.DateKey),
-        editingRecordableEventId: Schema.NullOr(EventDomain.RecordableEventId),
-        emojiInput: Schema.String,
-        nameInput: Schema.String,
-        notice: Schema.NullOr(TrackerNotice),
-        pastEventSelections: Schema.Array(PastEventSelection),
-        todayDateKey: EventDomain.DateKey,
-      })
-    ),
-    events: {
-      archiveRecordableEvent: Schema.toStandardSchemaV1(RecordEventInput),
-      beginCreate: Schema.toStandardSchemaV1(EmptyEvent),
-      cancelEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      changeEmoji: Schema.toStandardSchemaV1(
-        Schema.Struct({ value: Schema.String })
-      ),
-      changeName: Schema.toStandardSchemaV1(
-        Schema.Struct({ value: Schema.String })
-      ),
-      closeDayEditor: Schema.toStandardSchemaV1(EmptyEvent),
-      closeEventDetails: Schema.toStandardSchemaV1(EmptyEvent),
-      decrementPastEvent: Schema.toStandardSchemaV1(RecordEventInput),
-      deleteRecordedEvent: Schema.toStandardSchemaV1(DeleteRecordedEventInput),
-      editRecordableEvent: Schema.toStandardSchemaV1(RecordEventInput),
-      loadOlder: Schema.toStandardSchemaV1(EmptyEvent),
-      incrementPastEvent: Schema.toStandardSchemaV1(RecordEventInput),
-      openDayEditor: Schema.toStandardSchemaV1(
-        Schema.Struct({ dateKey: EventDomain.DateKey })
-      ),
-      openEventDetails: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          dateKey: EventDomain.DateKey,
-          recordableEventId: EventDomain.RecordableEventId,
-        })
-      ),
-      recordNow: Schema.toStandardSchemaV1(RecordEventInput),
-      recordPastEvents: Schema.toStandardSchemaV1(RecordPastEventsInput),
-      refreshToday: Schema.toStandardSchemaV1(
-        Schema.Struct({ todayDateKey: EventDomain.DateKey })
-      ),
-      reload: Schema.toStandardSchemaV1(EmptyEvent),
-      saveRecordableEvent: Schema.toStandardSchemaV1(EmptyEvent),
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({ index: EventTrackerTabIndex })
-      ),
-      unarchiveRecordableEvent: Schema.toStandardSchemaV1(RecordEventInput),
+const EventTrackerOperation = Schema.TaggedUnion({
+  LoadOlder: { input: LoadEventRangeInput },
+  RecordNow: { input: RecordEventInput },
+  RecordPastEvents: { input: RecordPastEventsInput },
+  DeleteRecordedEvent: { input: DeleteRecordedEventInput },
+  SaveRecordableEvent: { input: SaveRecordableEventInput },
+  ToggleRecordableEvent: { input: ToggleRecordableEventInput },
+});
+
+const EventTrackerOperationResult = Schema.TaggedUnion({
+  OlderLoaded: LoadOlderEventsResult.fields,
+  NowRecorded: { result: RecordEventResult },
+  PastRecorded: { result: RecordPastEventsResult },
+  RecordedEventDeleted: { result: DeleteRecordedEventResult },
+  RecordableEventSaved: { result: SaveRecordableEventResult },
+  RecordableEventToggled: { result: ToggleRecordableEventResult },
+  OperationFailed: { message: Schema.String },
+});
+
+const EventTrackerState = Schema.TaggedUnion({
+  Loading: { todayDateKey: EventDomain.DateKey },
+  Failure: {
+    notice: TrackerNotice,
+    todayDateKey: EventDomain.DateKey,
+  },
+  Ready: {
+    activeTab: EventTrackerTabIndex,
+    data: EventTrackerData,
+    detailDateKey: Schema.NullOr(EventDomain.DateKey),
+    detailRecordableEventId: Schema.NullOr(EventDomain.RecordableEventId),
+    editingDateKey: Schema.NullOr(EventDomain.DateKey),
+    editingRecordableEventId: Schema.NullOr(EventDomain.RecordableEventId),
+    emojiInput: Schema.String,
+    nameInput: Schema.String,
+    notice: Schema.NullOr(TrackerNotice),
+    pastEventSelections: Schema.Array(PastEventSelection),
+    todayDateKey: EventDomain.DateKey,
+  },
+  Idle: {},
+  Working: {
+    operation: EventTrackerOperation,
+  },
+});
+
+const EventTrackerEvent = Schema.TaggedUnion({
+  ArchiveRecordableEvent: RecordEventInput.fields,
+  BeginCreate: {},
+  CancelEdit: {},
+  ChangeEmoji: { value: Schema.String },
+  ChangeName: { value: Schema.String },
+  CloseDayEditor: {},
+  CloseEventDetails: {},
+  DecrementPastEvent: RecordEventInput.fields,
+  DeleteRecordedEvent: DeleteRecordedEventInput.fields,
+  EditRecordableEvent: RecordEventInput.fields,
+  IncrementPastEvent: RecordEventInput.fields,
+  LoadOlder: {},
+  OpenDayEditor: { dateKey: EventDomain.DateKey },
+  OpenEventDetails: {
+    dateKey: EventDomain.DateKey,
+    recordableEventId: EventDomain.RecordableEventId,
+  },
+  RecordNow: RecordEventInput.fields,
+  RecordPastEvents: RecordPastEventsInput.fields,
+  Reload: {},
+  SaveRecordableEvent: {},
+  SelectTab: { index: EventTrackerTabIndex },
+  UnarchiveRecordableEvent: RecordEventInput.fields,
+});
+
+const EventTrackerInternalEvent = Schema.TaggedUnion({
+  InitialLoadSucceeded: { data: EventTrackerData },
+  InitialLoadFailed: {},
+  RefreshToday: { todayDateKey: EventDomain.DateKey },
+  OperationCompleted: {
+    result: EventTrackerOperationResult,
+  },
+});
+
+const EventTrackerStates = Machine.defineStates({
+  Loading: EventTrackerState.cases.Loading,
+  Failure: EventTrackerState.cases.Failure,
+  Ready: {
+    schema: EventTrackerState.cases.Ready,
+    initial: "Idle",
+    states: {
+      Idle: EventTrackerState.cases.Idle,
+      Working: EventTrackerState.cases.Working,
     },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({ todayDateKey: EventDomain.DateKey })
-    ),
   },
-  states: {
-    DeletingRecordedEvent: {},
-    Failure: {},
-    Loading: {},
-    LoadingOlder: {},
-    Ready: {},
-    RecordingNow: {},
-    RecordingPastEvents: {},
-    SavingRecordableEvent: {},
-    TogglingRecordableEvent: {},
-  },
-  actorSources: {
-    trackToday: createCallbackLogic(({ sendBack }) => {
-      const refreshToday = () => {
-        Schema.decodeOption(EventDomain.DateKey)(
-          dateKeyFromDate({ date: new Date() })
-        ).pipe(
-          Option.map((todayDateKey) => {
-            sendBack({ type: "refreshToday", todayDateKey });
-          })
-        );
-      };
-      const appStateSubscription = AppState.addEventListener(
-        "change",
-        (state) => {
-          if (state === "active") {
-            refreshToday();
-          }
-        }
-      );
-      const refreshInterval = globalThis.setInterval(refreshToday, 60_000);
-      refreshToday();
+});
 
-      return () => {
-        appStateSubscription.remove();
-        globalThis.clearInterval(refreshInterval);
+const EventTrackerOperations = {
+  load: (input: typeof LoadEventRangeInput.Type) =>
+    Effect.gen(function* () {
+      const recordableEvents = yield* RecordableEventsService.RecordableEvents;
+      const recordedEvents = yield* RecordedEventsService.RecordedEvents;
+      return {
+        loadedStartDateKey: input.startDateKey,
+        recordableEvents: yield* recordableEvents.list(),
+        recordedEvents: yield* recordedEvents.listRange({ input }),
       };
     }),
-    deleteRecordedEvent: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(DeleteRecordedEventInput),
-        output: Schema.toStandardSchemaV1(DeleteRecordedEventResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
+
+  run: (operation: typeof EventTrackerOperation.Type) =>
+    Match.value(operation).pipe(
+      Match.tagsExhaustive({
+        LoadOlder: ({ input }) =>
           Effect.gen(function* () {
             const recordedEvents = yield* RecordedEventsService.RecordedEvents;
-            const deleted = yield* recordedEvents.delete({ input });
-
-            return {
-              _tag: "Deleted" as const,
-              recordedEvent: deleted.recordedEvent,
-            };
-          }).pipe(
-            Effect.catchTags({
-              RecordedEventNotFound: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This recorded event no longer exists.",
-                }),
-              SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "The recorded event could not be validated.",
-                }),
-            }),
-            Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                message:
-                  "Could not delete the recorded event. Please try again.",
-              })
-            )
-          )
-        ),
-    }),
-    loadEventTracker: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadEventRangeInput),
-        output: Schema.toStandardSchemaV1(EventTrackerData),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const recordableEvents =
-              yield* RecordableEventsService.RecordableEvents;
-            const recordedEvents = yield* RecordedEventsService.RecordedEvents;
-
-            return {
-              loadedStartDateKey: input.startDateKey,
-              recordableEvents: yield* recordableEvents.list(),
-              recordedEvents: yield* recordedEvents.listRange({
-                input,
+            return EventTrackerInternalEvent.cases.OperationCompleted.make({
+              result: EventTrackerOperationResult.cases.OlderLoaded.make({
+                loadedStartDateKey: input.startDateKey,
+                recordedEvents: yield* recordedEvents.listRange({ input }),
               }),
-            };
-          })
-        ),
-    }),
-    loadOlderEvents: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadEventRangeInput),
-        output: Schema.toStandardSchemaV1(LoadOlderEventsResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
+            });
+          }),
+        RecordNow: ({ input }) =>
           Effect.gen(function* () {
-            const recordedEvents = yield* RecordedEventsService.RecordedEvents;
-
-            return {
-              loadedStartDateKey: input.startDateKey,
-              recordedEvents: yield* recordedEvents.listRange({ input }),
-            };
-          })
-        ),
-    }),
-    recordNow: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(RecordEventInput),
-        output: Schema.toStandardSchemaV1(RecordEventResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const recordedEvents = yield* RecordedEventsService.RecordedEvents;
-            const recorded = yield* recordedEvents.recordNow({ input });
-
-            return {
-              _tag: "Recorded" as const,
+            const service = yield* RecordedEventsService.RecordedEvents;
+            const recorded = yield* service.recordNow({ input });
+            return RecordEventResult.make({
+              _tag: "Recorded",
               recordableEvent: recorded.recordableEvent,
               recordedEvent: recorded.recordedEvent,
-            };
+            });
           }).pipe(
             Effect.catchTags({
               RecordableEventArchived: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event is archived and cannot be recorded.",
-                }),
+                Effect.succeed(
+                  RecordEventResult.make({
+                    _tag: "Failed",
+                    message: "This event is archived and cannot be recorded.",
+                  })
+                ),
               RecordableEventNotFound: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event no longer exists.",
-                }),
+                Effect.succeed(
+                  RecordEventResult.make({
+                    _tag: "Failed",
+                    message: "This event no longer exists.",
+                  })
+                ),
               SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "The event could not be validated.",
-                }),
+                Effect.succeed(
+                  RecordEventResult.make({
+                    _tag: "Failed",
+                    message: "The event could not be validated.",
+                  })
+                ),
             }),
-            Effect.tapCause((cause) =>
-              Effect.logError("Could not record event", cause)
+            Effect.catch(() =>
+              Effect.succeed(
+                RecordEventResult.make({
+                  _tag: "Failed",
+                  message: "Could not record the event. Please try again.",
+                })
+              )
             ),
-            Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                message: "Could not record the event. Please try again.",
+            Effect.map((result) =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result: EventTrackerOperationResult.cases.NowRecorded.make({
+                  result,
+                }),
               })
             )
-          )
-        ),
-    }),
-    recordPastEvents: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(RecordPastEventsInput),
-        output: Schema.toStandardSchemaV1(RecordPastEventsResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
+          ),
+        RecordPastEvents: ({ input }) =>
           Effect.gen(function* () {
-            const recordedEvents = yield* RecordedEventsService.RecordedEvents;
-            const recorded = yield* recordedEvents.recordManyOnPastDay({
-              input,
-            });
-
-            return {
-              _tag: "Recorded" as const,
+            const service = yield* RecordedEventsService.RecordedEvents;
+            const recorded = yield* service.recordManyOnPastDay({ input });
+            return RecordPastEventsResult.make({
+              _tag: "Recorded",
               recordedEvents: recorded.recordedEvents,
-            };
+            });
           }).pipe(
             Effect.catchTags({
               RecordableEventArchived: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event is archived and cannot be recorded.",
-                }),
+                Effect.succeed(
+                  RecordPastEventsResult.make({
+                    _tag: "Failed",
+                    message: "This event is archived and cannot be recorded.",
+                  })
+                ),
               RecordableEventNotFound: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event no longer exists.",
-                }),
+                Effect.succeed(
+                  RecordPastEventsResult.make({
+                    _tag: "Failed",
+                    message: "This event no longer exists.",
+                  })
+                ),
               RecordedEventDateNotInPast: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "Choose a real day before today.",
-                }),
+                Effect.succeed(
+                  RecordPastEventsResult.make({
+                    _tag: "Failed",
+                    message: "Choose a real day before today.",
+                  })
+                ),
               SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "The event or date could not be validated.",
-                }),
+                Effect.succeed(
+                  RecordPastEventsResult.make({
+                    _tag: "Failed",
+                    message: "The event or date could not be validated.",
+                  })
+                ),
             }),
             Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                message: "Could not record the past event. Please try again.",
+              Effect.succeed(
+                RecordPastEventsResult.make({
+                  _tag: "Failed",
+                  message: "Could not record the past event. Please try again.",
+                })
+              )
+            ),
+            Effect.map((result) =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result: EventTrackerOperationResult.cases.PastRecorded.make({
+                  result,
+                }),
               })
             )
-          )
-        ),
-    }),
-    saveRecordableEvent: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SaveRecordableEventInput),
-        output: Schema.toStandardSchemaV1(SaveRecordableEventResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
+          ),
+        DeleteRecordedEvent: ({ input }) =>
           Effect.gen(function* () {
-            const recordableEvents =
-              yield* RecordableEventsService.RecordableEvents;
-
-            if (input._tag === "Create") {
-              const created = yield* recordableEvents.create({
-                input: {
-                  emoji: input.emoji,
-                  name: input.name,
-                },
-              });
-
-              return {
-                _tag: "Saved" as const,
-                action: "created" as const,
-                recordableEvent: created.recordableEvent,
-              };
-            }
-
-            const updated = yield* recordableEvents.update({
-              input: {
-                emoji: input.emoji,
-                name: input.name,
-                position: input.position,
-                recordableEventId: input.recordableEventId,
-              },
+            const service = yield* RecordedEventsService.RecordedEvents;
+            const deleted = yield* service.delete({ input });
+            return DeleteRecordedEventResult.make({
+              _tag: "Deleted",
+              recordedEvent: deleted.recordedEvent,
             });
-
-            return {
-              _tag: "Saved" as const,
-              action: "updated" as const,
+          }).pipe(
+            Effect.catch(() =>
+              Effect.succeed(
+                DeleteRecordedEventResult.make({
+                  _tag: "Failed",
+                  message:
+                    "Could not delete the recorded event. Please try again.",
+                })
+              )
+            ),
+            Effect.map((result) =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result:
+                  EventTrackerOperationResult.cases.RecordedEventDeleted.make({
+                    result,
+                  }),
+              })
+            )
+          ),
+        SaveRecordableEvent: ({ input }) =>
+          Effect.gen(function* () {
+            const service = yield* RecordableEventsService.RecordableEvents;
+            if (input._tag === "Create") {
+              const created = yield* service.create({
+                input: { emoji: input.emoji, name: input.name },
+              });
+              return SaveRecordableEventResult.make({
+                _tag: "Saved",
+                action: "created",
+                recordableEvent: created.recordableEvent,
+              });
+            }
+            const updated = yield* service.update({ input });
+            return SaveRecordableEventResult.make({
+              _tag: "Saved",
+              action: "updated",
               recordableEvent: updated.recordableEvent,
-            };
+            });
           }).pipe(
             Effect.catchTags({
               RecordableEventNameAlreadyExists: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "An event with this name already exists.",
-                }),
+                Effect.succeed(
+                  SaveRecordableEventResult.make({
+                    _tag: "Failed",
+                    message: "An event with this name already exists.",
+                  })
+                ),
               RecordableEventNotFound: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event no longer exists.",
-                }),
+                Effect.succeed(
+                  SaveRecordableEventResult.make({
+                    _tag: "Failed",
+                    message: "This event no longer exists.",
+                  })
+                ),
               SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "Enter a name and exactly one emoji.",
-                }),
+                Effect.succeed(
+                  SaveRecordableEventResult.make({
+                    _tag: "Failed",
+                    message: "Enter a name and exactly one emoji.",
+                  })
+                ),
             }),
             Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                message: "Could not save the event. Please try again.",
+              Effect.succeed(
+                SaveRecordableEventResult.make({
+                  _tag: "Failed",
+                  message: "Could not save the event. Please try again.",
+                })
+              )
+            ),
+            Effect.map((result) =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result:
+                  EventTrackerOperationResult.cases.RecordableEventSaved.make({
+                    result,
+                  }),
               })
             )
-          )
-        ),
-    }),
-    toggleRecordableEvent: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ToggleRecordableEventInput),
-        output: Schema.toStandardSchemaV1(ToggleRecordableEventResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
+          ),
+        ToggleRecordableEvent: ({ input }) =>
           Effect.gen(function* () {
-            const recordableEvents =
-              yield* RecordableEventsService.RecordableEvents;
+            const service = yield* RecordableEventsService.RecordableEvents;
             const toggled = yield* input.action === "archive"
-              ? recordableEvents.archive({
+              ? service.archive({
                   input: { recordableEventId: input.recordableEventId },
                 })
-              : recordableEvents.unarchive({
+              : service.unarchive({
                   input: { recordableEventId: input.recordableEventId },
                 });
-
-            return {
-              _tag: "Toggled" as const,
-              action:
-                input.action === "archive"
-                  ? ("archived" as const)
-                  : ("unarchived" as const),
+            return ToggleRecordableEventResult.make({
+              _tag: "Toggled",
+              action: input.action === "archive" ? "archived" : "unarchived",
               recordableEvent: toggled.recordableEvent,
-            };
+            });
           }).pipe(
-            Effect.catchTags({
-              RecordableEventAlreadyArchived: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event is already archived.",
-                }),
-              RecordableEventNotArchived: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event is already active.",
-                }),
-              RecordableEventNotFound: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "This event no longer exists.",
-                }),
-              SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failed" as const,
-                  message: "The event could not be validated.",
-                }),
-            }),
             Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                message: "Could not update the event. Please try again.",
+              Effect.succeed(
+                ToggleRecordableEventResult.make({
+                  _tag: "Failed",
+                  message: "Could not update the event. Please try again.",
+                })
+              )
+            ),
+            Effect.map((result) =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result:
+                  EventTrackerOperationResult.cases.RecordableEventToggled.make(
+                    {
+                      result,
+                    }
+                  ),
               })
             )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    activeTab: 0,
-    data: null,
-    detailDateKey: null,
-    detailRecordableEventId: null,
-    editingDateKey: null,
-    editingRecordableEventId: null,
-    emojiInput: "",
-    nameInput: "",
-    notice: null,
-    pastEventSelections: [],
-    todayDateKey: input.todayDateKey,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadEventTracker",
-        input: ({ context }) => ({
-          endDateKey: context.todayDateKey,
+          ),
+      })
+    ),
+};
+
+const eventTrackerMachine = Machine.make({
+  states: EventTrackerStates.states,
+  events: [
+    EventTrackerEvent.cases.ArchiveRecordableEvent,
+    EventTrackerEvent.cases.BeginCreate,
+    EventTrackerEvent.cases.CancelEdit,
+    EventTrackerEvent.cases.ChangeEmoji,
+    EventTrackerEvent.cases.ChangeName,
+    EventTrackerEvent.cases.CloseDayEditor,
+    EventTrackerEvent.cases.CloseEventDetails,
+    EventTrackerEvent.cases.DecrementPastEvent,
+    EventTrackerEvent.cases.DeleteRecordedEvent,
+    EventTrackerEvent.cases.EditRecordableEvent,
+    EventTrackerEvent.cases.IncrementPastEvent,
+    EventTrackerEvent.cases.LoadOlder,
+    EventTrackerEvent.cases.OpenDayEditor,
+    EventTrackerEvent.cases.OpenEventDetails,
+    EventTrackerEvent.cases.RecordNow,
+    EventTrackerEvent.cases.RecordPastEvents,
+    EventTrackerEvent.cases.Reload,
+    EventTrackerEvent.cases.SaveRecordableEvent,
+    EventTrackerEvent.cases.SelectTab,
+    EventTrackerEvent.cases.UnarchiveRecordableEvent,
+  ],
+  internalEvents: [
+    EventTrackerInternalEvent.cases.InitialLoadSucceeded,
+    EventTrackerInternalEvent.cases.InitialLoadFailed,
+    EventTrackerInternalEvent.cases.RefreshToday,
+    EventTrackerInternalEvent.cases.OperationCompleted,
+  ],
+  input: Schema.Struct({ todayDateKey: EventDomain.DateKey }),
+  initial: ({ todayDateKey }) =>
+    EventTrackerStates.initial.Loading(
+      EventTrackerState.cases.Loading.make({ todayDateKey })
+    ),
+}).handle({
+  Loading: {
+    invoke: ({ state }) =>
+      Machine.invokeEffect({
+        id: "load-event-tracker",
+        effect: EventTrackerOperations.load({
+          endDateKey: state.todayDateKey,
           startDateKey: _shiftDateKey({
-            dateKey: context.todayDateKey,
+            dateKey: state.todayDateKey,
             days: -(EventTimelinePageSize - 1),
           }),
         }),
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: {
-            data: event.output,
+        onSuccess: (data) =>
+          EventTrackerInternalEvent.cases.InitialLoadSucceeded.make({ data }),
+        onFailure: () =>
+          EventTrackerInternalEvent.cases.InitialLoadFailed.make({}),
+      }),
+    on: {
+      InitialLoadSucceeded: ({ event, state, target }) =>
+        target.full.Ready(
+          EventTrackerState.cases.Ready.make({
+            activeTab: 0,
+            data: event.data,
+            detailDateKey: null,
+            detailRecordableEventId: null,
+            editingDateKey: null,
+            editingRecordableEventId: null,
+            emojiInput: "",
+            nameInput: "",
             notice: null,
-          },
-        }),
-        onError: {
-          target: "Failure",
-          context: {
+            pastEventSelections: [],
+            todayDateKey: state.todayDateKey,
+          }),
+          (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+        ),
+      InitialLoadFailed: ({ state, target }) =>
+        target.full.Failure(
+          EventTrackerState.cases.Failure.make({
             notice: {
               message: "Could not load events. Please try again.",
               tone: "danger",
             },
-          },
-        },
-      },
+            todayDateKey: state.todayDateKey,
+          })
+        ),
     },
-    Failure: {
-      on: {
-        reload: {
-          target: "Loading",
-          context: {
-            notice: null,
-          },
-        },
-      },
+  },
+  Failure: {
+    on: {
+      Reload: ({ state, target }) =>
+        target.full.Loading(
+          EventTrackerState.cases.Loading.make({
+            todayDateKey: state.todayDateKey,
+          })
+        ),
     },
-    Ready: {
-      invoke: {
-        src: "trackToday",
-      },
-      on: {
-        archiveRecordableEvent: {
-          target: "TogglingRecordableEvent",
-          context: {
-            notice: null,
-          },
-        },
-        beginCreate: {
-          context: {
-            editingRecordableEventId: null,
-            emojiInput: "",
-            nameInput: "",
-            notice: null,
-          },
-        },
-        cancelEdit: {
-          context: {
-            editingRecordableEventId: null,
-            emojiInput: "",
-            nameInput: "",
-          },
-        },
-        changeEmoji: ({ event }) => ({
-          context: { emojiInput: event.value },
-        }),
-        changeName: ({ event }) => ({
-          context: { nameInput: event.value },
-        }),
-        closeDayEditor: {
-          context: {
-            editingDateKey: null,
-            pastEventSelections: [],
-          },
-        },
-        closeEventDetails: {
-          context: {
-            detailDateKey: null,
-            detailRecordableEventId: null,
-          },
-        },
-        decrementPastEvent: ({ context, event }) => ({
-          context: {
-            pastEventSelections: context.pastEventSelections.flatMap(
-              (selection) =>
-                selection.recordableEventId !== event.recordableEventId
-                  ? [selection]
-                  : selection.count <= 1
-                    ? []
-                    : [{ ...selection, count: selection.count - 1 }]
-            ),
-          },
-        }),
-        deleteRecordedEvent: {
-          target: "DeletingRecordedEvent",
-          context: {
-            notice: null,
-          },
-        },
-        editRecordableEvent: ({ context, event }) => {
-          const recordableEvent = context.data?.recordableEvents.find(
-            (candidate) => candidate.id === event.recordableEventId
-          );
-
-          return recordableEvent === undefined
-            ? {
-                context: {
-                  notice: {
-                    message: "This event no longer exists.",
-                    tone: "danger" as const,
-                  },
-                },
-              }
-            : {
-                context: {
-                  activeTab: 1,
-                  editingRecordableEventId: recordableEvent.id,
-                  emojiInput: recordableEvent.emoji,
-                  nameInput: recordableEvent.name,
-                  notice: null,
-                },
+  },
+  Ready: {
+    invoke: Machine.invoke({
+      id: "track-today",
+      src: () =>
+        Machine.logic({
+          initial: undefined,
+          run: ({ sendParent }) =>
+            Effect.gen(function* () {
+              const refreshToday = () => {
+                Schema.decodeOption(EventDomain.DateKey)(
+                  dateKeyFromDate({ date: new Date() })
+                ).pipe(
+                  Option.map((todayDateKey) =>
+                    RuntimeClient.runFork(
+                      sendParent(
+                        EventTrackerInternalEvent.cases.RefreshToday.make({
+                          todayDateKey,
+                        })
+                      )
+                    )
+                  )
+                );
               };
-        },
-        incrementPastEvent: ({ context, event }) => {
-          const existingSelection = context.pastEventSelections.find(
-            (selection) =>
-              selection.recordableEventId === event.recordableEventId
-          );
-
-          return {
-            context: {
-              pastEventSelections:
-                existingSelection === undefined
-                  ? [
-                      ...context.pastEventSelections,
-                      {
-                        count: 1,
-                        recordableEventId: event.recordableEventId,
+              yield* Effect.acquireRelease(
+                Effect.sync(() => {
+                  const subscription = AppState.addEventListener(
+                    "change",
+                    (state) => {
+                      if (state === "active") refreshToday();
+                    }
+                  );
+                  const interval = globalThis.setInterval(refreshToday, 60_000);
+                  refreshToday();
+                  return { interval, subscription };
+                }),
+                ({ interval, subscription }) =>
+                  Effect.sync(() => {
+                    subscription.remove();
+                    globalThis.clearInterval(interval);
+                  })
+              );
+              return yield* Effect.never;
+            }).pipe(Effect.scoped),
+        }),
+    }),
+    states: {
+      Idle: {
+        on: {
+          BeginCreate: ({ parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                editingRecordableEventId: null,
+                emojiInput: "",
+                nameInput: "",
+                notice: null,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          CancelEdit: ({ parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                editingRecordableEventId: null,
+                emojiInput: "",
+                nameInput: "",
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          ChangeEmoji: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                emojiInput: event.value,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          ChangeName: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                nameInput: event.value,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          CloseDayEditor: ({ parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                editingDateKey: null,
+                pastEventSelections: [],
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          CloseEventDetails: ({ parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                detailDateKey: null,
+                detailRecordableEventId: null,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          DecrementPastEvent: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                pastEventSelections: parent.pastEventSelections.flatMap(
+                  (selection) =>
+                    selection.recordableEventId !== event.recordableEventId
+                      ? [selection]
+                      : selection.count <= 1
+                        ? []
+                        : [{ ...selection, count: selection.count - 1 }]
+                ),
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          IncrementPastEvent: ({ event, parent, target }) => {
+            const selected = parent.pastEventSelections.find(
+              (item) => item.recordableEventId === event.recordableEventId
+            );
+            const pastEventSelections =
+              selected === undefined
+                ? [
+                    ...parent.pastEventSelections,
+                    { count: 1, recordableEventId: event.recordableEventId },
+                  ]
+                : parent.pastEventSelections.map((item) =>
+                    item.recordableEventId === event.recordableEventId
+                      ? { ...item, count: item.count + 1 }
+                      : item
+                  );
+            return target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                pastEventSelections,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            );
+          },
+          OpenDayEditor: ({ event, parent, target }) =>
+            event.dateKey >= parent.todayDateKey
+              ? undefined
+              : target.local.with(
+                  EventTrackerState.cases.Ready.make({
+                    ...parent,
+                    editingDateKey: event.dateKey,
+                    pastEventSelections: [],
+                  }),
+                  (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+                ),
+          OpenEventDetails: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                detailDateKey: event.dateKey,
+                detailRecordableEventId: event.recordableEventId,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          SelectTab: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                activeTab: event.index,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          RefreshToday: ({ event, parent, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                todayDateKey: event.todayDateKey,
+              }),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            ),
+          EditRecordableEvent: ({ event, parent, target }) => {
+            const item = parent.data.recordableEvents.find(
+              (candidate) => candidate.id === event.recordableEventId
+            );
+            return target.local.with(
+              EventTrackerState.cases.Ready.make(
+                item === undefined
+                  ? {
+                      ...parent,
+                      notice: {
+                        message: "This event no longer exists.",
+                        tone: "danger",
                       },
-                    ]
-                  : context.pastEventSelections.map((selection) =>
-                      selection.recordableEventId === event.recordableEventId
-                        ? { ...selection, count: selection.count + 1 }
-                        : selection
-                    ),
-            },
-          };
-        },
-        loadOlder: {
-          target: "LoadingOlder",
-        },
-        openDayEditor: ({ context, event }) =>
-          event.dateKey >= context.todayDateKey
-            ? {}
-            : {
-                context: {
-                  editingDateKey: event.dateKey,
-                  pastEventSelections: [],
-                },
-              },
-        openEventDetails: ({ event }) => ({
-          context: {
-            detailDateKey: event.dateKey,
-            detailRecordableEventId: event.recordableEventId,
+                    }
+                  : {
+                      ...parent,
+                      activeTab: 1,
+                      editingRecordableEventId: item.id,
+                      emojiInput: item.emoji,
+                      nameInput: item.name,
+                      notice: null,
+                    }
+              ),
+              (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+            );
           },
-        }),
-        recordNow: {
-          target: "RecordingNow",
-          context: {
-            notice: null,
-          },
-        },
-        recordPastEvents: {
-          target: "RecordingPastEvents",
-          context: {
-            editingDateKey: null,
-            notice: null,
-            pastEventSelections: [],
-          },
-        },
-        refreshToday: ({ event }) => ({
-          context: { todayDateKey: event.todayDateKey },
-        }),
-        saveRecordableEvent: {
-          target: "SavingRecordableEvent",
-          context: {
-            notice: null,
-          },
-        },
-        selectTab: ({ event }) => ({
-          context: { activeTab: event.index },
-        }),
-        unarchiveRecordableEvent: {
-          target: "TogglingRecordableEvent",
-          context: {
-            notice: null,
-          },
-        },
-      },
-    },
-    LoadingOlder: {
-      invoke: {
-        src: "loadOlderEvents",
-        input: ({ context }) => {
-          const currentStartDateKey =
-            context.data?.loadedStartDateKey ?? context.todayDateKey;
-          const endDateKey = _shiftDateKey({
-            dateKey: currentStartDateKey,
-            days: -1,
-          });
-
-          return {
-            endDateKey,
-            startDateKey: _shiftDateKey({
-              dateKey: endDateKey,
-              days: -(EventTimelinePageSize - 1),
-            }),
-          };
-        },
-        onDone: ({ context, event }) => ({
-          target: "Ready",
-          context: {
-            data:
-              context.data === null
-                ? null
-                : {
-                    ...context.data,
-                    loadedStartDateKey: event.output.loadedStartDateKey,
-                    recordedEvents: _mergeRecordedEvents({
-                      current: context.data.recordedEvents,
-                      incoming: event.output.recordedEvents,
+          LoadOlder: ({ parent, target }) => {
+            const endDateKey = _shiftDateKey({
+              dateKey: parent.data.loadedStartDateKey,
+              days: -1,
+            });
+            return target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation: EventTrackerOperation.cases.LoadOlder.make({
+                  input: {
+                    endDateKey,
+                    startDateKey: _shiftDateKey({
+                      dateKey: endDateKey,
+                      days: -(EventTimelinePageSize - 1),
                     }),
                   },
+                }),
+              })
+            );
           },
-        }),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not load older days. Scroll down to try again.",
-              tone: "danger",
-            },
-          },
-        },
-      },
-    },
-    RecordingNow: {
-      invoke: {
-        src: "recordNow",
-        input: ({ event }) => {
-          if (event.type !== "recordNow") {
-            throw new Error("Cannot record an event without a selection.");
-          }
-
-          return { recordableEventId: event.recordableEventId };
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failed: ({ message }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: { message, tone: "danger" as const },
-                },
-              }),
-              Recorded: ({ recordedEvent }) => ({
-                target: "Ready" as const,
-                context: {
-                  data:
-                    context.data === null
-                      ? null
-                      : {
-                          ...context.data,
-                          recordedEvents: _mergeRecordedEvents({
-                            current: context.data.recordedEvents,
-                            incoming: [recordedEvent],
-                          }),
-                        },
-                  notice: null,
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not record the event. Please try again.",
-              tone: "danger",
-            },
-          },
-        },
-      },
-    },
-    RecordingPastEvents: {
-      invoke: {
-        src: "recordPastEvents",
-        input: ({ event }) => {
-          if (event.type !== "recordPastEvents") {
-            throw new Error("Cannot record past events without selections.");
-          }
-
-          return {
-            dateKey: event.dateKey,
-            recordableEventIds: event.recordableEventIds,
-          };
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failed: ({ message }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: { message, tone: "danger" as const },
-                },
-              }),
-              Recorded: ({ recordedEvents }) => ({
-                target: "Ready" as const,
-                context: {
-                  data:
-                    context.data === null
-                      ? null
-                      : {
-                          ...context.data,
-                          recordedEvents: _mergeRecordedEvents({
-                            current: context.data.recordedEvents,
-                            incoming: recordedEvents,
-                          }),
-                        },
-                  notice: null,
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not record the past event. Please try again.",
-              tone: "danger",
-            },
-          },
-        },
-      },
-    },
-    DeletingRecordedEvent: {
-      invoke: {
-        src: "deleteRecordedEvent",
-        input: ({ event }) => {
-          if (event.type !== "deleteRecordedEvent") {
-            throw new Error("Cannot delete without a recorded event.");
-          }
-
-          return { recordedEventId: event.recordedEventId };
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Deleted: ({ recordedEvent }) => ({
-                target: "Ready" as const,
-                context: {
-                  data:
-                    context.data === null
-                      ? null
-                      : {
-                          ...context.data,
-                          recordedEvents: context.data.recordedEvents.filter(
-                            (candidate) => candidate.id !== recordedEvent.id
-                          ),
-                        },
-                  notice: null,
-                },
-              }),
-              Failed: ({ message }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: { message, tone: "danger" as const },
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not delete the recorded event. Please try again.",
-              tone: "danger",
-            },
-          },
-        },
-      },
-    },
-    SavingRecordableEvent: {
-      invoke: {
-        src: "saveRecordableEvent",
-        input: ({ context }) => {
-          if (context.editingRecordableEventId === null) {
-            return {
-              _tag: "Create" as const,
-              emoji: context.emojiInput,
-              name: context.nameInput,
-            };
-          }
-
-          const recordableEvent = context.data?.recordableEvents.find(
-            (candidate) => candidate.id === context.editingRecordableEventId
-          );
-
-          if (recordableEvent === undefined) {
-            throw new Error("Cannot update an event that no longer exists.");
-          }
-
-          return {
-            _tag: "Update" as const,
-            emoji: context.emojiInput,
-            name: context.nameInput,
-            position: recordableEvent.position,
-            recordableEventId: recordableEvent.id,
-          };
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failed: ({ message }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: { message, tone: "danger" as const },
-                },
-              }),
-              Saved: ({ recordableEvent }) => ({
-                target: "Ready" as const,
-                context: {
-                  data: _upsertRecordableEvent({
-                    data: context.data,
-                    recordableEvent,
+          RecordNow: ({ event, target }) =>
+            target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation: EventTrackerOperation.cases.RecordNow.make({
+                  input: { recordableEventId: event.recordableEventId },
+                }),
+              })
+            ),
+          RecordPastEvents: ({ event, target }) =>
+            target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation: EventTrackerOperation.cases.RecordPastEvents.make({
+                  input: {
+                    dateKey: event.dateKey,
+                    recordableEventIds: event.recordableEventIds,
+                  },
+                }),
+              })
+            ),
+          DeleteRecordedEvent: ({ event, target }) =>
+            target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation: EventTrackerOperation.cases.DeleteRecordedEvent.make(
+                  { input: { recordedEventId: event.recordedEventId } }
+                ),
+              })
+            ),
+          ArchiveRecordableEvent: ({ event, target }) =>
+            target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation:
+                  EventTrackerOperation.cases.ToggleRecordableEvent.make({
+                    input: {
+                      action: "archive",
+                      recordableEventId: event.recordableEventId,
+                    },
                   }),
-                  editingRecordableEventId: null,
-                  emojiInput: "",
-                  nameInput: "",
-                  notice: null,
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not save the event. Please try again.",
-              tone: "danger",
-            },
+              })
+            ),
+          UnarchiveRecordableEvent: ({ event, target }) =>
+            target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation:
+                  EventTrackerOperation.cases.ToggleRecordableEvent.make({
+                    input: {
+                      action: "unarchive",
+                      recordableEventId: event.recordableEventId,
+                    },
+                  }),
+              })
+            ),
+          SaveRecordableEvent: ({ parent, target }) => {
+            const recordable =
+              parent.editingRecordableEventId === null
+                ? undefined
+                : parent.data.recordableEvents.find(
+                    (item) => item.id === parent.editingRecordableEventId
+                  );
+            if (
+              parent.editingRecordableEventId !== null &&
+              recordable === undefined
+            ) {
+              return target.local.with(
+                EventTrackerState.cases.Ready.make({
+                  ...parent,
+                  notice: {
+                    message: "This event no longer exists.",
+                    tone: "danger",
+                  },
+                }),
+                (ready) => ready.Idle(EventTrackerState.cases.Idle.make({}))
+              );
+            }
+            const input =
+              recordable === undefined
+                ? SaveRecordableEventInput.make({
+                    _tag: "Create",
+                    emoji: parent.emojiInput,
+                    name: parent.nameInput,
+                  })
+                : SaveRecordableEventInput.make({
+                    _tag: "Update",
+                    emoji: parent.emojiInput,
+                    name: parent.nameInput,
+                    position: recordable.position,
+                    recordableEventId: recordable.id,
+                  });
+            return target.local.Working(
+              EventTrackerState.cases.Working.make({
+                operation: EventTrackerOperation.cases.SaveRecordableEvent.make(
+                  { input }
+                ),
+              })
+            );
           },
         },
       },
-    },
-    TogglingRecordableEvent: {
-      invoke: {
-        src: "toggleRecordableEvent",
-        input: ({ event }) => {
-          if (event.type === "archiveRecordableEvent") {
-            return {
-              action: "archive" as const,
-              recordableEventId: event.recordableEventId,
-            };
-          }
-
-          if (event.type === "unarchiveRecordableEvent") {
-            return {
-              action: "unarchive" as const,
-              recordableEventId: event.recordableEventId,
-            };
-          }
-
-          throw new Error("Cannot update an event without an action.");
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failed: ({ message }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: { message, tone: "danger" as const },
-                },
+      Working: {
+        invoke: ({ state }) =>
+          Machine.invokeEffect({
+            id: "event-tracker-operation",
+            effect: EventTrackerOperations.run(state.operation),
+            onSuccess: (event) => event,
+            onFailure: () =>
+              EventTrackerInternalEvent.cases.OperationCompleted.make({
+                result: EventTrackerOperationResult.cases.OperationFailed.make({
+                  message: "Could not update events. Please try again.",
+                }),
               }),
-              Toggled: ({ recordableEvent }) => ({
-                target: "Ready" as const,
-                context: {
-                  data: _upsertRecordableEvent({
-                    data: context.data,
-                    recordableEvent,
-                  }),
-                  editingRecordableEventId: null,
-                  emojiInput: "",
-                  nameInput: "",
-                  notice: null,
-                },
+          }),
+        on: {
+          RefreshToday: ({ event, parent, state, target }) =>
+            target.local.with(
+              EventTrackerState.cases.Ready.make({
+                ...parent,
+                todayDateKey: event.todayDateKey,
               }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: {
-              message: "Could not update the event. Please try again.",
-              tone: "danger",
-            },
+              (ready) => ready.Working(state)
+            ),
+          OperationCompleted: ({ event, parent, target }) => {
+            let next = EventTrackerState.cases.Ready.make({ ...parent });
+            Match.value(event.result).pipe(
+              Match.tagsExhaustive({
+                OlderLoaded: (result) => {
+                  next = EventTrackerState.cases.Ready.make({
+                    ...parent,
+                    data: {
+                      ...parent.data,
+                      loadedStartDateKey: result.loadedStartDateKey,
+                      recordedEvents: _mergeRecordedEvents({
+                        current: parent.data.recordedEvents,
+                        incoming: result.recordedEvents,
+                      }),
+                    },
+                  });
+                },
+                NowRecorded: ({ result }) => {
+                  next =
+                    result._tag === "Failed"
+                      ? EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: { message: result.message, tone: "danger" },
+                        })
+                      : EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: null,
+                          data: {
+                            ...parent.data,
+                            recordedEvents: _mergeRecordedEvents({
+                              current: parent.data.recordedEvents,
+                              incoming: [result.recordedEvent],
+                            }),
+                          },
+                        });
+                },
+                PastRecorded: ({ result }) => {
+                  next =
+                    result._tag === "Failed"
+                      ? EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: { message: result.message, tone: "danger" },
+                        })
+                      : EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          editingDateKey: null,
+                          pastEventSelections: [],
+                          notice: null,
+                          data: {
+                            ...parent.data,
+                            recordedEvents: _mergeRecordedEvents({
+                              current: parent.data.recordedEvents,
+                              incoming: result.recordedEvents,
+                            }),
+                          },
+                        });
+                },
+                RecordedEventDeleted: ({ result }) => {
+                  next =
+                    result._tag === "Failed"
+                      ? EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: { message: result.message, tone: "danger" },
+                        })
+                      : EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: null,
+                          data: {
+                            ...parent.data,
+                            recordedEvents: parent.data.recordedEvents.filter(
+                              (item) => item.id !== result.recordedEvent.id
+                            ),
+                          },
+                        });
+                },
+                RecordableEventSaved: ({ result }) => {
+                  next =
+                    result._tag === "Failed"
+                      ? EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: { message: result.message, tone: "danger" },
+                        })
+                      : EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          data:
+                            _upsertRecordableEvent({
+                              data: parent.data,
+                              recordableEvent: result.recordableEvent,
+                            }) ?? parent.data,
+                          editingRecordableEventId: null,
+                          emojiInput: "",
+                          nameInput: "",
+                          notice: null,
+                        });
+                },
+                RecordableEventToggled: ({ result }) => {
+                  next =
+                    result._tag === "Failed"
+                      ? EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          notice: { message: result.message, tone: "danger" },
+                        })
+                      : EventTrackerState.cases.Ready.make({
+                          ...parent,
+                          data:
+                            _upsertRecordableEvent({
+                              data: parent.data,
+                              recordableEvent: result.recordableEvent,
+                            }) ?? parent.data,
+                          editingRecordableEventId: null,
+                          emojiInput: "",
+                          nameInput: "",
+                          notice: null,
+                        });
+                },
+                OperationFailed: ({ message }) => {
+                  next = EventTrackerState.cases.Ready.make({
+                    ...parent,
+                    notice: { message, tone: "danger" },
+                  });
+                },
+              })
+            );
+            return target.local.with(next, (ready) =>
+              ready.Idle(EventTrackerState.cases.Idle.make({}))
+            );
           },
         },
       },
@@ -1123,11 +1111,17 @@ function EventTrackerRoute({
   readonly originDateKey: NutritionDomain.DateKey | undefined;
   readonly todayDateKey: EventDomain.DateKey;
 }) {
-  const [snapshot, , actor] = useMachine(eventTrackerMachine, {
-    input: { todayDateKey },
-  });
+  const machineAtom = useMemo(
+    () => MobileMachine.make(eventTrackerMachine, { todayDateKey }),
+    [todayDateKey]
+  );
+  const stateResult = useAtomValue(machineAtom.result);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading")) {
+  if (
+    AsyncResult.isInitial(stateResult) ||
+    AsyncResult.isFailure(stateResult)
+  ) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading events" />
@@ -1135,7 +1129,26 @@ function EventTrackerRoute({
     );
   }
 
-  if (snapshot.matches("Failure")) {
+  const snapshot = stateResult.value;
+  const loading = EventTrackerStates.get(snapshot, "Loading").pipe(
+    Option.getOrUndefined
+  );
+  const failure = EventTrackerStates.get(snapshot, "Failure").pipe(
+    Option.getOrUndefined
+  );
+  const ready = EventTrackerStates.get(snapshot, "Ready").pipe(
+    Option.getOrUndefined
+  );
+
+  if (loading !== undefined) {
+    return (
+      <AppScreen contentStyle={styles.centered}>
+        <LoadingView message="Loading events" />
+      </AppScreen>
+    );
+  }
+
+  if (failure !== undefined) {
     return (
       <AppScreen contentStyle={styles.stateScreen}>
         <AppHeader
@@ -1145,17 +1158,14 @@ function EventTrackerRoute({
           title="Events"
         />
         <Notice
-          message={
-            snapshot.context.notice?.message ??
-            "Could not load events. Please try again."
-          }
+          message={failure.notice.message}
           title="Events unavailable"
           tone="danger"
         />
         <Button
           icon={RotateCcw}
           onPress={() => {
-            actor.trigger.reload();
+            send(EventTrackerEvent.cases.Reload.make({}));
           }}
           variant="secondary"
         >
@@ -1165,7 +1175,7 @@ function EventTrackerRoute({
     );
   }
 
-  if (snapshot.context.data === null) {
+  if (ready === undefined) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading events" />
@@ -1173,10 +1183,13 @@ function EventTrackerRoute({
     );
   }
 
-  const loadingOlder = snapshot.matches("LoadingOlder");
-  const busy = !snapshot.matches("Ready") && !loadingOlder;
+  const working = EventTrackerStates.get(snapshot, "Ready.Working").pipe(
+    Option.getOrUndefined
+  );
+  const loadingOlder = working?.operation._tag === "LoadOlder";
+  const busy = working !== undefined && !loadingOlder;
   const activeRecordableEvents = _sortRecordableEvents({
-    recordableEvents: snapshot.context.data.recordableEvents,
+    recordableEvents: ready.data.recordableEvents,
   }).filter((recordableEvent) => recordableEvent.archivedAt === undefined);
   const tabs = [
     {
@@ -1204,17 +1217,18 @@ function EventTrackerRoute({
           title="Events"
         />
 
-        {snapshot.context.notice === null ? null : (
-          <Notice
-            message={snapshot.context.notice.message}
-            tone={snapshot.context.notice.tone}
-          />
+        {ready.notice === null ? null : (
+          <Notice message={ready.notice.message} tone={ready.notice.tone} />
         )}
 
         <PagerTabs
-          activeIndex={snapshot.context.activeTab}
+          activeIndex={ready.activeTab}
           onActiveIndexChange={(index) => {
-            actor.trigger.selectTab({ index: index === 0 ? 0 : 1 });
+            send(
+              EventTrackerEvent.cases.SelectTab.make({
+                index: index === 0 ? 0 : 1,
+              })
+            );
           }}
           tabBarPosition="bottom"
           tabs={[
@@ -1224,47 +1238,63 @@ function EventTrackerRoute({
                 <RecordEventsPanel
                   activeRecordableEvents={activeRecordableEvents}
                   busy={busy}
-                  detailDateKey={snapshot.context.detailDateKey}
-                  detailRecordableEventId={
-                    snapshot.context.detailRecordableEventId
-                  }
-                  editingDateKey={snapshot.context.editingDateKey}
-                  loadedStartDateKey={snapshot.context.data.loadedStartDateKey}
+                  detailDateKey={ready.detailDateKey}
+                  detailRecordableEventId={ready.detailRecordableEventId}
+                  editingDateKey={ready.editingDateKey}
+                  loadedStartDateKey={ready.data.loadedStartDateKey}
                   loadingOlder={loadingOlder}
                   onCloseDayEditor={() => {
-                    actor.trigger.closeDayEditor();
+                    send(EventTrackerEvent.cases.CloseDayEditor.make({}));
                   }}
                   onCloseEventDetails={() => {
-                    actor.trigger.closeEventDetails();
+                    send(EventTrackerEvent.cases.CloseEventDetails.make({}));
                   }}
                   onDecrementPastEvent={(recordableEventId) => {
-                    actor.trigger.decrementPastEvent({ recordableEventId });
+                    send(
+                      EventTrackerEvent.cases.DecrementPastEvent.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
                   onDeleteRecordedEvent={(recordedEventId) => {
-                    actor.trigger.deleteRecordedEvent({ recordedEventId });
+                    send(
+                      EventTrackerEvent.cases.DeleteRecordedEvent.make({
+                        recordedEventId,
+                      })
+                    );
                   }}
                   onLoadOlder={() => {
-                    actor.trigger.loadOlder();
+                    send(EventTrackerEvent.cases.LoadOlder.make({}));
                   }}
                   onIncrementPastEvent={(recordableEventId) => {
-                    actor.trigger.incrementPastEvent({ recordableEventId });
+                    send(
+                      EventTrackerEvent.cases.IncrementPastEvent.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
                   onOpenDayEditor={(dateKey) => {
-                    actor.trigger.openDayEditor({ dateKey });
+                    send(
+                      EventTrackerEvent.cases.OpenDayEditor.make({ dateKey })
+                    );
                   }}
                   onOpenEventDetails={(input) => {
-                    actor.trigger.openEventDetails(input);
+                    send(EventTrackerEvent.cases.OpenEventDetails.make(input));
                   }}
                   onRecordNow={(recordableEventId) => {
-                    actor.trigger.recordNow({ recordableEventId });
+                    send(
+                      EventTrackerEvent.cases.RecordNow.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
                   onRecordPastEvents={(input) => {
-                    actor.trigger.recordPastEvents(input);
+                    send(EventTrackerEvent.cases.RecordPastEvents.make(input));
                   }}
-                  pastEventSelections={snapshot.context.pastEventSelections}
-                  recordableEvents={snapshot.context.data.recordableEvents}
-                  recordedEvents={snapshot.context.data.recordedEvents}
-                  todayDateKey={snapshot.context.todayDateKey}
+                  pastEventSelections={ready.pastEventSelections}
+                  recordableEvents={ready.data.recordableEvents}
+                  recordedEvents={ready.data.recordedEvents}
+                  todayDateKey={ready.todayDateKey}
                 />
               ),
             },
@@ -1273,38 +1303,46 @@ function EventTrackerRoute({
               content: (
                 <ManageEventsPanel
                   busy={busy}
-                  editingRecordableEventId={
-                    snapshot.context.editingRecordableEventId
-                  }
-                  emojiInput={snapshot.context.emojiInput}
-                  nameInput={snapshot.context.nameInput}
+                  editingRecordableEventId={ready.editingRecordableEventId}
+                  emojiInput={ready.emojiInput}
+                  nameInput={ready.nameInput}
                   onArchive={(recordableEventId) => {
-                    actor.trigger.archiveRecordableEvent({ recordableEventId });
+                    send(
+                      EventTrackerEvent.cases.ArchiveRecordableEvent.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
                   onBeginCreate={() => {
-                    actor.trigger.beginCreate();
+                    send(EventTrackerEvent.cases.BeginCreate.make({}));
                   }}
                   onCancelEdit={() => {
-                    actor.trigger.cancelEdit();
+                    send(EventTrackerEvent.cases.CancelEdit.make({}));
                   }}
                   onChangeEmoji={(value) => {
-                    actor.trigger.changeEmoji({ value });
+                    send(EventTrackerEvent.cases.ChangeEmoji.make({ value }));
                   }}
                   onChangeName={(value) => {
-                    actor.trigger.changeName({ value });
+                    send(EventTrackerEvent.cases.ChangeName.make({ value }));
                   }}
                   onEdit={(recordableEventId) => {
-                    actor.trigger.editRecordableEvent({ recordableEventId });
+                    send(
+                      EventTrackerEvent.cases.EditRecordableEvent.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
                   onSave={() => {
-                    actor.trigger.saveRecordableEvent();
+                    send(EventTrackerEvent.cases.SaveRecordableEvent.make({}));
                   }}
                   onUnarchive={(recordableEventId) => {
-                    actor.trigger.unarchiveRecordableEvent({
-                      recordableEventId,
-                    });
+                    send(
+                      EventTrackerEvent.cases.UnarchiveRecordableEvent.make({
+                        recordableEventId,
+                      })
+                    );
                   }}
-                  recordableEvents={snapshot.context.data.recordableEvents}
+                  recordableEvents={ready.data.recordableEvents}
                 />
               ),
             },
@@ -1314,7 +1352,7 @@ function EventTrackerRoute({
 
       <LoadingOverlay
         message={EventTrackerViewModel.pendingMessage({
-          state: snapshot.value,
+          state: working?.operation._tag,
         })}
         visible={busy}
       />
@@ -2530,19 +2568,19 @@ const EventTrackerViewModel = {
     return days;
   },
   pendingMessage({ state }: { readonly state: unknown }) {
-    if (state === "RecordingNow") {
+    if (state === "RecordNow") {
       return "Recording event";
     }
 
-    if (state === "RecordingPastEvents") {
+    if (state === "RecordPastEvents") {
       return "Recording past events";
     }
 
-    if (state === "DeletingRecordedEvent") {
+    if (state === "DeleteRecordedEvent") {
       return "Deleting recorded event";
     }
 
-    if (state === "SavingRecordableEvent") {
+    if (state === "SaveRecordableEvent") {
       return "Saving event";
     }
 

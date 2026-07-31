@@ -5,12 +5,11 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, MealPlans } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { router } from "expo-router";
@@ -207,9 +206,8 @@ const editPlanOperations = {
 
 const editPlanRouteMachine = Machine.make({
   states: EditPlanStates.states,
-  events: [
-    Back,
-    Submit,
+  events: [Back, Submit],
+  internalEvents: [
     PlanLoaded,
     LoadFailed,
     PlanNotFound,
@@ -290,19 +288,17 @@ const editPlanRouteMachine = Machine.make({
             Machine.action(
               Effect.sync(() =>
                 editPlanOperations.replaceToDateKey(event.dateKey)
-              )
-            ).pipe(Effect.as(target.local.Revised(new Revised()))),
+              ),
+              target.local.Revised(new Revised())
+            ),
           PlanRejected: ({ event, state, target }) =>
             Machine.action(
-              Effect.sync(() => Alert.alert("Plan not saved", event.message))
-            ).pipe(
-              Effect.as(
-                target.local.Ready(
-                  new Ready({
-                    errorMessage: event.message,
-                    plan: state.plan,
-                  })
-                )
+              Effect.sync(() => Alert.alert("Plan not saved", event.message)),
+              target.local.Ready(
+                new Ready({
+                  errorMessage: event.message,
+                  plan: state.plan,
+                })
               )
             ),
         },
@@ -325,7 +321,7 @@ export default function EditPlanScreen() {
   );
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, editPlanRouteMachine, {
+      MobileMachine.make(editPlanRouteMachine, {
         routeParams,
       }),
     [

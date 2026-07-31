@@ -1,6 +1,6 @@
 import { Domain, Measurements } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { Array, Effect, Order, Schema } from "effect";
+import { Array, Order, Schema } from "effect";
 
 const foodCategoryLabels = {
   "bread-like": "Bread-like",
@@ -464,45 +464,42 @@ export const foodSearchMachine = Machine.make({
         ),
       SelectFirstMatchingFood: ({ emit, state, target }) => {
         const food = state.matchingFoods[0] ?? null;
-        return emit(
-          new FoodSearchSelected({
-            food,
-            selection: "firstMatching",
-          })
-        ).pipe(
-          Effect.as(
-            target.full.Ready(
-              new FoodSearchReady({
-                ...state,
-                selectedFoodId: food?.id ?? null,
-              })
-            )
+        return Machine.action(
+          emit(
+            new FoodSearchSelected({
+              food,
+              selection: "firstMatching",
+            })
+          ),
+          target.full.Ready(
+            new FoodSearchReady({
+              ...state,
+              selectedFoodId: food?.id ?? null,
+            })
           )
         );
       },
       SelectFood: ({ emit, event, state, target }) => {
         const food =
           state.foods.find((food) => food.id === event.foodId) ?? null;
-        return emit(
-          new FoodSearchSelected({
-            food,
-            selection: "explicit",
-          })
-        ).pipe(
-          Effect.as(
-            target.full.Ready(
-              new FoodSearchReady({
-                ...state,
-                selectedFoodId: food?.id ?? null,
-              })
-            )
+        return Machine.action(
+          emit(
+            new FoodSearchSelected({
+              food,
+              selection: "explicit",
+            })
+          ),
+          target.full.Ready(
+            new FoodSearchReady({
+              ...state,
+              selectedFoodId: food?.id ?? null,
+            })
           )
         );
       },
     },
   },
 });
-
 export const FoodSearchChild = Machine.child("foodSearch", foodSearchMachine);
 export type FoodSearchActorRef = Machine.ChildMachine.Ref<
   typeof FoodSearchChild

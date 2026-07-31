@@ -49,8 +49,18 @@ describe("food form machine", () => {
     const submitted = await Effect.runPromise(
       Machine.plan(foodFormMachine, changed.next, new SubmitFoodForm())
     );
+    const emitted: FoodFormSubmitted[] = [];
+    await Effect.runPromise(
+      Machine.runActions(submitted.actions, {
+        raise: () => Effect.void,
+        sendParent: (event) =>
+          Effect.sync(() => {
+            emitted.push(event);
+          }),
+      })
+    );
 
-    assert.instanceOf(submitted.emittedEvents[0], FoodFormSubmitted);
+    assert.instanceOf(emitted[0], FoodFormSubmitted);
   });
 });
 
@@ -66,10 +76,10 @@ describe("meal plan form machine", () => {
             yield* form.child(MealPlanMealsChild)
           );
 
-          yield* meals.send(new AddMeal());
+          yield* meals.send(AddMeal.make({}));
           yield* Effect.yieldNow;
           yield* form.send(
-            new ChangeMealPlanField({ name: "name", value: "Training" })
+            ChangeMealPlanField.make({ name: "name", value: "Training" })
           );
           yield* Effect.yieldNow;
 

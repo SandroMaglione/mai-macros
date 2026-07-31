@@ -53,28 +53,24 @@ const MealPlanFormInputSchema = Schema.Struct({
   initialPlan: Schema.NullOr(Domain.Plan),
 });
 
-export class MealPlanMealsEditing extends Schema.TaggedClass<MealPlanMealsEditing>(
-  "MealPlanMealsEditing"
-)("MealPlanMealsEditing", {
-  meals: Schema.Array(MealPlanFormMealValueSchema),
-}) {}
+const MealPlanMealsState = Schema.TaggedUnion({
+  MealPlanMealsEditing: {
+    meals: Schema.Array(MealPlanFormMealValueSchema),
+  },
+});
 
-export class AddMeal extends Schema.TaggedClass<AddMeal>("AddMeal")(
-  "AddMeal",
-  {}
-) {}
+const MealPlanMealsEvent = Schema.TaggedUnion({
+  AddMeal: {},
+  ChangeMealName: {
+    index: Schema.Number,
+    value: Schema.String,
+  },
+  RemoveMeal: { index: Schema.Number },
+});
 
-export class ChangeMealName extends Schema.TaggedClass<ChangeMealName>(
-  "ChangeMealName"
-)("ChangeMealName", {
-  index: Schema.Number,
-  value: Schema.String,
-}) {}
-
-export class RemoveMeal extends Schema.TaggedClass<RemoveMeal>("RemoveMeal")(
-  "RemoveMeal",
-  { index: Schema.Number }
-) {}
+export const MealPlanMealsEditing =
+  MealPlanMealsState.cases.MealPlanMealsEditing;
+export const { AddMeal, ChangeMealName, RemoveMeal } = MealPlanMealsEvent.cases;
 
 export const MealPlanMealsStates = Machine.defineStates({
   Editing: MealPlanMealsEditing,
@@ -87,7 +83,7 @@ export const mealPlanMealsMachine = Machine.make({
   input: MealPlanFormInputSchema,
   initial: ({ initialPlan }) =>
     MealPlanMealsStates.initial.Editing(
-      new MealPlanMealsEditing({
+      MealPlanMealsEditing.make({
         meals:
           initialPlan === null
             ? []
@@ -104,13 +100,13 @@ export const mealPlanMealsMachine = Machine.make({
     on: {
       AddMeal: ({ state, target }) =>
         target.full.Editing(
-          new MealPlanMealsEditing({
+          MealPlanMealsEditing.make({
             meals: [...state.meals, { name: "" }],
           })
         ),
       ChangeMealName: ({ event, state, target }) =>
         target.full.Editing(
-          new MealPlanMealsEditing({
+          MealPlanMealsEditing.make({
             meals: state.meals.map((meal, index) =>
               index === event.index
                 ? {
@@ -123,7 +119,7 @@ export const mealPlanMealsMachine = Machine.make({
         ),
       RemoveMeal: ({ event, state, target }) =>
         target.full.Editing(
-          new MealPlanMealsEditing({
+          MealPlanMealsEditing.make({
             meals: state.meals.flatMap((meal, index) =>
               index === event.index ? [] : [meal]
             ),
@@ -138,19 +134,22 @@ export const MealPlanMealsChild = Machine.child(
   mealPlanMealsMachine
 );
 
-export class MealPlanFormEditing extends Schema.TaggedClass<MealPlanFormEditing>(
-  "MealPlanFormEditing"
-)("MealPlanFormEditing", {
-  initialPlan: Schema.NullOr(Domain.Plan),
-  values: MealPlanFormValuesSchema,
-}) {}
+const MealPlanFormState = Schema.TaggedUnion({
+  MealPlanFormEditing: {
+    initialPlan: Schema.NullOr(Domain.Plan),
+    values: MealPlanFormValuesSchema,
+  },
+});
 
-export class ChangeMealPlanField extends Schema.TaggedClass<ChangeMealPlanField>(
-  "ChangeMealPlanField"
-)("ChangeMealPlanField", {
-  name: MealPlanFormTextFieldNameSchema,
-  value: Schema.String,
-}) {}
+const MealPlanFormEvent = Schema.TaggedUnion({
+  ChangeMealPlanField: {
+    name: MealPlanFormTextFieldNameSchema,
+    value: Schema.String,
+  },
+});
+
+export const MealPlanFormEditing = MealPlanFormState.cases.MealPlanFormEditing;
+export const ChangeMealPlanField = MealPlanFormEvent.cases.ChangeMealPlanField;
 
 export const MealPlanFormStates = Machine.defineStates({
   Editing: MealPlanFormEditing,
@@ -163,7 +162,7 @@ export const mealPlanFormMachine = Machine.make({
   input: MealPlanFormInputSchema,
   initial: ({ initialPlan }) =>
     MealPlanFormStates.initial.Editing(
-      new MealPlanFormEditing({
+      MealPlanFormEditing.make({
         initialPlan,
         values: {
           name: initialPlan?.name ?? "",
@@ -203,7 +202,7 @@ export const mealPlanFormMachine = Machine.make({
         reenter: false,
         transition: ({ event, state, target }) =>
           target.full.Editing(
-            new MealPlanFormEditing({
+            MealPlanFormEditing.make({
               ...state,
               values: {
                 ...state.values,

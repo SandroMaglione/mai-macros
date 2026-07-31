@@ -10,7 +10,7 @@ import {
   formatNumber,
   mealEntryMassGrams,
 } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import {
   DailyLogs,
@@ -22,7 +22,6 @@ import {
 } from "@mai/nutrition";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Order, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { router } from "expo-router";
@@ -209,8 +208,8 @@ const MacroDetailsRouteStates = Machine.defineStates({
 
 const macroDetailsRouteMachine = Machine.make({
   states: MacroDetailsRouteStates.states,
-  events: [
-    ReloadMacroDetails,
+  events: [ReloadMacroDetails],
+  internalEvents: [
     MacroDetailsLoaded,
     MacroDetailsLoadFailed,
     MacroDetailsWasRedirected,
@@ -243,8 +242,7 @@ const macroDetailsRouteMachine = Machine.make({
                 });
               }
 
-              const foods = yield* foodsService.list();
-              const mealEntries = yield* mealEntriesService.listForDay({
+              const dayMealEntries = yield* mealEntriesService.listForDay({
                 input: { dateKey: day.dailyLog.dateKey },
               });
               const selectedMeal =
@@ -259,6 +257,18 @@ const macroDetailsRouteMachine = Machine.make({
                   message: "Could not find this meal.",
                 });
               }
+
+              const mealEntries =
+                state.meal === undefined
+                  ? dayMealEntries
+                  : dayMealEntries.filter(
+                      (mealEntry) => mealEntry.mealId === state.meal
+                    );
+              const foods = yield* foodsService.getMany({
+                input: {
+                  foodIds: mealEntries.map((mealEntry) => mealEntry.foodId),
+                },
+              });
 
               return new MacroDetailsLoaded({
                 data: {
@@ -335,7 +345,7 @@ export function MacroDetailsRoute({
 }) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, macroDetailsRouteMachine, {
+      MobileMachine.make(macroDetailsRouteMachine, {
         dateKey,
         meal,
       }),

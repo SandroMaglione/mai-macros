@@ -6,7 +6,7 @@ import {
   Rect as SkiaRect,
 } from "@shopify/react-native-skia";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { type AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, DateTime, Effect, Match, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import {
@@ -44,7 +44,7 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 
 const BodyWeightReportPoint = Schema.Struct({
@@ -186,6 +186,8 @@ const bodyWeightEditorMachine = Machine.make({
     CloseEditor,
     DeleteEditorWeight,
     SaveEditorWeight,
+  ],
+  internalEvents: [
     EditorWeightSaved,
     EditorValidationFailed,
     EditorSaveFailed,
@@ -218,17 +220,16 @@ const bodyWeightEditorMachine = Machine.make({
           new EditorIdle({ ...state, message: null, weightInput: event.value })
         ),
       CloseEditor: ({ emit, state, target }) =>
-        emit(new EditorClosed()).pipe(
-          Effect.as(target.full.Idle(new EditorIdle({ ...state })))
+        Machine.action(
+          emit(new EditorClosed()),
+          target.full.Idle(new EditorIdle({ ...state }))
         ),
       DeleteEditorWeight: ({ state, target }) =>
         state.selectedEntry === null
           ? undefined
-          : target.full.Deleting(
-              new EditorDeleting({ ...state, _tag: undefined })
-            ),
+          : target.full.Deleting(Machine.retag(EditorDeleting, state)),
       SaveEditorWeight: ({ state, target }) =>
-        target.full.Saving(new EditorSaving({ ...state, _tag: undefined })),
+        target.full.Saving(Machine.retag(EditorSaving, state)),
     },
   },
   Saving: {
@@ -256,26 +257,19 @@ const bodyWeightEditorMachine = Machine.make({
       }),
     on: {
       EditorWeightSaved: ({ emit, state, target }) =>
-        emit(new EditorSaved()).pipe(
-          Effect.as(
-            target.full.Idle(
-              new EditorIdle({ ...state, _tag: undefined, message: null })
-            )
-          )
+        Machine.action(
+          emit(new EditorSaved()),
+          target.full.Idle(Machine.retag(EditorIdle, state, { message: null }))
         ),
       EditorValidationFailed: ({ state, target }) =>
         target.full.Idle(
-          new EditorIdle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(EditorIdle, state, {
             message: "Enter a positive weight in kilograms.",
           })
         ),
       EditorSaveFailed: ({ state, target }) =>
         target.full.Idle(
-          new EditorIdle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(EditorIdle, state, {
             message: "Could not save this weight.",
           })
         ),
@@ -283,35 +277,26 @@ const bodyWeightEditorMachine = Machine.make({
   },
   Deleting: {
     invoke: ({ state }) =>
-      Machine.invoke({
+      Machine.invokeEffect({
         id: "deleteBodyWeight",
-        src: () =>
-          Machine.effect(
-            Effect.gen(function* () {
-              const bodyWeights = yield* BodyWeights.BodyWeights;
-              yield* bodyWeights.delete({
-                input: { dateKey: state.dateKey },
-              });
-              return new EditorWeightDeleted();
-            }).pipe(
-              Effect.catch(() => Effect.succeed(new EditorDeleteFailed()))
-            )
-          ),
+        effect: Effect.gen(function* () {
+          const bodyWeights = yield* BodyWeights.BodyWeights;
+          yield* bodyWeights.delete({
+            input: { dateKey: state.dateKey },
+          });
+        }),
+        onSuccess: () => new EditorWeightDeleted(),
+        onFailure: () => new EditorDeleteFailed(),
       }),
     on: {
       EditorWeightDeleted: ({ emit, state, target }) =>
-        emit(new EditorDeleted()).pipe(
-          Effect.as(
-            target.full.Idle(
-              new EditorIdle({ ...state, _tag: undefined, message: null })
-            )
-          )
+        Machine.action(
+          emit(new EditorDeleted()),
+          target.full.Idle(Machine.retag(EditorIdle, state, { message: null }))
         ),
       EditorDeleteFailed: ({ state, target }) =>
         target.full.Idle(
-          new EditorIdle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(EditorIdle, state, {
             message: "Could not delete this weight.",
           })
         ),
@@ -362,14 +347,8 @@ const BodyWeightImporterStates = Machine.defineStates({
 
 const bodyWeightImporterMachine = Machine.make({
   states: BodyWeightImporterStates.states,
-  events: [
-    ChangeImportInput,
-    CloseImport,
-    SubmitImport,
-    ImportSucceeded,
-    ImportValidationFailed,
-    ImportFailed,
-  ],
+  events: [ChangeImportInput, CloseImport, SubmitImport],
+  internalEvents: [ImportSucceeded, ImportValidationFailed, ImportFailed],
   emits: [ImportClosed, WeightsImported],
   initial: () =>
     BodyWeightImporterStates.initial.Idle(
@@ -383,13 +362,12 @@ const bodyWeightImporterMachine = Machine.make({
           new ImportIdle({ ...state, input: event.value, message: null })
         ),
       CloseImport: ({ emit, state, target }) =>
-        emit(new ImportClosed()).pipe(
-          Effect.as(target.full.Idle(new ImportIdle({ ...state })))
+        Machine.action(
+          emit(new ImportClosed()),
+          target.full.Idle(new ImportIdle({ ...state }))
         ),
       SubmitImport: ({ state, target }) =>
-        target.full.Submitting(
-          new ImportSubmitting({ ...state, _tag: undefined })
-        ),
+        target.full.Submitting(Machine.retag(ImportSubmitting, state)),
     },
   },
   Submitting: {
@@ -441,26 +419,19 @@ const bodyWeightImporterMachine = Machine.make({
       }),
     on: {
       ImportSucceeded: ({ emit, state, target }) =>
-        emit(new WeightsImported()).pipe(
-          Effect.as(
-            target.full.Idle(
-              new ImportIdle({ ...state, _tag: undefined, message: null })
-            )
-          )
+        Machine.action(
+          emit(new WeightsImported()),
+          target.full.Idle(Machine.retag(ImportIdle, state, { message: null }))
         ),
       ImportValidationFailed: ({ event, state, target }) =>
         target.full.Idle(
-          new ImportIdle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(ImportIdle, state, {
             message: event.message,
           })
         ),
       ImportFailed: ({ state, target }) =>
         target.full.Idle(
-          new ImportIdle({
-            ...state,
-            _tag: undefined,
+          Machine.retag(ImportIdle, state, {
             message: "Could not import these weights.",
           })
         ),
@@ -553,13 +524,15 @@ const bodyWeightRouteMachine = Machine.make({
   id: "bodyWeightRoute",
   states: BodyWeightRouteStates.states,
   events: [
-    BodyWeightLoaded,
-    BodyWeightLoadFailed,
     NextMonth,
     PreviousMonth,
     ReloadBodyWeight,
     OpenImport,
     SelectBodyWeightDate,
+  ],
+  internalEvents: [
+    BodyWeightLoaded,
+    BodyWeightLoadFailed,
     ...bodyWeightEditorMachine.emits,
     ...bodyWeightImporterMachine.emits,
   ],
@@ -571,37 +544,35 @@ const bodyWeightRouteMachine = Machine.make({
 }).handle({
   Loading: {
     invoke: ({ state }) =>
-      Machine.invoke({
+      Machine.invokeEffect({
         id: "loadBodyWeight",
-        src: () =>
-          Machine.effect(
-            Effect.gen(function* () {
-              const bodyWeights = yield* BodyWeights.BodyWeights;
-              const reports = yield* BodyWeightReports.BodyWeightReports;
-              const monthRange = CalendarMonthModel.range({
-                dateKey: state.dateKey,
-              });
-              const today = yield* Schema.decodeEffect(Domain.DateKey)(
-                dateKeyFromDate({ date: yield* DateTime.nowAsDate })
-              );
-              const endDateKey = state.dateKey > today ? state.dateKey : today;
-              const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
-                shiftDateKey({
-                  dateKey: endDateKey,
-                  days: -(state.reportDayCount - 1),
-                })
-              );
-              const monthEntries = yield* bodyWeights.listRange({
-                input: monthRange,
-              });
-              const report = yield* reports.getRange({
-                input: { endDateKey, startDateKey },
-              });
-              return new BodyWeightLoaded({ monthEntries, report });
-            }).pipe(
-              Effect.catch(() => Effect.succeed(new BodyWeightLoadFailed()))
-            )
-          ),
+        effect: Effect.gen(function* () {
+          const bodyWeights = yield* BodyWeights.BodyWeights;
+          const reports = yield* BodyWeightReports.BodyWeightReports;
+          const monthRange = CalendarMonthModel.range({
+            dateKey: state.dateKey,
+          });
+          const today = yield* Schema.decodeEffect(Domain.DateKey)(
+            dateKeyFromDate({ date: yield* DateTime.nowAsDate })
+          );
+          const endDateKey = state.dateKey > today ? state.dateKey : today;
+          const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
+            shiftDateKey({
+              dateKey: endDateKey,
+              days: -(state.reportDayCount - 1),
+            })
+          );
+          const monthEntries = yield* bodyWeights.listRange({
+            input: monthRange,
+          });
+          const report = yield* reports.getRange({
+            input: { endDateKey, startDateKey },
+          });
+          return { monthEntries, report };
+        }),
+        onSuccess: ({ monthEntries, report }) =>
+          new BodyWeightLoaded({ monthEntries, report }),
+        onFailure: () => new BodyWeightLoadFailed(),
       }),
     on: {
       BodyWeightLoaded: ({ event, state, target }) =>
@@ -616,9 +587,7 @@ const bodyWeightRouteMachine = Machine.make({
         ),
       BodyWeightLoadFailed: ({ state, target }) =>
         target.full.Failed(
-          new RouteFailed({
-            ...state,
-            _tag: undefined,
+          Machine.retag(RouteFailed, state, {
             message: "Could not load weight data.",
           })
         ),
@@ -628,9 +597,7 @@ const bodyWeightRouteMachine = Machine.make({
     on: {
       NextMonth: ({ state, target }) =>
         target.full.Loading(
-          new RouteLoading({
-            ...state,
-            _tag: undefined,
+          Machine.retag(RouteLoading, state, {
             dateKey: _shiftMonthDateKey({
               dateKey: state.dateKey,
               months: 1,
@@ -639,9 +606,7 @@ const bodyWeightRouteMachine = Machine.make({
         ),
       PreviousMonth: ({ state, target }) =>
         target.full.Loading(
-          new RouteLoading({
-            ...state,
-            _tag: undefined,
+          Machine.retag(RouteLoading, state, {
             dateKey: _shiftMonthDateKey({
               dateKey: state.dateKey,
               months: -1,
@@ -808,7 +773,7 @@ function BodyWeightRoute({
 }) {
   const routeAtom = useMemo(
     () =>
-      AtomMachine.make(MobileAtomRuntime, bodyWeightRouteMachine, {
+      MobileMachine.make(bodyWeightRouteMachine, {
         dateKey,
         reportDayCount,
       }),

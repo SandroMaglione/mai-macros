@@ -71,27 +71,21 @@ export const makeLocalDataResetMachine = ({
 }: {
   readonly restartApp: Effect.Effect<void>;
 }) => {
-  const resetLocalData = Machine.invoke({
+  const resetLocalData = Machine.invokeEffect({
     id: "resetLocalData",
-    src: () =>
-      Machine.effect(
-        Effect.gen(function* () {
-          const localData = yield* NutritionLocalData.LocalData;
-          yield* localData.reset;
-          yield* restartApp;
-        }).pipe(
-          Effect.match({
-            onFailure: (error) =>
-              new LocalDataResetFailed({
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Could not delete the local data.",
-              }),
-            onSuccess: () => new LocalDataResetSucceeded(),
-          })
-        )
-      ),
+    effect: Effect.gen(function* () {
+      const localData = yield* NutritionLocalData.LocalData;
+      yield* localData.reset;
+      yield* restartApp;
+    }),
+    onFailure: (error) =>
+      new LocalDataResetFailed({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not delete the local data.",
+      }),
+    onSuccess: () => new LocalDataResetSucceeded(),
   });
 
   return Machine.make({
@@ -102,9 +96,8 @@ export const makeLocalDataResetMachine = ({
       CancelReset,
       ChangeResetConfirmationText,
       ConfirmLocalDataReset,
-      LocalDataResetSucceeded,
-      LocalDataResetFailed,
     ],
+    internalEvents: [LocalDataResetSucceeded, LocalDataResetFailed],
     initial: () => LocalDataResetStates.initial.Idle(new LocalDataResetIdle()),
   }).handle({
     Idle: {

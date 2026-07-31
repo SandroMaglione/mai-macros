@@ -11,9 +11,8 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
@@ -105,11 +104,9 @@ export function MealPlanForm({
 }) {
   const machineAtom = useMemo(
     () =>
-      AtomMachine.make(
-        MobileAtomRuntime,
-        MealPlanFormMachine.mealPlanFormMachine,
-        { initialPlan }
-      ),
+      MobileMachine.make(MealPlanFormMachine.mealPlanFormMachine, {
+        initialPlan,
+      }),
     [initialPlan]
   );
   const mealsAtom = useMemo(
@@ -163,7 +160,7 @@ export function MealPlanForm({
         label="Name"
         onChangeText={(value) =>
           send(
-            new MealPlanFormMachine.ChangeMealPlanField({
+            MealPlanFormMachine.ChangeMealPlanField.make({
               name: "name",
               value,
             })
@@ -183,7 +180,7 @@ export function MealPlanForm({
               key={field.name}
               onChangeText={(value) =>
                 send(
-                  new MealPlanFormMachine.ChangeMealPlanField({
+                  MealPlanFormMachine.ChangeMealPlanField.make({
                     name: field.name,
                     value,
                   })
@@ -221,7 +218,7 @@ export function MealPlanForm({
               key={field.name}
               onChangeText={(value) =>
                 send(
-                  new MealPlanFormMachine.ChangeMealPlanField({
+                  MealPlanFormMachine.ChangeMealPlanField.make({
                     name: field.name,
                     value,
                   })
@@ -244,7 +241,7 @@ export function MealPlanForm({
                   editable={!isSubmitting}
                   onChangeText={(value) => {
                     sendMeals(
-                      new MealPlanFormMachine.ChangeMealName({
+                      MealPlanFormMachine.ChangeMealName.make({
                         index,
                         value,
                       })
@@ -259,7 +256,7 @@ export function MealPlanForm({
                   disabled={isSubmitting}
                   index={index}
                   onPress={() => {
-                    sendMeals(new MealPlanFormMachine.RemoveMeal({ index }));
+                    sendMeals(MealPlanFormMachine.RemoveMeal.make({ index }));
                   }}
                 />
               </View>
@@ -270,7 +267,7 @@ export function MealPlanForm({
             disabled={isSubmitting}
             icon={Plus}
             onPress={() => {
-              sendMeals(new MealPlanFormMachine.AddMeal());
+              sendMeals(MealPlanFormMachine.AddMeal.make({}));
             }}
             variant="secondary"
           >

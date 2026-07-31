@@ -8,12 +8,11 @@ import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatCurrencyMinor, formatNumber } from "@/lib/format";
-import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { MobileMachine } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, Foods } from "@mai/nutrition";
 import { Machine } from "@typeonce/effect-machine";
-import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
@@ -262,10 +261,8 @@ const priceManagerMachine = Machine.make({
     EditPrice,
     RemovePrice,
     SelectPrice,
-    FoodLoaded,
-    OperationSucceeded,
-    OperationFailed,
   ],
+  internalEvents: [FoodLoaded, OperationSucceeded, OperationFailed],
   input: Schema.Struct({ foodId: Domain.FoodId }),
   initial: ({ foodId }) =>
     PriceStates.initial.Route(new PricesRoute({ foodId }), (route) =>
@@ -552,7 +549,7 @@ export default function FoodPricesRoute() {
 
 function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
   const machineAtom = useMemo(
-    () => AtomMachine.make(MobileAtomRuntime, priceManagerMachine, { foodId }),
+    () => MobileMachine.make(priceManagerMachine, { foodId }),
     [foodId]
   );
   const stateResult = useAtomValue(machineAtom.state);
