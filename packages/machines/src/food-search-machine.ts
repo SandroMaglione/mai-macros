@@ -1,7 +1,6 @@
 import { Domain, Measurements } from "@mai/nutrition";
-import { Array, Order, Schema } from "effect";
-import { setup, type ActorRefFrom } from "xstate";
-import { EmptyEvent } from "./schemas";
+import { Machine } from "@typeonce/effect-machine";
+import { Array, Effect, Order, Schema } from "effect";
 
 const foodCategoryLabels = {
   "bread-like": "Bread-like",
@@ -19,12 +18,6 @@ const foodCategoryLabels = {
   tuber: "Tuber",
   vegetable: "Vegetable",
 } satisfies Record<Domain.FoodCategory, string>;
-
-export type FoodSearchSelectedEvent = {
-  readonly type: "foodSearchSelected";
-  readonly food: Domain.Food | null;
-  readonly selection: "explicit" | "firstMatching";
-};
 
 export type FoodNameGroupLabel = "Newest" | "Older";
 
@@ -61,15 +54,6 @@ const FoodSearchMacroOrderSchema = Schema.Literals([
 
 const FoodSearchBaseOrderSchema = Schema.Literals(["catalog", "provided"]);
 
-const FoodSearchContextSchema = Schema.Struct({
-  baseOrder: FoodSearchBaseOrderSchema,
-  foods: Schema.Array(Domain.Food),
-  macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
-  matchingFoods: Schema.Array(Domain.Food),
-  query: Schema.String,
-  selectedFoodId: Schema.NullOr(Domain.FoodId),
-});
-
 const FoodSearchInputSchema = Schema.Struct({
   baseOrder: Schema.optionalKey(FoodSearchBaseOrderSchema),
   foods: Schema.Array(Domain.Food),
@@ -77,37 +61,6 @@ const FoodSearchInputSchema = Schema.Struct({
   query: Schema.optionalKey(Schema.String),
   selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
 });
-
-export type FoodSearchEvent =
-  | {
-      readonly type: "reset";
-      readonly baseOrder?: FoodSearchBaseOrder;
-      readonly foods: readonly Domain.Food[];
-      readonly query?: string;
-      readonly selectedFoodId?: Domain.Food["id"] | null;
-    }
-  | {
-      readonly type: "changeFoods";
-      readonly foods: readonly Domain.Food[];
-    }
-  | {
-      readonly type: "changeQuery";
-      readonly query: string;
-    }
-  | {
-      readonly type: "changeMacroOrder";
-      readonly macroOrder: FoodSearchMacroOrder | null;
-    }
-  | {
-      readonly type: "selectFirstMatchingFood";
-    }
-  | {
-      readonly type: "selectFood";
-      readonly foodId: Domain.Food["id"];
-    }
-  | {
-      readonly type: "clearSelectedFood";
-    };
 
 export const foodUserOriginOrder = Order.mapInput(
   Order.Number,
@@ -362,136 +315,198 @@ const _foodSearchContextFromInput = ({
         : null,
 });
 
-export const foodSearchMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(FoodSearchContextSchema),
-    events: {
-      reset: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          baseOrder: Schema.optionalKey(FoodSearchBaseOrderSchema),
-          foods: Schema.Array(Domain.Food),
-          query: Schema.optionalKey(Schema.String),
-          selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
-        })
-      ),
-      changeFoods: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          foods: Schema.Array(Domain.Food),
-        })
-      ),
-      changeQuery: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          query: Schema.String,
-        })
-      ),
-      changeMacroOrder: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
-        })
-      ),
-      selectFirstMatchingFood: Schema.toStandardSchemaV1(EmptyEvent),
-      selectFood: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          foodId: Domain.FoodId,
-        })
-      ),
-      clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(FoodSearchInputSchema),
-  },
-  states: {
-    Ready: {},
-  },
-}).createMachine({
-  context: ({ input }) => _foodSearchContextFromInput(input),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        changeFoods: ({ context, event }) => ({
-          context: _foodSearchContextFromInput({
-            baseOrder: context.baseOrder,
-            foods: event.foods,
-            macroOrder: context.macroOrder,
-            query: context.query,
-            selectedFoodId: context.selectedFoodId,
-          }),
-        }),
-        changeMacroOrder: ({ context, event }) => ({
-          context: {
+export class FoodSearchReady extends Schema.TaggedClass<FoodSearchReady>(
+  "FoodSearchReady"
+)("FoodSearchReady", {
+  baseOrder: FoodSearchBaseOrderSchema,
+  foods: Schema.Array(Domain.Food),
+  macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
+  matchingFoods: Schema.Array(Domain.Food),
+  query: Schema.String,
+  selectedFoodId: Schema.NullOr(Domain.FoodId),
+}) {}
+
+export class ResetFoodSearch extends Schema.TaggedClass<ResetFoodSearch>(
+  "ResetFoodSearch"
+)("ResetFoodSearch", {
+  baseOrder: Schema.optionalKey(FoodSearchBaseOrderSchema),
+  foods: Schema.Array(Domain.Food),
+  query: Schema.optionalKey(Schema.String),
+  selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
+}) {}
+
+export class ChangeFoods extends Schema.TaggedClass<ChangeFoods>("ChangeFoods")(
+  "ChangeFoods",
+  { foods: Schema.Array(Domain.Food) }
+) {}
+
+export class ChangeFoodSearchQuery extends Schema.TaggedClass<ChangeFoodSearchQuery>(
+  "ChangeFoodSearchQuery"
+)("ChangeFoodSearchQuery", { query: Schema.String }) {}
+
+export class ChangeFoodSearchMacroOrder extends Schema.TaggedClass<ChangeFoodSearchMacroOrder>(
+  "ChangeFoodSearchMacroOrder"
+)("ChangeFoodSearchMacroOrder", {
+  macroOrder: Schema.NullOr(FoodSearchMacroOrderSchema),
+}) {}
+
+export class SelectFirstMatchingFood extends Schema.TaggedClass<SelectFirstMatchingFood>(
+  "SelectFirstMatchingFood"
+)("SelectFirstMatchingFood", {}) {}
+
+export class SelectFood extends Schema.TaggedClass<SelectFood>("SelectFood")(
+  "SelectFood",
+  { foodId: Domain.FoodId }
+) {}
+
+export class ClearSelectedFood extends Schema.TaggedClass<ClearSelectedFood>(
+  "ClearSelectedFood"
+)("ClearSelectedFood", {}) {}
+
+export class FoodSearchSelected extends Schema.TaggedClass<FoodSearchSelected>(
+  "FoodSearchSelected"
+)("FoodSearchSelected", {
+  food: Schema.NullOr(Domain.Food),
+  selection: Schema.Literals(["explicit", "firstMatching"]),
+}) {}
+
+export type FoodSearchSelectedEvent = typeof FoodSearchSelected.Type;
+export type FoodSearchEvent =
+  | typeof ResetFoodSearch.Type
+  | typeof ChangeFoods.Type
+  | typeof ChangeFoodSearchQuery.Type
+  | typeof ChangeFoodSearchMacroOrder.Type
+  | typeof SelectFirstMatchingFood.Type
+  | typeof SelectFood.Type
+  | typeof ClearSelectedFood.Type;
+
+export const FoodSearchStates = Machine.defineStates({
+  Ready: FoodSearchReady,
+});
+
+const foodSearchEvents = [
+  ResetFoodSearch,
+  ChangeFoods,
+  ChangeFoodSearchQuery,
+  ChangeFoodSearchMacroOrder,
+  SelectFirstMatchingFood,
+  SelectFood,
+  ClearSelectedFood,
+] as const;
+
+export const foodSearchMachine = Machine.make({
+  id: "foodSearch",
+  states: FoodSearchStates.states,
+  events: foodSearchEvents,
+  emits: [FoodSearchSelected],
+  input: FoodSearchInputSchema,
+  initial: (input) =>
+    FoodSearchStates.initial.Ready(
+      new FoodSearchReady(_foodSearchContextFromInput(input))
+    ),
+}).handle({
+  Ready: {
+    on: {
+      ChangeFoods: ({ event, state, target }) =>
+        target.full.Ready(
+          new FoodSearchReady(
+            _foodSearchContextFromInput({
+              baseOrder: state.baseOrder,
+              foods: event.foods,
+              macroOrder: state.macroOrder,
+              query: state.query,
+              selectedFoodId: state.selectedFoodId,
+            })
+          )
+        ),
+      ChangeFoodSearchMacroOrder: ({ event, state, target }) =>
+        target.full.Ready(
+          new FoodSearchReady({
+            ...state,
             macroOrder: event.macroOrder,
             matchingFoods: sortFoodsByMacroOrder({
-              baseOrder: context.baseOrder,
+              baseOrder: state.baseOrder,
               foods: filterFoodsByQuery({
-                foods: context.foods,
-                query: context.query,
+                foods: state.foods,
+                query: state.query,
               }),
               macroOrder: event.macroOrder,
             }),
-          },
-        }),
-        changeQuery: ({ context, event }) => ({
-          context: {
+          })
+        ),
+      ChangeFoodSearchQuery: ({ event, state, target }) =>
+        target.full.Ready(
+          new FoodSearchReady({
+            ...state,
             matchingFoods: sortFoodsByMacroOrder({
-              baseOrder: context.baseOrder,
+              baseOrder: state.baseOrder,
               foods: filterFoodsByQuery({
-                foods: context.foods,
+                foods: state.foods,
                 query: event.query,
               }),
-              macroOrder: context.macroOrder,
+              macroOrder: state.macroOrder,
             }),
             query: event.query,
-          },
-        }),
-        clearSelectedFood: () => ({
-          context: {
-            selectedFoodId: null,
-          },
-        }),
-        reset: ({ context, event }) => ({
-          context: _foodSearchContextFromInput({
-            ...event,
-            baseOrder: event.baseOrder ?? context.baseOrder,
-          }),
-        }),
-        selectFirstMatchingFood: ({ context, parent }, enq) => {
-          const food = context.matchingFoods[0] ?? null;
-
-          if (parent !== undefined) {
-            enq.sendTo(parent, {
-              type: "foodSearchSelected",
-              food,
-              selection: "firstMatching",
-            } satisfies FoodSearchSelectedEvent);
-          }
-
-          return {
-            context: {
-              selectedFoodId: context.matchingFoods[0]?.id ?? null,
-            },
-          };
-        },
-        selectFood: ({ context, event, parent }, enq) => {
-          const food =
-            context.foods.find((food) => food.id === event.foodId) ?? null;
-
-          if (parent !== undefined) {
-            enq.sendTo(parent, {
-              type: "foodSearchSelected",
-              food,
-              selection: "explicit",
-            } satisfies FoodSearchSelectedEvent);
-          }
-
-          return {
-            context: {
-              selectedFoodId: food?.id ?? null,
-            },
-          };
-        },
+          })
+        ),
+      ClearSelectedFood: ({ state, target }) =>
+        target.full.Ready(
+          new FoodSearchReady({ ...state, selectedFoodId: null })
+        ),
+      ResetFoodSearch: ({ event, state, target }) =>
+        target.full.Ready(
+          new FoodSearchReady(
+            _foodSearchContextFromInput({
+              ...event,
+              baseOrder: event.baseOrder ?? state.baseOrder,
+            })
+          )
+        ),
+      SelectFirstMatchingFood: ({ emit, state, target }) => {
+        const food = state.matchingFoods[0] ?? null;
+        return emit(
+          new FoodSearchSelected({
+            food,
+            selection: "firstMatching",
+          })
+        ).pipe(
+          Effect.as(
+            target.full.Ready(
+              new FoodSearchReady({
+                ...state,
+                selectedFoodId: food?.id ?? null,
+              })
+            )
+          )
+        );
+      },
+      SelectFood: ({ emit, event, state, target }) => {
+        const food =
+          state.foods.find((food) => food.id === event.foodId) ?? null;
+        return emit(
+          new FoodSearchSelected({
+            food,
+            selection: "explicit",
+          })
+        ).pipe(
+          Effect.as(
+            target.full.Ready(
+              new FoodSearchReady({
+                ...state,
+                selectedFoodId: food?.id ?? null,
+              })
+            )
+          )
+        );
       },
     },
   },
 });
 
-export type FoodSearchActorRef = ActorRefFrom<typeof foodSearchMachine>;
+export const FoodSearchChild = Machine.child("foodSearch", foodSearchMachine);
+export type FoodSearchActorRef = Machine.ChildMachine.Ref<
+  typeof FoodSearchChild
+>;
+export type FoodSearchSnapshot = Machine.Machine.Snapshot<
+  typeof FoodSearchStates.states
+>;

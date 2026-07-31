@@ -7,11 +7,17 @@ import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { Button } from "@/components/ui/button";
 import { Field, NumberField } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
 import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
-import { useMachine, useSelector } from "@xstate/react";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Option } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
@@ -97,14 +103,46 @@ export function MealPlanForm({
   readonly onBack: () => void;
   readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {
-  const [snapshot, , actor] = useMachine(
-    MealPlanFormMachine.mealPlanFormMachine,
-    {
-      input: { initialPlan },
-    }
+  const machineAtom = useMemo(
+    () =>
+      AtomMachine.make(
+        MobileAtomRuntime,
+        MealPlanFormMachine.mealPlanFormMachine,
+        { initialPlan }
+      ),
+    [initialPlan]
   );
-  const { mealsActor, values } = snapshot.context;
-  const meals = useSelector(mealsActor, (snapshot) => snapshot.context.meals);
+  const mealsAtom = useMemo(
+    () => machineAtom.child(MealPlanFormMachine.MealPlanMealsChild),
+    [machineAtom]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const mealsStateResult = useAtomValue(mealsAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const sendMeals = useAtomSet(mealsAtom.send);
+  const editing =
+    AsyncResult.isInitial(stateResult) || AsyncResult.isFailure(stateResult)
+      ? null
+      : MealPlanFormMachine.MealPlanFormStates.get(
+          stateResult.value,
+          "Editing"
+        ).pipe(Option.getOrNull);
+  const mealsEditing =
+    AsyncResult.isInitial(mealsStateResult) ||
+    AsyncResult.isFailure(mealsStateResult) ||
+    Option.isNone(mealsStateResult.value)
+      ? null
+      : MealPlanFormMachine.MealPlanMealsStates.get(
+          mealsStateResult.value.value,
+          "Editing"
+        ).pipe(Option.getOrNull);
+
+  if (editing === null || mealsEditing === null) {
+    return <LoadingView message="Loading meal plan form" />;
+  }
+
+  const values = editing.values;
+  const meals = mealsEditing.meals;
   const isCreating = action === "create";
   const title = isCreating ? "Create plan" : "Edit plan";
   const submitText = isCreating ? "Create plan" : "Save revised plan";
@@ -124,7 +162,12 @@ export function MealPlanForm({
         editable={!isSubmitting}
         label="Name"
         onChangeText={(value) =>
-          actor.trigger.changeField({ name: "name", value })
+          send(
+            new MealPlanFormMachine.ChangeMealPlanField({
+              name: "name",
+              value,
+            })
+          )
         }
         placeholder="Training day"
         returnKeyType="next"
@@ -139,7 +182,12 @@ export function MealPlanForm({
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
-                actor.trigger.changeField({ name: field.name, value })
+                send(
+                  new MealPlanFormMachine.ChangeMealPlanField({
+                    name: field.name,
+                    value,
+                  })
+                )
               }
               value={values[field.name]}
             />
@@ -172,7 +220,12 @@ export function MealPlanForm({
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
-                actor.trigger.changeField({ name: field.name, value })
+                send(
+                  new MealPlanFormMachine.ChangeMealPlanField({
+                    name: field.name,
+                    value,
+                  })
+                )
               }
               value={values[field.name]}
             />
@@ -190,11 +243,12 @@ export function MealPlanForm({
                   autoCorrect={false}
                   editable={!isSubmitting}
                   onChangeText={(value) => {
-                    mealsActor.send({
-                      type: "changeMealName",
-                      index,
-                      value,
-                    });
+                    sendMeals(
+                      new MealPlanFormMachine.ChangeMealName({
+                        index,
+                        value,
+                      })
+                    );
                   }}
                   placeholder="Meal name"
                   returnKeyType="next"
@@ -205,10 +259,7 @@ export function MealPlanForm({
                   disabled={isSubmitting}
                   index={index}
                   onPress={() => {
-                    mealsActor.send({
-                      type: "removeMeal",
-                      index,
-                    });
+                    sendMeals(new MealPlanFormMachine.RemoveMeal({ index }));
                   }}
                 />
               </View>
@@ -219,9 +270,7 @@ export function MealPlanForm({
             disabled={isSubmitting}
             icon={Plus}
             onPress={() => {
-              mealsActor.send({
-                type: "addMeal",
-              });
+              sendMeals(new MealPlanFormMachine.AddMeal());
             }}
             variant="secondary"
           >

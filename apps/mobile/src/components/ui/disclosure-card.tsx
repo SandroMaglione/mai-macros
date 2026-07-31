@@ -1,10 +1,9 @@
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { useAtom } from "@effect/atom-react";
+import { Atom } from "effect/unstable/reactivity";
 import type { LucideIcon } from "lucide-react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -13,34 +12,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { setup } from "xstate";
-
-const disclosureCardMachine = setup({
-  schemas: {
-    events: {
-      toggle: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Collapsed: {},
-    Expanded: {},
-  },
-}).createMachine({
-  initial: "Collapsed",
-  states: {
-    Collapsed: {
-      on: {
-        toggle: { target: "Expanded" },
-      },
-    },
-    Expanded: {
-      on: {
-        toggle: { target: "Collapsed" },
-      },
-    },
-  },
-});
-
 export function DisclosureCard({
   children,
   icon: Icon,
@@ -52,8 +23,8 @@ export function DisclosureCard({
   readonly style?: StyleProp<ViewStyle>;
   readonly title: string;
 }) {
-  const [snapshot, , actor] = useMachine(disclosureCardMachine);
-  const isExpanded = snapshot.matches("Expanded");
+  const expandedAtom = useMemo(() => Atom.make(false), []);
+  const [isExpanded, setExpanded] = useAtom(expandedAtom);
   const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
 
   return (
@@ -62,7 +33,9 @@ export function DisclosureCard({
         accessibilityLabel={`${isExpanded ? "Hide" : "Show"} ${title.toLocaleLowerCase()}`}
         accessibilityRole="button"
         accessibilityState={{ expanded: isExpanded }}
-        onPress={actor.trigger.toggle}
+        onPress={() => {
+          setExpanded((expanded) => !expanded);
+        }}
         style={({ pressed }) => [
           styles.header,
           pressed ? styles.headerPressed : null,

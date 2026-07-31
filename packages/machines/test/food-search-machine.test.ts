@@ -1,13 +1,16 @@
 import { Domain } from "@mai/nutrition";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { assert, describe, it } from "vitest";
-import { createActor } from "xstate";
 
 import {
+  ChangeFoodSearchMacroOrder,
+  ChangeFoodSearchQuery,
+  FoodSearchStates,
   foodSearchMachine,
   getFoodNameGroupLabel,
   sortFoodsByOriginAndName,
 } from "../src/food-search-machine.ts";
+import { Machine } from "@typeonce/effect-machine";
 
 describe("food search name groups", () => {
   it("labels the newest same-name-and-brand food and sorts it first", async () => {
@@ -56,24 +59,28 @@ describe("food search base order", () => {
       id: "22222222-2222-4222-8222-222222222222",
       name: "Apple",
     });
-    const actor = createActor(foodSearchMachine, {
-      input: {
+    const initial = await Effect.runPromise(
+      Machine.planInitial(foodSearchMachine, {
         baseOrder: "provided",
         foods: [eggs, apple],
-      },
-    });
-
-    actor.start();
+      })
+    );
 
     assert.deepEqual(
-      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      _foodSearchState(initial.state).matchingFoods.map((food) => food.id),
       [eggs.id, apple.id]
     );
 
-    actor.send({ type: "changeQuery", query: "e" });
+    const changed = await Effect.runPromise(
+      Machine.plan(
+        foodSearchMachine,
+        initial.state,
+        new ChangeFoodSearchQuery({ query: "e" })
+      )
+    );
 
     assert.deepEqual(
-      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      _foodSearchState(changed.next).matchingFoods.map((food) => food.id),
       [eggs.id, apple.id]
     );
   });
@@ -89,19 +96,29 @@ describe("food search base order", () => {
       id: "22222222-2222-4222-8222-222222222222",
       name: "Apple",
     });
-    const actor = createActor(foodSearchMachine, {
-      input: {
+    const initial = await Effect.runPromise(
+      Machine.planInitial(foodSearchMachine, {
         baseOrder: "provided",
         foods: [eggs, apple],
-      },
-    });
-
-    actor.start();
-    actor.send({ type: "changeMacroOrder", macroOrder: "energy" });
-    actor.send({ type: "changeMacroOrder", macroOrder: null });
+      })
+    );
+    const ordered = await Effect.runPromise(
+      Machine.plan(
+        foodSearchMachine,
+        initial.state,
+        new ChangeFoodSearchMacroOrder({ macroOrder: "energy" })
+      )
+    );
+    const cleared = await Effect.runPromise(
+      Machine.plan(
+        foodSearchMachine,
+        ordered.next,
+        new ChangeFoodSearchMacroOrder({ macroOrder: null })
+      )
+    );
 
     assert.deepEqual(
-      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      _foodSearchState(cleared.next).matchingFoods.map((food) => food.id),
       [eggs.id, apple.id]
     );
   });
@@ -134,24 +151,42 @@ describe("food search price order", () => {
       id: "33333333-3333-4333-8333-333333333333",
       name: "Unpriced",
     });
-    const actor = createActor(foodSearchMachine, {
-      input: { foods: [unpriced, expensive, cheap] },
-    });
-
-    actor.start();
-    actor.send({ type: "changeMacroOrder", macroOrder: "priceLow" });
+    const initial = await Effect.runPromise(
+      Machine.planInitial(foodSearchMachine, {
+        foods: [unpriced, expensive, cheap],
+      })
+    );
+    const priceLow = await Effect.runPromise(
+      Machine.plan(
+        foodSearchMachine,
+        initial.state,
+        new ChangeFoodSearchMacroOrder({ macroOrder: "priceLow" })
+      )
+    );
     assert.deepEqual(
-      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      _foodSearchState(priceLow.next).matchingFoods.map((food) => food.id),
       [cheap.id, expensive.id, unpriced.id]
     );
 
-    actor.send({ type: "changeMacroOrder", macroOrder: "priceHigh" });
+    const priceHigh = await Effect.runPromise(
+      Machine.plan(
+        foodSearchMachine,
+        priceLow.next,
+        new ChangeFoodSearchMacroOrder({ macroOrder: "priceHigh" })
+      )
+    );
     assert.deepEqual(
-      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      _foodSearchState(priceHigh.next).matchingFoods.map((food) => food.id),
       [expensive.id, cheap.id, unpriced.id]
     );
   });
 });
+
+function _foodSearchState(
+  snapshot: Machine.Machine.Snapshot<typeof FoodSearchStates.states>
+) {
+  return Option.getOrThrow(FoodSearchStates.get(snapshot, "Ready"));
+}
 
 function _food({
   brand,

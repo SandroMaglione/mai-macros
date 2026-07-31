@@ -4,16 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./default-foods": "./src/default-foods.ts",
-    "./domain": "./src/domain.ts",
-    "./food-quick-input": "./src/food-quick-input.ts",
-    "./measurements": "./src/measurements.ts",
-    "./metadata": "./src/metadata.ts",
-    "./migrations": "./src/migrations/index.ts",
-    "./reporting": "./src/reporting.ts",
-    "./services/*": "./src/services/*.ts",
-    "./utils": "./src/utils.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "catalog:open-food-facts": "NODE_OPTIONS='--experimental-strip-types' node scripts/import-open-food-facts-catalogs.ts",
@@ -22,8 +13,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@mai/event-tracking": "workspace:^",
-    "effect": "4.0.0-beta.84"
+    "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
     "@types/node": "latest",

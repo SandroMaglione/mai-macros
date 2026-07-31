@@ -9,16 +9,18 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabs } from "@/components/ui/pager-tabs";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
 import { DailyLogs, Domain, MealPlans } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Effect, Match, Option, Schema } from "effect";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Effect, Option, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, Pencil } from "lucide-react-native";
+import { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const OpenedDay = Schema.TaggedStruct("OpenedDay", {
   dailyLog: Domain.DailyLog,
@@ -47,13 +49,8 @@ const PlansRouteData = Schema.Struct({
 
 type PlansRouteData = typeof PlansRouteData.Type;
 
-const PlansSource = Schema.Literal("settings");
-
-type PlansSource = typeof PlansSource.Type;
-
 const PlansSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
-  source: Schema.optionalKey(PlansSource),
 });
 
 const PlansTabIndex = Schema.Union([
@@ -81,21 +78,6 @@ const CreateMealPlanInput = Schema.Struct({
   saturatedFatTargetGrams: Schema.optionalKey(Schema.String),
 });
 
-const LoadPlansRouteDataResult = Schema.Union([
-  Schema.TaggedStruct("InvalidRoute", {}),
-  Schema.TaggedStruct("NoMealPlans", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("Ready", {
-    data: PlansRouteData,
-  }),
-]);
-
-const ChangePlanInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  planId: Domain.PlanId,
-});
-
 const SavePlanInput = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("create"),
@@ -112,518 +94,452 @@ const SavePlanInput = Schema.Union([
   }),
 ]);
 
-const SavePlanResult = Schema.Union([
-  Schema.TaggedStruct("Saved", {
+const PlansReadyData = {
+  activeTab: PlansTabIndex,
+  data: PlansRouteData,
+  editingPlan: Schema.NullOr(Domain.Plan),
+  notice: Schema.NullOr(Schema.String),
+} as const;
+
+class PlansRoute extends Schema.TaggedClass<PlansRoute>("PlansRoute")(
+  "PlansRoute",
+  { dateKey: Schema.UndefinedOr(Domain.DateKey) }
+) {}
+class PlansLoading extends Schema.TaggedClass<PlansLoading>("PlansLoading")(
+  "PlansLoading",
+  {}
+) {}
+class PlansReady extends Schema.TaggedClass<PlansReady>("PlansReady")(
+  "PlansReady",
+  PlansReadyData
+) {}
+class PlansChanging extends Schema.TaggedClass<PlansChanging>("PlansChanging")(
+  "PlansChanging",
+  { ...PlansReadyData, plan: Domain.Plan }
+) {}
+class PlansSaving extends Schema.TaggedClass<PlansSaving>("PlansSaving")(
+  "PlansSaving",
+  { ...PlansReadyData, save: SavePlanInput }
+) {}
+class PlansRedirecting extends Schema.TaggedClass<PlansRedirecting>(
+  "PlansRedirecting"
+)("PlansRedirecting", {}) {}
+
+class ChangePlan extends Schema.TaggedClass<ChangePlan>("ChangePlan")(
+  "ChangePlan",
+  { plan: Domain.Plan }
+) {}
+class ClearEditPlan extends Schema.TaggedClass<ClearEditPlan>("ClearEditPlan")(
+  "ClearEditPlan",
+  {}
+) {}
+class CreatePlan extends Schema.TaggedClass<CreatePlan>("CreatePlan")(
+  "CreatePlan",
+  { input: CreateMealPlanInput }
+) {}
+class RevisePlan extends Schema.TaggedClass<RevisePlan>("RevisePlan")(
+  "RevisePlan",
+  { input: CreateMealPlanInput, plan: Domain.Plan }
+) {}
+class SelectEditPlan extends Schema.TaggedClass<SelectEditPlan>(
+  "SelectEditPlan"
+)("SelectEditPlan", { plan: Domain.Plan }) {}
+class SelectPlansTab extends Schema.TaggedClass<SelectPlansTab>(
+  "SelectPlansTab"
+)("SelectPlansTab", { index: PlansTabIndex }) {}
+class PlansLoaded extends Schema.TaggedClass<PlansLoaded>("PlansLoaded")(
+  "PlansLoaded",
+  { data: PlansRouteData }
+) {}
+class PlansInvalidRoute extends Schema.TaggedClass<PlansInvalidRoute>(
+  "PlansInvalidRoute"
+)("PlansInvalidRoute", {}) {}
+class PlansMissing extends Schema.TaggedClass<PlansMissing>("PlansMissing")(
+  "PlansMissing",
+  { dateKey: Domain.DateKey }
+) {}
+class PlanChanged extends Schema.TaggedClass<PlanChanged>("PlanChanged")(
+  "PlanChanged",
+  { day: PlansDay }
+) {}
+class PlanChangeFailed extends Schema.TaggedClass<PlanChangeFailed>(
+  "PlanChangeFailed"
+)("PlanChangeFailed", {}) {}
+class PlanSaved extends Schema.TaggedClass<PlanSaved>("PlanSaved")(
+  "PlanSaved",
+  {
     day: PlansDay,
     editingPlan: Domain.Plan,
     notice: Schema.String,
-  }),
-  Schema.TaggedStruct("Failed", {
-    notice: Schema.String,
-  }),
-]);
+  }
+) {}
+class PlanSaveFailed extends Schema.TaggedClass<PlanSaveFailed>(
+  "PlanSaveFailed"
+)("PlanSaveFailed", { notice: Schema.String }) {}
 
-const plansRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        activeTab: PlansTabIndex,
-        data: Schema.NullOr(PlansRouteData),
-        dateKey: Schema.UndefinedOr(Domain.DateKey),
-        editingPlan: Schema.NullOr(Domain.Plan),
-        notice: Schema.NullOr(Schema.String),
-        redirectDateKey: Schema.NullOr(Domain.DateKey),
-        source: Schema.UndefinedOr(PlansSource),
-      })
-    ),
-    events: {
-      changePlan: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          plan: Domain.Plan,
-        })
-      ),
-      clearEditPlan: Schema.toStandardSchemaV1(EmptyEvent),
-      createPlan: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          input: CreateMealPlanInput,
-        })
-      ),
-      revisePlan: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          input: CreateMealPlanInput,
-          plan: Domain.Plan,
-        })
-      ),
-      selectEditPlan: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          plan: Domain.Plan,
-        })
-      ),
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: PlansTabIndex,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        dateKey: Schema.optionalKey(Domain.DateKey),
-        source: Schema.optionalKey(PlansSource),
-      })
-    ),
-  },
-  states: {
-    Loading: {},
-    Ready: {},
-    ChangingPlan: {},
-    SavingPlan: {},
-    InvalidRoute: {},
-    NoMealPlans: {},
-  },
-  actions: {
-    replaceHome: () => {
-      router.replace("/");
-    },
-    replaceToNewPlan: (params: {
-      readonly dateKey: Domain.DateKey;
-      readonly returnDateKey: Domain.DateKey | undefined;
-      readonly source: PlansSource | undefined;
-    }) => {
-      if (params.source === "settings") {
-        router.replace({
-          pathname: "/plans/new",
-          params:
-            params.returnDateKey === undefined
-              ? {
-                  dateKey: params.dateKey,
-                  source: params.source,
-                }
-              : {
-                  dateKey: params.dateKey,
-                  returnDateKey: params.returnDateKey,
-                  source: params.source,
-                },
-        });
-        return;
-      }
-
-      router.replace({
-        pathname: "/plans/new",
-        params: { dateKey: params.dateKey },
-      });
-    },
-  },
-  actorSources: {
-    changePlan: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ChangePlanInput),
-        output: Schema.toStandardSchemaV1(PlansDay),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-
-            return yield* dailyLogs.changePlan({
-              input: {
-                dateKey: input.dateKey,
-                planId: input.planId,
-              },
-            });
-          })
-        ),
-    }),
-    loadRouteData: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(Schema.UndefinedOr(Domain.DateKey)),
-        output: Schema.toStandardSchemaV1(LoadPlansRouteDataResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const targetDateKey =
-              input ??
-              (yield* Schema.decodeEffect(Domain.DateKey)(todayDateKey()));
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const day = yield* targetDateKey === todayDateKey()
-              ? dailyLogs.openOrCreate({
-                  input: {
-                    dateKey: targetDateKey,
-                  },
-                })
-              : dailyLogs.open({
-                  input: {
-                    dateKey: targetDateKey,
-                  },
-                });
-
-            return {
-              _tag: "Ready" as const,
-              data: {
-                dateKey: targetDateKey,
-                day,
-              },
-            };
-          }).pipe(
-            Effect.catchTag("NoMealPlans", ({ dateKey }) =>
-              Effect.succeed({
-                _tag: "NoMealPlans" as const,
-                dateKey,
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "InvalidRoute" as const,
-              })
-            )
-          )
-        ),
-    }),
-    savePlan: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SavePlanInput),
-        output: Schema.toStandardSchemaV1(SavePlanResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const mealPlans = yield* MealPlans.MealPlans;
-
-            if (input.action === "create") {
-              const created = yield* mealPlans.create({
-                input: input.input,
-              });
-
-              if (input.day._tag === "UnrecordedDay") {
-                const plans = yield* mealPlans.list();
-                const day = new DailyLogs.UnrecordedDay({
-                  dateKey: input.dateKey,
-                  plans,
-                  selectedPlan: created.plan,
-                });
-
-                return {
-                  _tag: "Saved" as const,
-                  day,
-                  editingPlan: created.plan,
-                  notice: "Plan created.",
-                };
-              }
-
-              const day = yield* dailyLogs.changePlan({
-                input: {
-                  dateKey: input.dateKey,
-                  planId: created.plan.id,
-                },
-              });
-
-              return {
-                _tag: "Saved" as const,
-                day,
-                editingPlan: created.plan,
-                notice: "Plan created.",
-              };
-            }
-
-            const revised = yield* mealPlans.revise({
-              input: {
-                ...input.input,
-                dateKey: input.dateKey,
-                planId: input.planId,
-              },
-            });
-
-            if (input.day._tag === "UnrecordedDay") {
-              const plans = yield* mealPlans.list();
-              const day = new DailyLogs.UnrecordedDay({
-                dateKey: input.dateKey,
-                plans,
-                selectedPlan: revised.plan,
-              });
-
-              return {
-                _tag: "Saved" as const,
-                day,
-                editingPlan: revised.plan,
-                notice: "Plan saved.",
-              };
-            }
-
-            const day = yield* dailyLogs.open({
-              input: {
-                dateKey: input.dateKey,
-              },
-            });
-
-            return {
-              _tag: "Saved" as const,
-              day,
-              editingPlan:
-                day._tag === "UnrecordedDay" ? revised.plan : day.selectedPlan,
-              notice: "Plan saved.",
-            };
-          }).pipe(
-            Effect.catchTag("PlanNameAlreadyExists", () =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                notice:
-                  "A plan with this name already exists. Choose a different name and try again.",
-              })
-            ),
-            Effect.catchTag("PlanMealNameAlreadyExists", () =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                notice:
-                  "Meal names must be unique inside a plan. Rename the duplicate meal and try again.",
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                notice:
-                  "Check that the plan name and meal names are filled, and every target is a non-negative number.",
-              })
-            ),
-            Effect.catchTag("PlanNotFound", () =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                notice: "This plan is no longer available.",
-              })
-            ),
-            Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failed" as const,
-                notice: "Could not save plan. Please try again.",
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    activeTab: 0,
-    data: null,
-    dateKey: input.dateKey,
-    editingPlan: null,
-    notice: null,
-    redirectDateKey: null,
-    source: input.source,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadRouteData",
-        input: ({ context }) => context.dateKey,
-        onDone: ({ event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              InvalidRoute: () => ({ target: "InvalidRoute" as const }),
-              NoMealPlans: ({ dateKey }) => ({
-                target: "NoMealPlans" as const,
-                context: {
-                  data: null,
-                  redirectDateKey: dateKey,
-                },
-              }),
-              Ready: ({ data }) => ({
-                target: "Ready" as const,
-                context: {
-                  data,
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "InvalidRoute",
-        },
-      },
-    },
-    Ready: {
-      on: {
-        changePlan: ({ context, event }) => {
-          if (context.data?.day._tag === "UnrecordedDay") {
-            return {
-              context: {
-                data: {
-                  ...context.data,
-                  day: new DailyLogs.UnrecordedDay({
-                    dateKey: context.data.day.dateKey,
-                    plans: context.data.day.plans,
-                    selectedPlan: event.plan,
-                  }),
-                },
-                notice: null,
-              },
-            };
-          }
-
-          return {
-            target: "ChangingPlan",
-            context: {
-              notice: null,
-            },
-          };
-        },
-        clearEditPlan: {
-          context: {
-            editingPlan: null,
-            notice: null,
-          },
-        },
-        createPlan: {
-          target: "SavingPlan",
-          context: {
-            notice: null,
-          },
-        },
-        revisePlan: {
-          target: "SavingPlan",
-          context: {
-            notice: null,
-          },
-        },
-        selectTab: ({ event }) => ({
-          context: {
-            activeTab: event.index,
-          },
-        }),
-        selectEditPlan: ({ event }) => ({
-          context: {
-            editingPlan: event.plan,
-            notice: null,
-          },
-        }),
-      },
-    },
-    ChangingPlan: {
-      invoke: {
-        src: "changePlan",
-        input: ({ context, event }) => {
-          if (context.data === null) {
-            throw new Error("Cannot change plans before the route loads.");
-          }
-
-          if (event.type !== "changePlan") {
-            throw new Error("Cannot change plans without a selected plan.");
-          }
-
-          return {
-            dateKey: context.data.dateKey,
-            planId: event.plan.id,
-          };
-        },
-        onDone: ({ context, event }) => ({
-          target: "Ready",
-          context:
-            context.data === null
-              ? {
-                  notice: "Plan changed.",
-                }
-              : {
-                  data: {
-                    ...context.data,
-                    day: event.output,
-                  },
-                  notice: "Plan changed.",
-                },
-        }),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: "Could not change plan. Please try again.",
-          },
-        },
-      },
-    },
-    SavingPlan: {
-      invoke: {
-        src: "savePlan",
-        input: ({ context, event }) => {
-          if (context.data === null) {
-            throw new Error("Cannot save plans before the route loads.");
-          }
-
-          if (event.type === "createPlan") {
-            return {
-              action: "create",
-              dateKey: context.data.dateKey,
-              day: context.data.day,
-              input: event.input,
-            };
-          }
-
-          if (event.type !== "revisePlan") {
-            throw new Error("Cannot save plans without a plan revision.");
-          }
-
-          return {
-            action: "revise",
-            dateKey: context.data.dateKey,
-            day: context.data.day,
-            input: event.input,
-            planId: event.plan.id,
-          };
-        },
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failed: ({ notice }) => ({
-                target: "Ready" as const,
-                context: {
-                  notice,
-                },
-              }),
-              Saved: ({ day, editingPlan, notice }) => ({
-                target: "Ready" as const,
-                context:
-                  context.data === null
-                    ? {
-                        editingPlan,
-                        notice,
-                      }
-                    : {
-                        data: {
-                          ...context.data,
-                          day,
-                        },
-                        editingPlan,
-                        notice,
-                      },
-              }),
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: {
-            notice: "Could not save plan. Please try again.",
-          },
-        },
-      },
-    },
-    InvalidRoute: {
-      entry: ({ actions }, enq) => {
-        enq(actions.replaceHome);
-      },
-    },
-    NoMealPlans: {
-      entry: ({ actions, context }, enq) => {
-        if (context.redirectDateKey === null) {
-          enq(actions.replaceHome);
-          return;
-        }
-
-        enq(actions.replaceToNewPlan, {
-          dateKey: context.redirectDateKey,
-          returnDateKey: context.dateKey,
-          source: context.source,
-        });
-      },
+const PlansStates = Machine.defineStates({
+  Route: {
+    schema: PlansRoute,
+    initial: "Loading",
+    states: {
+      Changing: PlansChanging,
+      Loading: PlansLoading,
+      Ready: PlansReady,
+      Redirecting: PlansRedirecting,
+      Saving: PlansSaving,
     },
   },
 });
+
+const plansRouteMachine = Machine.make({
+  states: PlansStates.states,
+  events: [
+    ChangePlan,
+    ClearEditPlan,
+    CreatePlan,
+    RevisePlan,
+    SelectEditPlan,
+    SelectPlansTab,
+    PlansLoaded,
+    PlansInvalidRoute,
+    PlansMissing,
+    PlanChanged,
+    PlanChangeFailed,
+    PlanSaved,
+    PlanSaveFailed,
+  ],
+  input: Schema.Struct({ dateKey: Schema.optionalKey(Domain.DateKey) }),
+  initial: ({ dateKey }) =>
+    PlansStates.initial.Route(new PlansRoute({ dateKey }), (route) =>
+      route.Loading(new PlansLoading())
+    ),
+}).handle({
+  Route: {
+    states: {
+      Loading: {
+        invoke: ({ parents }) =>
+          Machine.invoke({
+            id: "loadPlans",
+            src: () =>
+              Machine.effect(
+                Effect.gen(function* () {
+                  const targetDateKey =
+                    parents.Route.dateKey ??
+                    (yield* Schema.decodeEffect(Domain.DateKey)(
+                      todayDateKey()
+                    ));
+                  const dailyLogs = yield* DailyLogs.DailyLogs;
+                  const day = yield* targetDateKey === todayDateKey()
+                    ? dailyLogs.openOrCreate({
+                        input: { dateKey: targetDateKey },
+                      })
+                    : dailyLogs.open({ input: { dateKey: targetDateKey } });
+                  return new PlansLoaded({
+                    data: { dateKey: targetDateKey, day },
+                  });
+                }).pipe(
+                  Effect.catchTag("NoMealPlans", ({ dateKey }) =>
+                    Effect.succeed(new PlansMissing({ dateKey }))
+                  ),
+                  Effect.catch(() => Effect.succeed(new PlansInvalidRoute()))
+                )
+              ),
+          }),
+        on: {
+          PlansLoaded: ({ event, parents, target }) =>
+            target.full.Route(new PlansRoute({ ...parents.Route }), (route) =>
+              route.Ready(
+                new PlansReady({
+                  activeTab: 0,
+                  data: event.data,
+                  editingPlan: null,
+                  notice: null,
+                })
+              )
+            ),
+          PlansInvalidRoute: ({ parents, target }) =>
+            Machine.action(Effect.sync(() => router.replace("/"))).pipe(
+              Effect.as(
+                target.full.Route(
+                  new PlansRoute({ ...parents.Route }),
+                  (route) => route.Redirecting(new PlansRedirecting())
+                )
+              )
+            ),
+          PlansMissing: ({ event, parents, target }) =>
+            Machine.action(
+              Effect.sync(() => {
+                router.replace({
+                  pathname: "/plans/new",
+                  params: { dateKey: event.dateKey },
+                });
+              })
+            ).pipe(
+              Effect.as(
+                target.full.Route(
+                  new PlansRoute({ ...parents.Route }),
+                  (route) => route.Redirecting(new PlansRedirecting())
+                )
+              )
+            ),
+        },
+      },
+      Ready: {
+        on: {
+          ChangePlan: ({ event, state, target }) => {
+            if (state.data.day._tag === "UnrecordedDay") {
+              return target.local.Ready(
+                new PlansReady({
+                  ...state,
+                  data: {
+                    ...state.data,
+                    day: new DailyLogs.UnrecordedDay({
+                      dateKey: state.data.day.dateKey,
+                      plans: state.data.day.plans,
+                      selectedPlan: event.plan,
+                    }),
+                  },
+                  notice: null,
+                })
+              );
+            }
+
+            return target.local.Changing(
+              new PlansChanging({
+                ...state,
+                _tag: undefined,
+                notice: null,
+                plan: event.plan,
+              })
+            );
+          },
+          ClearEditPlan: ({ state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                ...state,
+                editingPlan: null,
+                notice: null,
+              })
+            ),
+          CreatePlan: ({ event, state, target }) =>
+            target.local.Saving(
+              new PlansSaving({
+                ...state,
+                _tag: undefined,
+                notice: null,
+                save: {
+                  action: "create",
+                  dateKey: state.data.dateKey,
+                  day: state.data.day,
+                  input: event.input,
+                },
+              })
+            ),
+          RevisePlan: ({ event, state, target }) =>
+            target.local.Saving(
+              new PlansSaving({
+                ...state,
+                _tag: undefined,
+                notice: null,
+                save: {
+                  action: "revise",
+                  dateKey: state.data.dateKey,
+                  day: state.data.day,
+                  input: event.input,
+                  planId: event.plan.id,
+                },
+              })
+            ),
+          SelectPlansTab: ({ event, state, target }) =>
+            target.local.Ready(
+              new PlansReady({ ...state, activeTab: event.index })
+            ),
+          SelectEditPlan: ({ event, state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                ...state,
+                editingPlan: event.plan,
+                notice: null,
+              })
+            ),
+        },
+      },
+      Changing: {
+        invoke: ({ state }) =>
+          Machine.invoke({
+            id: "changePlan",
+            src: () =>
+              Machine.effect(
+                Effect.gen(function* () {
+                  const dailyLogs = yield* DailyLogs.DailyLogs;
+                  const day = yield* dailyLogs.changePlan({
+                    input: {
+                      dateKey: state.data.dateKey,
+                      planId: state.plan.id,
+                    },
+                  });
+                  return new PlanChanged({ day });
+                }).pipe(
+                  Effect.catch(() => Effect.succeed(new PlanChangeFailed()))
+                )
+              ),
+          }),
+        on: {
+          PlanChanged: ({ event, state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                activeTab: state.activeTab,
+                data: { ...state.data, day: event.day },
+                editingPlan: state.editingPlan,
+                notice: "Plan changed.",
+              })
+            ),
+          PlanChangeFailed: ({ state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                activeTab: state.activeTab,
+                data: state.data,
+                editingPlan: state.editingPlan,
+                notice: "Could not change plan. Please try again.",
+              })
+            ),
+        },
+      },
+      Saving: {
+        invoke: ({ state }) =>
+          Machine.invoke({
+            id: "savePlan",
+            src: () => Machine.effect(planOperations.save(state.save)),
+          }),
+        on: {
+          PlanSaved: ({ event, state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                activeTab: state.activeTab,
+                data: { ...state.data, day: event.day },
+                editingPlan: event.editingPlan,
+                notice: event.notice,
+              })
+            ),
+          PlanSaveFailed: ({ event, state, target }) =>
+            target.local.Ready(
+              new PlansReady({
+                activeTab: state.activeTab,
+                data: state.data,
+                editingPlan: state.editingPlan,
+                notice: event.notice,
+              })
+            ),
+        },
+      },
+      Redirecting: {},
+    },
+  },
+});
+
+const planOperations = {
+  save: (input: typeof SavePlanInput.Type) =>
+    Effect.gen(function* () {
+      const dailyLogs = yield* DailyLogs.DailyLogs;
+      const mealPlans = yield* MealPlans.MealPlans;
+
+      if (input.action === "create") {
+        const created = yield* mealPlans.create({ input: input.input });
+
+        if (input.day._tag === "UnrecordedDay") {
+          const plans = yield* mealPlans.list();
+          return new PlanSaved({
+            day: new DailyLogs.UnrecordedDay({
+              dateKey: input.dateKey,
+              plans,
+              selectedPlan: created.plan,
+            }),
+            editingPlan: created.plan,
+            notice: "Plan created.",
+          });
+        }
+
+        const day = yield* dailyLogs.changePlan({
+          input: { dateKey: input.dateKey, planId: created.plan.id },
+        });
+        return new PlanSaved({
+          day,
+          editingPlan: created.plan,
+          notice: "Plan created.",
+        });
+      }
+
+      const revised = yield* mealPlans.revise({
+        input: {
+          ...input.input,
+          dateKey: input.dateKey,
+          planId: input.planId,
+        },
+      });
+
+      if (input.day._tag === "UnrecordedDay") {
+        const plans = yield* mealPlans.list();
+        return new PlanSaved({
+          day: new DailyLogs.UnrecordedDay({
+            dateKey: input.dateKey,
+            plans,
+            selectedPlan: revised.plan,
+          }),
+          editingPlan: revised.plan,
+          notice: "Plan saved.",
+        });
+      }
+
+      const day = yield* dailyLogs.open({
+        input: { dateKey: input.dateKey },
+      });
+      return new PlanSaved({
+        day,
+        editingPlan:
+          day._tag === "UnrecordedDay" ? revised.plan : day.selectedPlan,
+        notice: "Plan saved.",
+      });
+    }).pipe(
+      Effect.catchTag("PlanNameAlreadyExists", () =>
+        Effect.succeed(
+          new PlanSaveFailed({
+            notice:
+              "A plan with this name already exists. Choose a different name and try again.",
+          })
+        )
+      ),
+      Effect.catchTag("PlanMealNameAlreadyExists", () =>
+        Effect.succeed(
+          new PlanSaveFailed({
+            notice:
+              "Meal names must be unique inside a plan. Rename the duplicate meal and try again.",
+          })
+        )
+      ),
+      Effect.catchTag("SchemaError", () =>
+        Effect.succeed(
+          new PlanSaveFailed({
+            notice:
+              "Check that the plan name and meal names are filled, and every target is a non-negative number.",
+          })
+        )
+      ),
+      Effect.catchTag("PlanNotFound", () =>
+        Effect.succeed(
+          new PlanSaveFailed({
+            notice: "This plan is no longer available.",
+          })
+        )
+      ),
+      Effect.catch(() =>
+        Effect.succeed(
+          new PlanSaveFailed({
+            notice: "Could not save plan. Please try again.",
+          })
+        )
+      )
+    ),
+} as const;
 
 export default function PlansScreen() {
   const search = useSchemaLocalSearchParams(PlansSearchParams);
@@ -632,17 +548,24 @@ export default function PlansScreen() {
     return <Redirect href="/" />;
   }
 
-  const [snapshot, , actor] = useMachine(plansRouteMachine, {
-    input: {
-      dateKey: search.value.dateKey,
-      source: search.value.source,
-    },
-  });
+  return <DecodedPlansScreen dateKey={search.value.dateKey} />;
+}
+
+function DecodedPlansScreen({
+  dateKey,
+}: {
+  readonly dateKey: Domain.DateKey | undefined;
+}) {
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, plansRouteMachine, { dateKey }),
+    [dateKey]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
   if (
-    snapshot.value === "Loading" ||
-    snapshot.value === "InvalidRoute" ||
-    snapshot.value === "NoMealPlans"
+    AsyncResult.isInitial(stateResult) ||
+    AsyncResult.isFailure(stateResult)
   ) {
     return (
       <AppScreen contentStyle={styles.centered}>
@@ -651,7 +574,14 @@ export default function PlansScreen() {
     );
   }
 
-  if (snapshot.context.data === null) {
+  const state = stateResult.value;
+  const current = Option.firstSomeOf([
+    PlansStates.get(state, "Route.Ready"),
+    PlansStates.get(state, "Route.Changing"),
+    PlansStates.get(state, "Route.Saving"),
+  ]).pipe(Option.getOrNull);
+
+  if (current === null) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading plans" />
@@ -661,34 +591,35 @@ export default function PlansScreen() {
 
   return (
     <ReadyPlansScreen
-      activeTab={snapshot.context.activeTab}
-      data={snapshot.context.data}
+      activeTab={current.activeTab}
+      data={current.data}
       disabled={
-        snapshot.value === "ChangingPlan" || snapshot.value === "SavingPlan"
+        PlansStates.matches(state, "Route.Changing") ||
+        PlansStates.matches(state, "Route.Saving")
       }
-      editingPlan={snapshot.context.editingPlan}
-      notice={snapshot.context.notice}
-      returnDateKey={search.value.dateKey}
-      source={search.value.source}
+      editingPlan={current.editingPlan}
+      notice={current.notice}
       onChangePlan={(plan) => {
-        actor.trigger.changePlan({ plan });
+        send(new ChangePlan({ plan }));
       }}
       onClearEditPlan={() => {
-        actor.trigger.clearEditPlan();
+        send(new ClearEditPlan());
       }}
       onCreatePlan={(input) => {
-        actor.trigger.createPlan({ input });
+        send(new CreatePlan({ input }));
       }}
       onRevisePlan={(plan, input) => {
-        actor.trigger.revisePlan({ input, plan });
+        send(new RevisePlan({ input, plan }));
       }}
       onSelectEditPlan={(plan) => {
-        actor.trigger.selectEditPlan({ plan });
+        send(new SelectEditPlan({ plan }));
       }}
       onSelectTab={(index) => {
-        actor.trigger.selectTab({
-          index: index === 0 ? 0 : index === 1 ? 1 : 2,
-        });
+        send(
+          new SelectPlansTab({
+            index: index === 0 ? 0 : index === 1 ? 1 : 2,
+          })
+        );
       }}
     />
   );
@@ -700,8 +631,6 @@ function ReadyPlansScreen({
   disabled,
   editingPlan,
   notice,
-  returnDateKey,
-  source,
   onChangePlan,
   onClearEditPlan,
   onCreatePlan,
@@ -714,8 +643,6 @@ function ReadyPlansScreen({
   readonly disabled: boolean;
   readonly editingPlan: Domain.Plan | null;
   readonly notice: string | null;
-  readonly returnDateKey: Domain.DateKey | undefined;
-  readonly source: PlansSource | undefined;
   readonly onChangePlan: (plan: Domain.Plan) => void;
   readonly onClearEditPlan: () => void;
   readonly onCreatePlan: (input: MealPlans.CreateMealPlanInput) => void;
@@ -755,31 +682,9 @@ function ReadyPlansScreen({
           embedded
           leading={
             <IconButton
-              accessibilityLabel={
-                source === "settings" ? "Back to settings" : "Back to day"
-              }
+              accessibilityLabel="Back to day"
               icon={ChevronLeft}
               onPress={() => {
-                if (router.canGoBack()) {
-                  router.back();
-                  return;
-                }
-
-                if (source === "settings") {
-                  if (returnDateKey === undefined) {
-                    router.replace("/settings");
-                    return;
-                  }
-
-                  router.replace({
-                    pathname: "/settings",
-                    params: {
-                      dateKey: returnDateKey,
-                    },
-                  });
-                  return;
-                }
-
                 router.replace({
                   pathname: "/days/[dateKey]",
                   params: {

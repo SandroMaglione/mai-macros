@@ -5,7 +5,7 @@ const rule = {
     type: "problem",
     docs: {
       description:
-        "Disallow React state hooks. Use xstate actors for state and side effects instead.",
+        "Disallow React state hooks. Use Effect atoms or machines for state and side effects instead.",
     },
   },
   create(context: {
@@ -31,7 +31,7 @@ const rule = {
         if (hookName !== undefined && bannedHooks.has(hookName)) {
           context.report({
             node: callee,
-            message: `${hookName} is banned. Use xstate actors instead.`,
+            message: `${hookName} is banned. Use Effect atoms or machines instead.`,
           });
         }
       },

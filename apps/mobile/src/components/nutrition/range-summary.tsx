@@ -1,9 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { EmptyEvent } from "@mai/machines/schemas";
-import * as Reporting from "@mai/nutrition/reporting";
-import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
-import { useMachine } from "@xstate/react";
-import { Array, Schema } from "effect";
+import { NutritionReports, Reporting } from "@mai/nutrition";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Array } from "effect";
+import { Atom } from "effect/unstable/reactivity";
 import type { LucideIcon } from "lucide-react-native";
 import {
   ChevronDown,
@@ -12,9 +11,8 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react-native";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { setup } from "xstate";
 
 import {
   formatCurrencyMinor,
@@ -38,10 +36,6 @@ type FoodContributor = {
   readonly name: string;
   readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
-};
-
-type MutableFoodContributor = {
-  -readonly [Key in keyof FoodContributor]: FoodContributor[Key];
 };
 
 const trackedNutrients = [
@@ -110,37 +104,6 @@ const targetTrendIndicators = {
     readonly icon: LucideIcon;
   }
 >;
-
-const summaryInsightsVisibilityMachine = setup({
-  schemas: {
-    events: {
-      collapse: Schema.toStandardSchemaV1(EmptyEvent),
-      expand: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Collapsed: {},
-    Expanded: {},
-  },
-}).createMachine({
-  initial: "Collapsed",
-  states: {
-    Collapsed: {
-      on: {
-        expand: {
-          target: "Expanded",
-        },
-      },
-    },
-    Expanded: {
-      on: {
-        collapse: {
-          target: "Collapsed",
-        },
-      },
-    },
-  },
-});
 
 export function RangeSummary({
   rangeDayCount,
@@ -237,48 +200,56 @@ export function RangeSummary({
       sugarGrams: null,
     }
   );
-  const foodContributorsById: Record<string, MutableFoodContributor> = {};
+  const foodContributors = Object.values(
+    entries.reduce<Record<string, FoodContributor>>((contributors, entry) => {
+      const current =
+        contributors[entry.food.id] ??
+        ({
+          foodId: entry.food.id,
+          costMinor: 0,
+          name: entry.food.name,
+          quantityGrams: 0,
+          totals: Reporting.emptyNutrientTotals(),
+        } satisfies FoodContributor);
 
-  for (const entry of entries) {
-    const current =
-      foodContributorsById[entry.food.id] ??
-      ({
-        foodId: entry.food.id,
-        costMinor: 0,
-        name: entry.food.name,
-        quantityGrams: 0,
-        totals: Reporting.emptyNutrientTotals(),
-      } satisfies MutableFoodContributor);
-    foodContributorsById[entry.food.id] = current;
-    current.costMinor +=
-      entry.cost?.currency === "EUR" ? entry.cost.costMinor : 0;
-    current.quantityGrams +=
-      mealEntryMassGrams({
-        food: entry.food,
-        mealEntry: entry.mealEntry,
-      }) ?? 0;
-    current.totals = Reporting.addNutrientTotals({
-      left: current.totals,
-      right: {
-        carbsGrams: entry.nutrients.carbsGrams,
-        energyKcal: entry.nutrients.energyKcal,
-        fatGrams: entry.nutrients.fatGrams,
-        fiberGrams: entry.nutrients.fiberGrams ?? 0,
-        proteinGrams: entry.nutrients.proteinGrams,
-        saltGrams: entry.nutrients.saltGrams ?? 0,
-        saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
-        sugarGrams: entry.nutrients.sugarGrams ?? 0,
-      },
-    });
-  }
-
-  const foodContributors: readonly FoodContributor[] =
-    Object.values(foodContributorsById);
+      return {
+        ...contributors,
+        [entry.food.id]: {
+          ...current,
+          costMinor:
+            current.costMinor +
+            (entry.cost?.currency === "EUR" ? entry.cost.costMinor : 0),
+          quantityGrams:
+            current.quantityGrams +
+            (mealEntryMassGrams({
+              food: entry.food,
+              mealEntry: entry.mealEntry,
+            }) ?? 0),
+          totals: Reporting.addNutrientTotals({
+            left: current.totals,
+            right: {
+              carbsGrams: entry.nutrients.carbsGrams,
+              energyKcal: entry.nutrients.energyKcal,
+              fatGrams: entry.nutrients.fatGrams,
+              fiberGrams: entry.nutrients.fiberGrams ?? 0,
+              proteinGrams: entry.nutrients.proteinGrams,
+              saltGrams: entry.nutrients.saltGrams ?? 0,
+              saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
+              sugarGrams: entry.nutrients.sugarGrams ?? 0,
+            },
+          }),
+        },
+      };
+    }, {})
+  );
+  const defaultInsights = getNutritionReportInsights({
+    limit: summaryInsightLimit,
+    report,
+  });
   const allInsights = getNutritionReportInsights({
     limit: Number.MAX_SAFE_INTEGER,
     report,
   });
-  const defaultInsights = allInsights.slice(0, summaryInsightLimit);
 
   return (
     <View style={styles.root}>
@@ -396,8 +367,9 @@ function SummaryInsights({
   readonly allInsights: readonly NutritionReportInsight[];
   readonly insights: readonly NutritionReportInsight[];
 }) {
-  const [snapshot, , actor] = useMachine(summaryInsightsVisibilityMachine);
-  const isExpanded = snapshot.value === "Expanded";
+  const expandedAtom = useMemo(() => Atom.make(false), []);
+  const isExpanded = useAtomValue(expandedAtom);
+  const setExpanded = useAtomSet(expandedAtom);
   const visibleInsights = isExpanded ? allInsights : insights;
   const canToggle = allInsights.length > insights.length;
   const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
@@ -440,12 +412,7 @@ function SummaryInsights({
         <Button
           icon={ToggleIcon}
           onPress={() => {
-            if (isExpanded) {
-              actor.trigger.collapse();
-              return;
-            }
-
-            actor.trigger.expand();
+            setExpanded((expanded) => !expanded);
           }}
           style={styles.summaryToggle}
           variant="ghost"

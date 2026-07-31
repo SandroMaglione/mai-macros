@@ -7,14 +7,17 @@ import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { RuntimeClient } from "@/lib/runtime-client";
 import { describeFoodChanges } from "@/lib/food-change-summary";
 import { formatShortDate } from "@/lib/format";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent, FoodFormMachine } from "@mai/machines";
+import { FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Predicate, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
 import {
   CircleCheck,
@@ -28,364 +31,547 @@ import {
   ShieldAlert,
 } from "lucide-react-native";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ReactNode } from "react";
-import { Actor, createAsyncLogic, setup } from "xstate";
-
-const FoodFormInput = Schema.Struct({
-  name: Schema.String,
-  brand: Schema.optionalKey(Schema.String),
-  energyKcal: Schema.String,
-  proteinGrams: Schema.String,
-  carbsGrams: Schema.String,
-  fatGrams: Schema.String,
-  fiberGrams: Schema.optionalKey(Schema.String),
-  sugarGrams: Schema.optionalKey(Schema.String),
-  saturatedFatGrams: Schema.optionalKey(Schema.String),
-  saltGrams: Schema.optionalKey(Schema.String),
-  nutritionReference: Schema.Struct({
-    amount: Schema.String,
-    unit: Domain.MeasurementUnit,
-  }),
-  portions: Schema.Array(
-    Schema.Struct({
-      id: Schema.optionalKey(Domain.FoodPortionId),
-      name: Schema.String,
-      size: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MeasurementUnit,
-      }),
-    })
-  ),
-  massVolumeConversion: Schema.optionalKey(
-    Schema.Struct({
-      mass: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MassUnit,
-      }),
-      volume: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.VolumeUnit,
-      }),
-    })
-  ),
-});
+import { useMemo, type ReactNode } from "react";
 
 const FoodEditorRouteParams = Schema.Struct({
   id: Domain.FoodId,
   dateKey: Schema.optionalKey(Domain.DateKey),
 });
 
-const FoodFormActorSchema = Schema.declare<FoodFormMachine.FoodFormActorRef>(
-  (value): value is FoodFormMachine.FoodFormActorRef =>
-    value instanceof Actor && value.logic === FoodFormMachine.foodFormMachine,
-  { expected: "FoodFormActor" }
+const CreateFoodInput = Schema.declare<Foods.CreateFoodInput>(
+  (value): value is Foods.CreateFoodInput => Predicate.isObject(value),
+  { expected: "Foods.CreateFoodInput" }
 );
 
-const FoodEditorLoadOutput = Schema.Struct({
+class FoodEditorRouteState extends Schema.TaggedClass<FoodEditorRouteState>(
+  "FoodEditorRouteState"
+)("FoodEditorRouteState", { foodId: Domain.FoodId }) {}
+class FoodEditorLoading extends Schema.TaggedClass<FoodEditorLoading>(
+  "FoodEditorLoading"
+)("FoodEditorLoading", {}) {}
+class FoodEditorLoadFailed extends Schema.TaggedClass<FoodEditorLoadFailed>(
+  "FoodEditorLoadFailed"
+)("FoodEditorLoadFailed", { message: Schema.String }) {}
+class FoodEditorReady extends Schema.TaggedClass<FoodEditorReady>(
+  "FoodEditorReady"
+)("FoodEditorReady", {
   food: Domain.Food,
   foods: Schema.Array(Domain.Food),
   usage: Foods.FoodEditUsage,
-});
-
-const FoodEditorContext = Schema.Struct({
-  draft: Schema.NullOr(FoodFormInput),
-  food: Schema.NullOr(Domain.Food),
-  foods: Schema.Array(Domain.Food),
-  foodFormActor: FoodFormActorSchema,
-  foodId: Domain.FoodId,
+}) {}
+class FoodEditorChoosingAction extends Schema.TaggedClass<FoodEditorChoosingAction>(
+  "FoodEditorChoosingAction"
+)("FoodEditorChoosingAction", {}) {}
+class FoodEditorCopy extends Schema.TaggedClass<FoodEditorCopy>(
+  "FoodEditorCopy"
+)("FoodEditorCopy", {
+  draft: Schema.NullOr(CreateFoodInput),
   message: Schema.NullOr(Schema.String),
-  usage: Schema.NullOr(Foods.FoodEditUsage),
+}) {}
+class FoodEditorCopyForm extends Schema.TaggedClass<FoodEditorCopyForm>(
+  "FoodEditorCopyForm"
+)("FoodEditorCopyForm", {}) {}
+class FoodEditorReviewingCopy extends Schema.TaggedClass<FoodEditorReviewingCopy>(
+  "FoodEditorReviewingCopy"
+)("FoodEditorReviewingCopy", {}) {}
+class FoodEditorCopying extends Schema.TaggedClass<FoodEditorCopying>(
+  "FoodEditorCopying"
+)("FoodEditorCopying", {}) {}
+class FoodEditorEdit extends Schema.TaggedClass<FoodEditorEdit>(
+  "FoodEditorEdit"
+)("FoodEditorEdit", {
+  draft: Schema.NullOr(CreateFoodInput),
+  message: Schema.NullOr(Schema.String),
+}) {}
+class FoodEditorEditWarning extends Schema.TaggedClass<FoodEditorEditWarning>(
+  "FoodEditorEditWarning"
+)("FoodEditorEditWarning", {}) {}
+class FoodEditorEditForm extends Schema.TaggedClass<FoodEditorEditForm>(
+  "FoodEditorEditForm"
+)("FoodEditorEditForm", {}) {}
+class FoodEditorPreviewingEdit extends Schema.TaggedClass<FoodEditorPreviewingEdit>(
+  "FoodEditorPreviewingEdit"
+)("FoodEditorPreviewingEdit", {}) {}
+class FoodEditorReviewingEdit extends Schema.TaggedClass<FoodEditorReviewingEdit>(
+  "FoodEditorReviewingEdit"
+)("FoodEditorReviewingEdit", {}) {}
+class FoodEditorEditing extends Schema.TaggedClass<FoodEditorEditing>(
+  "FoodEditorEditing"
+)("FoodEditorEditing", {}) {}
+class FoodEditorCompleted extends Schema.TaggedClass<FoodEditorCompleted>(
+  "FoodEditorCompleted"
+)("FoodEditorCompleted", {
+  food: Domain.Food,
+  message: Schema.String,
+}) {}
+
+class RetryFoodEditor extends Schema.TaggedClass<RetryFoodEditor>(
+  "RetryFoodEditor"
+)("RetryFoodEditor", {}) {}
+class ChooseFoodCopy extends Schema.TaggedClass<ChooseFoodCopy>(
+  "ChooseFoodCopy"
+)("ChooseFoodCopy", {}) {}
+class ChooseFoodEdit extends Schema.TaggedClass<ChooseFoodEdit>(
+  "ChooseFoodEdit"
+)("ChooseFoodEdit", {}) {}
+class AcknowledgeFoodEdit extends Schema.TaggedClass<AcknowledgeFoodEdit>(
+  "AcknowledgeFoodEdit"
+)("AcknowledgeFoodEdit", {}) {}
+class BackToFoodChoice extends Schema.TaggedClass<BackToFoodChoice>(
+  "BackToFoodChoice"
+)("BackToFoodChoice", {}) {}
+class BackToFoodForm extends Schema.TaggedClass<BackToFoodForm>(
+  "BackToFoodForm"
+)("BackToFoodForm", {}) {}
+class ApplyFoodCopy extends Schema.TaggedClass<ApplyFoodCopy>("ApplyFoodCopy")(
+  "ApplyFoodCopy",
+  {}
+) {}
+class ConfirmFoodEdit extends Schema.TaggedClass<ConfirmFoodEdit>(
+  "ConfirmFoodEdit"
+)("ConfirmFoodEdit", {}) {}
+class FoodEditorLoaded extends Schema.TaggedClass<FoodEditorLoaded>(
+  "FoodEditorLoaded"
+)("FoodEditorLoaded", {
+  food: Domain.Food,
+  foods: Schema.Array(Domain.Food),
+  usage: Foods.FoodEditUsage,
+}) {}
+class FoodEditorLoadingFailed extends Schema.TaggedClass<FoodEditorLoadingFailed>(
+  "FoodEditorLoadingFailed"
+)("FoodEditorLoadingFailed", {}) {}
+class FoodEditPreviewed extends Schema.TaggedClass<FoodEditPreviewed>(
+  "FoodEditPreviewed"
+)("FoodEditPreviewed", {}) {}
+class FoodCopied extends Schema.TaggedClass<FoodCopied>("FoodCopied")(
+  "FoodCopied",
+  { food: Domain.Food }
+) {}
+class FoodEdited extends Schema.TaggedClass<FoodEdited>("FoodEdited")(
+  "FoodEdited",
+  {
+    food: Domain.Food,
+    revisedMealEntryCount: Schema.Number,
+  }
+) {}
+class FoodMutationFailed extends Schema.TaggedClass<FoodMutationFailed>(
+  "FoodMutationFailed"
+)("FoodMutationFailed", { message: Schema.String }) {}
+
+const FoodEditorStates = Machine.defineStates({
+  Route: {
+    schema: FoodEditorRouteState,
+    initial: "Loading",
+    states: {
+      Loading: FoodEditorLoading,
+      LoadFailed: FoodEditorLoadFailed,
+      Ready: {
+        schema: FoodEditorReady,
+        initial: "ChoosingAction",
+        states: {
+          ChoosingAction: FoodEditorChoosingAction,
+          Copy: {
+            schema: FoodEditorCopy,
+            initial: "Form",
+            states: {
+              Form: FoodEditorCopyForm,
+              Reviewing: FoodEditorReviewingCopy,
+              Saving: FoodEditorCopying,
+            },
+          },
+          Edit: {
+            schema: FoodEditorEdit,
+            initial: "Warning",
+            states: {
+              Warning: FoodEditorEditWarning,
+              Form: FoodEditorEditForm,
+              Previewing: FoodEditorPreviewingEdit,
+              Reviewing: FoodEditorReviewingEdit,
+              Saving: FoodEditorEditing,
+            },
+          },
+          Completed: FoodEditorCompleted,
+        },
+      },
+    },
+  },
 });
 
-const SubmitFoodInput = Schema.Struct({ input: FoodFormInput });
-
-const foodEditorMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(FoodEditorContext),
-    events: {
-      acknowledgeEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      apply: Schema.toStandardSchemaV1(EmptyEvent),
-      backToChoice: Schema.toStandardSchemaV1(EmptyEvent),
-      backToForm: Schema.toStandardSchemaV1(EmptyEvent),
-      chooseCopy: Schema.toStandardSchemaV1(EmptyEvent),
-      chooseEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      confirmEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(SubmitFoodInput),
-    },
-    input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
-  },
-  actorSources: {
-    foodForm: FoodFormMachine.foodFormMachine,
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(FoodEditorLoadOutput),
+const foodEditorMachine = Machine.make({
+  id: "foodEditor",
+  states: FoodEditorStates.states,
+  events: [
+    RetryFoodEditor,
+    ChooseFoodCopy,
+    ChooseFoodEdit,
+    AcknowledgeFoodEdit,
+    BackToFoodChoice,
+    BackToFoodForm,
+    ApplyFoodCopy,
+    ConfirmFoodEdit,
+    FoodEditorLoaded,
+    FoodEditorLoadingFailed,
+    FoodEditPreviewed,
+    FoodCopied,
+    FoodEdited,
+    FoodMutationFailed,
+    ...FoodFormMachine.foodFormMachine.emits,
+  ],
+  input: Schema.Struct({ foodId: Domain.FoodId }),
+  initial: ({ foodId }) =>
+    FoodEditorStates.initial.Route(
+      new FoodEditorRouteState({ foodId }),
+      (route) => route.Loading(new FoodEditorLoading())
+    ),
+}).handle({
+  Route: {
+    states: {
+      Loading: {
+        invoke: ({ parents }) =>
+          Machine.invoke({
+            id: "loadFoodEditor",
+            src: () =>
+              Machine.effect(
+                Effect.gen(function* () {
+                  const foods = yield* Foods.Foods;
+                  const input = { foodId: parents.Route.foodId };
+                  const food = yield* foods.get({ input });
+                  return new FoodEditorLoaded({
+                    food,
+                    foods: [...(yield* foods.list())],
+                    usage: yield* foods.inspectEdit({ input }),
+                  });
+                }).pipe(
+                  Effect.catch(() =>
+                    Effect.succeed(new FoodEditorLoadingFailed())
+                  )
+                )
+              ),
+          }),
+        on: {
+          FoodEditorLoaded: ({ event, parents, target }) =>
+            target.full.Route(
+              new FoodEditorRouteState({ ...parents.Route }),
+              (route) =>
+                route.Ready(
+                  new FoodEditorReady({
+                    food: event.food,
+                    foods: event.foods,
+                    usage: event.usage,
+                  }),
+                  (ready) =>
+                    ready.ChoosingAction(new FoodEditorChoosingAction())
+                )
+            ),
+          FoodEditorLoadingFailed: ({ parents, target }) =>
+            target.full.Route(
+              new FoodEditorRouteState({ ...parents.Route }),
+              (route) =>
+                route.LoadFailed(
+                  new FoodEditorLoadFailed({
+                    message: "Could not load this food.",
+                  })
+                )
+            ),
+        },
       },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const food = yield* foods.get({ input });
-
-            return {
-              food,
-              foods: [...(yield* foods.list())],
-              usage: yield* foods.inspectEdit({ input }),
-            };
-          })
-        ),
-    }),
-    previewEdit: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            draft: FoodFormInput,
-            foodId: Domain.FoodId,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(Foods.FoodEditPreview),
+      LoadFailed: {
+        on: {
+          RetryFoodEditor: ({ parents, target }) =>
+            target.full.Route(
+              new FoodEditorRouteState({ ...parents.Route }),
+              (route) => route.Loading(new FoodEditorLoading())
+            ),
+        },
       },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return yield* foods.previewFoodDetailsEdit({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                foodId: input.foodId,
+      Ready: {
+        invoke: ({ state }) =>
+          Machine.invokeMachine({
+            child: FoodFormMachine.FoodFormChild,
+            input: {
+              initialFood: state.food,
+              syncQuickInputFromFields: false,
+            },
+          }),
+        states: {
+          ChoosingAction: {
+            on: {
+              ChooseFoodCopy: ({ parents, target }) =>
+                Machine.action(
+                  Machine.sendTo(
+                    FoodFormMachine.FoodFormChild,
+                    new FoodFormMachine.LoadFood({
+                      food: parents["Route.Ready"].food,
+                    })
+                  )
+                ).pipe(
+                  Effect.as(
+                    target.local.Copy(
+                      new FoodEditorCopy({
+                        draft: null,
+                        message: null,
+                      }),
+                      (copy) => copy.Form(new FoodEditorCopyForm())
+                    )
+                  )
+                ),
+              ChooseFoodEdit: ({ parents, target }) => {
+                if (parents["Route.Ready"].food.origin === "app-default") {
+                  return;
+                }
+                return Machine.action(
+                  Machine.sendTo(
+                    FoodFormMachine.FoodFormChild,
+                    new FoodFormMachine.LoadFood({
+                      food: parents["Route.Ready"].food,
+                    })
+                  )
+                ).pipe(
+                  Effect.as(
+                    target.local.Edit(
+                      new FoodEditorEdit({
+                        draft: null,
+                        message: null,
+                      }),
+                      (edit) => edit.Warning(new FoodEditorEditWarning())
+                    )
+                  )
+                );
               },
-            });
-          })
-        ),
-    }),
-    copyFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            draft: FoodFormInput,
-            sourceFoodId: Domain.FoodId,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.copy({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                sourceFoodId: input.sourceFoodId,
+            },
+          },
+          Copy: {
+            states: {
+              Form: {
+                on: {
+                  BackToFoodChoice: ({ target }) =>
+                    target.branch.Route.Ready.ChoosingAction(
+                      new FoodEditorChoosingAction()
+                    ),
+                  FoodFormSubmitted: ({ event, target }) =>
+                    target.local.with(
+                      new FoodEditorCopy({
+                        draft: event.input,
+                        message: null,
+                      }),
+                      (copy) => copy.Reviewing(new FoodEditorReviewingCopy())
+                    ),
+                },
               },
-            });
-            return { food: result.food };
-          })
-        ),
-    }),
-    editFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ draft: FoodFormInput, foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            food: Domain.Food,
-            revisedMealEntryCount: Schema.Number,
-          })
-        ),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.editFoodDetails({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                foodId: input.foodId,
+              Reviewing: {
+                on: {
+                  BackToFoodForm: ({ target }) =>
+                    target.local.Form(new FoodEditorCopyForm()),
+                  ApplyFoodCopy: ({ target }) =>
+                    target.local.Saving(new FoodEditorCopying()),
+                },
               },
-            });
-            return {
-              food: result.food,
-              revisedMealEntryCount: result.revisedMealEntryCount,
-            };
-          })
-        ),
-    }),
-  },
-  actions: {
-    loadFoodForm: (params: {
-      readonly actor: FoodFormMachine.FoodFormActorRef;
-      readonly food: Domain.Food;
-    }) => {
-      params.actor.send({ type: "loadFood", food: params.food });
-    },
-  },
-}).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
-    draft: null,
-    food: null,
-    foods: [],
-    foodFormActor: spawn(actorSources.foodForm, {
-      id: "foodEditorForm",
-      input: { initialFood: null, syncQuickInputFromFields: false },
-    }),
-    foodId: input.foodId,
-    message: null,
-    usage: null,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "ChoosingAction",
-          context: {
-            food: event.output.food,
-            foods: event.output.foods,
-            usage: event.output.usage,
+              Saving: {
+                invoke: ({ parents }) => {
+                  const draft = parents["Route.Ready.Copy"].draft;
+                  const foodId = parents.Route.foodId;
+                  return Machine.invoke({
+                    id: "copyFood",
+                    src: () =>
+                      Machine.effect(
+                        draft === null
+                          ? Effect.succeed(_missingFoodDraftFailure())
+                          : Effect.gen(function* () {
+                              const foods = yield* Foods.Foods;
+                              const result = yield* foods.copy({
+                                input: {
+                                  ..._foodDetailsFromDraft(draft),
+                                  sourceFoodId: foodId,
+                                },
+                              });
+                              return new FoodCopied({ food: result.food });
+                            }).pipe(
+                              Effect.catch((error) =>
+                                Effect.succeed(
+                                  new FoodMutationFailed({
+                                    message: _foodMutationErrorMessage(error),
+                                  })
+                                )
+                              )
+                            )
+                      ),
+                  });
+                },
+                on: {
+                  FoodCopied: ({ event, target }) =>
+                    target.branch.Route.Ready.Completed(
+                      new FoodEditorCompleted({
+                        food: event.food,
+                        message:
+                          "Food copy created. Previous meal entries were unchanged.",
+                      })
+                    ),
+                  FoodMutationFailed: ({ event, parents, target }) =>
+                    target.local.with(
+                      new FoodEditorCopy({
+                        ...parents["Route.Ready.Copy"],
+                        message: event.message,
+                      }),
+                      (copy) => copy.Reviewing(new FoodEditorReviewingCopy())
+                    ),
+                },
+              },
+            },
           },
-        }),
-        onError: {
-          target: "LoadFailed",
-          context: { message: "Could not load this food." },
-        },
-      },
-    },
-    LoadFailed: {
-      on: { retry: { target: "Loading", context: { message: null } } },
-    },
-    ChoosingAction: {
-      on: {
-        chooseCopy: ({ actions, context }, enq) => {
-          if (context.food === null) {
-            return;
-          }
-          enq(actions.loadFoodForm, {
-            actor: context.foodFormActor,
-            food: context.food,
-          });
-          return { target: "CopyForm", context: { message: null } };
-        },
-        chooseEdit: ({ actions, context }, enq) => {
-          if (context.food === null || context.food.origin === "app-default") {
-            return;
-          }
-          enq(actions.loadFoodForm, {
-            actor: context.foodFormActor,
-            food: context.food,
-          });
-          return { target: "EditFormWarning", context: { message: null } };
-        },
-      },
-    },
-    EditFormWarning: {
-      on: {
-        backToChoice: { target: "ChoosingAction" },
-        acknowledgeEdit: { target: "EditForm", context: { message: null } },
-      },
-    },
-    CopyForm: {
-      on: {
-        backToChoice: { target: "ChoosingAction", context: { message: null } },
-        submit: ({ event }) => ({
-          target: "ReviewingCopy",
-          context: { draft: event.input, message: null },
-        }),
-      },
-    },
-    EditForm: {
-      on: {
-        backToChoice: { target: "ChoosingAction", context: { message: null } },
-        submit: ({ event }) => ({
-          target: "PreviewingEdit",
-          context: { draft: event.input, message: null },
-        }),
-      },
-    },
-    PreviewingEdit: {
-      invoke: {
-        src: "previewEdit",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected an edit draft.");
-          }
-          return { draft: context.draft, foodId: context.foodId };
-        },
-        onDone: {
-          target: "ReviewingEdit",
-          context: { message: null },
-        },
-        onError: ({ event }) => ({
-          target: "EditForm",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    ReviewingCopy: {
-      on: {
-        backToForm: { target: "CopyForm" },
-        apply: { target: "Copying" },
-      },
-    },
-    ReviewingEdit: {
-      on: {
-        backToForm: { target: "EditForm" },
-        confirmEdit: { target: "Editing" },
-      },
-    },
-    Copying: {
-      invoke: {
-        src: "copyFood",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected a copy draft.");
-          }
-          return { draft: context.draft, sourceFoodId: context.foodId };
-        },
-        onDone: ({ event }) => ({
-          target: "Completed",
-          context: {
-            food: event.output.food,
-            message: "Food copy created. Previous meal entries were unchanged.",
+          Edit: {
+            states: {
+              Warning: {
+                on: {
+                  BackToFoodChoice: ({ target }) =>
+                    target.branch.Route.Ready.ChoosingAction(
+                      new FoodEditorChoosingAction()
+                    ),
+                  AcknowledgeFoodEdit: ({ parents, target }) =>
+                    target.local.with(
+                      new FoodEditorEdit({
+                        ...parents["Route.Ready.Edit"],
+                        message: null,
+                      }),
+                      (edit) => edit.Form(new FoodEditorEditForm())
+                    ),
+                },
+              },
+              Form: {
+                on: {
+                  BackToFoodChoice: ({ target }) =>
+                    target.branch.Route.Ready.ChoosingAction(
+                      new FoodEditorChoosingAction()
+                    ),
+                  FoodFormSubmitted: ({ event, target }) =>
+                    target.local.with(
+                      new FoodEditorEdit({
+                        draft: event.input,
+                        message: null,
+                      }),
+                      (edit) => edit.Previewing(new FoodEditorPreviewingEdit())
+                    ),
+                },
+              },
+              Previewing: {
+                invoke: ({ parents }) => {
+                  const draft = parents["Route.Ready.Edit"].draft;
+                  const foodId = parents.Route.foodId;
+                  return Machine.invoke({
+                    id: "previewFoodEdit",
+                    src: () =>
+                      Machine.effect(
+                        draft === null
+                          ? Effect.succeed(_missingFoodDraftFailure())
+                          : Effect.gen(function* () {
+                              const foods = yield* Foods.Foods;
+                              yield* foods.previewFoodDetailsEdit({
+                                input: {
+                                  ..._foodDetailsFromDraft(draft),
+                                  foodId,
+                                },
+                              });
+                              return new FoodEditPreviewed();
+                            }).pipe(
+                              Effect.catch((error) =>
+                                Effect.succeed(
+                                  new FoodMutationFailed({
+                                    message: _foodMutationErrorMessage(error),
+                                  })
+                                )
+                              )
+                            )
+                      ),
+                  });
+                },
+                on: {
+                  FoodEditPreviewed: ({ parents, target }) =>
+                    target.local.with(
+                      new FoodEditorEdit({
+                        ...parents["Route.Ready.Edit"],
+                        message: null,
+                      }),
+                      (edit) => edit.Reviewing(new FoodEditorReviewingEdit())
+                    ),
+                  FoodMutationFailed: ({ event, parents, target }) =>
+                    target.local.with(
+                      new FoodEditorEdit({
+                        ...parents["Route.Ready.Edit"],
+                        message: event.message,
+                      }),
+                      (edit) => edit.Form(new FoodEditorEditForm())
+                    ),
+                },
+              },
+              Reviewing: {
+                on: {
+                  BackToFoodForm: ({ target }) =>
+                    target.local.Form(new FoodEditorEditForm()),
+                  ConfirmFoodEdit: ({ target }) =>
+                    target.local.Saving(new FoodEditorEditing()),
+                },
+              },
+              Saving: {
+                invoke: ({ parents }) => {
+                  const draft = parents["Route.Ready.Edit"].draft;
+                  const foodId = parents.Route.foodId;
+                  return Machine.invoke({
+                    id: "editFood",
+                    src: () =>
+                      Machine.effect(
+                        draft === null
+                          ? Effect.succeed(_missingFoodDraftFailure())
+                          : Effect.gen(function* () {
+                              const foods = yield* Foods.Foods;
+                              const result = yield* foods.editFoodDetails({
+                                input: {
+                                  ..._foodDetailsFromDraft(draft),
+                                  foodId,
+                                },
+                              });
+                              return new FoodEdited({
+                                food: result.food,
+                                revisedMealEntryCount:
+                                  result.revisedMealEntryCount,
+                              });
+                            }).pipe(
+                              Effect.catch((error) =>
+                                Effect.succeed(
+                                  new FoodMutationFailed({
+                                    message: _foodMutationErrorMessage(error),
+                                  })
+                                )
+                              )
+                            )
+                      ),
+                  });
+                },
+                on: {
+                  FoodEdited: ({ event, target }) =>
+                    target.branch.Route.Ready.Completed(
+                      new FoodEditorCompleted({
+                        food: event.food,
+                        message:
+                          event.revisedMealEntryCount === 0
+                            ? "Food updated. No previous meal entries changed."
+                            : `Food updated across ${event.revisedMealEntryCount} previous meal ${event.revisedMealEntryCount === 1 ? "entry" : "entries"}.`,
+                      })
+                    ),
+                  FoodMutationFailed: ({ event, parents, target }) =>
+                    target.local.with(
+                      new FoodEditorEdit({
+                        ...parents["Route.Ready.Edit"],
+                        message: event.message,
+                      }),
+                      (edit) => edit.Form(new FoodEditorEditForm())
+                    ),
+                },
+              },
+            },
           },
-        }),
-        onError: ({ event }) => ({
-          target: "ReviewingCopy",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    Editing: {
-      invoke: {
-        src: "editFood",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected an edit draft.");
-          }
-          return { draft: context.draft, foodId: context.foodId };
+          Completed: {},
         },
-        onDone: ({ event }) => ({
-          target: "Completed",
-          context: {
-            food: event.output.food,
-            message:
-              event.output.revisedMealEntryCount === 0
-                ? "Food updated. No previous meal entries changed."
-                : `Food updated across ${event.output.revisedMealEntryCount} previous meal ${event.output.revisedMealEntryCount === 1 ? "entry" : "entries"}.`,
-          },
-        }),
-        onError: ({ event }) => ({
-          target: "EditForm",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
       },
     },
-    Completed: {},
   },
 });
 
@@ -406,13 +592,22 @@ function FoodEditorScreen({
   readonly dateKey: Domain.DateKey | undefined;
   readonly foodId: Domain.FoodId;
 }) {
-  const [snapshot, , actor] = useMachine(foodEditorMachine, {
-    input: { foodId },
-  });
-  const food = snapshot.context.food;
-  const usage = snapshot.context.usage;
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, foodEditorMachine, { foodId }),
+    [foodId]
+  );
+  const foodFormAtom = useMemo(
+    () => machineAtom.child(FoodFormMachine.FoodFormChild),
+    [machineAtom]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading")) {
+  if (
+    AsyncResult.isInitial(stateResult) ||
+    (AsyncResult.isSuccess(stateResult) &&
+      FoodEditorStates.matches(stateResult.value, "Route.Loading"))
+  ) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading food" />
@@ -420,14 +615,26 @@ function FoodEditorScreen({
     );
   }
 
-  if (snapshot.matches("LoadFailed") || food === null || usage === null) {
+  if (AsyncResult.isFailure(stateResult)) {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load this food."}
-          tone="danger"
-        />
-        <Button icon={RotateCcw} onPress={actor.trigger.retry}>
+        <Notice message="Could not start the food editor." tone="danger" />
+        <Button onPress={() => router.back()} variant="secondary">
+          Back
+        </Button>
+      </AppScreen>
+    );
+  }
+
+  const state = stateResult.value;
+  const loadFailed = FoodEditorStates.get(state, "Route.LoadFailed").pipe(
+    Option.getOrNull
+  );
+  if (loadFailed !== null) {
+    return (
+      <AppScreen contentStyle={styles.centered}>
+        <Notice message={loadFailed.message} tone="danger" />
+        <Button icon={RotateCcw} onPress={() => send(new RetryFoodEditor())}>
           Try again
         </Button>
         <Button onPress={() => router.back()} variant="secondary">
@@ -437,16 +644,39 @@ function FoodEditorScreen({
     );
   }
 
-  if (snapshot.matches("CopyForm")) {
+  const ready = FoodEditorStates.get(state, "Route.Ready").pipe(
+    Option.getOrNull
+  );
+  if (ready === null) {
+    return (
+      <AppScreen contentStyle={styles.centered}>
+        <LoadingView message="Loading food" />
+      </AppScreen>
+    );
+  }
+
+  const copy = FoodEditorStates.get(state, "Route.Ready.Copy").pipe(
+    Option.getOrNull
+  );
+  const edit = FoodEditorStates.get(state, "Route.Ready.Edit").pipe(
+    Option.getOrNull
+  );
+  const completed = FoodEditorStates.get(state, "Route.Ready.Completed").pipe(
+    Option.getOrNull
+  );
+  const food = completed?.food ?? ready.food;
+  const usage = ready.usage;
+
+  if (FoodEditorStates.matches(state, "Route.Ready.Copy.Form")) {
     return (
       <FoodForm
         action="edit"
-        actor={snapshot.context.foodFormActor}
+        actor={foodFormAtom}
         disabled={false}
         feedback={
-          snapshot.context.message === null
+          copy?.message === null || copy?.message === undefined
             ? undefined
-            : { message: snapshot.context.message, tone: "danger" }
+            : { message: copy.message, tone: "danger" }
         }
         hasFailed={false}
         heading="Copy food"
@@ -456,7 +686,7 @@ function FoodEditorScreen({
             tone="neutral"
           />
         }
-        onBack={actor.trigger.backToChoice}
+        onBack={() => send(new BackToFoodChoice())}
         portionUsage={[]}
         showPortions={false}
         submitLabel="Review copy"
@@ -465,33 +695,39 @@ function FoodEditorScreen({
   }
 
   if (
-    snapshot.matches("EditFormWarning") ||
-    snapshot.matches("EditForm") ||
-    snapshot.matches("PreviewingEdit") ||
-    snapshot.matches("ReviewingEdit") ||
-    snapshot.matches("Editing")
+    FoodEditorStates.matches(state, "Route.Ready.Edit.Warning") ||
+    FoodEditorStates.matches(state, "Route.Ready.Edit.Form") ||
+    FoodEditorStates.matches(state, "Route.Ready.Edit.Previewing") ||
+    FoodEditorStates.matches(state, "Route.Ready.Edit.Reviewing") ||
+    FoodEditorStates.matches(state, "Route.Ready.Edit.Saving")
   ) {
-    const previewing = snapshot.matches("PreviewingEdit");
-    const editing = snapshot.matches("Editing");
+    const previewing = FoodEditorStates.matches(
+      state,
+      "Route.Ready.Edit.Previewing"
+    );
+    const editing = FoodEditorStates.matches(state, "Route.Ready.Edit.Saving");
     const changes =
-      snapshot.context.draft === null
+      edit?.draft === null || edit?.draft === undefined
         ? []
-        : describeFoodChanges({ draft: snapshot.context.draft, food });
+        : describeFoodChanges({
+            draft: _foodDetailsFromDraft(edit.draft),
+            food,
+          });
 
     return (
       <>
         <FoodForm
           action="edit"
-          actor={snapshot.context.foodFormActor}
+          actor={foodFormAtom}
           disabled={previewing || editing}
           feedback={
-            snapshot.context.message === null
+            edit?.message === null || edit?.message === undefined
               ? undefined
-              : { message: snapshot.context.message, tone: "danger" }
+              : { message: edit.message, tone: "danger" }
           }
           hasFailed={false}
           heading="Edit food details"
-          onBack={actor.trigger.backToChoice}
+          onBack={() => send(new BackToFoodChoice())}
           portionUsage={usage.portions}
           showPortions={false}
           submitLabel={
@@ -503,24 +739,27 @@ function FoodEditorScreen({
           }
         />
         <EditImpactDialog
-          onCancel={actor.trigger.backToChoice}
-          onContinue={actor.trigger.acknowledgeEdit}
+          onCancel={() => send(new BackToFoodChoice())}
+          onContinue={() => send(new AcknowledgeFoodEdit())}
           usage={usage}
-          visible={snapshot.matches("EditFormWarning")}
+          visible={FoodEditorStates.matches(state, "Route.Ready.Edit.Warning")}
         />
         <EditReviewDialog
           changes={changes}
           loading={editing}
-          onCancel={actor.trigger.backToForm}
-          onConfirm={actor.trigger.confirmEdit}
+          onCancel={() => send(new BackToFoodForm())}
+          onConfirm={() => send(new ConfirmFoodEdit())}
           usage={usage}
-          visible={snapshot.matches("ReviewingEdit") || editing}
+          visible={
+            FoodEditorStates.matches(state, "Route.Ready.Edit.Reviewing") ||
+            editing
+          }
         />
       </>
     );
   }
 
-  if (snapshot.matches("ChoosingAction")) {
+  if (FoodEditorStates.matches(state, "Route.Ready.ChoosingAction")) {
     return (
       <WorkflowPage food={food} title="Manage food">
         <Notice
@@ -574,7 +813,7 @@ function FoodEditorScreen({
               tone="warning"
             />
           ) : (
-            <Button icon={Pencil} onPress={actor.trigger.chooseEdit}>
+            <Button icon={Pencil} onPress={() => send(new ChooseFoodEdit())}>
               Edit food details
             </Button>
           )}
@@ -583,7 +822,7 @@ function FoodEditorScreen({
           subtitle="Create a separate food from these values. Previous entries stay unchanged."
           title="Copy food"
         >
-          <Button icon={Copy} onPress={actor.trigger.chooseCopy}>
+          <Button icon={Copy} onPress={() => send(new ChooseFoodCopy())}>
             Copy this food
           </Button>
         </SectionCard>
@@ -591,12 +830,15 @@ function FoodEditorScreen({
     );
   }
 
-  if (snapshot.matches("ReviewingCopy") || snapshot.matches("Copying")) {
-    const draft = snapshot.context.draft;
+  if (
+    FoodEditorStates.matches(state, "Route.Ready.Copy.Reviewing") ||
+    FoodEditorStates.matches(state, "Route.Ready.Copy.Saving")
+  ) {
+    const draft = copy?.draft;
     const duplicateCount =
-      draft === null
+      draft === null || draft === undefined
         ? 0
-        : snapshot.context.foods.filter(
+        : ready.foods.filter(
             (candidate) =>
               _normalizeNameGroupValue(candidate.name) ===
                 _normalizeNameGroupValue(draft.name) &&
@@ -615,14 +857,14 @@ function FoodEditorScreen({
             tone="warning"
           />
         )}
-        {snapshot.context.message === null ? null : (
-          <Notice message={snapshot.context.message} tone="danger" />
+        {copy?.message === null || copy?.message === undefined ? null : (
+          <Notice message={copy.message} tone="danger" />
         )}
         <BottomActions
-          back={actor.trigger.backToForm}
-          confirm={actor.trigger.apply}
+          back={() => send(new BackToFoodForm())}
+          confirm={() => send(new ApplyFoodCopy())}
           confirmLabel="Create food copy"
-          loading={snapshot.matches("Copying")}
+          loading={FoodEditorStates.matches(state, "Route.Ready.Copy.Saving")}
         />
       </WorkflowPage>
     );
@@ -630,10 +872,7 @@ function FoodEditorScreen({
 
   return (
     <WorkflowPage food={food} title="Food saved">
-      <Notice
-        message={snapshot.context.message ?? "Food saved."}
-        tone="success"
-      />
+      <Notice message={completed?.message ?? "Food saved."} tone="success" />
       <Button
         icon={Save}
         onPress={() => {
@@ -882,6 +1121,13 @@ function EditReviewDialog({
   );
 }
 
+function _missingFoodDraftFailure() {
+  return new FoodMutationFailed({
+    message:
+      "Could not save this food. Please review the values and try again.",
+  });
+}
+
 function _foodMutationErrorMessage(error: unknown) {
   if (Predicate.isTagged(error, "UsedFoodPortionMutationNotAllowed")) {
     return "A used portion was changed or removed. Restore it before saving.";
@@ -910,9 +1156,21 @@ function _normalizeNameGroupValue(value: string) {
   return value.trim().normalize("NFKC").toLocaleLowerCase();
 }
 
-function _foodDetailsFromDraft(draft: typeof FoodFormInput.Type) {
-  const { portions: _portions, ...details } = draft;
-  return details;
+function _foodDetailsFromDraft(draft: Foods.CreateFoodInput): Omit<
+  Foods.EditFoodDetailsInput,
+  "foodId" | "nutritionReference"
+> & {
+  readonly nutritionReference: NonNullable<
+    Foods.EditFoodDetailsInput["nutritionReference"]
+  >;
+} {
+  const {
+    initialPrice: _initialPrice,
+    portions: _portions,
+    nutritionReference = { amount: "100", unit: "g" },
+    ...details
+  } = draft;
+  return { ...details, nutritionReference };
 }
 
 const styles = StyleSheet.create({

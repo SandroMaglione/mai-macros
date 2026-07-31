@@ -5,15 +5,17 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { todayDateKey } from "@/lib/date-keys";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { spacing } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Domain, MealPlans } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Effect, Match, Option, Schema } from "effect";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Effect, Option, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { router } from "expo-router";
+import { useMemo } from "react";
 import { Alert, StyleSheet } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const EditRouteParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
@@ -36,6 +38,7 @@ const CreateMealPlanInput = Schema.Struct({
   saltTargetGrams: Schema.optionalKey(Schema.String),
   saturatedFatTargetGrams: Schema.optionalKey(Schema.String),
 });
+type CreateMealPlanInput = typeof CreateMealPlanInput.Type;
 
 const EditPlanRouteParams = Schema.Union([
   Schema.TaggedStruct("Valid", {
@@ -45,322 +48,274 @@ const EditPlanRouteParams = Schema.Union([
   Schema.TaggedStruct("Invalid", {}),
 ]);
 
-const ReviseMealPlanInput = Schema.Struct({
-  dateKey: Schema.NullOr(Domain.DateKey),
+class EditPlanRoute extends Schema.TaggedClass<EditPlanRoute>("EditPlanRoute")(
+  "EditPlanRoute",
+  {
+    dateKey: Schema.UndefinedOr(Domain.DateKey),
+    planId: Schema.NullOr(Domain.PlanId),
+  }
+) {}
+
+class Loading extends Schema.TaggedClass<Loading>("Loading")("Loading", {}) {}
+class InvalidRoute extends Schema.TaggedClass<InvalidRoute>("InvalidRoute")(
+  "InvalidRoute",
+  {}
+) {}
+class Failed extends Schema.TaggedClass<Failed>("Failed")("Failed", {
+  message: Schema.String,
+}) {}
+class Ready extends Schema.TaggedClass<Ready>("Ready")("Ready", {
+  errorMessage: Schema.UndefinedOr(Schema.String),
+  plan: Domain.Plan,
+}) {}
+class Submitting extends Schema.TaggedClass<Submitting>("Submitting")(
+  "Submitting",
+  {
+    input: CreateMealPlanInput,
+    plan: Domain.Plan,
+  }
+) {}
+class Revised extends Schema.TaggedClass<Revised>("Revised")("Revised", {}) {}
+
+class Back extends Schema.TaggedClass<Back>("Back")("Back", {}) {}
+class Submit extends Schema.TaggedClass<Submit>("Submit")("Submit", {
   input: CreateMealPlanInput,
-  planId: Schema.NullOr(Domain.PlanId),
+}) {}
+class PlanLoaded extends Schema.TaggedClass<PlanLoaded>("PlanLoaded")(
+  "PlanLoaded",
+  { plan: Domain.Plan }
+) {}
+class LoadFailed extends Schema.TaggedClass<LoadFailed>("LoadFailed")(
+  "LoadFailed",
+  { message: Schema.String }
+) {}
+class PlanNotFound extends Schema.TaggedClass<PlanNotFound>("PlanNotFound")(
+  "PlanNotFound",
+  {}
+) {}
+class PlanRevised extends Schema.TaggedClass<PlanRevised>("PlanRevised")(
+  "PlanRevised",
+  { dateKey: Domain.DateKey }
+) {}
+class PlanRejected extends Schema.TaggedClass<PlanRejected>("PlanRejected")(
+  "PlanRejected",
+  { message: Schema.String }
+) {}
+
+const EditPlanStates = Machine.defineStates({
+  Route: {
+    schema: EditPlanRoute,
+    initial: "Loading",
+    states: { Loading, InvalidRoute, Failed, Ready, Submitting, Revised },
+  },
 });
 
-const ReviseMealPlanResult = Schema.Union([
-  Schema.TaggedStruct("Revised", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("PlanNameAlreadyExists", {}),
-  Schema.TaggedStruct("PlanMealNameAlreadyExists", {}),
-  Schema.TaggedStruct("SchemaError", {}),
-  Schema.TaggedStruct("PlanNotFound", {}),
-  Schema.TaggedStruct("UnknownError", {}),
-]);
-
-const editPlanRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        dateKey: Schema.UndefinedOr(Domain.DateKey),
-        errorMessage: Schema.UndefinedOr(Schema.String),
-        plan: Schema.NullOr(Domain.Plan),
-        planId: Schema.NullOr(Domain.PlanId),
-      })
-    ),
-    events: {
-      back: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          input: CreateMealPlanInput,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        routeParams: EditPlanRouteParams,
-      })
-    ),
-  },
-  states: {
-    Loading: {},
-    InvalidRoute: {},
-    Failed: {},
-    Ready: {},
-    Submitting: {},
-    Revised: {},
-  },
-  actions: {
-    replaceBack: (params: { readonly dateKey: Domain.DateKey | undefined }) => {
-      if (params.dateKey === undefined) {
-        router.replace("/");
-        return;
-      }
-
-      router.replace({
-        pathname: "/days/[dateKey]",
-        params: { dateKey: params.dateKey },
-      });
-    },
-    replaceHome: () => {
+const editPlanOperations = {
+  replaceBack: (dateKey: Domain.DateKey | undefined) => {
+    if (dateKey === undefined) {
       router.replace("/");
-    },
-    replaceToDateKey: (params: { readonly dateKey: Domain.DateKey }) => {
-      if (params.dateKey === todayDateKey()) {
-        router.replace("/");
-        return;
-      }
-
+    } else {
       router.replace({
         pathname: "/days/[dateKey]",
-        params: { dateKey: params.dateKey },
+        params: { dateKey },
       });
-    },
-    showPlanNotSavedAlert: (params: { readonly message: string }) => {
-      Alert.alert("Plan not saved", params.message);
-    },
+    }
   },
-  actorSources: {
-    loadMealPlan: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(Schema.NullOr(Domain.PlanId)),
-        output: Schema.toStandardSchemaV1(Schema.NullOr(Domain.Plan)),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            if (input === null) {
-              return yield* Effect.succeed(null);
-            }
 
-            const mealPlans = yield* MealPlans.MealPlans;
-
-            return yield* mealPlans.get({
-              input: {
-                planId: input,
-              },
-            });
-          }).pipe(
-            Effect.catchTag("PlanNotFound", () => Effect.succeed(null)),
-            Effect.catchTag("SchemaError", () => Effect.succeed(null))
-          )
-        ),
-    }),
-    reviseMealPlan: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ReviseMealPlanInput),
-        output: Schema.toStandardSchemaV1(ReviseMealPlanResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            if (input.planId === null) {
-              return yield* Effect.succeed({
-                _tag: "PlanNotFound" as const,
-              });
-            }
-
-            if (input.dateKey === null) {
-              return yield* Effect.succeed({
-                _tag: "SchemaError" as const,
-              });
-            }
-
-            const mealPlans = yield* MealPlans.MealPlans;
-
-            yield* mealPlans.revise({
-              input: {
-                ...input.input,
-                dateKey: input.dateKey,
-                planId: input.planId,
-              },
-            });
-
-            return {
-              _tag: "Revised" as const,
-              dateKey: input.dateKey,
-            };
-          }).pipe(
-            Effect.catchTag("PlanNameAlreadyExists", () =>
-              Effect.succeed({
-                _tag: "PlanNameAlreadyExists" as const,
-              })
-            ),
-            Effect.catchTag("PlanMealNameAlreadyExists", () =>
-              Effect.succeed({
-                _tag: "PlanMealNameAlreadyExists" as const,
-              })
-            ),
-            Effect.catchTag("PlanNotFound", () =>
-              Effect.succeed({
-                _tag: "PlanNotFound" as const,
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            ),
-            Effect.catch(() =>
-              Effect.succeed({
-                _tag: "UnknownError" as const,
-              })
-            )
-          )
-        ),
-    }),
+  replaceToDateKey: (dateKey: Domain.DateKey) => {
+    if (dateKey === todayDateKey()) {
+      router.replace("/");
+    } else {
+      router.replace({
+        pathname: "/days/[dateKey]",
+        params: { dateKey },
+      });
+    }
   },
-}).createMachine({
-  context: ({ input }) => ({
-    dateKey:
-      input.routeParams._tag === "Valid"
-        ? input.routeParams.dateKey
-        : undefined,
-    errorMessage: undefined,
-    plan: null,
-    planId:
-      input.routeParams._tag === "Valid" ? input.routeParams.planId : null,
-  }),
-  initial: "Loading",
-  on: {
-    back: ({ actions, context }, enq) => {
-      enq(actions.replaceBack, { dateKey: context.dateKey });
-    },
-  },
-  states: {
-    Loading: {
-      always: ({ context }) =>
-        context.planId === null ? { target: "InvalidRoute" } : undefined,
-      invoke: {
-        src: "loadMealPlan",
-        input: ({ context }) => context.planId,
-        onDone: ({ event }) =>
-          event.output === null
-            ? { target: "InvalidRoute" }
-            : {
-                target: "Ready",
-                context: {
-                  plan: event.output,
-                },
-              },
-        onError: {
-          target: "Failed",
-          context: {
-            errorMessage: "Could not load this meal plan. Please try again.",
-          },
-        },
-      },
-    },
-    InvalidRoute: {
-      entry: ({ actions }, enq) => {
-        enq(actions.replaceHome);
-      },
-    },
-    Failed: {},
-    Ready: {
-      on: {
-        submit: {
-          target: "Submitting",
-          context: {
-            errorMessage: undefined,
-          },
-        },
-      },
-    },
-    Submitting: {
-      invoke: {
-        src: "reviseMealPlan",
-        input: ({ context, event }) => {
-          if (event.type !== "submit") {
-            throw new Error("Cannot revise a plan without a submit event.");
-          }
 
-          return {
-            dateKey:
-              context.dateKey !== undefined
-                ? context.dateKey
-                : Schema.decodeOption(Domain.DateKey)(todayDateKey()).pipe(
-                    Option.getOrNull
-                  ),
-            input: event.input,
-            planId: context.planId,
-          };
-        },
-        onDone: ({ actions, event }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              PlanMealNameAlreadyExists: () => {
-                const message =
-                  "Meal names must be unique inside a plan. Rename the duplicate meal and try again.";
-                enq(actions.showPlanNotSavedAlert, { message });
+  loadMealPlan: (planId: Domain.PlanId) =>
+    Effect.gen(function* () {
+      const mealPlans = yield* MealPlans.MealPlans;
+      const plan = yield* mealPlans.get({ input: { planId } });
+      return new PlanLoaded({ plan });
+    }).pipe(
+      Effect.catchTags({
+        PlanNotFound: () => Effect.succeed(new PlanNotFound()),
+        SchemaError: () => Effect.succeed(new PlanNotFound()),
+      }),
+      Effect.catch(() =>
+        Effect.succeed(
+          new LoadFailed({
+            message: "Could not load this meal plan. Please try again.",
+          })
+        )
+      )
+    ),
 
-                return {
-                  target: "Ready" as const,
-                  context: {
-                    errorMessage: message,
-                  },
-                };
-              },
-              PlanNameAlreadyExists: () => {
-                const message =
-                  "A plan with this name already exists. Choose a different name and try again.";
-                enq(actions.showPlanNotSavedAlert, { message });
-
-                return {
-                  target: "Ready" as const,
-                  context: {
-                    errorMessage: message,
-                  },
-                };
-              },
-              PlanNotFound: () => ({ target: "InvalidRoute" as const }),
-              Revised: ({ dateKey }) => {
-                enq(actions.replaceToDateKey, { dateKey });
-
-                return { target: "Revised" as const };
-              },
-              SchemaError: () => {
-                const message =
-                  "Check that the plan name and meal names are filled, and every target is a non-negative number.";
-                enq(actions.showPlanNotSavedAlert, { message });
-
-                return {
-                  target: "Ready" as const,
-                  context: {
-                    errorMessage: message,
-                  },
-                };
-              },
-              UnknownError: () => {
-                const message =
-                  "Something went wrong while saving the plan. Please try again.";
-                enq(actions.showPlanNotSavedAlert, { message });
-
-                return {
-                  target: "Ready" as const,
-                  context: {
-                    errorMessage: message,
-                  },
-                };
-              },
+  reviseMealPlan: ({
+    dateKey,
+    input,
+    planId,
+  }: {
+    readonly dateKey: Domain.DateKey | undefined;
+    readonly input: CreateMealPlanInput;
+    readonly planId: Domain.PlanId;
+  }) =>
+    Effect.gen(function* () {
+      const targetDateKey =
+        dateKey ?? (yield* Schema.decodeEffect(Domain.DateKey)(todayDateKey()));
+      const mealPlans = yield* MealPlans.MealPlans;
+      yield* mealPlans.revise({
+        input: { ...input, dateKey: targetDateKey, planId },
+      });
+      return new PlanRevised({ dateKey: targetDateKey });
+    }).pipe(
+      Effect.catchTags({
+        PlanMealNameAlreadyExists: () =>
+          Effect.succeed(
+            new PlanRejected({
+              message:
+                "Meal names must be unique inside a plan. Rename the duplicate meal and try again.",
             })
           ),
-      },
+        PlanNameAlreadyExists: () =>
+          Effect.succeed(
+            new PlanRejected({
+              message:
+                "A plan with this name already exists. Choose a different name and try again.",
+            })
+          ),
+        PlanNotFound: () => Effect.succeed(new PlanNotFound()),
+        SchemaError: () =>
+          Effect.succeed(
+            new PlanRejected({
+              message:
+                "Check that the plan name and meal names are filled, and every target is a non-negative number.",
+            })
+          ),
+      }),
+      Effect.catch(() =>
+        Effect.succeed(
+          new PlanRejected({
+            message:
+              "Something went wrong while saving the plan. Please try again.",
+          })
+        )
+      )
+    ),
+};
+
+const editPlanRouteMachine = Machine.make({
+  states: EditPlanStates.states,
+  events: [
+    Back,
+    Submit,
+    PlanLoaded,
+    LoadFailed,
+    PlanNotFound,
+    PlanRevised,
+    PlanRejected,
+  ],
+  input: Schema.Struct({ routeParams: EditPlanRouteParams }),
+  initial: ({ routeParams }) =>
+    EditPlanStates.initial.Route(
+      new EditPlanRoute({
+        dateKey: routeParams._tag === "Valid" ? routeParams.dateKey : undefined,
+        planId: routeParams._tag === "Valid" ? routeParams.planId : null,
+      }),
+      (route) => route.Loading(new Loading())
+    ),
+}).handle({
+  Route: {
+    on: {
+      Back: ({ state }) =>
+        Machine.action(
+          Effect.sync(() => editPlanOperations.replaceBack(state.dateKey))
+        ),
     },
-    Revised: {},
+    states: {
+      Loading: {
+        invoke: ({ parents }) =>
+          Machine.invoke({
+            id: "load-meal-plan",
+            src: () =>
+              Machine.effect(
+                parents.Route.planId === null
+                  ? Effect.succeed(new PlanNotFound())
+                  : editPlanOperations.loadMealPlan(parents.Route.planId)
+              ),
+          }),
+        on: {
+          PlanLoaded: ({ event, target }) =>
+            target.local.Ready(
+              new Ready({ errorMessage: undefined, plan: event.plan })
+            ),
+          PlanNotFound: ({ target }) =>
+            target.local.InvalidRoute(new InvalidRoute()),
+          LoadFailed: ({ event, target }) =>
+            target.local.Failed(new Failed({ message: event.message })),
+        },
+      },
+      InvalidRoute: {
+        entry: () => Machine.action(Effect.sync(() => router.replace("/"))),
+      },
+      Failed: {},
+      Ready: {
+        on: {
+          Submit: ({ event, state, target }) =>
+            target.local.Submitting(
+              new Submitting({ input: event.input, plan: state.plan })
+            ),
+        },
+      },
+      Submitting: {
+        invoke: ({ parents, state }) =>
+          Machine.invoke({
+            id: "revise-meal-plan",
+            src: () =>
+              Machine.effect(
+                parents.Route.planId === null
+                  ? Effect.succeed(new PlanNotFound())
+                  : editPlanOperations.reviseMealPlan({
+                      dateKey: parents.Route.dateKey,
+                      input: state.input,
+                      planId: parents.Route.planId,
+                    })
+              ),
+          }),
+        on: {
+          PlanNotFound: ({ target }) =>
+            target.local.InvalidRoute(new InvalidRoute()),
+          PlanRevised: ({ event, target }) =>
+            Machine.action(
+              Effect.sync(() =>
+                editPlanOperations.replaceToDateKey(event.dateKey)
+              )
+            ).pipe(Effect.as(target.local.Revised(new Revised()))),
+          PlanRejected: ({ event, state, target }) =>
+            Machine.action(
+              Effect.sync(() => Alert.alert("Plan not saved", event.message))
+            ).pipe(
+              Effect.as(
+                target.local.Ready(
+                  new Ready({
+                    errorMessage: event.message,
+                    plan: state.plan,
+                  })
+                )
+              )
+            ),
+        },
+      },
+      Revised: {},
+    },
   },
 });
 
 export default function EditPlanScreen() {
   const routeParams = useSchemaLocalSearchParams(EditRouteParams).pipe(
     Option.match({
-      onNone: () => ({
-        _tag: "Invalid" as const,
-      }),
+      onNone: () => ({ _tag: "Invalid" as const }),
       onSome: (params) => ({
         _tag: "Valid" as const,
         dateKey: params.dateKey,
@@ -368,13 +323,25 @@ export default function EditPlanScreen() {
       }),
     })
   );
-  const [snapshot, , actor] = useMachine(editPlanRouteMachine, {
-    input: {
-      routeParams,
-    },
-  });
+  const machineAtom = useMemo(
+    () =>
+      AtomMachine.make(MobileAtomRuntime, editPlanRouteMachine, {
+        routeParams,
+      }),
+    [
+      routeParams._tag,
+      routeParams._tag === "Valid" ? routeParams.dateKey : undefined,
+      routeParams._tag === "Valid" ? routeParams.planId : undefined,
+    ]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.value === "Loading" || snapshot.value === "InvalidRoute") {
+  if (
+    !AsyncResult.isSuccess(stateResult) ||
+    EditPlanStates.matches(stateResult.value, "Route.Loading") ||
+    EditPlanStates.matches(stateResult.value, "Route.InvalidRoute")
+  ) {
     return (
       <AppScreen contentStyle={styles.loadingScreen}>
         <LoadingView message="Loading plan" />
@@ -382,15 +349,15 @@ export default function EditPlanScreen() {
     );
   }
 
-  if (snapshot.value === "Failed") {
+  const failed = EditPlanStates.get(stateResult.value, "Route.Failed").pipe(
+    Option.getOrUndefined
+  );
+  if (failed !== undefined) {
     return (
       <AppScreen contentStyle={styles.stateScreen}>
         <MaiHeader title="Edit plan" />
         <Notice
-          message={
-            snapshot.context.errorMessage ??
-            "Could not load this meal plan. Please try again."
-          }
+          message={failed.message}
           title="Plan unavailable"
           tone="danger"
         />
@@ -398,7 +365,16 @@ export default function EditPlanScreen() {
     );
   }
 
-  if (snapshot.context.plan === null) {
+  const ready = EditPlanStates.get(stateResult.value, "Route.Ready").pipe(
+    Option.getOrUndefined
+  );
+  const submitting = EditPlanStates.get(
+    stateResult.value,
+    "Route.Submitting"
+  ).pipe(Option.getOrUndefined);
+  const plan = ready?.plan ?? submitting?.plan;
+
+  if (plan === undefined) {
     return (
       <AppScreen contentStyle={styles.loadingScreen}>
         <LoadingView message="Loading plan" />
@@ -409,15 +385,11 @@ export default function EditPlanScreen() {
   return (
     <MealPlanForm
       action="edit"
-      errorMessage={snapshot.context.errorMessage}
-      initialPlan={snapshot.context.plan}
-      isSubmitting={snapshot.value === "Submitting"}
-      onBack={() => {
-        actor.trigger.back();
-      }}
-      onSubmit={(input) => {
-        actor.trigger.submit({ input });
-      }}
+      errorMessage={ready?.errorMessage}
+      initialPlan={plan}
+      isSubmitting={submitting !== undefined}
+      onBack={() => send(new Back())}
+      onSubmit={(input) => send(new Submit({ input }))}
     />
   );
 }

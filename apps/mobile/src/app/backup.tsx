@@ -6,10 +6,9 @@ import { LoadingOverlay } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
-import { BackupRuntimeClient } from "@/lib/backup-runtime-client";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent, LocalDataResetMachine } from "@mai/machines";
+import { LocalDataResetMachine } from "@mai/machines";
 import {
   Backup,
   Domain,
@@ -17,16 +16,11 @@ import {
   LocalData as NutritionLocalData,
 } from "@mai/nutrition";
 import { BackupFileTransfer, FoodCatalogShare, Gzip } from "@mai/services";
-import { useMachine } from "@xstate/react";
-import {
-  Array,
-  DateTime,
-  Effect,
-  HashSet,
-  Match,
-  Option,
-  Schema,
-} from "effect";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { DateTime, Effect, HashSet, Match, Option, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { router } from "expo-router";
 import {
   ChevronLeft,
@@ -37,186 +31,249 @@ import {
   Upload,
   X,
 } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { createAsyncLogic, setup } from "xstate";
+class ExportReady extends Schema.TaggedClass<ExportReady>("ExportReady")(
+  "ExportReady",
+  { backupName: Schema.String }
+) {}
 
-const MobileBackupImportResult = Schema.Union([
-  Schema.TaggedStruct("Imported", { message: Schema.NonEmptyString }),
-  Schema.TaggedStruct("Canceled", {}),
-]);
+class ExportEditing extends Schema.TaggedClass<ExportEditing>("ExportEditing")(
+  "ExportEditing",
+  {}
+) {}
 
-type MobileBackupImportResult = typeof MobileBackupImportResult.Type;
+class ExportFailure extends Schema.TaggedClass<ExportFailure>("ExportFailure")(
+  "ExportFailure",
+  { message: Schema.String }
+) {}
 
-const MobileCatalogFilePreviewResult = Schema.Union([
-  Schema.TaggedStruct("Previewed", {
-    catalogJson: Schema.String,
-    message: Schema.NonEmptyString,
-    candidates: Schema.Array(FoodCatalogTransfer.FoodCatalogImportCandidate),
-    selectedFoodIds: Schema.Array(Domain.FoodId),
-  }),
-  Schema.TaggedStruct("Canceled", {}),
-]);
+class ExportSuccess extends Schema.TaggedClass<ExportSuccess>("ExportSuccess")(
+  "ExportSuccess",
+  { message: Schema.String }
+) {}
 
-type MobileCatalogFilePreviewResult =
-  typeof MobileCatalogFilePreviewResult.Type;
+class ExportingBackup extends Schema.TaggedClass<ExportingBackup>(
+  "ExportingBackup"
+)("ExportingBackup", { backupName: Schema.String }) {}
 
-const exportBackupMachine = setup({
-  schemas: {
-    events: {
-      exportBackup: Schema.toStandardSchemaV1(EmptyEvent),
-      changeBackupName: Schema.toStandardSchemaV1(
-        Schema.Struct({ backupName: Schema.String })
-      ),
+class ChangeBackupName extends Schema.TaggedClass<ChangeBackupName>(
+  "ChangeBackupName"
+)("ChangeBackupName", { backupName: Schema.String }) {}
+
+class ExportBackup extends Schema.TaggedClass<ExportBackup>("ExportBackup")(
+  "ExportBackup",
+  {}
+) {}
+
+class ExportBackupSucceeded extends Schema.TaggedClass<ExportBackupSucceeded>(
+  "ExportBackupSucceeded"
+)("ExportBackupSucceeded", { message: Schema.String }) {}
+
+class ExportBackupFailed extends Schema.TaggedClass<ExportBackupFailed>(
+  "ExportBackupFailed"
+)("ExportBackupFailed", { message: Schema.String }) {}
+
+class ClearExportStatus extends Schema.TaggedClass<ClearExportStatus>(
+  "ClearExportStatus"
+)("ClearExportStatus", {}) {}
+
+const ExportBackupStates = Machine.defineStates({
+  Ready: {
+    schema: ExportReady,
+    initial: "Editing",
+    states: {
+      Editing: ExportEditing,
+      Failure: ExportFailure,
+      Success: ExportSuccess,
     },
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({ backupName: Schema.String })
+  },
+  Exporting: ExportingBackup,
+});
+
+const exportBackupMachine = Machine.make({
+  states: ExportBackupStates.states,
+  events: [
+    ChangeBackupName,
+    ExportBackup,
+    ExportBackupSucceeded,
+    ExportBackupFailed,
+    ClearExportStatus,
+  ],
+  initial: () =>
+    ExportBackupStates.initial.Ready(
+      new ExportReady({ backupName: "" }),
+      (ready) => ready.Editing(new ExportEditing())
     ),
-  },
-  delays: { exportBackupSuccess: 3000 },
-  states: {
-    Idle: {},
-    Exporting: {},
-    Error: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            message: Schema.NonEmptyString,
-          })
+}).handle({
+  Ready: {
+    on: {
+      ChangeBackupName: ({ event, target }) =>
+        target.full.Ready(
+          new ExportReady({ backupName: event.backupName }),
+          (ready) => ready.Editing(new ExportEditing())
         ),
-      },
+      ExportBackup: ({ state, target }) =>
+        target.full.Exporting(
+          new ExportingBackup({ backupName: state.backupName })
+        ),
     },
-    Success: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            message: Schema.NonEmptyString,
-          })
-        ),
-      },
-    },
-  },
-  actorSources: {
-    exportBackup: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            backupName: Schema.String,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-      run: ({ input }) =>
-        BackupRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const backups = yield* Backup.Backups;
-            const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-            const gzip = yield* Gzip.Gzip;
-            const exportedBackup = yield* backups.exportToJson();
-            const exportedAt = new Date(
-              DateTime.toEpochMillis(exportedBackup.backup.source.exportedAt)
-            );
-            const baseName =
-              input.backupName.trim() === ""
-                ? "mai-backup"
-                : input.backupName.trim();
-            const sanitizedName = baseName
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-+|-+$/g, "");
-            const fileNamePrefix =
-              sanitizedName.trim() === "" ? "mai-backup" : sanitizedName;
-            const fileName = `${fileNamePrefix}-format-v${exportedBackup.backup.formatVersion}-db-v${exportedBackup.backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.json.gz`;
-            const bytes = yield* gzip.gzipText({
-              text: exportedBackup.json,
-            });
-
-            yield* fileTransfers.shareFile({
-              bytes,
-              dialogTitle: "Export backup",
-              fileName,
-              mimeType: GzipFileMimeType,
-              uti: GzipFileUti,
-            });
-
-            return {
-              fileName,
-              message: `Opened share options for ${fileName}.`,
-            };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: { backupName: "" },
-  initial: "Idle",
-  on: {
-    changeBackupName: ({ event }) => ({
-      context: { backupName: event.backupName },
-    }),
-  },
-  states: {
-    Idle: { on: { exportBackup: { target: "Exporting" } } },
-    Exporting: {
-      invoke: {
-        src: "exportBackup",
-        input: ({ context }) => ({ backupName: context.backupName }),
-        onError: ({ event, context }) => ({
-          target: "Error",
-          context: {
-            ...context,
-            message: _backupErrorMessage({ error: event.error }),
-          },
+    states: {
+      Success: {
+        invoke: Machine.invoke({
+          id: "clearExportStatus",
+          src: () =>
+            Machine.effect(
+              Effect.sleep("3 seconds").pipe(Effect.as(new ClearExportStatus()))
+            ),
         }),
-        onDone: ({ event, context }) => ({
-          target: "Success",
-          context: { ...context, message: event.output.message },
-        }),
+        on: {
+          ClearExportStatus: ({ parents, target }) =>
+            target.full.Ready(
+              new ExportReady({ backupName: parents.Ready.backupName }),
+              (ready) => ready.Editing(new ExportEditing())
+            ),
+        },
       },
     },
-    Error: { on: { exportBackup: { target: "Exporting" } } },
-    Success: { after: { exportBackupSuccess: { target: "Idle" } } },
+  },
+  Exporting: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "exportBackup",
+        src: () =>
+          Machine.effect(
+            Effect.gen(function* () {
+              const backups = yield* Backup.Backups;
+              const fileTransfers =
+                yield* BackupFileTransfer.BackupFileTransfer;
+              const gzip = yield* Gzip.Gzip;
+              const exportedBackup = yield* backups.exportToJson();
+              const exportedAt = new Date(
+                DateTime.toEpochMillis(exportedBackup.backup.source.exportedAt)
+              );
+              const baseName =
+                state.backupName.trim() === ""
+                  ? "mai-backup"
+                  : state.backupName.trim();
+              const sanitizedName = baseName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "");
+              const fileNamePrefix =
+                sanitizedName.trim() === "" ? "mai-backup" : sanitizedName;
+              const fileName = `${fileNamePrefix}-format-v${exportedBackup.backup.formatVersion}-db-v${exportedBackup.backup.source.databaseVersion}-${exportedAt.toISOString().slice(0, 10)}.json.gz`;
+              const bytes = yield* gzip.gzipText({
+                text: exportedBackup.json,
+              });
+
+              yield* fileTransfers.shareFile({
+                bytes,
+                dialogTitle: "Export backup",
+                fileName,
+                mimeType: GzipFileMimeType,
+                uti: GzipFileUti,
+              });
+
+              return new ExportBackupSucceeded({
+                message: `Opened share options for ${fileName}.`,
+              });
+            }).pipe(
+              Effect.catch((error) =>
+                Effect.succeed(
+                  new ExportBackupFailed({
+                    message: _backupErrorMessage({ error }),
+                  })
+                )
+              )
+            )
+          ),
+      }),
+    on: {
+      ExportBackupSucceeded: ({ event, state, target }) =>
+        target.full.Ready(
+          new ExportReady({ backupName: state.backupName }),
+          (ready) =>
+            ready.Success(new ExportSuccess({ message: event.message }))
+        ),
+      ExportBackupFailed: ({ event, state, target }) =>
+        target.full.Ready(
+          new ExportReady({ backupName: state.backupName }),
+          (ready) =>
+            ready.Failure(new ExportFailure({ message: event.message }))
+        ),
+    },
   },
 });
 
-const importBackupMachine = setup({
-  schemas: {
-    events: {
-      importFile: Schema.toStandardSchemaV1(EmptyEvent),
+class BackupImportIdle extends Schema.TaggedClass<BackupImportIdle>(
+  "BackupImportIdle"
+)("BackupImportIdle", {}) {}
+
+class ImportingBackup extends Schema.TaggedClass<ImportingBackup>(
+  "ImportingBackup"
+)("ImportingBackup", {}) {}
+
+class BackupImportFailure extends Schema.TaggedClass<BackupImportFailure>(
+  "BackupImportFailure"
+)("BackupImportFailure", { message: Schema.String }) {}
+
+class BackupImportSuccess extends Schema.TaggedClass<BackupImportSuccess>(
+  "BackupImportSuccess"
+)("BackupImportSuccess", { message: Schema.String }) {}
+
+class ImportBackupFile extends Schema.TaggedClass<ImportBackupFile>(
+  "ImportBackupFile"
+)("ImportBackupFile", {}) {}
+
+class BackupImported extends Schema.TaggedClass<BackupImported>(
+  "BackupImported"
+)("BackupImported", { message: Schema.String }) {}
+
+class BackupImportCanceled extends Schema.TaggedClass<BackupImportCanceled>(
+  "BackupImportCanceled"
+)("BackupImportCanceled", {}) {}
+
+class BackupImportFailed extends Schema.TaggedClass<BackupImportFailed>(
+  "BackupImportFailed"
+)("BackupImportFailed", { message: Schema.String }) {}
+
+class ClearBackupImportStatus extends Schema.TaggedClass<ClearBackupImportStatus>(
+  "ClearBackupImportStatus"
+)("ClearBackupImportStatus", {}) {}
+
+const ImportBackupStates = Machine.defineStates({
+  Idle: BackupImportIdle,
+  Importing: ImportingBackup,
+  Failure: BackupImportFailure,
+  Success: BackupImportSuccess,
+});
+
+const importBackupMachine = Machine.make({
+  states: ImportBackupStates.states,
+  events: [
+    ImportBackupFile,
+    BackupImported,
+    BackupImportCanceled,
+    BackupImportFailed,
+    ClearBackupImportStatus,
+  ],
+  initial: () => ImportBackupStates.initial.Idle(new BackupImportIdle()),
+}).handle({
+  Idle: {
+    on: {
+      ImportBackupFile: ({ target }) =>
+        target.full.Importing(new ImportingBackup()),
     },
   },
-  delays: { importBackupSuccess: 3000 },
-  states: {
-    Idle: {},
-    ImportingFile: {},
-    Error: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-    },
-    Success: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-    },
-  },
-  actorSources: {
-    importBackupFile: createAsyncLogic({
-      schemas: {
-        output: Schema.toStandardSchemaV1(MobileBackupImportResult),
-      },
-      run: () =>
-        BackupRuntimeClient.runPromise(
+  Importing: {
+    invoke: Machine.invoke({
+      id: "importBackup",
+      src: () =>
+        Machine.effect(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
-
             const pickedFile = yield* fileTransfers.pickFile({
               mimeTypes: BackupImportMimeTypes,
             });
@@ -224,114 +281,145 @@ const importBackupMachine = setup({
             return yield* Match.value(pickedFile).pipe(
               Match.tagsExhaustive({
                 BackupFilePickCanceled: () =>
-                  Effect.succeed<MobileBackupImportResult>({
-                    _tag: "Canceled",
-                  }),
-
+                  Effect.succeed(new BackupImportCanceled()),
                 PickedBackupFile: Effect.fnUntraced(function* (pickedFile) {
                   const json = yield* _decodeMobileJsonFile({
                     bytes: pickedFile.bytes,
                     fileName: pickedFile.fileName,
                   });
-
                   const backups = yield* Backup.Backups;
                   const importedBackup = yield* backups.importFromJson({
-                    input: {
-                      json,
-                    },
+                    input: { json },
                   });
                   const totalRecords =
                     importedBackup.backup.integrity.counts.dailyLogs +
                     importedBackup.backup.integrity.counts.foods +
                     importedBackup.backup.integrity.counts.mealEntries +
-                    importedBackup.backup.integrity.counts.plans +
-                    importedBackup.backup.integrity.counts.recordableEvents +
-                    importedBackup.backup.integrity.counts.recordedEvents;
+                    importedBackup.backup.integrity.counts.plans;
 
-                  return {
-                    _tag: "Imported" as const,
+                  return new BackupImported({
                     message:
                       "Imported " +
                       pickedFile.fileName +
                       `. Imported backup. Format v${importedBackup.backup.formatVersion}, database v${importedBackup.backup.source.databaseVersion}, ${totalRecords} records restored.`,
-                  };
+                  });
                 }),
               })
             );
-          })
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.succeed(
+                new BackupImportFailed({
+                  message: _backupErrorMessage({ error }),
+                })
+              )
+            )
+          )
         ),
     }),
-  },
-}).createMachine({
-  initial: "Idle",
-  states: {
-    Idle: { on: { importFile: { target: "ImportingFile" } } },
-    ImportingFile: {
-      invoke: {
-        src: "importBackupFile",
-        onDone: ({ event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Canceled: () => ({
-                target: "Success" as const,
-                context: { message: "Import canceled" },
-              }),
-              Imported: ({ message }) => ({
-                target: "Success" as const,
-                context: { message },
-              }),
-            })
-          ),
-        onError: ({ event }) => ({
-          target: "Error",
-          context: { message: _backupErrorMessage({ error: event.error }) },
-        }),
-      },
+    on: {
+      BackupImported: ({ event, target }) =>
+        target.full.Success(
+          new BackupImportSuccess({ message: event.message })
+        ),
+      BackupImportCanceled: ({ target }) =>
+        target.full.Success(
+          new BackupImportSuccess({ message: "Import canceled" })
+        ),
+      BackupImportFailed: ({ event, target }) =>
+        target.full.Failure(
+          new BackupImportFailure({ message: event.message })
+        ),
     },
-    Error: { on: { importFile: { target: "ImportingFile" } } },
-    Success: { after: { importBackupSuccess: { target: "Idle" } } },
+  },
+  Failure: {
+    on: {
+      ImportBackupFile: ({ target }) =>
+        target.full.Importing(new ImportingBackup()),
+    },
+  },
+  Success: {
+    invoke: Machine.invoke({
+      id: "clearBackupImportStatus",
+      src: () =>
+        Machine.effect(
+          Effect.sleep("3 seconds").pipe(
+            Effect.as(new ClearBackupImportStatus())
+          )
+        ),
+    }),
+    on: {
+      ClearBackupImportStatus: ({ target }) =>
+        target.full.Idle(new BackupImportIdle()),
+    },
   },
 });
 
-const catalogExportMachine = setup({
-  schemas: {
-    events: {
-      exportCatalog: Schema.toStandardSchemaV1(EmptyEvent),
+class CatalogExportIdle extends Schema.TaggedClass<CatalogExportIdle>(
+  "CatalogExportIdle"
+)("CatalogExportIdle", {}) {}
+
+class ExportingCatalog extends Schema.TaggedClass<ExportingCatalog>(
+  "ExportingCatalog"
+)("ExportingCatalog", {}) {}
+
+class CatalogExportFailure extends Schema.TaggedClass<CatalogExportFailure>(
+  "CatalogExportFailure"
+)("CatalogExportFailure", { message: Schema.String }) {}
+
+class CatalogExportSuccess extends Schema.TaggedClass<CatalogExportSuccess>(
+  "CatalogExportSuccess"
+)("CatalogExportSuccess", { message: Schema.String }) {}
+
+class ExportCatalog extends Schema.TaggedClass<ExportCatalog>("ExportCatalog")(
+  "ExportCatalog",
+  {}
+) {}
+
+class CatalogExported extends Schema.TaggedClass<CatalogExported>(
+  "CatalogExported"
+)("CatalogExported", { message: Schema.String }) {}
+
+class CatalogExportFailed extends Schema.TaggedClass<CatalogExportFailed>(
+  "CatalogExportFailed"
+)("CatalogExportFailed", { message: Schema.String }) {}
+
+class ClearCatalogExportStatus extends Schema.TaggedClass<ClearCatalogExportStatus>(
+  "ClearCatalogExportStatus"
+)("ClearCatalogExportStatus", {}) {}
+
+const CatalogExportStates = Machine.defineStates({
+  Idle: CatalogExportIdle,
+  Exporting: ExportingCatalog,
+  Failure: CatalogExportFailure,
+  Success: CatalogExportSuccess,
+});
+
+const catalogExportMachine = Machine.make({
+  states: CatalogExportStates.states,
+  events: [
+    ExportCatalog,
+    CatalogExported,
+    CatalogExportFailed,
+    ClearCatalogExportStatus,
+  ],
+  initial: () => CatalogExportStates.initial.Idle(new CatalogExportIdle()),
+}).handle({
+  Idle: {
+    on: {
+      ExportCatalog: ({ target }) =>
+        target.full.Exporting(new ExportingCatalog()),
     },
   },
-  delays: { exportCatalogSuccess: 3000 },
-  states: {
-    Idle: {},
-    ExportingCatalog: {},
-    Error: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-    },
-    Success: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-    },
-  },
-  actorSources: {
-    exportCatalog: createAsyncLogic({
-      schemas: {
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-      run: () =>
-        BackupRuntimeClient.runPromise(
+  Exporting: {
+    invoke: Machine.invoke({
+      id: "exportCatalog",
+      src: () =>
+        Machine.effect(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
             const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
             const gzip = yield* Gzip.Gzip;
-
             const exportedCatalog = yield* transfers.exportToJson();
             const exportedAt = new Date(
               DateTime.toEpochMillis(exportedCatalog.catalog.source.exportedAt)
@@ -349,96 +437,174 @@ const catalogExportMachine = setup({
               uti: GzipFileUti,
             });
 
-            return {
+            return new CatalogExported({
               message: `Opened share options for ${fileName}.`,
-            };
-          })
+            });
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.succeed(
+                new CatalogExportFailed({
+                  message: _backupErrorMessage({ error }),
+                })
+              )
+            )
+          )
         ),
     }),
-  },
-}).createMachine({
-  initial: "Idle",
-  states: {
-    Idle: { on: { exportCatalog: { target: "ExportingCatalog" } } },
-    ExportingCatalog: {
-      invoke: {
-        src: "exportCatalog",
-        onDone: ({ event }) => ({
-          target: "Success",
-          context: { message: event.output.message },
-        }),
-        onError: ({ event }) => ({
-          target: "Error",
-          context: { message: _backupErrorMessage({ error: event.error }) },
-        }),
-      },
+    on: {
+      CatalogExported: ({ event, target }) =>
+        target.full.Success(
+          new CatalogExportSuccess({ message: event.message })
+        ),
+      CatalogExportFailed: ({ event, target }) =>
+        target.full.Failure(
+          new CatalogExportFailure({ message: event.message })
+        ),
     },
-    Error: { on: { exportCatalog: { target: "ExportingCatalog" } } },
-    Success: { after: { exportCatalogSuccess: { target: "Idle" } } },
+  },
+  Failure: {
+    on: {
+      ExportCatalog: ({ target }) =>
+        target.full.Exporting(new ExportingCatalog()),
+    },
+  },
+  Success: {
+    invoke: Machine.invoke({
+      id: "clearCatalogExportStatus",
+      src: () =>
+        Machine.effect(
+          Effect.sleep("3 seconds").pipe(
+            Effect.as(new ClearCatalogExportStatus())
+          )
+        ),
+    }),
+    on: {
+      ClearCatalogExportStatus: ({ target }) =>
+        target.full.Idle(new CatalogExportIdle()),
+    },
   },
 });
 
-const catalogImportMachine = setup({
-  schemas: {
-    events: {
-      openPreviewCatalogImportFile: Schema.toStandardSchemaV1(EmptyEvent),
-      importSelectedCatalogFoods: Schema.toStandardSchemaV1(EmptyEvent),
-      toggleCatalogFood: Schema.toStandardSchemaV1(
-        Schema.Struct({ foodId: Domain.FoodId })
-      ),
+class CatalogImportIdle extends Schema.TaggedClass<CatalogImportIdle>(
+  "CatalogImportIdle"
+)("CatalogImportIdle", {}) {}
+
+class CatalogPreviewing extends Schema.TaggedClass<CatalogPreviewing>(
+  "CatalogPreviewing"
+)("CatalogPreviewing", {}) {}
+
+class CatalogPreviewFailure extends Schema.TaggedClass<CatalogPreviewFailure>(
+  "CatalogPreviewFailure"
+)("CatalogPreviewFailure", { message: Schema.String }) {}
+
+class CatalogPreview extends Schema.TaggedClass<CatalogPreview>(
+  "CatalogPreview"
+)("CatalogPreview", {
+  catalogJson: Schema.String,
+  selectedFoodIds: Schema.HashSet(Domain.FoodId),
+  previewCandidates: Schema.Array(
+    FoodCatalogTransfer.FoodCatalogImportCandidate
+  ),
+}) {}
+
+class SelectingCatalogFoods extends Schema.TaggedClass<SelectingCatalogFoods>(
+  "SelectingCatalogFoods"
+)("SelectingCatalogFoods", {}) {}
+
+class ImportingCatalogFoods extends Schema.TaggedClass<ImportingCatalogFoods>(
+  "ImportingCatalogFoods"
+)("ImportingCatalogFoods", {}) {}
+
+class CatalogImportFailure extends Schema.TaggedClass<CatalogImportFailure>(
+  "CatalogImportFailure"
+)("CatalogImportFailure", { message: Schema.String }) {}
+
+class CatalogImportSuccess extends Schema.TaggedClass<CatalogImportSuccess>(
+  "CatalogImportSuccess"
+)("CatalogImportSuccess", { message: Schema.String }) {}
+
+class OpenCatalogPreview extends Schema.TaggedClass<OpenCatalogPreview>(
+  "OpenCatalogPreview"
+)("OpenCatalogPreview", {}) {}
+
+class ToggleCatalogFood extends Schema.TaggedClass<ToggleCatalogFood>(
+  "ToggleCatalogFood"
+)("ToggleCatalogFood", { foodId: Domain.FoodId }) {}
+
+class ImportSelectedCatalogFoods extends Schema.TaggedClass<ImportSelectedCatalogFoods>(
+  "ImportSelectedCatalogFoods"
+)("ImportSelectedCatalogFoods", {}) {}
+
+class CatalogPreviewCanceled extends Schema.TaggedClass<CatalogPreviewCanceled>(
+  "CatalogPreviewCanceled"
+)("CatalogPreviewCanceled", {}) {}
+
+class CatalogPreviewed extends Schema.TaggedClass<CatalogPreviewed>(
+  "CatalogPreviewed"
+)("CatalogPreviewed", {
+  catalogJson: Schema.String,
+  candidates: Schema.Array(FoodCatalogTransfer.FoodCatalogImportCandidate),
+  selectedFoodIds: Schema.Array(Domain.FoodId),
+}) {}
+
+class CatalogPreviewFailed extends Schema.TaggedClass<CatalogPreviewFailed>(
+  "CatalogPreviewFailed"
+)("CatalogPreviewFailed", { message: Schema.String }) {}
+
+class CatalogFoodsImported extends Schema.TaggedClass<CatalogFoodsImported>(
+  "CatalogFoodsImported"
+)("CatalogFoodsImported", { message: Schema.String }) {}
+
+class CatalogFoodsImportFailed extends Schema.TaggedClass<CatalogFoodsImportFailed>(
+  "CatalogFoodsImportFailed"
+)("CatalogFoodsImportFailed", { message: Schema.String }) {}
+
+class FinishCatalogImport extends Schema.TaggedClass<FinishCatalogImport>(
+  "FinishCatalogImport"
+)("FinishCatalogImport", {}) {}
+
+const CatalogImportStates = Machine.defineStates({
+  Idle: CatalogImportIdle,
+  Previewing: CatalogPreviewing,
+  PreviewFailure: CatalogPreviewFailure,
+  Preview: {
+    schema: CatalogPreview,
+    initial: "Selecting",
+    states: {
+      Selecting: SelectingCatalogFoods,
+      Importing: ImportingCatalogFoods,
+      Failure: CatalogImportFailure,
+      Success: CatalogImportSuccess,
     },
   },
-  delays: { importCatalogSuccess: 3000 },
-  states: {
-    Idle: {},
-    ImportingPreview: {},
-    ImportingPreviewError: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
-        ),
-      },
-    },
-    CatalogPreview: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            catalogJson: Schema.String,
-            selectedFoodIds: Schema.HashSet(Domain.FoodId),
-            previewCandidates: Schema.Array(
-              FoodCatalogTransfer.FoodCatalogImportCandidate
-            ),
-          })
-        ),
-      },
-      states: {
-        SelectFoods: {},
-        ImportingCatalog: {},
-        ImportCompleted: {},
-        Error: {
-          schemas: {
-            context: Schema.toStandardSchemaV1(
-              Schema.Struct({ message: Schema.NonEmptyString })
-            ),
-          },
-        },
-        Success: {
-          schemas: {
-            context: Schema.toStandardSchemaV1(
-              Schema.Struct({ message: Schema.NonEmptyString })
-            ),
-          },
-        },
-      },
+});
+
+const catalogImportMachine = Machine.make({
+  states: CatalogImportStates.states,
+  events: [
+    OpenCatalogPreview,
+    ToggleCatalogFood,
+    ImportSelectedCatalogFoods,
+    CatalogPreviewCanceled,
+    CatalogPreviewed,
+    CatalogPreviewFailed,
+    CatalogFoodsImported,
+    CatalogFoodsImportFailed,
+    FinishCatalogImport,
+  ],
+  initial: () => CatalogImportStates.initial.Idle(new CatalogImportIdle()),
+}).handle({
+  Idle: {
+    on: {
+      OpenCatalogPreview: ({ target }) =>
+        target.full.Previewing(new CatalogPreviewing()),
     },
   },
-  actorSources: {
-    previewCatalogImportFile: createAsyncLogic({
-      schemas: {
-        output: Schema.toStandardSchemaV1(MobileCatalogFilePreviewResult),
-      },
-      run: () =>
-        BackupRuntimeClient.runPromise(
+  Previewing: {
+    invoke: Machine.invoke({
+      id: "previewCatalogImport",
+      src: () =>
+        Machine.effect(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
             const pickedFile = yield* fileTransfers.pickFile({
@@ -448,25 +614,18 @@ const catalogImportMachine = setup({
             return yield* Match.value(pickedFile).pipe(
               Match.tagsExhaustive({
                 BackupFilePickCanceled: () =>
-                  Effect.succeed<MobileCatalogFilePreviewResult>({
-                    _tag: "Canceled",
-                  }),
+                  Effect.succeed(new CatalogPreviewCanceled()),
                 PickedBackupFile: Effect.fnUntraced(function* (pickedFile) {
                   const json = yield* _decodeMobileJsonFile({
                     bytes: pickedFile.bytes,
                     fileName: pickedFile.fileName,
                   });
-
                   const transfers =
                     yield* FoodCatalogTransfer.FoodCatalogTransfers;
                   const decodedCatalog =
-                    yield* FoodCatalogShare.decodeShareText({
-                      text: json,
-                    });
+                    yield* FoodCatalogShare.decodeShareText({ text: json });
                   const preview = yield* transfers.previewImportFromJson({
-                    input: {
-                      json: decodedCatalog.catalogJson,
-                    },
+                    input: { json: decodedCatalog.catalogJson },
                   });
                   const selectedFoodIds = preview.candidates
                     .filter(
@@ -478,155 +637,154 @@ const catalogImportMachine = setup({
                     )
                     .map((candidate) => candidate.food.id);
 
-                  return {
-                    _tag: "Previewed" as const,
+                  return new CatalogPreviewed({
                     catalogJson: decodedCatalog.catalogJson,
                     candidates: preview.candidates,
-                    message: `Previewed ${pickedFile.fileName}. Previewed ${preview.candidates.length} foods. ${selectedFoodIds.length} selected by default.`,
                     selectedFoodIds,
-                  };
+                  });
                 }),
               })
             );
-          })
+          }).pipe(
+            Effect.catch((error) =>
+              Effect.succeed(
+                new CatalogPreviewFailed({
+                  message: _backupErrorMessage({ error }),
+                })
+              )
+            )
+          )
         ),
     }),
-
-    importSelectedCatalogFoods: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            catalogJson: Schema.String,
-            selectedFoodIds: Schema.Array(Domain.FoodId),
-          })
+    on: {
+      CatalogPreviewCanceled: ({ target }) =>
+        target.full.Idle(new CatalogImportIdle()),
+      CatalogPreviewed: ({ event, target }) =>
+        target.full.Preview(
+          new CatalogPreview({
+            catalogJson: event.catalogJson,
+            previewCandidates: event.candidates,
+            selectedFoodIds: HashSet.fromIterable(event.selectedFoodIds),
+          }),
+          (preview) => preview.Selecting(new SelectingCatalogFoods())
         ),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({ message: Schema.NonEmptyString })
+      CatalogPreviewFailed: ({ event, target }) =>
+        target.full.PreviewFailure(
+          new CatalogPreviewFailure({ message: event.message })
         ),
-      },
-      run: ({ input }) =>
-        BackupRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
-            const importedCatalog = yield* transfers.importSelectedFromJson({
-              input: {
-                json: input.catalogJson,
-                selectedFoodIds: input.selectedFoodIds,
-              },
-            });
-
-            return {
-              message: `Imported ${importedCatalog.importedFoods.length} foods.`,
-            };
-          })
-        ),
-    }),
+    },
   },
-}).createMachine({
-  initial: "Idle",
-  states: {
-    Idle: {
-      on: {
-        openPreviewCatalogImportFile: { target: "ImportingPreview" },
-      },
+  PreviewFailure: {
+    on: {
+      OpenCatalogPreview: ({ target }) =>
+        target.full.Previewing(new CatalogPreviewing()),
     },
-    ImportingPreview: {
-      invoke: {
-        src: "previewCatalogImportFile",
-        onDone: ({ event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Canceled: () => ({
-                target: "Idle" as const,
-              }),
-              Previewed: ({ candidates, catalogJson, selectedFoodIds }) => ({
-                target: "CatalogPreview" as const,
-                context: {
-                  catalogJson,
-                  previewCandidates: candidates,
-                  selectedFoodIds: HashSet.fromIterable(selectedFoodIds),
-                },
-              }),
-            })
-          ),
-        onError: ({ event }) => ({
-          target: "ImportingPreviewError",
-          context: { message: _backupErrorMessage({ error: event.error }) },
-        }),
-      },
-    },
-    ImportingPreviewError: {
-      on: {
-        openPreviewCatalogImportFile: { target: "ImportingPreview" },
-      },
-    },
-    CatalogPreview: {
-      initial: "SelectFoods",
-      onDone: { target: "Idle" },
-      on: {
-        toggleCatalogFood: ({ context, event }) =>
-          Option.gen(function* () {
-            const { selection } = yield* Array.findFirst(
-              context.previewCandidates,
-              (previewCandidate) => previewCandidate.food.id === event.foodId
+  },
+  Preview: {
+    states: {
+      Selecting: {
+        on: {
+          ToggleCatalogFood: ({ event, parents, target }) => {
+            const preview = parents.Preview;
+            const candidate = preview.previewCandidates.find(
+              ({ food }) => food.id === event.foodId
             );
 
-            if (!selection.selectable) return yield* Option.none();
+            if (candidate === undefined || !candidate.selection.selectable) {
+              return undefined;
+            }
 
-            return {
-              context: {
-                ...context,
+            return target.full.Preview(
+              new CatalogPreview({
+                catalogJson: preview.catalogJson,
+                previewCandidates: preview.previewCandidates,
                 selectedFoodIds: HashSet.has(
-                  context.selectedFoodIds,
+                  preview.selectedFoodIds,
                   event.foodId
                 )
-                  ? HashSet.remove(context.selectedFoodIds, event.foodId)
-                  : HashSet.add(context.selectedFoodIds, event.foodId),
-              },
-            };
-          }).pipe(Option.getOrElse(() => ({ context }))),
+                  ? HashSet.remove(preview.selectedFoodIds, event.foodId)
+                  : HashSet.add(preview.selectedFoodIds, event.foodId),
+              }),
+              (nextPreview) =>
+                nextPreview.Selecting(new SelectingCatalogFoods())
+            );
+          },
+          ImportSelectedCatalogFoods: ({ parents, target }) =>
+            HashSet.isEmpty(parents.Preview.selectedFoodIds)
+              ? undefined
+              : target.local.Importing(new ImportingCatalogFoods()),
+        },
       },
-      states: {
-        SelectFoods: {
-          on: {
-            importSelectedCatalogFoods: { target: "ImportingCatalog" },
-          },
+      Importing: {
+        invoke: ({ parents }) =>
+          Machine.invoke({
+            id: "importSelectedCatalogFoods",
+            src: () =>
+              Machine.effect(
+                Effect.gen(function* () {
+                  const transfers =
+                    yield* FoodCatalogTransfer.FoodCatalogTransfers;
+                  const importedCatalog =
+                    yield* transfers.importSelectedFromJson({
+                      input: {
+                        json: parents.Preview.catalogJson,
+                        selectedFoodIds: globalThis.Array.from(
+                          parents.Preview.selectedFoodIds
+                        ),
+                      },
+                    });
+
+                  return new CatalogFoodsImported({
+                    message: `Imported ${importedCatalog.importedFoods.length} foods.`,
+                  });
+                }).pipe(
+                  Effect.catch((error) =>
+                    Effect.succeed(
+                      new CatalogFoodsImportFailed({
+                        message: _backupErrorMessage({ error }),
+                      })
+                    )
+                  )
+                )
+              ),
+          }),
+        on: {
+          CatalogFoodsImported: ({ event, target }) =>
+            target.local.Success(
+              new CatalogImportSuccess({ message: event.message })
+            ),
+          CatalogFoodsImportFailed: ({ event, target }) =>
+            target.local.Failure(
+              new CatalogImportFailure({ message: event.message })
+            ),
         },
-        ImportingCatalog: {
-          invoke: {
-            src: "importSelectedCatalogFoods",
-            input: ({ context }) => ({
-              catalogJson: context.catalogJson,
-              selectedFoodIds: globalThis.Array.from(context.selectedFoodIds),
-            }),
-            onError: ({ event }) => ({
-              target: "Error",
-              context: { message: _backupErrorMessage({ error: event.error }) },
-            }),
-            onDone: ({ event }) => ({
-              target: "Success",
-              context: { message: event.output.message },
-            }),
-          },
+      },
+      Failure: {
+        on: {
+          ImportSelectedCatalogFoods: ({ target }) =>
+            target.local.Importing(new ImportingCatalogFoods()),
         },
-        Error: {
-          on: {
-            importSelectedCatalogFoods: { target: "ImportingCatalog" },
-          },
+      },
+      Success: {
+        invoke: Machine.invoke({
+          id: "finishCatalogImport",
+          src: () =>
+            Machine.effect(
+              Effect.sleep("3 seconds").pipe(
+                Effect.as(new FinishCatalogImport())
+              )
+            ),
+        }),
+        on: {
+          FinishCatalogImport: ({ target }) =>
+            target.full.Idle(new CatalogImportIdle()),
         },
-        Success: {
-          after: {
-            importCatalogSuccess: { target: "ImportCompleted" },
-          },
-        },
-        ImportCompleted: { type: "final" },
       },
     },
   },
 });
 
 const localDataResetMachine = LocalDataResetMachine.makeLocalDataResetMachine({
-  runtime: RuntimeClient,
   restartApp: Effect.sync(() => {
     if (router.canDismiss()) {
       router.dismissAll();
@@ -679,8 +837,28 @@ export default function BackupScreen() {
 }
 
 function ExportBackupSection() {
-  const [snapshot, , actor] = useMachine(exportBackupMachine);
-  const exporting = snapshot.matches("Exporting");
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, exportBackupMachine),
+    []
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const state = AsyncResult.isSuccess(stateResult) ? stateResult.value : null;
+  const ready =
+    state === null
+      ? null
+      : ExportBackupStates.get(state, "Ready").pipe(Option.getOrNull);
+  const failure =
+    state === null
+      ? null
+      : ExportBackupStates.get(state, "Ready.Failure").pipe(Option.getOrNull);
+  const success =
+    state === null
+      ? null
+      : ExportBackupStates.get(state, "Ready.Success").pipe(Option.getOrNull);
+  const exporting =
+    state !== null && ExportBackupStates.matches(state, "Exporting");
+
   return (
     <>
       <BackupSettingsSection divider={false} title="Export">
@@ -691,31 +869,41 @@ function ExportBackupSection() {
             editable={!exporting}
             label="Name"
             placeholder="Mai backup"
-            value={snapshot.context.backupName}
-            onChangeText={(value) =>
-              actor.trigger.changeBackupName({ backupName: value })
-            }
+            value={ready?.backupName ?? ""}
+            onChangeText={(backupName) => {
+              send(new ChangeBackupName({ backupName }));
+            }}
           />
           <Button
-            disabled={exporting}
+            disabled={exporting || state === null}
             icon={Download}
             loading={exporting}
-            onPress={actor.trigger.exportBackup}
+            onPress={() => {
+              send(new ExportBackup());
+            }}
           >
             Export backup
           </Button>
 
-          {snapshot.matches("Success") && (
-            <Notice message={snapshot.context.message} tone="success" />
+          {success === null ? null : (
+            <Notice message={success.message} tone="success" />
           )}
 
-          {snapshot.matches("Error") && (
+          {failure === null ? null : (
             <Notice
-              message={snapshot.context.message}
+              message={failure.message}
               title="Export failed"
               tone="danger"
             />
           )}
+
+          {AsyncResult.isFailure(stateResult) ? (
+            <Notice
+              message="Could not start the backup export."
+              title="Export unavailable"
+              tone="danger"
+            />
+          ) : null}
         </View>
       </BackupSettingsSection>
 
@@ -725,8 +913,24 @@ function ExportBackupSection() {
 }
 
 function ImportBackupSection() {
-  const [snapshot, , actor] = useMachine(importBackupMachine);
-  const isImporting = snapshot.matches("ImportingFile");
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, importBackupMachine),
+    []
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const state = AsyncResult.isSuccess(stateResult) ? stateResult.value : null;
+  const failure =
+    state === null
+      ? null
+      : ImportBackupStates.get(state, "Failure").pipe(Option.getOrNull);
+  const success =
+    state === null
+      ? null
+      : ImportBackupStates.get(state, "Success").pipe(Option.getOrNull);
+  const isImporting =
+    state !== null && ImportBackupStates.matches(state, "Importing");
+
   return (
     <>
       <BackupSettingsSection divider title="Import">
@@ -735,26 +939,36 @@ function ImportBackupSection() {
             Import replaces the current data on this device.
           </Text>
           <Button
-            disabled={isImporting}
+            disabled={isImporting || state === null}
             icon={Upload}
             loading={isImporting}
-            onPress={actor.trigger.importFile}
+            onPress={() => {
+              send(new ImportBackupFile());
+            }}
             variant="danger"
           >
             Choose backup file
           </Button>
 
-          {snapshot.matches("Success") && (
-            <Notice message={snapshot.context.message} tone="success" />
+          {success === null ? null : (
+            <Notice message={success.message} tone="success" />
           )}
 
-          {snapshot.matches("Error") && (
+          {failure === null ? null : (
             <Notice
-              message={snapshot.context.message}
+              message={failure.message}
               title="Import failed"
               tone="danger"
             />
           )}
+
+          {AsyncResult.isFailure(stateResult) ? (
+            <Notice
+              message="Could not start the backup import."
+              title="Import unavailable"
+              tone="danger"
+            />
+          ) : null}
         </View>
       </BackupSettingsSection>
 
@@ -764,32 +978,58 @@ function ImportBackupSection() {
 }
 
 function CatalogExportSection() {
-  const [snapshot, , actor] = useMachine(catalogExportMachine);
-  const isExporting = snapshot.matches("ExportingCatalog");
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, catalogExportMachine),
+    []
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const state = AsyncResult.isSuccess(stateResult) ? stateResult.value : null;
+  const failure =
+    state === null
+      ? null
+      : CatalogExportStates.get(state, "Failure").pipe(Option.getOrNull);
+  const success =
+    state === null
+      ? null
+      : CatalogExportStates.get(state, "Success").pipe(Option.getOrNull);
+  const isExporting =
+    state !== null && CatalogExportStates.matches(state, "Exporting");
+
   return (
     <>
       <BackupSettingsSection divider title="Export catalog">
         <View style={styles.sectionBody}>
           <Button
-            disabled={isExporting}
+            disabled={isExporting || state === null}
             icon={Download}
             loading={isExporting}
-            onPress={actor.trigger.exportCatalog}
+            onPress={() => {
+              send(new ExportCatalog());
+            }}
           >
             Export catalog file
           </Button>
 
-          {snapshot.matches("Success") && (
-            <Notice message={snapshot.context.message} tone="success" />
+          {success === null ? null : (
+            <Notice message={success.message} tone="success" />
           )}
 
-          {snapshot.matches("Error") && (
+          {failure === null ? null : (
             <Notice
-              message={snapshot.context.message}
+              message={failure.message}
               title="Export catalog failed"
               tone="danger"
             />
           )}
+
+          {AsyncResult.isFailure(stateResult) ? (
+            <Notice
+              message="Could not start the catalog export."
+              title="Export unavailable"
+              tone="danger"
+            />
+          ) : null}
         </View>
       </BackupSettingsSection>
 
@@ -799,68 +1039,116 @@ function CatalogExportSection() {
 }
 
 function CatalogImportSection() {
-  const [snapshot, , actor] = useMachine(catalogImportMachine);
-  const isImporting = snapshot.matches("CatalogPreview.ImportingCatalog");
-  const isPreviewing = snapshot.matches("ImportingPreview");
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, catalogImportMachine),
+    []
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const state = AsyncResult.isSuccess(stateResult) ? stateResult.value : null;
+  const preview =
+    state === null
+      ? null
+      : CatalogImportStates.get(state, "Preview").pipe(Option.getOrNull);
+  const previewFailure =
+    state === null
+      ? null
+      : CatalogImportStates.get(state, "PreviewFailure").pipe(Option.getOrNull);
+  const importFailure =
+    state === null
+      ? null
+      : CatalogImportStates.get(state, "Preview.Failure").pipe(
+          Option.getOrNull
+        );
+  const importSuccess =
+    state === null
+      ? null
+      : CatalogImportStates.get(state, "Preview.Success").pipe(
+          Option.getOrNull
+        );
+  const isImporting =
+    state !== null && CatalogImportStates.matches(state, "Preview.Importing");
+  const isPreviewing =
+    state !== null && CatalogImportStates.matches(state, "Previewing");
   const isPreviewReady =
-    snapshot.matches("CatalogPreview.SelectFoods") ||
-    snapshot.matches("CatalogPreview.ImportingCatalog");
+    state !== null &&
+    (CatalogImportStates.matches(state, "Preview.Selecting") ||
+      CatalogImportStates.matches(state, "Preview.Importing"));
   const isBusy = isImporting || isPreviewing;
+
   return (
     <>
       <BackupSettingsSection divider title="Import catalog">
         <View style={styles.sectionBody}>
           <Button
-            disabled={isBusy}
+            disabled={isBusy || state === null}
             icon={Upload}
             loading={isPreviewing}
-            onPress={actor.trigger.openPreviewCatalogImportFile}
+            onPress={() => {
+              send(new OpenCatalogPreview());
+            }}
           >
             Choose catalog file
           </Button>
 
-          {snapshot.matches("CatalogPreview.Success") && (
-            <Notice message={snapshot.context.message} tone="success" />
+          {importSuccess === null ? null : (
+            <Notice message={importSuccess.message} tone="success" />
           )}
 
-          {snapshot.matches("CatalogPreview.Error") && (
+          {importFailure === null ? null : (
             <Notice
-              message={snapshot.context.message}
+              message={importFailure.message}
               title="Import catalog failed"
               tone="danger"
             />
           )}
+
+          {previewFailure === null ? null : (
+            <Notice
+              message={previewFailure.message}
+              title="Preview catalog failed"
+              tone="danger"
+            />
+          )}
+
+          {AsyncResult.isFailure(stateResult) ? (
+            <Notice
+              message="Could not start the catalog import."
+              title="Import unavailable"
+              tone="danger"
+            />
+          ) : null}
         </View>
       </BackupSettingsSection>
 
-      {isPreviewReady && (
+      {isPreviewReady && preview !== null && (
         <BackupSettingsSection divider title="Preview">
           <View style={styles.sectionBody}>
             <View style={styles.catalogMetricRow}>
               <Text style={styles.catalogMetricText}>
-                {snapshot.context.previewCandidates.length} candidates
+                {preview.previewCandidates.length} candidates
               </Text>
               <Text style={styles.catalogMetricText}>
-                {HashSet.size(snapshot.context.selectedFoodIds)} selected
+                {HashSet.size(preview.selectedFoodIds)} selected
               </Text>
             </View>
 
             <View style={styles.catalogCandidateList}>
-              {snapshot.context.previewCandidates.map(
+              {preview.previewCandidates.map(
                 (candidate: FoodCatalogTransfer.FoodCatalogImportCandidate) => (
                   <CatalogCandidateRow
                     key={candidate.food.id}
                     candidate={candidate}
                     disabled={isBusy}
                     selected={HashSet.has(
-                      snapshot.context.selectedFoodIds,
+                      preview.selectedFoodIds,
                       candidate.food.id
                     )}
-                    onToggle={() =>
-                      actor.trigger.toggleCatalogFood({
-                        foodId: candidate.food.id,
-                      })
-                    }
+                    onToggle={() => {
+                      send(
+                        new ToggleCatalogFood({ foodId: candidate.food.id })
+                      );
+                    }}
                   />
                 )
               )}
@@ -869,10 +1157,10 @@ function CatalogImportSection() {
             <Button
               icon={Upload}
               loading={isImporting}
-              onPress={actor.trigger.importSelectedCatalogFoods}
-              disabled={
-                HashSet.isEmpty(snapshot.context.selectedFoodIds) || isBusy
-              }
+              onPress={() => {
+                send(new ImportSelectedCatalogFoods());
+              }}
+              disabled={HashSet.isEmpty(preview.selectedFoodIds) || isBusy}
             >
               Import selected
             </Button>
@@ -974,27 +1262,56 @@ function CatalogBadge({
 }
 
 function ResetDataSection() {
-  const [snapshot, , actor] = useMachine(localDataResetMachine);
-  const canReset = snapshot.can({ type: "reset" });
-  const isIdle = snapshot.matches("Idle");
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, localDataResetMachine),
+    []
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+  const state = AsyncResult.isSuccess(stateResult) ? stateResult.value : null;
+  const confirmation =
+    state === null
+      ? null
+      : LocalDataResetMachine.LocalDataResetStates.get(
+          state,
+          "Confirmation"
+        ).pipe(Option.getOrNull);
+  const failure =
+    state === null
+      ? null
+      : LocalDataResetMachine.LocalDataResetStates.get(
+          state,
+          "Confirmation.Failure"
+        ).pipe(Option.getOrNull);
+  const canReset =
+    confirmation?.confirmationText ===
+    NutritionLocalData.LocalDataResetConfirmationText;
+  const isIdle =
+    state !== null &&
+    LocalDataResetMachine.LocalDataResetStates.matches(state, "Idle");
   const isConfirming =
-    snapshot.matches("Failure") || snapshot.matches("ConfirmReset");
-  const isResetting = snapshot.matches("Resetting");
+    state !== null &&
+    LocalDataResetMachine.LocalDataResetStates.matches(state, "Confirmation");
+  const isResetting =
+    state !== null &&
+    LocalDataResetMachine.LocalDataResetStates.matches(state, "Resetting");
   const resetDisabled = isResetting;
+
   return (
     <>
       <BackupSettingsSection divider title="Reset">
         <View style={styles.sectionBody}>
           <Text style={styles.warningText}>
-            Delete every plan, food, daily log, meal entry, and recorded event
-            on this device.
+            Delete every plan, food, daily log, and meal entry on this device.
           </Text>
 
           {isIdle ? (
             <Button
               disabled={resetDisabled}
               icon={Trash2}
-              onPress={actor.trigger.begin}
+              onPress={() => {
+                send(new LocalDataResetMachine.BeginReset());
+              }}
               variant="danger"
             >
               Delete everything
@@ -1016,18 +1333,22 @@ function ResetDataSection() {
                 editable={!resetDisabled}
                 label="Confirmation"
                 placeholder={NutritionLocalData.LocalDataResetConfirmationText}
-                value={snapshot.context.confirmationText}
-                onChangeText={(confirmationText) =>
-                  actor.trigger.changeConfirmationText({
-                    confirmationText,
-                  })
-                }
+                value={confirmation?.confirmationText ?? ""}
+                onChangeText={(confirmationText) => {
+                  send(
+                    new LocalDataResetMachine.ChangeResetConfirmationText({
+                      confirmationText,
+                    })
+                  );
+                }}
               />
               <View style={styles.inlineActions}>
                 <Button
                   disabled={resetDisabled}
                   icon={X}
-                  onPress={actor.trigger.cancel}
+                  onPress={() => {
+                    send(new LocalDataResetMachine.CancelReset());
+                  }}
                   style={styles.inlineAction}
                   variant="secondary"
                 >
@@ -1036,7 +1357,9 @@ function ResetDataSection() {
                 <Button
                   disabled={resetDisabled || !canReset}
                   icon={Trash2}
-                  onPress={actor.trigger.reset}
+                  onPress={() => {
+                    send(new LocalDataResetMachine.ConfirmLocalDataReset());
+                  }}
                   style={styles.inlineAction}
                   variant="danger"
                 >
@@ -1044,12 +1367,18 @@ function ResetDataSection() {
                 </Button>
               </View>
 
-              {snapshot.matches("Failure") && (
-                <Text style={styles.resetErrorText}>
-                  {snapshot.context.message}
-                </Text>
+              {failure === null ? null : (
+                <Text style={styles.resetErrorText}>{failure.message}</Text>
               )}
             </View>
+          ) : null}
+
+          {AsyncResult.isFailure(stateResult) ? (
+            <Notice
+              message="Could not start the local-data reset."
+              title="Reset unavailable"
+              tone="danger"
+            />
           ) : null}
         </View>
       </BackupSettingsSection>

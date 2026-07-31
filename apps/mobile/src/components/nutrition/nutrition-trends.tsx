@@ -5,18 +5,19 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
-import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import * as Domain from "@mai/nutrition/domain";
-import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
+import { Domain, NutritionReports } from "@mai/nutrition";
 import {
   Circle as SkiaCircle,
   DashPathEffect,
   Rect as SkiaRect,
 } from "@shopify/react-native-skia";
-import { useMachine } from "@xstate/react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Array, Effect, Option, Schema } from "effect";
+import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -27,7 +28,6 @@ import {
   Scatter,
   useChartPressState,
 } from "victory-native";
-import { createAsyncLogic, setup } from "xstate";
 
 import { isInsideNutritionTargetMargin } from "@/lib/nutrition-target-trend";
 
@@ -47,44 +47,9 @@ type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
 
 const NutritionChartKind = Schema.Literals(["trend", "daily"]);
 
-const NutritionTrendMetricContext = Schema.Struct({
+const NutritionTrendSelection = Schema.Struct({
   chartKind: NutritionChartKind,
   nutrientName: NutritionTrendMetric,
-});
-
-const nutritionTrendMetricMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(NutritionTrendMetricContext),
-    events: {
-      selectChartKind: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          chartKind: NutritionChartKind,
-        })
-      ),
-      selectMetric: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          nutrientName: NutritionTrendMetric,
-        })
-      ),
-    },
-  },
-}).createMachine({
-  context: {
-    chartKind: "trend",
-    nutrientName: "energyKcal",
-  },
-  on: {
-    selectChartKind: ({ event }) => ({
-      context: {
-        chartKind: event.chartKind,
-      },
-    }),
-    selectMetric: ({ event }) => ({
-      context: {
-        nutrientName: event.nutrientName,
-      },
-    }),
-  },
 });
 
 const NutritionCalendarDay = Schema.Struct({
@@ -95,164 +60,173 @@ const NutritionCalendarDay = Schema.Struct({
 
 const NutritionCalendarInput = Schema.Struct({
   dateKey: Domain.DateKey,
-  days: Schema.Array(NutritionCalendarDay),
-  loadEndDateKey: Schema.NullOr(Domain.DateKey),
-  loadStartDateKey: Schema.NullOr(Domain.DateKey),
-  shouldLoad: Schema.Boolean,
 });
 
-const NutritionCalendarContext = Schema.Struct({
+class NutritionCalendarLoading extends Schema.TaggedClass<NutritionCalendarLoading>(
+  "NutritionCalendarLoading"
+)("NutritionCalendarLoading", {
   dateKey: Domain.DateKey,
-  days: Schema.Array(NutritionCalendarDay),
-  loadEndDateKey: Schema.NullOr(Domain.DateKey),
-  loadStartDateKey: Schema.NullOr(Domain.DateKey),
-  message: Schema.NullOr(Schema.String),
-  shouldLoad: Schema.Boolean,
-});
+}) {}
 
 const LoadNutritionCalendarInput = Schema.Struct({
   dateKey: Domain.DateKey,
-  days: Schema.Array(NutritionCalendarDay),
-  loadEndDateKey: Schema.NullOr(Domain.DateKey),
-  loadStartDateKey: Schema.NullOr(Domain.DateKey),
 });
 
-const LoadNutritionCalendarOutput = Schema.Struct({
+class NutritionCalendarReady extends Schema.TaggedClass<NutritionCalendarReady>(
+  "NutritionCalendarReady"
+)("NutritionCalendarReady", {
+  dateKey: Domain.DateKey,
   days: Schema.Array(NutritionCalendarDay),
+}) {}
+
+class NutritionCalendarFailed extends Schema.TaggedClass<NutritionCalendarFailed>(
+  "NutritionCalendarFailed"
+)("NutritionCalendarFailed", {
+  dateKey: Domain.DateKey,
+  message: Schema.String,
+}) {}
+
+class NextNutritionMonth extends Schema.TaggedClass<NextNutritionMonth>(
+  "NextNutritionMonth"
+)("NextNutritionMonth", {}) {}
+
+class PreviousNutritionMonth extends Schema.TaggedClass<PreviousNutritionMonth>(
+  "PreviousNutritionMonth"
+)("PreviousNutritionMonth", {}) {}
+
+class RetryNutritionMonth extends Schema.TaggedClass<RetryNutritionMonth>(
+  "RetryNutritionMonth"
+)("RetryNutritionMonth", {}) {}
+
+class NutritionCalendarLoaded extends Schema.TaggedClass<NutritionCalendarLoaded>(
+  "NutritionCalendarLoaded"
+)("NutritionCalendarLoaded", {
+  days: Schema.Array(NutritionCalendarDay),
+}) {}
+
+class NutritionCalendarLoadFailed extends Schema.TaggedClass<NutritionCalendarLoadFailed>(
+  "NutritionCalendarLoadFailed"
+)("NutritionCalendarLoadFailed", {
+  message: Schema.String,
+}) {}
+
+const NutritionCalendarStates = Machine.defineStates({
+  NutritionCalendarLoading,
+  NutritionCalendarReady,
+  NutritionCalendarFailed,
 });
 
-const nutritionCalendarMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(NutritionCalendarContext),
-    events: {
-      nextMonth: Schema.toStandardSchemaV1(EmptyEvent),
-      previousMonth: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(NutritionCalendarInput),
-  },
-  states: {
-    Failed: {},
-    Initial: {},
-    Loading: {},
-    Ready: {},
-  },
-  actorSources: {
-    loadMonth: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadNutritionCalendarInput),
-        output: Schema.toStandardSchemaV1(LoadNutritionCalendarOutput),
-      },
-      run: ({ input }) =>
-        InsightsRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const reports = yield* NutritionReports.NutritionReports;
-            const range =
-              input.loadStartDateKey === null || input.loadEndDateKey === null
-                ? CalendarMonthModel.range({
-                    dateKey: input.dateKey,
-                  })
-                : {
-                    endDateKey: input.loadEndDateKey,
-                    startDateKey: input.loadStartDateKey,
-                  };
-            const report = yield* reports.getRange({
-              input: range,
-            });
+const NutritionCalendarEffects = {
+  load: ({ dateKey }: typeof LoadNutritionCalendarInput.Type) =>
+    Effect.gen(function* () {
+      const reports = yield* NutritionReports.NutritionReports;
+      const range = CalendarMonthModel.range({ dateKey });
+      const report = yield* reports.getRange({ input: range });
 
-            return {
-              days: [...input.days, ..._calendarDaysFromReport({ report })],
-            };
+      return new NutritionCalendarLoaded({
+        days: report.days.map((day) => ({
+          dateKey: day.dateKey,
+          hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
+          isInsideTargetMargin:
+            Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
+            day.targetStatuses.every((status) =>
+              isInsideNutritionTargetMargin({
+                actual: status.value,
+                semantics: status.semantics,
+                target: status.amount,
+              })
+            ),
+        })),
+      });
+    }).pipe(
+      Effect.catch(() =>
+        Effect.succeed(
+          new NutritionCalendarLoadFailed({
+            message: "Could not load this nutrition month.",
+          })
+        )
+      )
+    ),
+};
+
+const nutritionCalendarMachine = Machine.make({
+  states: NutritionCalendarStates.states,
+  events: [
+    NextNutritionMonth,
+    PreviousNutritionMonth,
+    RetryNutritionMonth,
+    NutritionCalendarLoaded,
+    NutritionCalendarLoadFailed,
+  ],
+  input: NutritionCalendarInput,
+  initial: (input) =>
+    NutritionCalendarStates.initial.NutritionCalendarLoading(
+      new NutritionCalendarLoading(input)
+    ),
+}).handle({
+  NutritionCalendarLoading: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "loadNutritionCalendar",
+        src: () => Machine.effect(NutritionCalendarEffects.load(state)),
+      }),
+    on: {
+      NutritionCalendarLoaded: ({ event, state, target }) =>
+        target.full.NutritionCalendarReady(
+          new NutritionCalendarReady({
+            dateKey: state.dateKey,
+            days: event.days,
           })
         ),
-    }),
+      NutritionCalendarLoadFailed: ({ event, state, target }) =>
+        target.full.NutritionCalendarFailed(
+          new NutritionCalendarFailed({
+            dateKey: state.dateKey,
+            message: event.message,
+          })
+        ),
+    },
   },
-}).createMachine({
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-    days: input.days,
-    loadEndDateKey: input.loadEndDateKey,
-    loadStartDateKey: input.loadStartDateKey,
-    message: null,
-    shouldLoad: input.shouldLoad,
-  }),
-  initial: "Initial",
-  states: {
-    Initial: {
-      always: ({ context }) => ({
-        target: context.shouldLoad ? "Loading" : "Ready",
-      }),
+  NutritionCalendarReady: {
+    on: {
+      NextNutritionMonth: ({ state, target }) =>
+        target.full.NutritionCalendarLoading(
+          new NutritionCalendarLoading({
+            dateKey: _shiftCalendarMonth({ dateKey: state.dateKey, months: 1 }),
+          })
+        ),
+      PreviousNutritionMonth: ({ state, target }) =>
+        target.full.NutritionCalendarLoading(
+          new NutritionCalendarLoading({
+            dateKey: _shiftCalendarMonth({
+              dateKey: state.dateKey,
+              months: -1,
+            }),
+          })
+        ),
     },
-    Loading: {
-      invoke: {
-        src: "loadMonth",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          days: context.days,
-          loadEndDateKey: context.loadEndDateKey,
-          loadStartDateKey: context.loadStartDateKey,
-        }),
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: {
-            days: event.output.days,
-            loadEndDateKey: null,
-            loadStartDateKey: null,
-            message: null,
-            shouldLoad: false,
-          },
-        }),
-        onError: {
-          target: "Failed",
-          context: {
-            message: "Could not load this nutrition month.",
-            shouldLoad: false,
-          },
-        },
-      },
-    },
-    Ready: {
-      on: {
-        nextMonth: ({ context }) => ({
-          target: "Loading",
-          context: _calendarNavigationContext({
-            context,
-            months: 1,
-          }),
-        }),
-        previousMonth: ({ context }) => ({
-          target: "Loading",
-          context: _calendarNavigationContext({
-            context,
-            months: -1,
-          }),
-        }),
-      },
-    },
-    Failed: {
-      on: {
-        nextMonth: ({ context }) => ({
-          target: "Loading",
-          context: _calendarNavigationContext({
-            context,
-            months: 1,
-          }),
-        }),
-        previousMonth: ({ context }) => ({
-          target: "Loading",
-          context: _calendarNavigationContext({
-            context,
-            months: -1,
-          }),
-        }),
-        retry: {
-          target: "Loading",
-          context: {
-            message: null,
-            shouldLoad: true,
-          },
-        },
-      },
+  },
+  NutritionCalendarFailed: {
+    on: {
+      NextNutritionMonth: ({ state, target }) =>
+        target.full.NutritionCalendarLoading(
+          new NutritionCalendarLoading({
+            dateKey: _shiftCalendarMonth({ dateKey: state.dateKey, months: 1 }),
+          })
+        ),
+      PreviousNutritionMonth: ({ state, target }) =>
+        target.full.NutritionCalendarLoading(
+          new NutritionCalendarLoading({
+            dateKey: _shiftCalendarMonth({
+              dateKey: state.dateKey,
+              months: -1,
+            }),
+          })
+        ),
+      RetryNutritionMonth: ({ state, target }) =>
+        target.full.NutritionCalendarLoading(
+          new NutritionCalendarLoading({ dateKey: state.dateKey })
+        ),
     },
   },
 });
@@ -325,24 +299,11 @@ export function NutritionTrends({
   readonly currentReport: NutritionReports.NutritionReportRange;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
 }) {
-  const initialCalendar = useMemo(
-    () =>
-      CalendarMonthModel.initialLoad({
-        dateKey: currentReport.endDateKey,
-        report: currentReport,
-      }),
-    [currentReport]
-  );
-
   return (
     <View style={styles.root}>
       <NutritionTrendChart report={currentReport} />
       <NutritionCalendar
-        initialDays={initialCalendar.days}
         initialDateKey={currentReport.endDateKey}
-        loadEndDateKey={initialCalendar.loadEndDateKey}
-        loadStartDateKey={initialCalendar.loadStartDateKey}
-        shouldLoadInitialMonth={initialCalendar.shouldLoad}
         onSelectDate={onSelectDate}
       />
     </View>
@@ -354,17 +315,20 @@ function NutritionTrendChart({
 }: {
   readonly report: NutritionReports.NutritionReportRange;
 }) {
-  const [snapshot, , actor] = useMachine(nutritionTrendMetricMachine);
-  const chartKind = snapshot.context.chartKind;
-  const nutrientName = snapshot.context.nutrientName;
-  const chart = useMemo(
+  const selectionAtom = useMemo(
     () =>
-      NutritionChartDataModel.make({
-        nutrientName,
-        report,
+      Atom.make<typeof NutritionTrendSelection.Type>({
+        chartKind: "trend",
+        nutrientName: "energyKcal",
       }),
-    [nutrientName, report]
+    []
   );
+  const { chartKind, nutrientName } = useAtomValue(selectionAtom);
+  const setSelection = useAtomSet(selectionAtom);
+  const chart = NutritionChartDataModel.make({
+    nutrientName,
+    report,
+  });
   const unit =
     nutrientName === "energyKcal"
       ? "kcal"
@@ -395,9 +359,10 @@ function NutritionTrendChart({
       <PagerTabBar
         activeIndex={chartKind === "trend" ? 0 : 1}
         onActiveIndexChange={(index) => {
-          actor.trigger.selectChartKind({
+          setSelection((current) => ({
+            ...current,
             chartKind: index === 0 ? "trend" : "daily",
-          });
+          }));
         }}
         tabs={nutritionChartTabs}
       />
@@ -571,9 +536,10 @@ function NutritionTrendChart({
               accessibilityState={{ selected }}
               key={metric}
               onPress={() => {
-                actor.trigger.selectMetric({
+                setSelection((current) => ({
+                  ...current,
                   nutrientName: metric,
-                });
+                }));
               }}
               style={({ pressed }) => [
                 styles.metricSelectorButton,
@@ -627,74 +593,101 @@ function ChartLegendItem({
 }
 
 function NutritionCalendar({
-  initialDays,
   initialDateKey,
-  loadEndDateKey,
-  loadStartDateKey,
   onSelectDate,
-  shouldLoadInitialMonth,
 }: {
-  readonly initialDays: readonly (typeof NutritionCalendarDay.Type)[];
   readonly initialDateKey: Domain.DateKey;
-  readonly loadEndDateKey: Domain.DateKey | null;
-  readonly loadStartDateKey: Domain.DateKey | null;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
-  readonly shouldLoadInitialMonth: boolean;
 }) {
-  const [snapshot, , actor] = useMachine(nutritionCalendarMachine, {
-    input: {
-      dateKey: initialDateKey,
-      days: initialDays,
-      loadEndDateKey,
-      loadStartDateKey,
-      shouldLoad: shouldLoadInitialMonth,
-    },
-  });
-  const calendar = useMemo(
+  const machineAtom = useMemo(
     () =>
-      CalendarMonthModel.make({
-        dateKey: snapshot.context.dateKey,
-        days: snapshot.context.days,
+      AtomMachine.make(MobileAtomRuntime, nutritionCalendarMachine, {
+        dateKey: initialDateKey,
       }),
-    [snapshot.context.dateKey, snapshot.context.days]
+    [initialDateKey]
   );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
+
+  if (
+    AsyncResult.isInitial(stateResult) ||
+    AsyncResult.isFailure(stateResult)
+  ) {
+    return (
+      <View style={styles.calendarSection}>
+        <View style={styles.calendarLoading}>
+          <LoadingView message="Loading nutrition month..." />
+        </View>
+      </View>
+    );
+  }
+
+  const loading = NutritionCalendarStates.get(
+    stateResult.value,
+    "NutritionCalendarLoading"
+  );
+  const ready = NutritionCalendarStates.get(
+    stateResult.value,
+    "NutritionCalendarReady"
+  );
+  const failed = NutritionCalendarStates.get(
+    stateResult.value,
+    "NutritionCalendarFailed"
+  );
+  const dateKey =
+    loading._tag === "Some"
+      ? loading.value.dateKey
+      : ready._tag === "Some"
+        ? ready.value.dateKey
+        : failed._tag === "Some"
+          ? failed.value.dateKey
+          : initialDateKey;
+  const days = ready._tag === "Some" ? ready.value.days : [];
+  const calendar = CalendarMonthModel.make({
+    dateKey,
+    days,
+  });
 
   return (
     <View style={styles.calendarSection}>
       <View style={styles.monthNavigator}>
         <Text style={styles.monthLabel}>
           {CalendarMonthModel.monthLabel({
-            dateKey: snapshot.context.dateKey,
+            dateKey,
           })}
         </Text>
         <View style={styles.monthControls}>
           <IconButton
             accessibilityLabel="Previous nutrition month"
-            disabled={snapshot.matches("Loading")}
+            disabled={loading._tag === "Some"}
             icon={ChevronLeft}
-            onPress={actor.trigger.previousMonth}
+            onPress={() => {
+              send(new PreviousNutritionMonth());
+            }}
           />
           <IconButton
             accessibilityLabel="Next nutrition month"
-            disabled={snapshot.matches("Loading")}
+            disabled={loading._tag === "Some"}
             icon={ChevronRight}
-            onPress={actor.trigger.nextMonth}
+            onPress={() => {
+              send(new NextNutritionMonth());
+            }}
           />
         </View>
       </View>
-      {snapshot.matches("Loading") ? (
+      {loading._tag === "Some" ? (
         <View style={styles.calendarLoading}>
           <LoadingView message="Loading nutrition month..." />
         </View>
-      ) : snapshot.matches("Failed") ? (
+      ) : failed._tag === "Some" ? (
         <View style={styles.calendarFailure}>
-          <Notice
-            message={
-              snapshot.context.message ?? "Could not load this nutrition month."
-            }
-            tone="warning"
-          />
-          <Button onPress={actor.trigger.retry} variant="secondary">
+          <Notice message={failed.value.message} tone="warning" />
+          <Button
+            onPress={() => {
+              send(new RetryNutritionMonth());
+            }}
+            variant="secondary"
+          >
             Retry month
           </Button>
         </View>
@@ -793,25 +786,6 @@ const calendarStatusStyles = StyleSheet.create({
 }) satisfies Record<Exclude<CalendarStatus, "none">, object>;
 
 const CalendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const calendarAccessibilityDateFormatter = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  month: "long",
-  weekday: "long",
-  year: "numeric",
-});
-const calendarMonthFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  year: "numeric",
-});
-const chartShortDateFormatter = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  month: "short",
-});
-const euroChartValueFormatter = new Intl.NumberFormat(undefined, {
-  currency: "EUR",
-  maximumFractionDigits: 2,
-  style: "currency",
-});
 
 const CalendarMonthModel = {
   dateFromDateKey({ dateKey }: { readonly dateKey: Domain.DateKey }) {
@@ -857,10 +831,6 @@ const CalendarMonthModel = {
     const totalCellCount =
       firstOfMonth.getDay() + lastOfMonth.getDate() + 6 - lastOfMonth.getDay();
     const today = todayDateKey();
-    const daysByDateKey: Record<
-      string,
-      typeof NutritionCalendarDay.Type | undefined
-    > = Object.fromEntries(days.map((day) => [day.dateKey, day]));
     const cells = globalThis.Array.from(
       { length: totalCellCount },
       (_, index) => {
@@ -875,7 +845,7 @@ const CalendarMonthModel = {
         });
         const isCurrentMonth = cellDate.getMonth() === monthIndex;
         const isFuture = isCurrentMonth && cellDateKey > today;
-        const day = daysByDateKey[cellDateKey];
+        const day = days.find((candidate) => candidate.dateKey === cellDateKey);
         const status: CalendarStatus =
           !isCurrentMonth || day === undefined
             ? "none"
@@ -884,8 +854,12 @@ const CalendarMonthModel = {
               : day.isInsideTargetMargin
                 ? "inside"
                 : "outside";
-        const fullDateLabel =
-          calendarAccessibilityDateFormatter.format(cellDate);
+        const fullDateLabel = new Intl.DateTimeFormat("en-US", {
+          day: "numeric",
+          month: "long",
+          weekday: "long",
+          year: "numeric",
+        }).format(cellDate);
         const statusLabel = {
           empty: "empty nutrition log",
           inside: "inside nutrition targets",
@@ -915,9 +889,10 @@ const CalendarMonthModel = {
     };
   },
   monthLabel({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-    return calendarMonthFormatter.format(
-      CalendarMonthModel.dateFromDateKey({ dateKey })
-    );
+    return new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+    }).format(CalendarMonthModel.dateFromDateKey({ dateKey }));
   },
   range({ dateKey }: { readonly dateKey: Domain.DateKey }) {
     const date = CalendarMonthModel.dateFromDateKey({ dateKey });
@@ -931,60 +906,6 @@ const CalendarMonthModel = {
         date: new Date(date.getFullYear(), date.getMonth(), 1),
         fallbackDateKey: dateKey,
       }),
-    };
-  },
-  initialLoad({
-    dateKey,
-    report,
-  }: {
-    readonly dateKey: Domain.DateKey;
-    readonly report: NutritionReports.NutritionReportRange;
-  }) {
-    const monthRange = CalendarMonthModel.range({ dateKey });
-    const today = todayDateKey();
-    const neededEndDateKey =
-      monthRange.endDateKey < today ? monthRange.endDateKey : today;
-    const reportCoversMonthEnd = report.endDateKey >= neededEndDateKey;
-    const days = _calendarDaysFromReport({ report });
-
-    if (
-      report.startDateKey <= monthRange.startDateKey &&
-      reportCoversMonthEnd
-    ) {
-      return {
-        days,
-        loadEndDateKey: null,
-        loadStartDateKey: null,
-        shouldLoad: false,
-      };
-    }
-
-    if (report.startDateKey > monthRange.startDateKey && reportCoversMonthEnd) {
-      const reportStartDate = CalendarMonthModel.dateFromDateKey({
-        dateKey: report.startDateKey,
-      });
-      const loadEndDateKey = CalendarMonthModel.dateKeyFromDate({
-        date: new Date(
-          reportStartDate.getFullYear(),
-          reportStartDate.getMonth(),
-          reportStartDate.getDate() - 1
-        ),
-        fallbackDateKey: monthRange.startDateKey,
-      });
-
-      return {
-        days,
-        loadEndDateKey,
-        loadStartDateKey: monthRange.startDateKey,
-        shouldLoad: true,
-      };
-    }
-
-    return {
-      days: [],
-      loadEndDateKey: null,
-      loadStartDateKey: null,
-      shouldLoad: true,
     };
   },
   shift({
@@ -1023,45 +944,23 @@ const NutritionChartDataModel = {
         : nutrientName === "costEur"
           ? "€"
           : "g";
-    const dayValues = report.days.map((day) => {
-      const [yearString, monthString, dayString] = day.dateKey.split("-");
+    const data = report.days.map((day) => {
+      const referenceIndex = _dateKeyToDayIndex({ dateKey: day.dateKey });
+      const days = report.days.filter((candidate) => {
+        const candidateIndex = _dateKeyToDayIndex({
+          dateKey: candidate.dateKey,
+        });
+        const distance = referenceIndex - candidateIndex;
 
-      return {
-        actual:
-          nutrientName === "costEur"
-            ? day.costTotals.costMinorByCurrency.EUR / 100
-            : day.totals[nutrientName],
-        day,
-        dayIndex: Math.floor(
-          Date.UTC(
-            Number(yearString),
-            Number(monthString) - 1,
-            Number(dayString),
-            12
-          ) / 86_400_000
-        ),
-      };
-    });
-    let windowStart = 0;
-    let windowTotal = 0;
-    const data = dayValues.map(({ actual, day, dayIndex }, index) => {
-      windowTotal += actual;
-
-      while (true) {
-        const firstWindowDay = dayValues[windowStart];
-
-        if (
-          firstWindowDay === undefined ||
-          dayIndex - firstWindowDay.dayIndex <= 6
-        ) {
-          break;
-        }
-
-        windowTotal -= firstWindowDay.actual;
-        windowStart += 1;
-      }
-
-      const average = windowTotal / (index - windowStart + 1);
+        return distance >= 0 && distance <= 6;
+      });
+      const average = !Array.isReadonlyArrayNonEmpty(days)
+        ? 0
+        : days.reduce(
+            (total, candidate) =>
+              total + _nutritionTrendValue({ day: candidate, nutrientName }),
+            0
+          ) / days.length;
       const targetStatus =
         nutrientName === "costEur"
           ? undefined
@@ -1069,6 +968,7 @@ const NutritionChartDataModel = {
               (status) => status.nutrientName === nutrientName
             );
       const target = targetStatus?.amount ?? null;
+      const actual = _nutritionTrendValue({ day, nutrientName });
       const targetLabel =
         target === null
           ? "No target"
@@ -1078,7 +978,7 @@ const NutritionChartDataModel = {
         actual,
         average,
         dateKey: day.dateKey,
-        dayIndex,
+        dayIndex: referenceIndex,
         target,
         targetSemantics: targetStatus?.semantics ?? null,
         tooltipPrimary: `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: actual })}`,
@@ -1124,7 +1024,11 @@ function _formatNutritionChartValue({
   readonly value: number;
 }) {
   return unit === "€"
-    ? euroChartValueFormatter.format(value)
+    ? new Intl.NumberFormat(undefined, {
+        currency: "EUR",
+        maximumFractionDigits: 2,
+        style: "currency",
+      }).format(value)
     : `${formatNumber({
         maximumFractionDigits: unit === "kcal" ? 0 : 1,
         value,
@@ -1151,50 +1055,46 @@ function _formatNutritionChartAxisValue({
         });
 }
 
-function _calendarNavigationContext({
-  context,
-  months,
+function _nutritionTrendValue({
+  day,
+  nutrientName,
 }: {
-  readonly context: typeof NutritionCalendarContext.Type;
-  readonly months: number;
+  readonly day: NutritionReports.NutritionReportDay;
+  readonly nutrientName: NutritionTrendMetric;
 }) {
-  return {
-    dateKey: CalendarMonthModel.shift({
-      dateKey: context.dateKey,
-      months,
-    }),
-    days: [],
-    loadEndDateKey: null,
-    loadStartDateKey: null,
-    message: null,
-    shouldLoad: true,
-  };
+  return nutrientName === "costEur"
+    ? day.costTotals.costMinorByCurrency.EUR / 100
+    : day.totals[nutrientName];
 }
 
-function _calendarDaysFromReport({
-  report,
+function _shiftCalendarMonth({
+  dateKey,
+  months,
 }: {
-  readonly report: NutritionReports.NutritionReportRange;
-}): readonly (typeof NutritionCalendarDay.Type)[] {
-  return report.days.map((day) => ({
-    dateKey: day.dateKey,
-    hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
-    isInsideTargetMargin:
-      Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
-      day.targetStatuses.every((status) =>
-        isInsideNutritionTargetMargin({
-          actual: status.value,
-          semantics: status.semantics,
-          target: status.amount,
-        })
-      ),
-  }));
+  readonly dateKey: Domain.DateKey;
+  readonly months: number;
+}) {
+  return CalendarMonthModel.shift({ dateKey, months });
+}
+
+function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: Domain.DateKey }) {
+  const [yearString, monthString, dayString] = dateKey.split("-");
+
+  return Math.floor(
+    Date.UTC(
+      Number(yearString),
+      Number(monthString) - 1,
+      Number(dayString),
+      12
+    ) / 86_400_000
+  );
 }
 
 function _formatShortDate({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-  return chartShortDateFormatter.format(
-    CalendarMonthModel.dateFromDateKey({ dateKey })
-  );
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+  }).format(CalendarMonthModel.dateFromDateKey({ dateKey }));
 }
 
 const styles = StyleSheet.create({

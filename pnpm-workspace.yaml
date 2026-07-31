@@ -20,4 +20,4 @@ allowBuilds:
   msgpackr-extract: false
 
 minimumReleaseAgeExclude:
-  - xstate@6.0.0-alpha.18
+  - "@typeonce/effect-machine@0.1.0"

@@ -1,128 +1,193 @@
 import { LocalData as NutritionLocalData } from "@mai/nutrition";
+import { Machine } from "@typeonce/effect-machine";
 import { Effect, Schema } from "effect";
-import {
-  createAsyncLogic,
-  setup,
-  type ActorRefFrom,
-  type SnapshotFrom,
-} from "xstate";
-import type { MachineRuntime } from "./runtime";
-import { EmptyEvent } from "./schemas";
+
+export class LocalDataResetIdle extends Schema.TaggedClass<LocalDataResetIdle>(
+  "LocalDataResetIdle"
+)("LocalDataResetIdle", {}) {}
+
+export class LocalDataResetConfirmation extends Schema.TaggedClass<LocalDataResetConfirmation>(
+  "LocalDataResetConfirmation"
+)("LocalDataResetConfirmation", { confirmationText: Schema.String }) {}
+
+export class EditingResetConfirmation extends Schema.TaggedClass<EditingResetConfirmation>(
+  "EditingResetConfirmation"
+)("EditingResetConfirmation", {}) {}
+
+export class LocalDataResetFailure extends Schema.TaggedClass<LocalDataResetFailure>(
+  "LocalDataResetFailure"
+)("LocalDataResetFailure", { message: Schema.String }) {}
+
+export class LocalDataResetting extends Schema.TaggedClass<LocalDataResetting>(
+  "LocalDataResetting"
+)("LocalDataResetting", { confirmationText: Schema.String }) {}
+
+export class LocalDataResetCompleted extends Schema.TaggedClass<LocalDataResetCompleted>(
+  "LocalDataResetCompleted"
+)("LocalDataResetCompleted", {}) {}
+
+export class BeginReset extends Schema.TaggedClass<BeginReset>("BeginReset")(
+  "BeginReset",
+  {}
+) {}
+
+export class CancelReset extends Schema.TaggedClass<CancelReset>("CancelReset")(
+  "CancelReset",
+  {}
+) {}
+
+export class ChangeResetConfirmationText extends Schema.TaggedClass<ChangeResetConfirmationText>(
+  "ChangeResetConfirmationText"
+)("ChangeResetConfirmationText", { confirmationText: Schema.String }) {}
+
+export class ConfirmLocalDataReset extends Schema.TaggedClass<ConfirmLocalDataReset>(
+  "ConfirmLocalDataReset"
+)("ConfirmLocalDataReset", {}) {}
+
+class LocalDataResetSucceeded extends Schema.TaggedClass<LocalDataResetSucceeded>(
+  "LocalDataResetSucceeded"
+)("LocalDataResetSucceeded", {}) {}
+
+class LocalDataResetFailed extends Schema.TaggedClass<LocalDataResetFailed>(
+  "LocalDataResetFailed"
+)("LocalDataResetFailed", { message: Schema.String }) {}
+
+export const LocalDataResetStates = Machine.defineStates({
+  Idle: LocalDataResetIdle,
+  Confirmation: {
+    schema: LocalDataResetConfirmation,
+    initial: "Editing",
+    states: {
+      Editing: EditingResetConfirmation,
+      Failure: LocalDataResetFailure,
+    },
+  },
+  Resetting: LocalDataResetting,
+  ResetCompleted: LocalDataResetCompleted,
+});
 
 export const makeLocalDataResetMachine = ({
   restartApp,
-  runtime,
 }: {
   readonly restartApp: Effect.Effect<void>;
-  readonly runtime: MachineRuntime<NutritionLocalData.LocalData>;
-}) =>
-  setup({
-    schemas: {
-      events: {
-        begin: Schema.toStandardSchemaV1(EmptyEvent),
-        cancel: Schema.toStandardSchemaV1(EmptyEvent),
-        reset: Schema.toStandardSchemaV1(EmptyEvent),
-        changeConfirmationText: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            confirmationText: Schema.String,
+}) => {
+  const resetLocalData = Machine.invoke({
+    id: "resetLocalData",
+    src: () =>
+      Machine.effect(
+        Effect.gen(function* () {
+          const localData = yield* NutritionLocalData.LocalData;
+          yield* localData.reset;
+          yield* restartApp;
+        }).pipe(
+          Effect.match({
+            onFailure: (error) =>
+              new LocalDataResetFailed({
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Could not delete the local data.",
+              }),
+            onSuccess: () => new LocalDataResetSucceeded(),
           })
-        ),
-      },
-    },
-    states: {
-      Idle: {},
-      ConfirmReset: {
-        schemas: {
-          context: Schema.toStandardSchemaV1(
-            Schema.Struct({ confirmationText: Schema.String })
-          ),
-        },
-      },
-      Failure: {
-        schemas: {
-          context: Schema.toStandardSchemaV1(
-            Schema.Struct({ message: Schema.String })
-          ),
-        },
-      },
-      Resetting: {},
-      ResetCompleted: {},
-    },
-    actorSources: {
-      resetLocalData: createAsyncLogic({
-        run: () =>
-          runtime.runPromise(
-            Effect.gen(function* () {
-              const localData = yield* NutritionLocalData.LocalData;
+        )
+      ),
+  });
 
-              yield* localData.reset;
-              yield* restartApp;
-            })
+  return Machine.make({
+    id: "localDataReset",
+    states: LocalDataResetStates.states,
+    events: [
+      BeginReset,
+      CancelReset,
+      ChangeResetConfirmationText,
+      ConfirmLocalDataReset,
+      LocalDataResetSucceeded,
+      LocalDataResetFailed,
+    ],
+    initial: () => LocalDataResetStates.initial.Idle(new LocalDataResetIdle()),
+  }).handle({
+    Idle: {
+      on: {
+        BeginReset: () =>
+          LocalDataResetStates.initial.Confirmation(
+            new LocalDataResetConfirmation({ confirmationText: "" }),
+            (confirmation) =>
+              confirmation.Editing(new EditingResetConfirmation())
           ),
-      }),
+      },
     },
-    guards: {
-      confirmationMatches: (params: { readonly confirmationText: string }) =>
-        params.confirmationText ===
-        NutritionLocalData.LocalDataResetConfirmationText,
+    Confirmation: {
+      on: {
+        CancelReset: ({ target }) => target.full.Idle(new LocalDataResetIdle()),
+      },
+      states: {
+        Editing: {
+          on: {
+            ChangeResetConfirmationText: ({ event, target }) =>
+              target.full.Confirmation(
+                new LocalDataResetConfirmation({
+                  confirmationText: event.confirmationText,
+                }),
+                (confirmation) =>
+                  confirmation.Editing(new EditingResetConfirmation())
+              ),
+            ConfirmLocalDataReset: ({ parents, target }) =>
+              parents.Confirmation.confirmationText ===
+              NutritionLocalData.LocalDataResetConfirmationText
+                ? target.full.Resetting(
+                    new LocalDataResetting({
+                      confirmationText: parents.Confirmation.confirmationText,
+                    })
+                  )
+                : undefined,
+          },
+        },
+        Failure: {
+          on: {
+            ChangeResetConfirmationText: ({ event, state, target }) =>
+              target.full.Confirmation(
+                new LocalDataResetConfirmation({
+                  confirmationText: event.confirmationText,
+                }),
+                (confirmation) => confirmation.Failure(state)
+              ),
+            ConfirmLocalDataReset: ({ parents, target }) =>
+              parents.Confirmation.confirmationText ===
+              NutritionLocalData.LocalDataResetConfirmationText
+                ? target.full.Resetting(
+                    new LocalDataResetting({
+                      confirmationText: parents.Confirmation.confirmationText,
+                    })
+                  )
+                : undefined,
+          },
+        },
+      },
     },
-  }).createMachine({
-    initial: "Idle",
-    states: {
-      Idle: {
-        on: {
-          begin: { target: "ConfirmReset", context: { confirmationText: "" } },
-        },
+    Resetting: {
+      invoke: resetLocalData,
+      on: {
+        LocalDataResetSucceeded: ({ target }) =>
+          target.full.ResetCompleted(new LocalDataResetCompleted()),
+        LocalDataResetFailed: ({ event, state, target }) =>
+          target.full.Confirmation(
+            new LocalDataResetConfirmation({
+              confirmationText: state.confirmationText,
+            }),
+            (confirmation) =>
+              confirmation.Failure(
+                new LocalDataResetFailure({ message: event.message })
+              )
+          ),
       },
-      ConfirmReset: {
-        on: {
-          cancel: { target: "Idle" },
-          changeConfirmationText: ({ event }) => ({
-            context: { confirmationText: event.confirmationText },
-          }),
-          reset: ({ guards, context }) =>
-            guards.confirmationMatches({
-              confirmationText: context.confirmationText,
-            })
-              ? { target: "Resetting" }
-              : undefined,
-        },
-      },
-      Resetting: {
-        invoke: {
-          src: "resetLocalData",
-          onDone: { target: "ResetCompleted" },
-          onError: ({ event }) => ({
-            target: "Failure",
-            context: {
-              message:
-                event.error instanceof Error
-                  ? event.error.message
-                  : "Could not delete the local data.",
-            },
-          }),
-        },
-      },
-      Failure: {
-        on: {
-          cancel: { target: "Idle" },
-          changeConfirmationText: ({ event }) => ({
-            context: { confirmationText: event.confirmationText },
-          }),
-          reset: ({ guards, context }) =>
-            guards.confirmationMatches({
-              confirmationText: context.confirmationText,
-            })
-              ? { target: "Resetting" }
-              : undefined,
-        },
-      },
-      ResetCompleted: {},
     },
   });
+};
 
 export type LocalDataResetMachine = ReturnType<
   typeof makeLocalDataResetMachine
 >;
-export type LocalDataResetActorRef = ActorRefFrom<LocalDataResetMachine>;
-export type LocalDataResetSnapshot = SnapshotFrom<LocalDataResetMachine>;
+export type LocalDataResetSnapshot = Machine.Machine.Snapshot<
+  typeof LocalDataResetStates.states
+>;

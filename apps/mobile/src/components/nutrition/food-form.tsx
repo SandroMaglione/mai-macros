@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DisclosureCard } from "@/components/ui/disclosure-card";
 import { Field, NumberField, TextArea } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
+import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
@@ -15,8 +16,10 @@ import { measurementUnitFromValue } from "@/lib/food-measurements";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { FoodFormMachine } from "@mai/machines";
 import type { FoodQuickInput, Foods } from "@mai/nutrition";
-import { useSelector } from "@xstate/react";
-import { Array } from "effect";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { type AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Array, Option } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import type { ReactNode } from "react";
 import {
   BadgeEuro,
@@ -33,6 +36,11 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { FoodNutrientOverview } from "./food-nutrient-overview";
 import { FoodPriceInputFields } from "./food-price-fields";
 import { MeasurementUnitSelect } from "./measurement-unit-select";
+
+type FoodFormAtom = AtomMachine.ChildMachineAtom<
+  typeof FoodFormMachine.FoodFormChild,
+  unknown
+>;
 
 type FoodNutrientField = {
   readonly accentColor: string;
@@ -125,7 +133,7 @@ export function FoodForm({
   intro,
 }: {
   readonly action: "create" | "edit";
-  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly actor: FoodFormAtom;
   readonly disabled: boolean;
   readonly feedback?: {
     readonly message: string;
@@ -141,17 +149,29 @@ export function FoodForm({
   readonly showPortions?: boolean;
   readonly submitLabel?: string;
 }) {
-  const snapshot = useSelector(
-    actor,
-    (state): FoodFormMachine.FoodFormSnapshot => state
-  );
+  const stateResult = useAtomValue(actor.state);
+  const send = useAtomSet(actor.send);
+  const editing =
+    AsyncResult.isInitial(stateResult) ||
+    AsyncResult.isFailure(stateResult) ||
+    Option.isNone(stateResult.value)
+      ? null
+      : FoodFormMachine.FoodFormStates.get(
+          stateResult.value.value,
+          "Editing"
+        ).pipe(Option.getOrNull);
+
+  if (editing === null) {
+    return <LoadingView message="Loading food form" />;
+  }
+
   const {
     formValues,
     numberWarnings,
     portions,
     quickInput,
     quickInputParseResult,
-  } = snapshot.context;
+  } = editing;
   const isCreating = action === "create";
   const portionsAreValid = FoodFormMachine.foodPortionFormValuesAreValid({
     portions,
@@ -213,9 +233,7 @@ export function FoodForm({
       icon={SubmitIcon}
       loading={disabled}
       onPress={() => {
-        actor.send({
-          type: "submit",
-        });
+        send(new FoodFormMachine.SubmitFoodForm());
       }}
       style={styles.footerButton}
     >
@@ -276,10 +294,12 @@ function FoodQuickInputTextField({
   disabled,
   input,
 }: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly actor: FoodFormAtom;
   readonly disabled: boolean;
   readonly input: string;
 }) {
+  const send = useAtomSet(actor.send);
+
   return (
     <TextArea
       autoCapitalize="sentences"
@@ -287,10 +307,7 @@ function FoodQuickInputTextField({
       editable={!disabled}
       label="Food text"
       onChangeText={(value) => {
-        actor.send({
-          type: "changeQuickInput",
-          input: value,
-        });
+        send(new FoodFormMachine.ChangeFoodQuickInput({ input: value }));
       }}
       placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
       returnKeyType="default"
@@ -308,7 +325,7 @@ function FoodFormFields({
   showPortions,
   values,
 }: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly actor: FoodFormAtom;
   readonly disabled: boolean;
   readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
   readonly portionUsage: readonly Foods.FoodPortionUsage[];
@@ -316,6 +333,7 @@ function FoodFormFields({
   readonly showPortions: boolean;
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
+  const send = useAtomSet(actor.send);
   const portionErrors = FoodFormMachine.foodPortionFormErrorsFromValues({
     portions,
   });
@@ -337,7 +355,7 @@ function FoodFormFields({
             label="Name"
             onChangeText={(value) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "name",
                 value,
               });
@@ -353,7 +371,7 @@ function FoodFormFields({
             label="Brand"
             onChangeText={(value) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "brand",
                 value,
               });
@@ -372,7 +390,7 @@ function FoodFormFields({
             label="Nutrition values per"
             onChangeText={(value) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "nutritionReferenceAmount",
                 value,
               });
@@ -383,7 +401,7 @@ function FoodFormFields({
                 disabled={disabled}
                 onSelect={(unit) => {
                   _sendFoodFormValueChange({
-                    actor,
+                    send,
                     name: "nutritionReferenceUnit",
                     value: unit,
                   });
@@ -447,12 +465,13 @@ function FoodFormFields({
                     error={portionErrors[index]?.name}
                     label="Portion name"
                     onChangeText={(value) => {
-                      actor.send({
-                        type: "changePortion",
-                        field: "name",
-                        index,
-                        value,
-                      });
+                      send(
+                        new FoodFormMachine.ChangeFoodPortion({
+                          field: "name",
+                          index,
+                          value,
+                        })
+                      );
                     }}
                     placeholder="X"
                     value={portion.name}
@@ -462,24 +481,26 @@ function FoodFormFields({
                     error={portionErrors[index]?.amount}
                     label={`One ${portion.name.trim() || "portion"} equals`}
                     onChangeText={(value) => {
-                      actor.send({
-                        type: "changePortion",
-                        field: "amount",
-                        index,
-                        value,
-                      });
+                      send(
+                        new FoodFormMachine.ChangeFoodPortion({
+                          field: "amount",
+                          index,
+                          value,
+                        })
+                      );
                     }}
                     placeholder="250"
                     rightElement={
                       <MeasurementUnitSelect
                         disabled={disabled || isUsed}
                         onSelect={(unit) => {
-                          actor.send({
-                            type: "changePortion",
-                            field: "unit",
-                            index,
-                            value: unit,
-                          });
+                          send(
+                            new FoodFormMachine.ChangeFoodPortion({
+                              field: "unit",
+                              index,
+                              value: unit,
+                            })
+                          );
                         }}
                         selectedUnit={portion.unit}
                         title={`${portion.name.trim() || "Portion"} unit`}
@@ -493,7 +514,7 @@ function FoodFormFields({
                       disabled={disabled}
                       icon={Trash2}
                       onPress={() => {
-                        actor.send({ type: "removePortion", index });
+                        send(new FoodFormMachine.RemoveFoodPortion({ index }));
                       }}
                       variant="ghost"
                     >
@@ -507,7 +528,7 @@ function FoodFormFields({
               disabled={disabled || !portionsAreValid}
               icon={Plus}
               onPress={() => {
-                actor.send({ type: "addPortion" });
+                send(new FoodFormMachine.AddFoodPortion());
               }}
               variant="secondary"
             >
@@ -523,21 +544,21 @@ function FoodFormFields({
             disabled={disabled}
             onPriceChange={(value) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "initialPriceValue",
                 value,
               });
             }}
             onQuantityChange={(value) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "initialPriceQuantity",
                 value,
               });
             }}
             onQuantityUnitChange={(unit) => {
               _sendFoodFormValueChange({
-                actor,
+                send,
                 name: "initialPriceQuantityUnit",
                 value: unit,
               });
@@ -566,7 +587,7 @@ function FoodFormFields({
               label="Mass amount"
               onChangeText={(value) => {
                 _sendFoodFormValueChange({
-                  actor,
+                  send,
                   name: "conversionMassAmount",
                   value,
                 });
@@ -577,7 +598,7 @@ function FoodFormFields({
                   disabled={disabled}
                   onSelect={(unit) => {
                     _sendFoodFormValueChange({
-                      actor,
+                      send,
                       name: "conversionMassUnit",
                       value: unit,
                     });
@@ -597,7 +618,7 @@ function FoodFormFields({
               label="Equivalent volume"
               onChangeText={(value) => {
                 _sendFoodFormValueChange({
-                  actor,
+                  send,
                   name: "conversionVolumeAmount",
                   value,
                 });
@@ -608,7 +629,7 @@ function FoodFormFields({
                   disabled={disabled}
                   onSelect={(unit) => {
                     _sendFoodFormValueChange({
-                      actor,
+                      send,
                       name: "conversionVolumeUnit",
                       value: unit,
                     });
@@ -636,11 +657,13 @@ function FoodNutrientInput({
   field,
   value,
 }: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly actor: FoodFormAtom;
   readonly disabled: boolean;
   readonly field: FoodNutrientField;
   readonly value: string;
 }) {
+  const send = useAtomSet(actor.send);
+
   return (
     <View style={styles.nutrientField}>
       <Text style={[styles.nutrientLabel, { color: field.accentColor }]}>
@@ -650,7 +673,7 @@ function FoodNutrientInput({
         editable={!disabled}
         onChangeText={(nextValue) => {
           _sendFoodFormValueChange({
-            actor,
+            send,
             name: field.name,
             value: nextValue,
           });
@@ -732,19 +755,17 @@ function FoodQuickInputIssues({
 }
 
 function _sendFoodFormValueChange({
-  actor,
+  send,
   name,
   value,
 }: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
+  readonly send: (
+    event: typeof FoodFormMachine.ChangeFoodFormValue.Type
+  ) => void;
   readonly name: keyof FoodFormMachine.FoodFormValues;
   readonly value: string;
 }) {
-  actor.send({
-    type: "changeFormValue",
-    name,
-    value,
-  });
+  send(new FoodFormMachine.ChangeFoodFormValue({ name, value }));
 }
 
 function _optionalTrimmedText(value: string) {

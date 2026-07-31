@@ -1,7 +1,6 @@
 import { Domain, MealPlans, Utils } from "@mai/nutrition";
+import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
-import { Actor, setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
-import { EmptyEvent } from "./schemas";
 
 export type MealPlanTargetFieldName =
   | "proteinTargetGrams"
@@ -50,60 +49,69 @@ const MealPlanFormTextFieldNameSchema = Schema.Literals([
   "saltTargetGrams",
 ]);
 
-export const mealPlanMealsMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        meals: Schema.Array(MealPlanFormMealValueSchema),
+const MealPlanFormInputSchema = Schema.Struct({
+  initialPlan: Schema.NullOr(Domain.Plan),
+});
+
+export class MealPlanMealsEditing extends Schema.TaggedClass<MealPlanMealsEditing>(
+  "MealPlanMealsEditing"
+)("MealPlanMealsEditing", {
+  meals: Schema.Array(MealPlanFormMealValueSchema),
+}) {}
+
+export class AddMeal extends Schema.TaggedClass<AddMeal>("AddMeal")(
+  "AddMeal",
+  {}
+) {}
+
+export class ChangeMealName extends Schema.TaggedClass<ChangeMealName>(
+  "ChangeMealName"
+)("ChangeMealName", {
+  index: Schema.Number,
+  value: Schema.String,
+}) {}
+
+export class RemoveMeal extends Schema.TaggedClass<RemoveMeal>("RemoveMeal")(
+  "RemoveMeal",
+  { index: Schema.Number }
+) {}
+
+export const MealPlanMealsStates = Machine.defineStates({
+  Editing: MealPlanMealsEditing,
+});
+
+export const mealPlanMealsMachine = Machine.make({
+  id: "mealPlanMeals",
+  states: MealPlanMealsStates.states,
+  events: [AddMeal, ChangeMealName, RemoveMeal],
+  input: MealPlanFormInputSchema,
+  initial: ({ initialPlan }) =>
+    MealPlanMealsStates.initial.Editing(
+      new MealPlanMealsEditing({
+        meals:
+          initialPlan === null
+            ? []
+            : [...initialPlan.meals]
+                .sort((left, right) => left.position - right.position)
+                .map((meal) => ({
+                  id: meal.id,
+                  name: meal.name,
+                })),
       })
     ),
-    events: {
-      addMeal: Schema.toStandardSchemaV1(EmptyEvent),
-      changeMealName: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: Schema.Number,
-          value: Schema.String,
-        })
-      ),
-      removeMeal: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: Schema.Number,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        initialPlan: Schema.NullOr(Domain.Plan),
-      })
-    ),
-  },
-  states: {
-    Ready: {},
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    meals:
-      input.initialPlan === null
-        ? []
-        : [...input.initialPlan.meals]
-            .sort((left, right) => left.position - right.position)
-            .map((meal) => ({
-              id: meal.id,
-              name: meal.name,
-            })),
-  }),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        addMeal: ({ context }) => ({
-          context: {
-            meals: [...context.meals, { name: "" }],
-          },
-        }),
-        changeMealName: ({ context, event }) => ({
-          context: {
-            meals: context.meals.map((meal, index) =>
+}).handle({
+  Editing: {
+    on: {
+      AddMeal: ({ state, target }) =>
+        target.full.Editing(
+          new MealPlanMealsEditing({
+            meals: [...state.meals, { name: "" }],
+          })
+        ),
+      ChangeMealName: ({ event, state, target }) =>
+        target.full.Editing(
+          new MealPlanMealsEditing({
+            meals: state.meals.map((meal, index) =>
               index === event.index
                 ? {
                     ...meal,
@@ -111,110 +119,119 @@ export const mealPlanMealsMachine = setup({
                   }
                 : meal
             ),
-          },
-        }),
-        removeMeal: ({ context, event }) => ({
-          context: {
-            meals: context.meals.flatMap((meal, index) =>
+          })
+        ),
+      RemoveMeal: ({ event, state, target }) =>
+        target.full.Editing(
+          new MealPlanMealsEditing({
+            meals: state.meals.flatMap((meal, index) =>
               index === event.index ? [] : [meal]
             ),
-          },
-        }),
-      },
+          })
+        ),
     },
   },
 });
 
-type MealPlanMealsActor = ActorRefFrom<typeof mealPlanMealsMachine>;
-
-const MealPlanMealsActorSchema = Schema.declare<MealPlanMealsActor>(
-  (value): value is MealPlanMealsActor =>
-    value instanceof Actor && value.logic === mealPlanMealsMachine,
-  { expected: "MealPlanMealsActor" }
+export const MealPlanMealsChild = Machine.child(
+  "mealPlanFormMeals",
+  mealPlanMealsMachine
 );
 
-export const mealPlanFormMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        mealsActor: MealPlanMealsActorSchema,
-        values: MealPlanFormValuesSchema,
+export class MealPlanFormEditing extends Schema.TaggedClass<MealPlanFormEditing>(
+  "MealPlanFormEditing"
+)("MealPlanFormEditing", {
+  initialPlan: Schema.NullOr(Domain.Plan),
+  values: MealPlanFormValuesSchema,
+}) {}
+
+export class ChangeMealPlanField extends Schema.TaggedClass<ChangeMealPlanField>(
+  "ChangeMealPlanField"
+)("ChangeMealPlanField", {
+  name: MealPlanFormTextFieldNameSchema,
+  value: Schema.String,
+}) {}
+
+export const MealPlanFormStates = Machine.defineStates({
+  Editing: MealPlanFormEditing,
+});
+
+export const mealPlanFormMachine = Machine.make({
+  id: "mealPlanForm",
+  states: MealPlanFormStates.states,
+  events: [ChangeMealPlanField],
+  input: MealPlanFormInputSchema,
+  initial: ({ initialPlan }) =>
+    MealPlanFormStates.initial.Editing(
+      new MealPlanFormEditing({
+        initialPlan,
+        values: {
+          name: initialPlan?.name ?? "",
+          proteinTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.proteinTargetGrams
+          ),
+          carbsTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.carbsTargetGrams
+          ),
+          fatTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.fatTargetGrams
+          ),
+          fiberTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.fiberTargetGrams
+          ),
+          sugarTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.sugarTargetGrams
+          ),
+          saturatedFatTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.saturatedFatTargetGrams
+          ),
+          saltTargetGrams: _stringFromOptionalNumber(
+            initialPlan?.saltTargetGrams
+          ),
+        },
       })
     ),
-    events: {
-      changeField: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          name: MealPlanFormTextFieldNameSchema,
-          value: Schema.String,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        initialPlan: Schema.NullOr(Domain.Plan),
-      })
-    ),
-  },
-  states: {
-    Ready: {},
-  },
-  actorSources: {
-    mealPlanMeals: mealPlanMealsMachine,
-  },
-}).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
-    mealsActor: spawn(actorSources.mealPlanMeals, {
-      id: "mealPlanFormMeals",
-      input: {
-        initialPlan: input.initialPlan,
-      },
-    }),
-    values: {
-      name: input.initialPlan?.name ?? "",
-      proteinTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.proteinTargetGrams
-      ),
-      carbsTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.carbsTargetGrams
-      ),
-      fatTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.fatTargetGrams
-      ),
-      fiberTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.fiberTargetGrams
-      ),
-      sugarTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.sugarTargetGrams
-      ),
-      saturatedFatTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.saturatedFatTargetGrams
-      ),
-      saltTargetGrams: _stringFromOptionalNumber(
-        input.initialPlan?.saltTargetGrams
-      ),
-    },
-  }),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        changeField: ({ context, event }) => ({
-          context: {
-            values: {
-              ...context.values,
-              [event.name]: event.value,
-            },
-          },
-        }),
+}).handle({
+  Editing: {
+    invoke: ({ state }) =>
+      Machine.invokeMachine({
+        child: MealPlanMealsChild,
+        input: { initialPlan: state.initialPlan },
+      }),
+    on: {
+      ChangeMealPlanField: {
+        reenter: false,
+        transition: ({ event, state, target }) =>
+          target.full.Editing(
+            new MealPlanFormEditing({
+              ...state,
+              values: {
+                ...state.values,
+                [event.name]: event.value,
+              },
+            })
+          ),
       },
     },
   },
 });
 
-export type MealPlanMealsActorRef = MealPlanMealsActor;
-export type MealPlanMealsSnapshot = SnapshotFrom<typeof mealPlanMealsMachine>;
-export type MealPlanFormActorRef = ActorRefFrom<typeof mealPlanFormMachine>;
-export type MealPlanFormSnapshot = SnapshotFrom<typeof mealPlanFormMachine>;
+export const MealPlanFormChild = Machine.child(
+  "mealPlanForm",
+  mealPlanFormMachine
+);
+export type MealPlanMealsActorRef = Machine.ChildMachine.Ref<
+  typeof MealPlanMealsChild
+>;
+export type MealPlanMealsSnapshot = Machine.Machine.Snapshot<
+  typeof MealPlanMealsStates.states
+>;
+export type MealPlanFormActorRef = Machine.ChildMachine.Ref<
+  typeof MealPlanFormChild
+>;
+export type MealPlanFormSnapshot = Machine.Machine.Snapshot<
+  typeof MealPlanFormStates.states
+>;
 
 export function createMealPlanInputFromValues({
   meals,

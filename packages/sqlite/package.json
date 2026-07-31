@@ -4,22 +4,19 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./layers/*": "./src/layers/*.ts",
-    "./migrations": "./src/migrations/index.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@effect/sql-sqlite-react-native": "4.0.0-beta.78",
-    "@mai/event-tracking": "workspace:^",
+    "@effect/sql-sqlite-react-native": "4.0.0-beta.102",
     "@mai/nutrition": "workspace:^",
-    "effect": "4.0.0-beta.84"
+    "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
-    "@effect/sql-sqlite-node": "4.0.0-beta.78",
+    "@effect/sql-sqlite-node": "4.0.0-beta.102",
     "vitest": "^4.0.8"
   }
 }

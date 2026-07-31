@@ -1,8 +1,8 @@
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { useAtom } from "@effect/atom-react";
+import { Atom } from "effect/unstable/reactivity";
 import { Check, ChevronDown } from "lucide-react-native";
+import { useMemo } from "react";
 import {
   ActionSheetIOS,
   Modal,
@@ -13,40 +13,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { setup } from "xstate";
 
 export type InputSelectOption<Value extends string> = {
   readonly accessibilityLabel?: string;
   readonly label: string;
   readonly value: Value;
 };
-
-const inputSelectDialogMachine = setup({
-  schemas: {
-    events: {
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      open: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Closed: {},
-    Open: {},
-  },
-}).createMachine({
-  initial: "Closed",
-  states: {
-    Closed: {
-      on: {
-        open: { target: "Open" },
-      },
-    },
-    Open: {
-      on: {
-        close: { target: "Closed" },
-      },
-    },
-  },
-});
 
 export function InputSelect<Value extends string>({
   disabled = false,
@@ -63,10 +35,13 @@ export function InputSelect<Value extends string>({
   readonly title: string;
   readonly variant?: "default" | "header";
 }) {
-  const [snapshot, , actor] = useMachine(inputSelectDialogMachine);
+  const openAtom = useMemo(() => Atom.make(false), []);
+  const [isOpen, setOpen] = useAtom(openAtom);
   const selectedOption =
     options.find((option) => option.value === selectedValue) ?? options[0];
-  const close = actor.trigger.close;
+  const close = () => {
+    setOpen(false);
+  };
   const open = () => {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -87,7 +62,7 @@ export function InputSelect<Value extends string>({
       return;
     }
 
-    actor.trigger.open();
+    setOpen(true);
   };
 
   return (
@@ -131,7 +106,7 @@ export function InputSelect<Value extends string>({
         animationType="fade"
         onRequestClose={close}
         transparent
-        visible={snapshot.matches("Open")}
+        visible={isOpen}
       >
         <Pressable
           accessibilityRole="button"

@@ -19,4 +19,4 @@ This repository is a pnpm monorepo.
 
 Use `.repos/effect` to inspect Effect APIs.
 
-Use `.repos/xstate` to inspect XState APIs when state machine implementation details are unclear.
+Use `.repos/effect-machine` to inspect Effect Machine APIs when state machine implementation details are unclear.

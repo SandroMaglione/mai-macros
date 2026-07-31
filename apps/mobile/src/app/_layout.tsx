@@ -1,6 +1,7 @@
 import "react-native-gesture-handler";
 
 import { color } from "@/theme/tokens";
+import { RegistryProvider } from "@effect/atom-react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Appearance, StyleSheet } from "react-native";
@@ -11,18 +12,20 @@ Appearance.setColorScheme("dark");
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <KeyboardProvider>
-        <Stack
-          screenOptions={{
-            animation: "none",
-            headerShown: false,
-            contentStyle: { backgroundColor: color.bg },
-          }}
-        />
-        <StatusBar style="light" />
-      </KeyboardProvider>
-    </GestureHandlerRootView>
+    <RegistryProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <KeyboardProvider>
+          <Stack
+            screenOptions={{
+              animation: "none",
+              headerShown: false,
+              contentStyle: { backgroundColor: color.bg },
+            }}
+          />
+          <StatusBar style="light" />
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </RegistryProvider>
   );
 }
 

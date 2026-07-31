@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@mai/nutrition": "workspace:^",
-    "effect": "4.0.0-beta.84",
-    "xstate": "6.0.0-alpha.18"
+    "@typeonce/effect-machine": "0.1.0",
+    "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
     "@types/node": "latest",

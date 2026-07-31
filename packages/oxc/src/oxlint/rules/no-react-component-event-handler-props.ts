@@ -285,7 +285,7 @@ const rule = {
 
           context.report({
             node: candidate.attributeNameNode,
-            message: `Consider whether ${candidate.attributeName} is needed here. Prefer passing an actor ref to the child component and modeling the interaction with XState actors instead of passing callback props down.`,
+            message: `Consider whether ${candidate.attributeName} is needed here. Prefer passing an Effect machine or atom handle to the child component instead of passing callback props down.`,
           });
         }
       },

@@ -10,17 +10,21 @@ import {
   formatNumber,
   mealEntryMassGrams,
 } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import * as Domain from "@mai/nutrition/domain";
-import * as Reporting from "@mai/nutrition/reporting";
-import * as DailyLogs from "@mai/nutrition/services/daily-logs";
-import * as Foods from "@mai/nutrition/services/foods";
-import * as MealEntries from "@mai/nutrition/services/meal-entries";
-import * as Utils from "@mai/nutrition/utils";
-import { useMachine } from "@xstate/react";
-import { Array, Effect, Match, Order, Schema } from "effect";
+import {
+  DailyLogs,
+  Domain,
+  Foods,
+  MealEntries,
+  Reporting,
+  Utils,
+} from "@mai/nutrition";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Array, Effect, Order, Schema } from "effect";
+import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { router } from "expo-router";
 import {
   ChevronDown,
@@ -28,8 +32,8 @@ import {
   ChevronRight,
   RotateCcw,
 } from "lucide-react-native";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const OpenedDay = Schema.TaggedStruct("OpenedDay", {
   dailyLog: Domain.DailyLog,
@@ -59,18 +63,50 @@ const MacroDetailsRouteInput = Schema.Struct({
   meal: Schema.UndefinedOr(Domain.MealId),
 });
 
-const MacroDetailsRouteContext = Schema.Struct({
+class MacroDetailsLoading extends Schema.TaggedClass<MacroDetailsLoading>(
+  "MacroDetailsLoading"
+)("MacroDetailsLoading", {
   dateKey: Domain.DateKey,
   meal: Schema.UndefinedOr(Domain.MealId),
-});
+}) {}
 
-const MacroDetailsRouteFailureContext = Schema.Struct({
+class MacroDetailsFailed extends Schema.TaggedClass<MacroDetailsFailed>(
+  "MacroDetailsFailed"
+)("MacroDetailsFailed", {
+  dateKey: Domain.DateKey,
+  meal: Schema.UndefinedOr(Domain.MealId),
   message: Schema.String,
-});
+}) {}
 
-const MacroDetailsRouteReadyContext = Schema.Struct({
+class MacroDetailsReady extends Schema.TaggedClass<MacroDetailsReady>(
+  "MacroDetailsReady"
+)("MacroDetailsReady", {
   data: MacroDetailsRouteData,
-});
+}) {}
+
+class MacroDetailsRedirected extends Schema.TaggedClass<MacroDetailsRedirected>(
+  "MacroDetailsRedirected"
+)("MacroDetailsRedirected", {}) {}
+
+class ReloadMacroDetails extends Schema.TaggedClass<ReloadMacroDetails>(
+  "ReloadMacroDetails"
+)("ReloadMacroDetails", {}) {}
+
+class MacroDetailsLoaded extends Schema.TaggedClass<MacroDetailsLoaded>(
+  "MacroDetailsLoaded"
+)("MacroDetailsLoaded", {
+  data: MacroDetailsRouteData,
+}) {}
+
+class MacroDetailsLoadFailed extends Schema.TaggedClass<MacroDetailsLoadFailed>(
+  "MacroDetailsLoadFailed"
+)("MacroDetailsLoadFailed", {
+  message: Schema.String,
+}) {}
+
+class MacroDetailsWasRedirected extends Schema.TaggedClass<MacroDetailsWasRedirected>(
+  "MacroDetailsWasRedirected"
+)("MacroDetailsWasRedirected", {}) {}
 
 const FoodWeightMetricName = "foodWeightGrams";
 const FoodCostMetricName = "foodCostEur";
@@ -164,235 +200,130 @@ const nutrientDetails = [
   },
 ] as const satisfies readonly NutrientDetail[];
 
-const macroDetailsRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(MacroDetailsRouteContext),
-    events: {
-      reload: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(MacroDetailsRouteInput),
-  },
-  states: {
-    Loading: {},
-    Failed: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(MacroDetailsRouteFailureContext),
-      },
-    },
-    Ready: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(MacroDetailsRouteReadyContext),
-      },
-    },
-    Redirected: {},
-  },
-  actions: {
-    redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/plans/new",
-        params,
-      });
-    },
-  },
-  actorSources: {
-    loadMacroDetails: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(MacroDetailsRouteInput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const foodsService = yield* Foods.Foods;
-            const mealEntriesService = yield* MealEntries.MealEntries;
-            const day = yield* input.dateKey === todayDateKey()
-              ? dailyLogs.openOrCreate({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                })
-              : dailyLogs.open({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                });
-
-            if (day._tag === "UnrecordedDay") {
-              return {
-                _tag: "UnrecordedDay" as const,
-                dateKey: day.dateKey,
-              };
-            }
-
-            const selectedMeal =
-              input.meal === undefined
-                ? undefined
-                : day.selectedPlan.meals.find(
-                    (planMeal) => planMeal.id === input.meal
-                  );
-
-            if (input.meal !== undefined && selectedMeal === undefined) {
-              return {
-                _tag: "InvalidRoute" as const,
-              };
-            }
-
-            const dayMealEntries = yield* mealEntriesService.listForDay({
-              input: {
-                dateKey: day.dailyLog.dateKey,
-              },
-            });
-            const mealEntries =
-              input.meal === undefined
-                ? dayMealEntries
-                : dayMealEntries.filter(
-                    (mealEntry) => mealEntry.mealId === input.meal
-                  );
-            const foods = yield* foodsService.getMany({
-              input: {
-                foodIds: mealEntries.map((mealEntry) => mealEntry.foodId),
-              },
-            });
-
-            return {
-              _tag: "Ready" as const,
-              data: {
-                dateKey: day.dailyLog.dateKey,
-                day,
-                foods,
-                mealEntries,
-                scope:
-                  input.meal === undefined
-                    ? {
-                        _tag: "Day" as const,
-                      }
-                    : {
-                        _tag: "Meal" as const,
-                        meal: input.meal,
-                      },
-              },
-            };
-          }).pipe(
-            Effect.catchTag("NoMealPlans", ({ dateKey }) =>
-              Effect.succeed({
-                _tag: "NoMealPlans" as const,
-                dateKey,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-    meal: input.meal,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadMacroDetails",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          meal: context.meal,
-        }),
-        onDone: ({ event, actions }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              InvalidRoute: () => ({
-                target: "Failed" as const,
-                context: {
-                  message: "Could not find this meal.",
-                },
-              }),
-              NoMealPlans: ({ dateKey }) => {
-                enq(actions.redirectToNewPlan, { dateKey });
-
-                return { target: "Redirected" as const };
-              },
-              Ready: ({ data }) => ({
-                target: "Ready" as const,
-                context: {
-                  data,
-                },
-              }),
-              UnrecordedDay: () => ({
-                target: "Failed" as const,
-                context: {
-                  message: "Create this day before viewing details.",
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Failed",
-          context: {
-            message: "Could not load nutrition details.",
-          },
-        },
-      },
-    },
-    Failed: {
-      on: {
-        reload: {
-          target: "Loading",
-        },
-      },
-    },
-    Ready: {
-      on: {
-        reload: {
-          target: "Loading",
-        },
-      },
-    },
-    Redirected: {},
-  },
+const MacroDetailsRouteStates = Machine.defineStates({
+  MacroDetailsLoading,
+  MacroDetailsFailed,
+  MacroDetailsReady,
+  MacroDetailsRedirected,
 });
 
-const macroDetailsSelectionMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        selectedMetricName: Schema.NullOr(DetailMetricName),
-      })
+const macroDetailsRouteMachine = Machine.make({
+  states: MacroDetailsRouteStates.states,
+  events: [
+    ReloadMacroDetails,
+    MacroDetailsLoaded,
+    MacroDetailsLoadFailed,
+    MacroDetailsWasRedirected,
+  ],
+  input: MacroDetailsRouteInput,
+  initial: (input) =>
+    MacroDetailsRouteStates.initial.MacroDetailsLoading(
+      new MacroDetailsLoading(input)
     ),
-    events: {
-      clearSelection: Schema.toStandardSchemaV1(EmptyEvent),
-      selectMetric: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          metricName: DetailMetricName,
-        })
-      ),
+}).handle({
+  MacroDetailsLoading: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "loadMacroDetails",
+        src: () =>
+          Machine.effect(
+            Effect.gen(function* () {
+              const dailyLogs = yield* DailyLogs.DailyLogs;
+              const foodsService = yield* Foods.Foods;
+              const mealEntriesService = yield* MealEntries.MealEntries;
+              const day = yield* state.dateKey === todayDateKey()
+                ? dailyLogs.openOrCreate({
+                    input: { dateKey: state.dateKey },
+                  })
+                : dailyLogs.open({ input: { dateKey: state.dateKey } });
+
+              if (day._tag === "UnrecordedDay") {
+                return new MacroDetailsLoadFailed({
+                  message: "Create this day before viewing details.",
+                });
+              }
+
+              const foods = yield* foodsService.list();
+              const mealEntries = yield* mealEntriesService.listForDay({
+                input: { dateKey: day.dailyLog.dateKey },
+              });
+              const selectedMeal =
+                state.meal === undefined
+                  ? undefined
+                  : day.selectedPlan.meals.find(
+                      (planMeal) => planMeal.id === state.meal
+                    );
+
+              if (state.meal !== undefined && selectedMeal === undefined) {
+                return new MacroDetailsLoadFailed({
+                  message: "Could not find this meal.",
+                });
+              }
+
+              return new MacroDetailsLoaded({
+                data: {
+                  dateKey: day.dailyLog.dateKey,
+                  day,
+                  foods,
+                  mealEntries,
+                  scope:
+                    state.meal === undefined
+                      ? { _tag: "Day" as const }
+                      : { _tag: "Meal" as const, meal: state.meal },
+                },
+              });
+            }).pipe(
+              Effect.catchTag(
+                "NoMealPlans",
+                ({ dateKey: missingPlanDateKey }) =>
+                  Effect.sync(() => {
+                    router.replace({
+                      pathname: "/plans/new",
+                      params: { dateKey: missingPlanDateKey },
+                    });
+                    return new MacroDetailsWasRedirected();
+                  })
+              ),
+              Effect.catch(() =>
+                Effect.succeed(
+                  new MacroDetailsLoadFailed({
+                    message: "Could not load nutrition details.",
+                  })
+                )
+              )
+            )
+          ),
+      }),
+    on: {
+      MacroDetailsLoaded: ({ event, target }) =>
+        target.full.MacroDetailsReady(
+          new MacroDetailsReady({ data: event.data })
+        ),
+      MacroDetailsLoadFailed: ({ event, state, target }) =>
+        target.full.MacroDetailsFailed(
+          new MacroDetailsFailed({
+            dateKey: state.dateKey,
+            meal: state.meal,
+            message: event.message,
+          })
+        ),
+      MacroDetailsWasRedirected: ({ target }) =>
+        target.full.MacroDetailsRedirected(new MacroDetailsRedirected()),
     },
   },
-  states: {
-    Selected: {},
-  },
-}).createMachine({
-  context: {
-    selectedMetricName: null,
-  },
-  initial: "Selected",
-  states: {
-    Selected: {},
-  },
-  on: {
-    clearSelection: {
-      context: {
-        selectedMetricName: null,
-      },
+  MacroDetailsFailed: {
+    on: {
+      ReloadMacroDetails: ({ state, target }) =>
+        target.full.MacroDetailsLoading(
+          new MacroDetailsLoading({
+            dateKey: state.dateKey,
+            meal: state.meal,
+          })
+        ),
     },
-    selectMetric: ({ context, event }) => ({
-      context: {
-        selectedMetricName:
-          context.selectedMetricName === event.metricName
-            ? null
-            : event.metricName,
-      },
-    }),
   },
+  MacroDetailsReady: {},
+  MacroDetailsRedirected: {},
 });
 
 export function MacroDetailsRoute({
@@ -402,14 +333,23 @@ export function MacroDetailsRoute({
   readonly dateKey: Domain.DateKey;
   readonly meal: Domain.MealId | undefined;
 }) {
-  const [snapshot, , actor] = useMachine(macroDetailsRouteMachine, {
-    input: {
-      dateKey,
-      meal,
-    },
-  });
+  const machineAtom = useMemo(
+    () =>
+      AtomMachine.make(MobileAtomRuntime, macroDetailsRouteMachine, {
+        dateKey,
+        meal,
+      }),
+    [dateKey, meal]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading") || snapshot.matches("Redirected")) {
+  if (
+    AsyncResult.isInitial(stateResult) ||
+    AsyncResult.isFailure(stateResult) ||
+    MacroDetailsRouteStates.matches(stateResult.value, "MacroDetailsLoading") ||
+    MacroDetailsRouteStates.matches(stateResult.value, "MacroDetailsRedirected")
+  ) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading details" />
@@ -417,14 +357,18 @@ export function MacroDetailsRoute({
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  const failed = MacroDetailsRouteStates.get(
+    stateResult.value,
+    "MacroDetailsFailed"
+  );
+  if (failed._tag === "Some") {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice message={snapshot.context.message} tone="danger" />
+        <Notice message={failed.value.message} tone="danger" />
         <Button
           icon={RotateCcw}
           onPress={() => {
-            actor.trigger.reload();
+            send(new ReloadMacroDetails());
           }}
           variant="secondary"
         >
@@ -434,11 +378,27 @@ export function MacroDetailsRoute({
     );
   }
 
-  return <MacroDetailsView data={snapshot.context.data} />;
+  const ready = MacroDetailsRouteStates.get(
+    stateResult.value,
+    "MacroDetailsReady"
+  );
+
+  return ready._tag === "Some" ? (
+    <MacroDetailsView data={ready.value.data} />
+  ) : (
+    <AppScreen contentStyle={styles.centered}>
+      <LoadingView message="Loading details" />
+    </AppScreen>
+  );
 }
 
 function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
-  const [snapshot, , actor] = useMachine(macroDetailsSelectionMachine);
+  const selectedMetricAtom = useMemo(
+    () => Atom.make<null | typeof DetailMetricName.Type>(null),
+    []
+  );
+  const selectedMetricName = useAtomValue(selectedMetricAtom);
+  const setSelectedMetric = useAtomSet(selectedMetricAtom);
   const meal = data.scope._tag === "Meal" ? data.scope.meal : null;
   const mealEntries =
     meal === null
@@ -517,8 +477,7 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
 
       <View style={styles.nutrientList}>
         {nutrientDetails.map((nutrient) => {
-          const selected =
-            snapshot.context.selectedMetricName === nutrient.nutrientName;
+          const selected = selectedMetricName === nutrient.nutrientName;
           const total = Reporting.getNutrientTotal({
             nutrientName: nutrient.nutrientName,
             totals,
@@ -529,9 +488,11 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
               <NutrientRow
                 nutrient={nutrient}
                 onPress={() => {
-                  actor.trigger.selectMetric({
-                    metricName: nutrient.nutrientName,
-                  });
+                  setSelectedMetric((current) =>
+                    current === nutrient.nutrientName
+                      ? null
+                      : nutrient.nutrientName
+                  );
                 }}
                 selected={selected}
                 target={Reporting.getPlanNutrientTargetAmount({
@@ -566,16 +527,14 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
               weightTotals.resolvedEntriesCount === weightTotals.entriesCount
             }
             onPress={() => {
-              actor.trigger.selectMetric({
-                metricName: FoodWeightMetricName,
-              });
+              setSelectedMetric((current) =>
+                current === FoodWeightMetricName ? null : FoodWeightMetricName
+              );
             }}
-            selected={
-              snapshot.context.selectedMetricName === FoodWeightMetricName
-            }
+            selected={selectedMetricName === FoodWeightMetricName}
             total={weightTotals.quantityGrams}
           />
-          {snapshot.context.selectedMetricName === FoodWeightMetricName ? (
+          {selectedMetricName === FoodWeightMetricName ? (
             <WeightContributors
               entries={entries}
               total={weightTotals.quantityGrams}
@@ -588,14 +547,14 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
               costTotals.resolvedEntriesCount === costTotals.entriesCount
             }
             onPress={() => {
-              actor.trigger.selectMetric({ metricName: FoodCostMetricName });
+              setSelectedMetric((current) =>
+                current === FoodCostMetricName ? null : FoodCostMetricName
+              );
             }}
-            selected={
-              snapshot.context.selectedMetricName === FoodCostMetricName
-            }
+            selected={selectedMetricName === FoodCostMetricName}
             totalMinor={costTotals.costMinorByCurrency.EUR}
           />
-          {snapshot.context.selectedMetricName === FoodCostMetricName ? (
+          {selectedMetricName === FoodCostMetricName ? (
             <CostContributors
               entries={entries}
               totalMinor={costTotals.costMinorByCurrency.EUR}

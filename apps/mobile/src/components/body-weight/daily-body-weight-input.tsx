@@ -4,286 +4,274 @@ import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
 import { formatNumber } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import * as Domain from "@mai/nutrition/domain";
-import * as BodyWeights from "@mai/nutrition/services/body-weights";
-import { useMachine } from "@xstate/react";
-import { Effect, Match, Option, Schema } from "effect";
+import { BodyWeights, Domain } from "@mai/nutrition";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Effect, Option, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { Save, Trash2 } from "lucide-react-native";
+import { useMemo } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const DailyBodyWeightMachineInput = Schema.Struct({
   dateKey: Domain.DateKey,
 });
 
-const DailyBodyWeightContext = Schema.Struct({
+const DailyBodyWeightData = {
   dateKey: Domain.DateKey,
   entry: Schema.NullOr(Domain.BodyWeightEntry),
   message: Schema.NullOr(Schema.String),
   weightInput: Schema.String,
+} as const;
+
+class Loading extends Schema.TaggedClass<Loading>("Loading")("Loading", {
+  dateKey: DailyBodyWeightData.dateKey,
+}) {}
+
+class Idle extends Schema.TaggedClass<Idle>("Idle")(
+  "Idle",
+  DailyBodyWeightData
+) {}
+
+class Saving extends Schema.TaggedClass<Saving>("Saving")(
+  "Saving",
+  DailyBodyWeightData
+) {}
+
+class Deleting extends Schema.TaggedClass<Deleting>("Deleting")(
+  "Deleting",
+  DailyBodyWeightData
+) {}
+
+class Failed extends Schema.TaggedClass<Failed>("Failed")("Failed", {
+  dateKey: DailyBodyWeightData.dateKey,
+  message: Schema.String,
+}) {}
+
+class ChangeWeight extends Schema.TaggedClass<ChangeWeight>("ChangeWeight")(
+  "ChangeWeight",
+  { value: Schema.String }
+) {}
+
+class DeleteWeight extends Schema.TaggedClass<DeleteWeight>("DeleteWeight")(
+  "DeleteWeight",
+  {}
+) {}
+
+class Retry extends Schema.TaggedClass<Retry>("Retry")("Retry", {}) {}
+
+class SaveWeight extends Schema.TaggedClass<SaveWeight>("SaveWeight")(
+  "SaveWeight",
+  {}
+) {}
+
+class WeightLoaded extends Schema.TaggedClass<WeightLoaded>("WeightLoaded")(
+  "WeightLoaded",
+  { entry: Schema.NullOr(Domain.BodyWeightEntry) }
+) {}
+
+class WeightLoadFailed extends Schema.TaggedClass<WeightLoadFailed>(
+  "WeightLoadFailed"
+)("WeightLoadFailed", {}) {}
+
+class WeightSaved extends Schema.TaggedClass<WeightSaved>("WeightSaved")(
+  "WeightSaved",
+  { entry: Domain.BodyWeightEntry }
+) {}
+
+class WeightValidationFailed extends Schema.TaggedClass<WeightValidationFailed>(
+  "WeightValidationFailed"
+)("WeightValidationFailed", {}) {}
+
+class WeightSaveFailed extends Schema.TaggedClass<WeightSaveFailed>(
+  "WeightSaveFailed"
+)("WeightSaveFailed", {}) {}
+
+class WeightDeleted extends Schema.TaggedClass<WeightDeleted>("WeightDeleted")(
+  "WeightDeleted",
+  {}
+) {}
+
+class WeightDeleteFailed extends Schema.TaggedClass<WeightDeleteFailed>(
+  "WeightDeleteFailed"
+)("WeightDeleteFailed", {}) {}
+
+const DailyBodyWeightStates = Machine.defineStates({
+  Deleting,
+  Failed,
+  Idle,
+  Loading,
+  Saving,
 });
 
-const LoadDailyBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-});
+const dailyBodyWeightMachine = Machine.make({
+  states: DailyBodyWeightStates.states,
+  events: [
+    ChangeWeight,
+    DeleteWeight,
+    Retry,
+    SaveWeight,
+    WeightLoaded,
+    WeightLoadFailed,
+    WeightSaved,
+    WeightValidationFailed,
+    WeightSaveFailed,
+    WeightDeleted,
+    WeightDeleteFailed,
+  ],
+  input: DailyBodyWeightMachineInput,
+  initial: ({ dateKey }) =>
+    DailyBodyWeightStates.initial.Loading(new Loading({ dateKey })),
+}).handle({
+  Loading: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "loadWeight",
+        src: () =>
+          Machine.effect(
+            Effect.gen(function* () {
+              const bodyWeights = yield* BodyWeights.BodyWeights;
+              const entry = yield* bodyWeights.findByDate({
+                input: { dateKey: state.dateKey },
+              });
 
-const LoadDailyBodyWeightOutput = Schema.Union([
-  Schema.TaggedStruct("Loaded", {
-    entry: Domain.BodyWeightEntry,
-  }),
-  Schema.TaggedStruct("NoEntry", {}),
-]);
-
-const SaveDailyBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  weightInput: Schema.String,
-});
-
-const SaveDailyBodyWeightOutput = Schema.Union([
-  Schema.TaggedStruct("Saved", {
-    entry: Domain.BodyWeightEntry,
-  }),
-  Schema.TaggedStruct("ValidationFailure", {}),
-]);
-
-const DeleteDailyBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-});
-
-const dailyBodyWeightMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(DailyBodyWeightContext),
-    events: {
-      changeWeight: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          value: Schema.String,
-        })
-      ),
-      deleteWeight: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      save: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(DailyBodyWeightMachineInput),
-  },
-  states: {
-    Deleting: {},
-    Failed: {},
-    Idle: {},
-    Loading: {},
-    Saving: {},
-  },
-  actorSources: {
-    deleteWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(DeleteDailyBodyWeightInput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-
-            yield* bodyWeights.delete({
-              input: {
-                dateKey: input.dateKey,
-              },
-            });
-          })
-        ),
-    }),
-    loadWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadDailyBodyWeightInput),
-        output: Schema.toStandardSchemaV1(LoadDailyBodyWeightOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-            const entry = yield* bodyWeights.findByDate({
-              input: {
-                dateKey: input.dateKey,
-              },
-            });
-
-            return Option.fromNullishOr(entry).pipe(
-              Option.match({
-                onNone: () => ({
-                  _tag: "NoEntry" as const,
-                }),
-                onSome: (loadedEntry) => ({
-                  _tag: "Loaded" as const,
-                  entry: loadedEntry,
-                }),
-              })
-            );
-          })
-        ),
-    }),
-    saveWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SaveDailyBodyWeightInput),
-        output: Schema.toStandardSchemaV1(SaveDailyBodyWeightOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-            const saved = yield* bodyWeights.save({
-              input: {
-                dateKey: input.dateKey,
-                weightKilograms: input.weightInput,
-              },
-            });
-
-            return {
-              _tag: "Saved" as const,
-              entry: saved.bodyWeightEntry,
-            };
-          }).pipe(
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "ValidationFailure" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-    entry: null,
-    message: null,
-    weightInput: "",
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-        }),
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Loaded: ({ entry }) => ({
-                target: "Idle" as const,
-                context: {
-                  dateKey: context.dateKey,
-                  entry,
-                  message: null,
-                  weightInput: _entryInput({ entry }),
-                },
-              }),
-              NoEntry: () => ({
-                target: "Idle" as const,
-                context: {
-                  dateKey: context.dateKey,
-                  entry: null,
-                  message: null,
-                  weightInput: "",
-                },
-              }),
-            })
+              return new WeightLoaded({ entry });
+            }).pipe(Effect.catch(() => Effect.succeed(new WeightLoadFailed())))
           ),
-        onError: {
-          target: "Failed",
-          context: {
+      }),
+    on: {
+      WeightLoaded: ({ event, state, target }) =>
+        target.full.Idle(
+          new Idle({
+            dateKey: state.dateKey,
+            entry: event.entry,
+            message: null,
+            weightInput: _entryInput({ entry: event.entry }),
+          })
+        ),
+      WeightLoadFailed: ({ state, target }) =>
+        target.full.Failed(
+          new Failed({
+            dateKey: state.dateKey,
             message: "Could not load the weight for this day.",
-          },
-        },
-      },
+          })
+        ),
     },
-    Idle: {
-      on: {
-        changeWeight: ({ event }) => ({
-          context: {
+  },
+  Idle: {
+    on: {
+      ChangeWeight: ({ event, state, target }) =>
+        target.full.Idle(
+          new Idle({
+            ...state,
             message: null,
             weightInput: event.value,
-          },
-        }),
-        deleteWeight: ({ context }) =>
-          context.entry === null
-            ? undefined
-            : {
-                target: "Deleting" as const,
-              },
-        save: {
-          target: "Saving",
-        },
-      },
+          })
+        ),
+      DeleteWeight: ({ state, target }) =>
+        state.entry === null
+          ? undefined
+          : target.full.Deleting(new Deleting({ ...state, _tag: undefined })),
+      SaveWeight: ({ state, target }) =>
+        target.full.Saving(new Saving({ ...state, _tag: undefined })),
     },
-    Saving: {
-      invoke: {
-        src: "saveWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          weightInput: context.weightInput,
-        }),
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Saved: ({ entry }) => ({
-                target: "Idle" as const,
-                context: {
-                  dateKey: context.dateKey,
-                  entry,
-                  message: null,
-                  weightInput: _entryInput({ entry }),
+  },
+  Saving: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "saveWeight",
+        src: () =>
+          Machine.effect(
+            Effect.gen(function* () {
+              const bodyWeights = yield* BodyWeights.BodyWeights;
+              const saved = yield* bodyWeights.save({
+                input: {
+                  dateKey: state.dateKey,
+                  weightKilograms: state.weightInput,
                 },
-              }),
-              ValidationFailure: () => ({
-                target: "Idle" as const,
-                context: {
-                  message: "Enter a positive weight in kilograms.",
-                },
-              }),
-            })
+              });
+
+              return new WeightSaved({ entry: saved.bodyWeightEntry });
+            }).pipe(
+              Effect.catchTag("SchemaError", () =>
+                Effect.succeed(new WeightValidationFailed())
+              ),
+              Effect.catch(() => Effect.succeed(new WeightSaveFailed()))
+            )
           ),
-        onError: {
-          target: "Idle",
-          context: {
+      }),
+    on: {
+      WeightSaved: ({ event, state, target }) =>
+        target.full.Idle(
+          new Idle({
+            dateKey: state.dateKey,
+            entry: event.entry,
+            message: null,
+            weightInput: _entryInput({ entry: event.entry }),
+          })
+        ),
+      WeightValidationFailed: ({ state, target }) =>
+        target.full.Idle(
+          new Idle({
+            ...state,
+            _tag: undefined,
+            message: "Enter a positive weight in kilograms.",
+          })
+        ),
+      WeightSaveFailed: ({ state, target }) =>
+        target.full.Idle(
+          new Idle({
+            ...state,
+            _tag: undefined,
             message: "Could not save this weight.",
-          },
-        },
-      },
+          })
+        ),
     },
-    Deleting: {
-      invoke: {
-        src: "deleteWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-        }),
-        onDone: ({ context }) => ({
-          target: "Idle",
-          context: {
-            dateKey: context.dateKey,
+  },
+  Deleting: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "deleteWeight",
+        src: () =>
+          Machine.effect(
+            Effect.gen(function* () {
+              const bodyWeights = yield* BodyWeights.BodyWeights;
+              yield* bodyWeights.delete({
+                input: { dateKey: state.dateKey },
+              });
+              return new WeightDeleted();
+            }).pipe(
+              Effect.catch(() => Effect.succeed(new WeightDeleteFailed()))
+            )
+          ),
+      }),
+    on: {
+      WeightDeleted: ({ state, target }) =>
+        target.full.Idle(
+          new Idle({
+            dateKey: state.dateKey,
             entry: null,
             message: null,
             weightInput: "",
-          },
-        }),
-        onError: {
-          target: "Idle",
-          context: {
+          })
+        ),
+      WeightDeleteFailed: ({ state, target }) =>
+        target.full.Idle(
+          new Idle({
+            ...state,
+            _tag: undefined,
             message: "Could not delete this weight.",
-          },
-        },
-      },
+          })
+        ),
     },
-    Failed: {
-      on: {
-        retry: {
-          target: "Loading",
-          context: {
-            message: null,
-          },
-        },
-      },
+  },
+  Failed: {
+    on: {
+      Retry: ({ state, target }) =>
+        target.full.Loading(new Loading({ dateKey: state.dateKey })),
     },
   },
 });
@@ -293,17 +281,15 @@ export function DailyBodyWeightInput({
 }: {
   readonly dateKey: Domain.DateKey;
 }) {
-  const [snapshot, , actor] = useMachine(dailyBodyWeightMachine, {
-    input: {
-      dateKey,
-    },
-  });
-  const isBusy =
-    snapshot.matches("Loading") ||
-    snapshot.matches("Saving") ||
-    snapshot.matches("Deleting");
+  const machineAtom = useMemo(
+    () =>
+      AtomMachine.make(MobileAtomRuntime, dailyBodyWeightMachine, { dateKey }),
+    [dateKey]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading")) {
+  if (AsyncResult.isInitial(stateResult)) {
     return (
       <View style={styles.root}>
         <LoadingView message="Loading weight..." />
@@ -311,21 +297,51 @@ export function DailyBodyWeightInput({
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  if (AsyncResult.isFailure(stateResult)) {
     return (
       <View style={styles.root}>
         <Notice
-          message={
-            snapshot.context.message ??
-            "Could not load the weight for this day."
-          }
+          message="Could not start the body-weight editor."
           tone="warning"
         />
-        <Button onPress={actor.trigger.retry} variant="secondary">
+      </View>
+    );
+  }
+
+  const state = stateResult.value;
+  const failed = DailyBodyWeightStates.get(state, "Failed").pipe(
+    Option.getOrNull
+  );
+  const data = Option.firstSomeOf([
+    DailyBodyWeightStates.get(state, "Idle"),
+    DailyBodyWeightStates.get(state, "Saving"),
+    DailyBodyWeightStates.get(state, "Deleting"),
+  ]).pipe(Option.getOrNull);
+  const isBusy =
+    DailyBodyWeightStates.matches(state, "Saving") ||
+    DailyBodyWeightStates.matches(state, "Deleting");
+
+  if (DailyBodyWeightStates.matches(state, "Loading")) {
+    return (
+      <View style={styles.root}>
+        <LoadingView message="Loading weight..." />
+      </View>
+    );
+  }
+
+  if (failed !== null) {
+    return (
+      <View style={styles.root}>
+        <Notice message={failed.message} tone="warning" />
+        <Button onPress={() => send(new Retry())} variant="secondary">
           Retry weight
         </Button>
       </View>
     );
+  }
+
+  if (data === null) {
+    return null;
   }
 
   return (
@@ -334,26 +350,26 @@ export function DailyBodyWeightInput({
         <NumberField
           accessibilityLabel="Body weight in kilograms"
           editable={!isBusy}
-          error={snapshot.context.message ?? undefined}
+          error={data.message ?? undefined}
           onChangeText={(value) => {
-            actor.trigger.changeWeight({ value });
+            send(new ChangeWeight({ value }));
           }}
           placeholder="0.00"
           rightElement={<Text style={styles.unit}>kg</Text>}
           style={styles.weightField}
-          value={snapshot.context.weightInput}
+          value={data.weightInput}
         />
         <Button
           accessibilityLabel="Save body weight"
-          disabled={isBusy || snapshot.context.weightInput.trim() === ""}
+          disabled={isBusy || data.weightInput.trim() === ""}
           icon={Save}
-          loading={snapshot.matches("Saving")}
-          onPress={actor.trigger.save}
+          loading={DailyBodyWeightStates.matches(state, "Saving")}
+          onPress={() => send(new SaveWeight())}
           style={styles.saveButton}
         >
           Save
         </Button>
-        {snapshot.context.entry === null ? null : (
+        {data.entry === null ? null : (
           <IconButton
             accessibilityLabel="Delete body weight"
             disabled={isBusy}
@@ -370,7 +386,7 @@ export function DailyBodyWeightInput({
                     text: "Cancel",
                   },
                   {
-                    onPress: actor.trigger.deleteWeight,
+                    onPress: () => send(new DeleteWeight()),
                     style: "destructive",
                     text: "Delete",
                   },

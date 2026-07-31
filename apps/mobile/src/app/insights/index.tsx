@@ -10,19 +10,19 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
-import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import * as Domain from "@mai/nutrition/domain";
-import * as Reporting from "@mai/nutrition/reporting";
-import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
-import { useMachine } from "@xstate/react";
-import { DateTime, Effect, Match, Option, Schema } from "effect";
+import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { router, useRouter } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import { Activity, ChevronLeft, Plus, Scale } from "lucide-react-native";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const InsightTab = Schema.Literals(["nutrition", "weight"]);
 
@@ -33,50 +33,11 @@ const InsightsSearchParams = Schema.Struct({
   tab: Schema.optionalKey(InsightTab),
 });
 
-const InsightsViewInput = Schema.Struct({
-  initialTab: InsightTab,
-});
-
-const InsightsViewContext = Schema.Struct({
+const InsightsView = Schema.Struct({
   activeTab: InsightTab,
   rangeDayCount: InsightRangeDayCount,
 });
-
-const insightsViewMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(InsightsViewContext),
-    events: {
-      selectRange: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          rangeDayCount: InsightRangeDayCount,
-        })
-      ),
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          tab: InsightTab,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(InsightsViewInput),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    activeTab: input.initialTab,
-    rangeDayCount: 30,
-  }),
-  on: {
-    selectRange: ({ event }) => ({
-      context: {
-        rangeDayCount: event.rangeDayCount,
-      },
-    }),
-    selectTab: ({ event }) => ({
-      context: {
-        activeTab: event.tab,
-      },
-    }),
-  },
-});
+type InsightsView = typeof InsightsView.Type;
 
 const NutrientName = Schema.Literals(Reporting.NutrientNames);
 
@@ -148,183 +109,175 @@ const NutritionInsightsInput = Schema.Struct({
   rangeDayCount: InsightRangeDayCount,
 });
 
-const NutritionInsightsFailureContext = Schema.Struct({
+class NutritionInsightsLoading extends Schema.TaggedClass<NutritionInsightsLoading>(
+  "NutritionInsightsLoading"
+)("NutritionInsightsLoading", {
+  rangeDayCount: InsightRangeDayCount,
+}) {}
+
+class NutritionInsightsFailure extends Schema.TaggedClass<NutritionInsightsFailure>(
+  "NutritionInsightsFailure"
+)("NutritionInsightsFailure", {
   message: Schema.String,
   rangeDayCount: InsightRangeDayCount,
-});
+}) {}
 
-const NutritionInsightsLoadedContext = Schema.Struct({
+class NutritionInsightsLoaded extends Schema.TaggedClass<NutritionInsightsLoaded>(
+  "NutritionInsightsLoaded"
+)("NutritionInsightsLoaded", {
   currentReport: NutritionReportRange,
   rangeDayCount: InsightRangeDayCount,
-});
+}) {}
 
-const NutritionInsightsNoPlansContext = Schema.Struct({
+class NutritionInsightsNoPlans extends Schema.TaggedClass<NutritionInsightsNoPlans>(
+  "NutritionInsightsNoPlans"
+)("NutritionInsightsNoPlans", {
   dateKey: Domain.DateKey,
   message: Schema.String,
   rangeDayCount: InsightRangeDayCount,
+}) {}
+
+class RetryNutritionInsights extends Schema.TaggedClass<RetryNutritionInsights>(
+  "RetryNutritionInsights"
+)("RetryNutritionInsights", {}) {}
+
+class NutritionInsightsLoadedEvent extends Schema.TaggedClass<NutritionInsightsLoadedEvent>(
+  "NutritionInsightsLoadedEvent"
+)("NutritionInsightsLoadedEvent", {
+  currentReport: NutritionReportRange,
+}) {}
+
+class NutritionInsightsNoPlansEvent extends Schema.TaggedClass<NutritionInsightsNoPlansEvent>(
+  "NutritionInsightsNoPlansEvent"
+)("NutritionInsightsNoPlansEvent", {
+  dateKey: Domain.DateKey,
+}) {}
+
+class NutritionInsightsFailedEvent extends Schema.TaggedClass<NutritionInsightsFailedEvent>(
+  "NutritionInsightsFailedEvent"
+)("NutritionInsightsFailedEvent", {
+  message: Schema.String,
+}) {}
+
+const NutritionInsightsStates = Machine.defineStates({
+  Loading: NutritionInsightsLoading,
+  Loaded: NutritionInsightsLoaded,
+  NoPlans: NutritionInsightsNoPlans,
+  Failure: NutritionInsightsFailure,
 });
 
-const LoadNutritionInsightsInput = Schema.Struct({
-  rangeDayCount: InsightRangeDayCount,
-});
+const nutritionInsightsOperations = {
+  load: (rangeDayCount: InsightRangeDayCount) =>
+    Effect.gen(function* () {
+      const today = yield* Schema.decodeEffect(Domain.DateKey)(
+        dateKeyFromDate({ date: yield* DateTime.nowAsDate })
+      );
+      const currentStartDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
+        shiftDateKey({
+          dateKey: today,
+          days: -(rangeDayCount - 1),
+        })
+      );
+      const reports = yield* NutritionReports.NutritionReports;
+      const currentReport = yield* reports.getRange({
+        input: {
+          endDateKey: today,
+          startDateKey: currentStartDateKey,
+        },
+      });
 
-const nutritionInsightsRouteMachine = setup({
-  schemas: {
-    events: {
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(NutritionInsightsInput),
-  },
-  states: {
-    Failure: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(NutritionInsightsFailureContext),
-      },
-    },
-    Loaded: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(NutritionInsightsLoadedContext),
-      },
-    },
-    Loading: {},
-    NoPlans: {
-      schemas: {
-        context: Schema.toStandardSchemaV1(NutritionInsightsNoPlansContext),
-      },
-    },
-  },
-  actorSources: {
-    loadRange: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadNutritionInsightsInput),
-      },
-      run: ({ input }) =>
-        InsightsRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const today = yield* Schema.decodeEffect(Domain.DateKey)(
-              dateKeyFromDate({
-                date: yield* DateTime.nowAsDate,
-              })
-            );
-            const currentStartDateKey = yield* Schema.decodeEffect(
-              Domain.DateKey
-            )(
-              shiftDateKey({
-                dateKey: today,
-                days: -(input.rangeDayCount - 1),
-              })
-            );
-            const reports = yield* NutritionReports.NutritionReports;
-            const currentReport = yield* reports.getRange({
-              input: {
-                endDateKey: today,
-                startDateKey: currentStartDateKey,
-              },
-            });
-
-            return {
-              _tag: "Loaded" as const,
-              currentReport,
-            };
-          }).pipe(
-            Effect.catchTag("NoNutritionReportPlans", () =>
-              Effect.gen(function* () {
-                const today = yield* Schema.decodeEffect(Domain.DateKey)(
-                  dateKeyFromDate({
-                    date: yield* DateTime.nowAsDate,
-                  })
-                );
-
-                return {
-                  _tag: "NoPlans" as const,
-                  dateKey: today,
-                };
-              })
-            ),
-            Effect.catchTags({
-              InvalidNutritionReportRange: () =>
-                Effect.succeed({
-                  _tag: "Failure" as const,
-                  message: "The selected nutrition range is invalid.",
-                }),
-              SchemaError: () =>
-                Effect.succeed({
-                  _tag: "Failure" as const,
-                  message: "The selected date range could not be validated.",
-                }),
-            }),
-            Effect.catch(() =>
-              Effect.succeed({
-                _tag: "Failure" as const,
-                message:
-                  "Something went wrong while loading nutrition insights.",
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    currentReport: null,
-    dateKey: null,
-    message: null,
-    rangeDayCount: input.rangeDayCount,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadRange",
-        input: ({ context }) => ({
-          rangeDayCount: context.rangeDayCount,
-        }),
-        onDone: ({ context, event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Failure: ({ message }) => ({
-                target: "Failure" as const,
-                context: {
-                  message,
-                  rangeDayCount: context.rangeDayCount,
-                },
-              }),
-              Loaded: ({ currentReport }) => ({
-                target: "Loaded" as const,
-                context: {
-                  currentReport,
-                  rangeDayCount: context.rangeDayCount,
-                },
-              }),
-              NoPlans: ({ dateKey }) => ({
-                target: "NoPlans" as const,
-                context: {
-                  dateKey,
-                  message: "Create a meal plan to unlock nutrition insights.",
-                  rangeDayCount: context.rangeDayCount,
-                },
-              }),
+      return new NutritionInsightsLoadedEvent({ currentReport });
+    }).pipe(
+      Effect.catchTag("NoNutritionReportPlans", () =>
+        Effect.gen(function* () {
+          const today = yield* Schema.decodeEffect(Domain.DateKey)(
+            dateKeyFromDate({ date: yield* DateTime.nowAsDate })
+          );
+          return new NutritionInsightsNoPlansEvent({ dateKey: today });
+        })
+      ),
+      Effect.catchTags({
+        InvalidNutritionReportRange: () =>
+          Effect.succeed(
+            new NutritionInsightsFailedEvent({
+              message: "The selected nutrition range is invalid.",
             })
           ),
-        onError: ({ context }) => ({
-          target: "Failure",
-          context: {
+        SchemaError: () =>
+          Effect.succeed(
+            new NutritionInsightsFailedEvent({
+              message: "The selected date range could not be validated.",
+            })
+          ),
+      }),
+      Effect.catch(() =>
+        Effect.succeed(
+          new NutritionInsightsFailedEvent({
             message: "Something went wrong while loading nutrition insights.",
-            rangeDayCount: context.rangeDayCount,
-          },
-        }),
-      },
+          })
+        )
+      )
+    ),
+};
+
+const nutritionInsightsRouteMachine = Machine.make({
+  states: NutritionInsightsStates.states,
+  events: [
+    RetryNutritionInsights,
+    NutritionInsightsLoadedEvent,
+    NutritionInsightsNoPlansEvent,
+    NutritionInsightsFailedEvent,
+  ],
+  input: NutritionInsightsInput,
+  initial: ({ rangeDayCount }) =>
+    NutritionInsightsStates.initial.Loading(
+      new NutritionInsightsLoading({ rangeDayCount })
+    ),
+}).handle({
+  Loading: {
+    invoke: ({ state }) =>
+      Machine.invoke({
+        id: "load-nutrition-insights",
+        src: () =>
+          Machine.effect(nutritionInsightsOperations.load(state.rangeDayCount)),
+      }),
+    on: {
+      NutritionInsightsLoadedEvent: ({ event, state, target }) =>
+        target.full.Loaded(
+          new NutritionInsightsLoaded({
+            currentReport: event.currentReport,
+            rangeDayCount: state.rangeDayCount,
+          })
+        ),
+      NutritionInsightsNoPlansEvent: ({ event, state, target }) =>
+        target.full.NoPlans(
+          new NutritionInsightsNoPlans({
+            dateKey: event.dateKey,
+            message: "Create a meal plan to unlock nutrition insights.",
+            rangeDayCount: state.rangeDayCount,
+          })
+        ),
+      NutritionInsightsFailedEvent: ({ event, state, target }) =>
+        target.full.Failure(
+          new NutritionInsightsFailure({
+            message: event.message,
+            rangeDayCount: state.rangeDayCount,
+          })
+        ),
     },
-    Failure: {
-      on: {
-        retry: {
-          target: "Loading",
-        },
-      },
-    },
-    Loaded: {},
-    NoPlans: {},
   },
+  Failure: {
+    on: {
+      RetryNutritionInsights: ({ state, target }) =>
+        target.full.Loading(
+          new NutritionInsightsLoading({
+            rangeDayCount: state.rangeDayCount,
+          })
+        ),
+    },
+  },
+  Loaded: {},
+  NoPlans: {},
 });
 
 const rangeSelectOptions = [
@@ -349,11 +302,15 @@ export default function InsightsScreen() {
       onSome: ({ tab }) => tab ?? "nutrition",
     })
   );
-  const [snapshot, , actor] = useMachine(insightsViewMachine, {
-    input: {
-      initialTab,
-    },
-  });
+  const viewAtom = useMemo(
+    () =>
+      Atom.make<InsightsView>({
+        activeTab: initialTab,
+        rangeDayCount: 30,
+      }),
+    [initialTab]
+  );
+  const [view, setView] = useAtom(viewAtom);
   const appRouter = useRouter();
 
   return (
@@ -368,43 +325,43 @@ export default function InsightsScreen() {
         topSafeAreaColor={color.primary}
       >
         <InsightsHeader
-          activeRange={snapshot.context.rangeDayCount}
+          activeRange={view.rangeDayCount}
           onBackToToday={() => {
             appRouter.replace("/");
           }}
           onSelectRange={(rangeDayCount) => {
-            actor.trigger.selectRange({ rangeDayCount });
+            setView((current) => ({ ...current, rangeDayCount }));
           }}
         />
-        {snapshot.context.activeTab === "nutrition" ? (
+        {view.activeTab === "nutrition" ? (
           <NutritionInsightsPanel
-            key={`nutrition-${snapshot.context.rangeDayCount}`}
-            rangeDayCount={snapshot.context.rangeDayCount}
+            key={`nutrition-${view.rangeDayCount}`}
+            rangeDayCount={view.rangeDayCount}
           />
         ) : (
           <BodyWeightPanel
             calendarPosition="bottom"
-            key={`weight-${snapshot.context.rangeDayCount}`}
-            reportDayCount={snapshot.context.rangeDayCount}
+            key={`weight-${view.rangeDayCount}`}
+            reportDayCount={view.rangeDayCount}
             showImport
           />
         )}
       </AppScreen>
       <BottomActionBar variant="tab">
         <InsightsBottomTab
-          active={snapshot.context.activeTab === "nutrition"}
+          active={view.activeTab === "nutrition"}
           icon={Activity}
           label="Nutrition"
           onPress={() => {
-            actor.trigger.selectTab({ tab: "nutrition" });
+            setView((current) => ({ ...current, activeTab: "nutrition" }));
           }}
         />
         <InsightsBottomTab
-          active={snapshot.context.activeTab === "weight"}
+          active={view.activeTab === "weight"}
           icon={Scale}
           label="Weight"
           onPress={() => {
-            actor.trigger.selectTab({ tab: "weight" });
+            setView((current) => ({ ...current, activeTab: "weight" }));
           }}
         />
       </BottomActionBar>
@@ -417,13 +374,20 @@ function NutritionInsightsPanel({
 }: {
   readonly rangeDayCount: InsightRangeDayCount;
 }) {
-  const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine, {
-    input: {
-      rangeDayCount,
-    },
-  });
+  const machineAtom = useMemo(
+    () =>
+      AtomMachine.make(MobileAtomRuntime, nutritionInsightsRouteMachine, {
+        rangeDayCount,
+      }),
+    [rangeDayCount]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading")) {
+  if (
+    !AsyncResult.isSuccess(stateResult) ||
+    NutritionInsightsStates.matches(stateResult.value, "Loading")
+  ) {
     return (
       <View style={styles.centered}>
         <LoadingView message="Loading nutrition insights..." />
@@ -431,26 +395,37 @@ function NutritionInsightsPanel({
     );
   }
 
-  if (snapshot.matches("Failure")) {
+  const failure = NutritionInsightsStates.get(
+    stateResult.value,
+    "Failure"
+  ).pipe(Option.getOrUndefined);
+  if (failure !== undefined) {
     return (
       <View style={styles.failure}>
         <Notice
-          message={snapshot.context.message}
+          message={failure.message}
           title="Nutrition insights unavailable"
           tone="warning"
         />
-        <Button onPress={actor.trigger.retry} variant="secondary">
+        <Button
+          onPress={() => send(new RetryNutritionInsights())}
+          variant="secondary"
+        >
           Retry
         </Button>
       </View>
     );
   }
 
-  if (snapshot.matches("NoPlans")) {
+  const noPlans = NutritionInsightsStates.get(
+    stateResult.value,
+    "NoPlans"
+  ).pipe(Option.getOrUndefined);
+  if (noPlans !== undefined) {
     return (
       <View style={styles.failure}>
         <Notice
-          message={snapshot.context.message}
+          message={noPlans.message}
           title="Nutrition unavailable"
           tone="neutral"
         />
@@ -460,7 +435,7 @@ function NutritionInsightsPanel({
             router.push({
               pathname: "/plans/new",
               params: {
-                dateKey: snapshot.context.dateKey,
+                dateKey: noPlans.dateKey,
               },
             });
           }}
@@ -471,10 +446,14 @@ function NutritionInsightsPanel({
     );
   }
 
+  const loaded = NutritionInsightsStates.get(stateResult.value, "Loaded").pipe(
+    Option.getOrThrow
+  );
+
   return (
     <View style={styles.nutritionStack}>
       <NutritionTrends
-        currentReport={snapshot.context.currentReport}
+        currentReport={loaded.currentReport}
         onSelectDate={(dateKey) => {
           router.push({
             pathname: "/days/[dateKey]",
@@ -485,8 +464,8 @@ function NutritionInsightsPanel({
         }}
       />
       <RangeSummary
-        rangeDayCount={snapshot.context.rangeDayCount}
-        report={snapshot.context.currentReport}
+        rangeDayCount={loaded.rangeDayCount}
+        report={loaded.currentReport}
       />
     </View>
   );

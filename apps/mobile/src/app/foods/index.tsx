@@ -4,13 +4,14 @@ import { AppHeader } from "@/components/ui/mai-header";
 import { PagerTabs } from "@/components/ui/pager-tabs";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { color, spacing } from "@/theme/tokens";
+import { useAtom } from "@effect/atom-react";
 import { Domain } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
 import { Option, Schema } from "effect";
+import { Atom } from "effect/unstable/reactivity";
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { setup } from "xstate";
 
 import { ManageFoodsPanelLoader } from "./edit";
 import { CreateFoodPanel } from "./new";
@@ -18,35 +19,6 @@ import { CreateFoodPanel } from "./new";
 const FoodsSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
   tab: Schema.optionalKey(Schema.Literals(["create", "manage"])),
-});
-
-const foodsHubMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        activeTab: Schema.Literals([0, 1]),
-      })
-    ),
-    events: {
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: Schema.Literals([0, 1]),
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({ activeTab: Schema.Literals([0, 1]) })
-    ),
-  },
-}).createMachine({
-  context: ({ input }) => ({ activeTab: input.activeTab }),
-  on: {
-    selectTab: ({ event }) => ({
-      context: {
-        activeTab: event.index,
-      },
-    }),
-  },
 });
 
 export default function FoodsScreen() {
@@ -74,15 +46,13 @@ export default function FoodsScreen() {
     dateKeyResult._tag === "Valid" ? dateKeyResult.dateKey : undefined;
   const panelDateKeyParam =
     dateKeyResult._tag === "Valid" ? dateKey : undefined;
-  const [snapshot, , actor] = useMachine(foodsHubMachine, {
-    input: {
-      activeTab:
-        dateKeyResult._tag === "Valid" && dateKeyResult.tab === "manage"
-          ? 1
-          : 0,
-    },
-  });
-  const activeTab = snapshot.context.activeTab;
+  const initialTab =
+    dateKeyResult._tag === "Valid" && dateKeyResult.tab === "manage" ? 1 : 0;
+  const activeTabAtom = useMemo(
+    () => Atom.make<0 | 1>(initialTab),
+    [initialTab]
+  );
+  const [activeTab, setActiveTab] = useAtom(activeTabAtom);
   const tabs = [
     {
       accessibilityLabel: "Create food",
@@ -132,9 +102,7 @@ export default function FoodsScreen() {
         <PagerTabs
           activeIndex={activeTab}
           onActiveIndexChange={(index) => {
-            actor.trigger.selectTab({
-              index: index === 0 ? 0 : 1,
-            });
+            setActiveTab(index === 0 ? 0 : 1);
           }}
           tabBarPosition="bottom"
           tabBarStyle={styles.tabBar}

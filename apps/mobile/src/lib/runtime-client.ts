@@ -1,14 +1,20 @@
-import * as RecordableEvents from "@mai/event-tracking/services/recordable-events";
-import * as RecordedEvents from "@mai/event-tracking/services/recorded-events";
-import * as EventTimeZone from "@mai/event-tracking/services/time-zone";
-import * as BodyWeights from "@mai/nutrition/services/body-weights";
-import * as DailyLogs from "@mai/nutrition/services/daily-logs";
-import * as Foods from "@mai/nutrition/services/foods";
-import * as MealEntries from "@mai/nutrition/services/meal-entries";
-import * as MealPlans from "@mai/nutrition/services/meal-plans";
-import * as ReactNativeSqlite from "@mai/sqlite/layers/react-native-sqlite";
-import { Layer, ManagedRuntime } from "effect";
+import {
+  Backup,
+  BodyWeightReports,
+  BodyWeights,
+  DailyLogs,
+  FoodCatalogTransfer,
+  Foods,
+  MealEntries,
+  MealPlans,
+  NutritionReports,
+} from "@mai/nutrition";
+import { Gzip, QrCode } from "@mai/services";
+import { ReactNativeSqlite } from "@mai/sqlite";
+import { Layer } from "effect";
+import { Atom } from "effect/unstable/reactivity";
 
+import { ExpoBackupFileTransferLayer } from "./expo-backup-file-transfer.ts";
 import { ReactNativeCryptoLayer } from "./react-native-crypto.ts";
 
 const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
@@ -16,25 +22,22 @@ const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
 });
 
 const MobileServicesLayer = Layer.mergeAll(
+  Backup.Backups.layer,
   BodyWeights.BodyWeights.layer,
-  RecordableEvents.RecordableEvents.layer,
-  RecordedEvents.RecordedEvents.layer,
+  BodyWeightReports.BodyWeightReports.layer,
   MealPlans.MealPlans.layer,
   DailyLogs.DailyLogs.layer,
   Foods.Foods.layer,
-  MealEntries.MealEntries.layer
+  FoodCatalogTransfer.FoodCatalogTransfers.layer,
+  MealEntries.MealEntries.layer,
+  NutritionReports.NutritionReports.layer,
+  ExpoBackupFileTransferLayer,
+  Gzip.Gzip.Default,
+  QrCode.QrCode.Default
 );
 
 const MobileLayer = MobileServicesLayer.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      MobileStoreLayer,
-      ReactNativeCryptoLayer,
-      EventTimeZone.EventTrackingTimeZone.layerLocal
-    )
-  )
+  Layer.provideMerge(Layer.mergeAll(MobileStoreLayer, ReactNativeCryptoLayer))
 );
 
-export const RuntimeClient = ManagedRuntime.make(MobileLayer);
-
-export type RuntimeClient = typeof RuntimeClient;
+export const MobileAtomRuntime = Atom.runtime(MobileLayer);

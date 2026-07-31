@@ -10,16 +10,19 @@ import { AppHeader, MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MobileAtomRuntime } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
+import { FoodSearchMachine } from "@mai/machines";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { Machine } from "@typeonce/effect-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Effect, Option, Schema } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, RotateCcw } from "lucide-react-native";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { Actor, createAsyncLogic, setup } from "xstate";
 
 type ManageFoodsLayout = "screen" | "embedded";
 
@@ -42,143 +45,154 @@ const ManageFoodsData = Schema.Struct({
   foodUsage: Schema.Array(MealFoodUsage),
 });
 
-type ManageFoodsData = typeof ManageFoodsData.Type;
-
-const FoodSearchActorSchema =
-  Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
-    (value): value is FoodSearchMachine.FoodSearchActorRef =>
-      value instanceof Actor &&
-      value.logic === FoodSearchMachine.foodSearchMachine,
-    { expected: "FoodSearchActor" }
-  );
-
-const manageFoodsMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        dateKey: Schema.UndefinedOr(Domain.DateKey),
-        foodSearchActor: FoodSearchActorSchema,
-        foodUsage: Schema.Array(MealFoodUsage),
-      })
-    ),
-    events: {
-      foodSearchSelected: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          food: Schema.NullOr(Domain.Food),
-          selection: Schema.Literals(["explicit", "firstMatching"]),
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(ManageFoodsData),
-  },
-  actorSources: {
-    foodSearch: FoodSearchMachine.foodSearchMachine,
-  },
-  actions: {
-    openFood: ({
-      dateKey,
-      foodId,
-    }: {
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly foodId: Domain.FoodId;
-    }) => {
-      router.push({
-        pathname: "/foods/[id]",
-        params: {
-          id: foodId,
-          ...(dateKey === undefined ? {} : { dateKey }),
-        },
-      });
-    },
-  },
-}).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
-    dateKey: input.dateKey,
-    foodSearchActor: spawn(actorSources.foodSearch, {
-      id: "manageFoodsSearch",
-      input: { foods: input.foods },
-    }),
-    foodUsage: input.foodUsage,
-  }),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        foodSearchSelected: ({ actions, context, event }, enq) => {
-          if (event.food === null) {
-            return;
-          }
-
-          enq(actions.openFood, {
-            dateKey: context.dateKey,
-            foodId: event.food.id,
-          });
-          enq.sendTo(context.foodSearchActor, {
-            type: "clearSelectedFood",
-          } satisfies FoodSearchMachine.FoodSearchEvent);
-        },
-      },
-    },
-  },
-});
-
 const ManageFoodsLoaderInput = Schema.Struct({
   dateKey: Schema.UndefinedOr(Domain.DateKey),
 });
 
-const manageFoodsLoaderMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({ dateKey: Schema.UndefinedOr(Domain.DateKey) })
-    ),
-    events: {
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
-  },
-  actorSources: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
-        output: Schema.toStandardSchemaV1(ManageFoodsData),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const mealEntries = yield* MealEntries.MealEntries;
+class ManageFoodsRouteState extends Schema.TaggedClass<ManageFoodsRouteState>(
+  "ManageFoodsRouteState"
+)("ManageFoodsRouteState", {
+  dateKey: Schema.UndefinedOr(Domain.DateKey),
+}) {}
+class ManageFoodsLoading extends Schema.TaggedClass<ManageFoodsLoading>(
+  "ManageFoodsLoading"
+)("ManageFoodsLoading", {}) {}
+class ManageFoodsFailed extends Schema.TaggedClass<ManageFoodsFailed>(
+  "ManageFoodsFailed"
+)("ManageFoodsFailed", { message: Schema.String }) {}
+class ManageFoodsReady extends Schema.TaggedClass<ManageFoodsReady>(
+  "ManageFoodsReady"
+)("ManageFoodsReady", {
+  foods: ManageFoodsData.fields.foods,
+  foodUsage: ManageFoodsData.fields.foodUsage,
+}) {}
+class RetryManageFoods extends Schema.TaggedClass<RetryManageFoods>(
+  "RetryManageFoods"
+)("RetryManageFoods", {}) {}
+class ManageFoodsLoaded extends Schema.TaggedClass<ManageFoodsLoaded>(
+  "ManageFoodsLoaded"
+)("ManageFoodsLoaded", {
+  foods: ManageFoodsData.fields.foods,
+  foodUsage: ManageFoodsData.fields.foodUsage,
+}) {}
+class ManageFoodsLoadFailed extends Schema.TaggedClass<ManageFoodsLoadFailed>(
+  "ManageFoodsLoadFailed"
+)("ManageFoodsLoadFailed", {}) {}
 
-            return {
-              dateKey: input.dateKey,
-              foods: [...(yield* foods.list())],
-              foodUsage: yield* mealEntries.listFoodUsage(),
-            };
-          })
-        ),
-    }),
+const ManageFoodsStates = Machine.defineStates({
+  Route: {
+    schema: ManageFoodsRouteState,
+    initial: "Loading",
+    states: {
+      Failed: ManageFoodsFailed,
+      Loading: ManageFoodsLoading,
+      Ready: ManageFoodsReady,
+    },
   },
-}).createMachine({
-  context: ({ input }) => ({ dateKey: input.dateKey }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ dateKey: context.dateKey }),
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: { data: event.output },
-        }),
-        onError: {
-          target: "Failed",
-          context: { message: "Could not load foods. Please try again." },
+});
+
+const ManageFoodsSearchChild = FoodSearchMachine.FoodSearchChild;
+
+const manageFoodsMachine = Machine.make({
+  states: ManageFoodsStates.states,
+  events: [
+    RetryManageFoods,
+    ManageFoodsLoaded,
+    ManageFoodsLoadFailed,
+    ...FoodSearchMachine.foodSearchMachine.emits,
+  ],
+  input: ManageFoodsLoaderInput,
+  initial: ({ dateKey }) =>
+    ManageFoodsStates.initial.Route(
+      new ManageFoodsRouteState({ dateKey }),
+      (route) => route.Loading(new ManageFoodsLoading())
+    ),
+}).handle({
+  Route: {
+    states: {
+      Loading: {
+        invoke: () =>
+          Machine.invoke({
+            id: "loadFoods",
+            src: () =>
+              Machine.effect(
+                Effect.gen(function* () {
+                  const foods = yield* Foods.Foods;
+                  const mealEntries = yield* MealEntries.MealEntries;
+                  return new ManageFoodsLoaded({
+                    foods: [...(yield* foods.list())],
+                    foodUsage: yield* mealEntries.listFoodUsage(),
+                  });
+                }).pipe(
+                  Effect.catch(() =>
+                    Effect.succeed(new ManageFoodsLoadFailed())
+                  )
+                )
+              ),
+          }),
+        on: {
+          ManageFoodsLoaded: ({ event, parents, target }) =>
+            target.full.Route(
+              new ManageFoodsRouteState({ ...parents.Route }),
+              (route) =>
+                route.Ready(
+                  new ManageFoodsReady({
+                    foods: event.foods,
+                    foodUsage: event.foodUsage,
+                  })
+                )
+            ),
+          ManageFoodsLoadFailed: ({ parents, target }) =>
+            target.full.Route(
+              new ManageFoodsRouteState({ ...parents.Route }),
+              (route) =>
+                route.Failed(
+                  new ManageFoodsFailed({
+                    message: "Could not load foods. Please try again.",
+                  })
+                )
+            ),
+        },
+      },
+      Failed: {
+        on: {
+          RetryManageFoods: ({ parents, target }) =>
+            target.full.Route(
+              new ManageFoodsRouteState({ ...parents.Route }),
+              (route) => route.Loading(new ManageFoodsLoading())
+            ),
+        },
+      },
+      Ready: {
+        invoke: ({ state }) =>
+          Machine.invokeMachine({
+            child: ManageFoodsSearchChild,
+            input: { foods: state.foods },
+          }),
+        on: {
+          FoodSearchSelected: ({ event, parents }) => {
+            if (event.food === null) {
+              return;
+            }
+
+            const foodId = event.food.id;
+            return Machine.action(
+              Effect.sync(() => {
+                router.push({
+                  pathname: "/foods/[id]",
+                  params: {
+                    id: foodId,
+                    ...(parents.Route.dateKey === undefined
+                      ? {}
+                      : { dateKey: parents.Route.dateKey }),
+                  },
+                });
+              })
+            );
+          },
         },
       },
     },
-    Failed: {
-      on: { retry: { target: "Loading" } },
-    },
-    Ready: {},
   },
 });
 
@@ -203,11 +217,22 @@ export function ManageFoodsPanelLoader({
   readonly dateKey: Domain.DateKey | undefined;
   readonly layout: ManageFoodsLayout;
 }) {
-  const [snapshot, , actor] = useMachine(manageFoodsLoaderMachine, {
-    input: { dateKey },
-  });
+  const machineAtom = useMemo(
+    () => AtomMachine.make(MobileAtomRuntime, manageFoodsMachine, { dateKey }),
+    [dateKey]
+  );
+  const foodSearchAtom = useMemo(
+    () => machineAtom.child(ManageFoodsSearchChild),
+    [machineAtom]
+  );
+  const stateResult = useAtomValue(machineAtom.state);
+  const send = useAtomSet(machineAtom.send);
 
-  if (snapshot.matches("Loading")) {
+  if (
+    AsyncResult.isInitial(stateResult) ||
+    (AsyncResult.isSuccess(stateResult) &&
+      ManageFoodsStates.matches(stateResult.value, "Route.Loading"))
+  ) {
     return layout === "embedded" ? (
       <View style={styles.centered}>
         <LoadingView message="Loading foods" />
@@ -219,17 +244,34 @@ export function ManageFoodsPanelLoader({
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  if (AsyncResult.isFailure(stateResult)) {
+    return (
+      <View style={styles.centered}>
+        <Notice
+          message="Could not start the food library."
+          title="Food library unavailable"
+          tone="danger"
+        />
+      </View>
+    );
+  }
+
+  const state = stateResult.value;
+  const failed = ManageFoodsStates.get(state, "Route.Failed").pipe(
+    Option.getOrNull
+  );
+
+  if (failed !== null) {
     const failure = (
       <View style={styles.centered}>
         <Notice
-          message={snapshot.context.message}
+          message={failed.message}
           title="Food library unavailable"
           tone="danger"
         />
         <Button
           icon={RotateCcw}
-          onPress={actor.trigger.retry}
+          onPress={() => send(new RetryManageFoods())}
           variant="secondary"
         >
           Try again
@@ -250,40 +292,57 @@ export function ManageFoodsPanelLoader({
     );
   }
 
-  return <ManageFoodsPanel data={snapshot.context.data} layout={layout} />;
+  const ready = ManageFoodsStates.get(state, "Route.Ready").pipe(
+    Option.getOrNull
+  );
+
+  return ready === null ? null : (
+    <ManageFoodsPanel
+      actor={foodSearchAtom}
+      data={ready}
+      dateKey={dateKey}
+      layout={layout}
+    />
+  );
 }
 
 function ManageFoodsPanel({
+  actor,
   data,
+  dateKey,
   layout,
 }: {
-  readonly data: ManageFoodsData;
+  readonly actor: AtomMachine.ChildMachineAtom<
+    typeof ManageFoodsSearchChild,
+    unknown
+  >;
+  readonly data: ManageFoodsReady;
+  readonly dateKey: Domain.DateKey | undefined;
   readonly layout: ManageFoodsLayout;
 }) {
-  const [snapshot] = useMachine(manageFoodsMachine, { input: data });
-  const { foodSearchActor, foodUsage } = snapshot.context;
+  const { foodUsage } = data;
   const body = (
     <>
       {layout === "screen" ? (
         <AppHeader
           embedded
-          leading={<BackButton dateKey={data.dateKey} />}
+          leading={<BackButton dateKey={dateKey} />}
           shadow
           style={styles.searchHeader}
           title="Manage foods"
         >
-          <FoodSearchField actor={foodSearchActor} disabled={false} />
+          <FoodSearchField actor={actor} disabled={false} />
         </AppHeader>
       ) : (
         <View style={styles.embeddedSearchHeader}>
-          <FoodSearchField actor={foodSearchActor} disabled={false} />
+          <FoodSearchField actor={actor} disabled={false} />
         </View>
       )}
       <View
         style={layout === "embedded" ? styles.embeddedBody : styles.searchBody}
       >
         <FoodSearchResults
-          actor={foodSearchActor}
+          actor={actor}
           disabled={false}
           emptyFoodsText="Create a food before managing it."
           emptySearchText="No foods found."
