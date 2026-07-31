@@ -47,8 +47,13 @@ const PlansRouteData = Schema.Struct({
 
 type PlansRouteData = typeof PlansRouteData.Type;
 
+const PlansSource = Schema.Literal("settings");
+
+type PlansSource = typeof PlansSource.Type;
+
 const PlansSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  source: Schema.optionalKey(PlansSource),
 });
 
 const PlansTabIndex = Schema.Union([
@@ -128,6 +133,7 @@ const plansRouteMachine = setup({
         editingPlan: Schema.NullOr(Domain.Plan),
         notice: Schema.NullOr(Schema.String),
         redirectDateKey: Schema.NullOr(Domain.DateKey),
+        source: Schema.UndefinedOr(PlansSource),
       })
     ),
     events: {
@@ -162,6 +168,7 @@ const plansRouteMachine = setup({
     input: Schema.toStandardSchemaV1(
       Schema.Struct({
         dateKey: Schema.optionalKey(Domain.DateKey),
+        source: Schema.optionalKey(PlansSource),
       })
     ),
   },
@@ -177,10 +184,32 @@ const plansRouteMachine = setup({
     replaceHome: () => {
       router.replace("/");
     },
-    replaceToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
+    replaceToNewPlan: (params: {
+      readonly dateKey: Domain.DateKey;
+      readonly returnDateKey: Domain.DateKey | undefined;
+      readonly source: PlansSource | undefined;
+    }) => {
+      if (params.source === "settings") {
+        router.replace({
+          pathname: "/plans/new",
+          params:
+            params.returnDateKey === undefined
+              ? {
+                  dateKey: params.dateKey,
+                  source: params.source,
+                }
+              : {
+                  dateKey: params.dateKey,
+                  returnDateKey: params.returnDateKey,
+                  source: params.source,
+                },
+        });
+        return;
+      }
+
       router.replace({
         pathname: "/plans/new",
-        params,
+        params: { dateKey: params.dateKey },
       });
     },
   },
@@ -380,6 +409,7 @@ const plansRouteMachine = setup({
     editingPlan: null,
     notice: null,
     redirectDateKey: null,
+    source: input.source,
   }),
   initial: "Loading",
   states: {
@@ -587,6 +617,8 @@ const plansRouteMachine = setup({
 
         enq(actions.replaceToNewPlan, {
           dateKey: context.redirectDateKey,
+          returnDateKey: context.dateKey,
+          source: context.source,
         });
       },
     },
@@ -603,6 +635,7 @@ export default function PlansScreen() {
   const [snapshot, , actor] = useMachine(plansRouteMachine, {
     input: {
       dateKey: search.value.dateKey,
+      source: search.value.source,
     },
   });
 
@@ -635,6 +668,8 @@ export default function PlansScreen() {
       }
       editingPlan={snapshot.context.editingPlan}
       notice={snapshot.context.notice}
+      returnDateKey={search.value.dateKey}
+      source={search.value.source}
       onChangePlan={(plan) => {
         actor.trigger.changePlan({ plan });
       }}
@@ -665,6 +700,8 @@ function ReadyPlansScreen({
   disabled,
   editingPlan,
   notice,
+  returnDateKey,
+  source,
   onChangePlan,
   onClearEditPlan,
   onCreatePlan,
@@ -677,6 +714,8 @@ function ReadyPlansScreen({
   readonly disabled: boolean;
   readonly editingPlan: Domain.Plan | null;
   readonly notice: string | null;
+  readonly returnDateKey: Domain.DateKey | undefined;
+  readonly source: PlansSource | undefined;
   readonly onChangePlan: (plan: Domain.Plan) => void;
   readonly onClearEditPlan: () => void;
   readonly onCreatePlan: (input: MealPlans.CreateMealPlanInput) => void;
@@ -716,9 +755,31 @@ function ReadyPlansScreen({
           embedded
           leading={
             <IconButton
-              accessibilityLabel="Back to day"
+              accessibilityLabel={
+                source === "settings" ? "Back to settings" : "Back to day"
+              }
               icon={ChevronLeft}
               onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                  return;
+                }
+
+                if (source === "settings") {
+                  if (returnDateKey === undefined) {
+                    router.replace("/settings");
+                    return;
+                  }
+
+                  router.replace({
+                    pathname: "/settings",
+                    params: {
+                      dateKey: returnDateKey,
+                    },
+                  });
+                  return;
+                }
+
                 router.replace({
                   pathname: "/days/[dateKey]",
                   params: {

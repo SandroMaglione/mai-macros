@@ -1,25 +1,22 @@
 {
-  "name": "@mai/sqlite",
+  "name": "@mai/event-tracking",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./layers/*": "./src/layers/*.ts",
-    "./migrations": "./src/migrations/index.ts"
+    "./domain": "./src/domain.ts",
+    "./services/*": "./src/services/*.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@effect/sql-sqlite-react-native": "4.0.0-beta.78",
-    "@mai/event-tracking": "workspace:^",
-    "@mai/nutrition": "workspace:^",
     "effect": "4.0.0-beta.84"
   },
   "devDependencies": {
-    "@effect/sql-sqlite-node": "4.0.0-beta.78",
+    "@types/node": "latest",
     "vitest": "^4.0.8"
   }
 }

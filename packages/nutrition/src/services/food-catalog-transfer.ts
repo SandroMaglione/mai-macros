@@ -20,12 +20,14 @@ import {
   NonEmptyString,
   NonNegativeNumber,
 } from "../domain.ts";
-import { CurrentDatabaseVersion, DatabaseName } from "../metadata.ts";
+import { DatabaseName } from "../metadata.ts";
 import { NutritionStore } from "./store.ts";
 
 export const MaiFoodCatalogFormat = Schema.Literal("mai.food-catalog");
 
 export const MaiFoodCatalogFormatVersion = Schema.Literal(1);
+
+export const CurrentFoodCatalogDatabaseVersion = 7;
 
 export const FoodCatalogCount = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(0)
@@ -85,7 +87,7 @@ export class MaiFoodCatalogSource extends Schema.Class<MaiFoodCatalogSource>(
   "MaiFoodCatalogSource"
 )({
   databaseName: Schema.Literal(DatabaseName),
-  databaseVersion: Schema.Literal(CurrentDatabaseVersion),
+  databaseVersion: Schema.Literal(CurrentFoodCatalogDatabaseVersion),
   exportedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
@@ -369,7 +371,7 @@ export class FoodCatalogTransfers extends Context.Service<FoodCatalogTransfers>(
               },
               source: {
                 databaseName: DatabaseName,
-                databaseVersion: CurrentDatabaseVersion,
+                databaseVersion: CurrentFoodCatalogDatabaseVersion,
                 exportedAt: DateTime.toEpochMillis(yield* DateTime.now),
               },
               stores: {
@@ -560,7 +562,7 @@ const _decodeFoodCatalogJson = Effect.fn("_decodeFoodCatalogJson")(function* ({
     integrity: catalogImport.integrity,
     source: {
       databaseName: catalogImport.source.databaseName,
-      databaseVersion: CurrentDatabaseVersion,
+      databaseVersion: CurrentFoodCatalogDatabaseVersion,
       exportedAt: DateTime.toEpochMillis(catalogImport.source.exportedAt),
     },
     stores: {

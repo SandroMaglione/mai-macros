@@ -2,10 +2,10 @@ import { Backup, Store } from "@mai/nutrition";
 import { Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import { TestSqliteNutritionStoreLayer } from "./sqlite-test-layers.ts";
+import { TestSqliteAppDataStoreLayer } from "./sqlite-test-layers.ts";
 
 const backupTestLayer = Backup.Backups.layer.pipe(
-  Layer.provideMerge(TestSqliteNutritionStoreLayer)
+  Layer.provideMerge(TestSqliteAppDataStoreLayer)
 );
 
 describe("food measurement backup migration", () => {

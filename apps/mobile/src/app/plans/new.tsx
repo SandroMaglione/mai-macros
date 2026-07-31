@@ -15,8 +15,14 @@ import { router } from "expo-router";
 import { Alert, StyleSheet } from "react-native";
 import { createAsyncLogic, setup } from "xstate";
 
+const PlanSource = Schema.Literal("settings");
+
+type PlanSource = typeof PlanSource.Type;
+
 const SearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  returnDateKey: Schema.optionalKey(Domain.DateKey),
+  source: Schema.optionalKey(PlanSource),
 });
 
 const MealPlanInputMeal = Schema.Struct({
@@ -39,6 +45,8 @@ const CreateMealPlanInput = Schema.Struct({
 const NewPlanRouteSearch = Schema.Union([
   Schema.TaggedStruct("Valid", {
     dateKey: Schema.optionalKey(Domain.DateKey),
+    returnDateKey: Schema.optionalKey(Domain.DateKey),
+    source: Schema.optionalKey(PlanSource),
   }),
   Schema.TaggedStruct("Invalid", {}),
 ]);
@@ -58,6 +66,8 @@ const newPlanRouteMachine = setup({
         dateKey: Schema.UndefinedOr(Domain.DateKey),
         errorMessage: Schema.UndefinedOr(Schema.String),
         hasExistingPlan: Schema.Boolean,
+        returnDateKey: Schema.UndefinedOr(Domain.DateKey),
+        source: Schema.UndefinedOr(PlanSource),
       })
     ),
     events: {
@@ -82,7 +92,29 @@ const newPlanRouteMachine = setup({
     Created: {},
   },
   actions: {
-    replaceBack: (params: { readonly dateKey: Domain.DateKey | undefined }) => {
+    replaceBack: (params: {
+      readonly dateKey: Domain.DateKey | undefined;
+      readonly returnDateKey: Domain.DateKey | undefined;
+      readonly source: PlanSource | undefined;
+    }) => {
+      if (params.source === "settings") {
+        if (router.canGoBack()) {
+          router.back();
+          return;
+        }
+
+        if (params.returnDateKey === undefined) {
+          router.replace("/settings");
+          return;
+        }
+
+        router.replace({
+          pathname: "/settings",
+          params: { dateKey: params.returnDateKey },
+        });
+        return;
+      }
+
       if (params.dateKey === undefined) {
         router.replace("/");
         return;
@@ -95,7 +127,27 @@ const newPlanRouteMachine = setup({
     },
     replaceToDateKey: (params: {
       readonly dateKey: Domain.DateKey | undefined;
+      readonly returnDateKey: Domain.DateKey | undefined;
+      readonly source: PlanSource | undefined;
     }) => {
+      if (params.source === "settings") {
+        if (router.canGoBack()) {
+          router.back();
+          return;
+        }
+
+        if (params.returnDateKey === undefined) {
+          router.replace("/settings");
+          return;
+        }
+
+        router.replace({
+          pathname: "/settings",
+          params: { dateKey: params.returnDateKey },
+        });
+        return;
+      }
+
       const today = todayDateKey();
       const targetDateKey = params.dateKey ?? today;
 
@@ -174,11 +226,18 @@ const newPlanRouteMachine = setup({
     errorMessage:
       input.search._tag === "Invalid" ? invalidDateMessage : undefined,
     hasExistingPlan: false,
+    returnDateKey:
+      input.search._tag === "Valid" ? input.search.returnDateKey : undefined,
+    source: input.search._tag === "Valid" ? input.search.source : undefined,
   }),
   initial: "Loading",
   on: {
     back: ({ actions, context }, enq) => {
-      enq(actions.replaceBack, { dateKey: context.dateKey });
+      enq(actions.replaceBack, {
+        dateKey: context.dateKey,
+        returnDateKey: context.returnDateKey,
+        source: context.source,
+      });
     },
   },
   states: {
@@ -224,7 +283,11 @@ const newPlanRouteMachine = setup({
           Match.value(event.output).pipe(
             Match.tagsExhaustive({
               Created: () => {
-                enq(actions.replaceToDateKey, { dateKey: context.dateKey });
+                enq(actions.replaceToDateKey, {
+                  dateKey: context.dateKey,
+                  returnDateKey: context.returnDateKey,
+                  source: context.source,
+                });
 
                 return { target: "Created" as const };
               },
@@ -293,6 +356,8 @@ export default function NewPlanScreen() {
       onSome: (params) => ({
         _tag: "Valid" as const,
         dateKey: params.dateKey,
+        returnDateKey: params.returnDateKey,
+        source: params.source,
       }),
     })
   );
@@ -329,7 +394,10 @@ export default function NewPlanScreen() {
   return (
     <MealPlanForm
       action="create"
-      canNavigateBack={snapshot.context.hasExistingPlan}
+      canNavigateBack={
+        snapshot.context.hasExistingPlan ||
+        snapshot.context.source === "settings"
+      }
       errorMessage={snapshot.context.errorMessage}
       initialPlan={null}
       isSubmitting={snapshot.value === "Submitting"}

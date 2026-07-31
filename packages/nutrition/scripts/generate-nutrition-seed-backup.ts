@@ -1151,6 +1151,8 @@ function buildBackup(): Backup.MaiBackupEncoded {
         foods: foods.length,
         mealEntries: mealEntries.length,
         plans: plans.length,
+        recordableEvents: 0,
+        recordedEvents: 0,
       },
     },
     source: {
@@ -1165,6 +1167,8 @@ function buildBackup(): Backup.MaiBackupEncoded {
       foods,
       mealEntries,
       plans,
+      recordableEvents: [],
+      recordedEvents: [],
     },
   };
 }

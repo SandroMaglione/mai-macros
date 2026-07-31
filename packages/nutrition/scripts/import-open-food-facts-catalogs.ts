@@ -2986,7 +2986,8 @@ function writeCatalogs({
         },
         source: {
           databaseName: Metadata.DatabaseName,
-          databaseVersion: Metadata.CurrentDatabaseVersion,
+          databaseVersion:
+            FoodCatalogTransfer.CurrentFoodCatalogDatabaseVersion,
           exportedAt,
         },
         stores: {

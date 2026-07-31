@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "56.0.15",
+    "@mai/event-tracking": "workspace:^",
     "@mai/machines": "workspace:^",
     "@mai/nutrition": "workspace:^",
     "@mai/services": "workspace:^",

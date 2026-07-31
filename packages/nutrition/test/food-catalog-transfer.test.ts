@@ -60,6 +60,40 @@ describe("FoodCatalogTransfers", () => {
     });
   });
 
+  it("keeps the released catalog wire version stable across database version 8", async () => {
+    const food = await Effect.runPromise(testFood);
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const transfers = yield* FoodCatalogTransfers;
+        const exported = yield* transfers.exportToJson();
+        const encoded = yield* Schema.encodeEffect(
+          FoodCatalogTransfer.MaiFoodCatalogV1
+        )(exported.catalog);
+        const catalogJson = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown)
+        )(encoded);
+
+        return yield* transfers.previewImportFromJson({
+          input: { json: catalogJson },
+        });
+      }).pipe(
+        Effect.provide(
+          _foodCatalogTestLayer({
+            stores: {
+              ...emptyStores,
+              foods: [food],
+            },
+          })
+        )
+      )
+    );
+
+    assert.equal(result.catalog.source.databaseVersion, 7);
+    assert.equal(result.catalog.integrity.counts.foods, 1);
+    assert.equal(result.catalog.stores.foods[0]?.id, food.id);
+    assert.equal(result.catalog.stores.foods[0]?.name, food.name);
+  });
+
   it("previews same-name local conflicts as selectable but not selected by default", async () => {
     const sourceFood = await Effect.runPromise(testFood);
     const sameNameLocalFood = await Effect.runPromise(testSameNameLocalFood);

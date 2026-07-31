@@ -1,4 +1,5 @@
 import * as BackupService from "./services/backup.ts";
+import * as AppDataStoreService from "./services/app-data-store.ts";
 import * as BodyWeightReportsService from "./services/body-weight-reports.ts";
 import * as BodyWeightsService from "./services/body-weights.ts";
 import * as DailyLogsService from "./services/daily-logs.ts";
@@ -20,6 +21,7 @@ export * as Migrations from "./migrations/index.ts";
 export * as Reporting from "./reporting.ts";
 export * as Utils from "./utils.ts";
 export {
+  AppDataStoreService as AppDataStore,
   BackupService as Backup,
   BodyWeightReportsService as BodyWeightReports,
   BodyWeightsService as BodyWeights,
@@ -34,6 +36,7 @@ export {
 };
 
 export const Service = {
+  AppDataStore: AppDataStoreService,
   Backup: BackupService,
   BodyWeightReports: BodyWeightReportsService,
   BodyWeights: BodyWeightsService,

@@ -244,7 +244,9 @@ const importBackupMachine = setup({
                     importedBackup.backup.integrity.counts.dailyLogs +
                     importedBackup.backup.integrity.counts.foods +
                     importedBackup.backup.integrity.counts.mealEntries +
-                    importedBackup.backup.integrity.counts.plans;
+                    importedBackup.backup.integrity.counts.plans +
+                    importedBackup.backup.integrity.counts.recordableEvents +
+                    importedBackup.backup.integrity.counts.recordedEvents;
 
                   return {
                     _tag: "Imported" as const,
@@ -984,7 +986,8 @@ function ResetDataSection() {
       <BackupSettingsSection divider title="Reset">
         <View style={styles.sectionBody}>
           <Text style={styles.warningText}>
-            Delete every plan, food, daily log, and meal entry on this device.
+            Delete every plan, food, daily log, meal entry, and recorded event
+            on this device.
           </Text>
 
           {isIdle ? (

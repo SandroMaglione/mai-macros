@@ -22,6 +22,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@mai/event-tracking": "workspace:^",
     "effect": "4.0.0-beta.84"
   },
   "devDependencies": {

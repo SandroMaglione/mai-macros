@@ -76,3 +76,39 @@ Any food other than the newest food in a food name group containing multiple foo
 - "Oldest" was proposed for every previous same-name-and-brand food — resolved: the latest is **Newest Food** and every previous match is an **Older Food**.
 - "A field was never used" means that a **Food** or **Food Portion** has no **Meal Entries** — resolved: individual nutritional input fields do not have independent usage.
 - "Edit a portion" was previously treated as part of **Edit Food** — resolved: portions have a separate management flow, with **Change Portion Everywhere** and **Create New Portion** as explicit choices.
+
+# Event Tracking
+
+This context defines user-configured events and the occurrences recorded from them.
+
+## Language
+
+**Recordable Event**:
+A reusable event definition with a name and emoji that can be selected when recording an occurrence.
+
+**Recorded Event**:
+A single occurrence of a recordable event assigned to a local calendar day.
+
+**Record Now**:
+The creation of a recorded event with both the device-local calendar day and the exact current UTC instant.
+
+**Record for a Day**:
+The creation of one or more day-precision recorded events for a past local calendar day. A batch may repeat the same recordable event and is committed atomically. No exact time is invented when the user only knows the day.
+
+**Event Timeline**:
+A reverse-chronological sequence of local calendar days. Every day is visible even when it has no recorded events, and earlier days load as the user scrolls.
+
+**Archive Recordable Event**:
+The removal of a recordable event from quick recording while preserving its recorded events and historical display.
+
+## Relationships
+
+- A **Recordable Event** has zero or more **Recorded Events**
+- A **Recorded Event** refers to exactly one **Recordable Event**
+- The same **Recordable Event** may be recorded multiple times on the same day
+- **Record Now** stores an exact occurrence instant and the local day on which it was recorded
+- **Record for a Day** stores the selected local day without fabricating an exact time
+- A multi-event **Record for a Day** either saves every selected occurrence or none of them
+- Editing a **Recordable Event** changes the name or emoji shown for all of its recorded events
+- Archiving a **Recordable Event** preserves all of its recorded events
+- Recorded events cannot be assigned to a future local day

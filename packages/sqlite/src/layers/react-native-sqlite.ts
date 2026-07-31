@@ -3,6 +3,8 @@ import { Layer } from "effect";
 
 import { SqliteLocalDataLayer } from "./sqlite-local-data.ts";
 import { runSqliteMigrations } from "../migrations/index.ts";
+import { SqliteAppDataStoreLayer } from "./sqlite-app-data-store.ts";
+import { SqliteEventTrackingStoreLayer } from "./sqlite-event-tracking-store.ts";
 import { SqliteNutritionStoreLayer } from "./sqlite-nutrition-store.ts";
 
 export const ReactNativeSqliteLayer = (config: {
@@ -10,7 +12,14 @@ export const ReactNativeSqliteLayer = (config: {
   readonly filename: string;
   readonly location?: string | undefined;
 }) =>
-  Layer.mergeAll(SqliteNutritionStoreLayer, SqliteLocalDataLayer).pipe(
+  Layer.mergeAll(
+    SqliteAppDataStoreLayer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(SqliteNutritionStoreLayer, SqliteEventTrackingStoreLayer)
+      )
+    ),
+    SqliteLocalDataLayer
+  ).pipe(
     Layer.provideMerge(
       Layer.effectDiscard(runSqliteMigrations).pipe(
         Layer.provideMerge(SqliteClient.layer(config))

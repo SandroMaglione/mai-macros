@@ -29,11 +29,11 @@ import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
   Apple,
+  CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  Database,
   Plus,
+  Settings,
   Trash2,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -870,11 +870,11 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
-        icon={ClipboardList}
-        label="Plans"
+        icon={CalendarCheck}
+        label="Events"
         onPress={() => {
           router.push({
-            pathname: "/plans",
+            pathname: "/events",
             params: {
               dateKey,
             },
@@ -894,10 +894,15 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
         }}
       />
       <BottomAction
-        icon={Database}
-        label="Data"
+        icon={Settings}
+        label="Settings"
         onPress={() => {
-          router.push("/backup");
+          router.push({
+            pathname: "/settings",
+            params: {
+              dateKey,
+            },
+          });
         }}
       />
     </BottomActionBar>

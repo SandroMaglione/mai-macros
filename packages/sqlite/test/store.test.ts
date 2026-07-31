@@ -17,14 +17,14 @@ import migration003 from "../src/migrations/003-body-weight-entries.ts";
 import migration004 from "../src/migrations/004-food-measurements.ts";
 import {
   TestSqliteClientLayer,
+  TestSqliteAppDataStoreLayer,
   TestSqliteDataLayer,
-  TestSqliteNutritionStoreLayer,
 } from "./sqlite-test-layers.ts";
 
 const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
 const testLayer = Backup.Backups.layer.pipe(
-  Layer.provideMerge(TestSqliteNutritionStoreLayer)
+  Layer.provideMerge(TestSqliteAppDataStoreLayer)
 );
 
 describe("SqliteNutritionStore", () => {
@@ -791,7 +791,7 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":7', '"databaseVersion":4')
+          .replace('"databaseVersion":8', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
           .replace('"bodyWeightEntries":[],', "")
           .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")

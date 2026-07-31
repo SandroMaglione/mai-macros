@@ -1,3 +1,6 @@
+import * as RecordableEvents from "@mai/event-tracking/services/recordable-events";
+import * as RecordedEvents from "@mai/event-tracking/services/recorded-events";
+import * as EventTimeZone from "@mai/event-tracking/services/time-zone";
 import * as BodyWeights from "@mai/nutrition/services/body-weights";
 import * as DailyLogs from "@mai/nutrition/services/daily-logs";
 import * as Foods from "@mai/nutrition/services/foods";
@@ -14,6 +17,8 @@ const MobileStoreLayer = ReactNativeSqlite.ReactNativeSqliteLayer({
 
 const MobileServicesLayer = Layer.mergeAll(
   BodyWeights.BodyWeights.layer,
+  RecordableEvents.RecordableEvents.layer,
+  RecordedEvents.RecordedEvents.layer,
   MealPlans.MealPlans.layer,
   DailyLogs.DailyLogs.layer,
   Foods.Foods.layer,
@@ -21,7 +26,13 @@ const MobileServicesLayer = Layer.mergeAll(
 );
 
 const MobileLayer = MobileServicesLayer.pipe(
-  Layer.provideMerge(Layer.mergeAll(MobileStoreLayer, ReactNativeCryptoLayer))
+  Layer.provideMerge(
+    Layer.mergeAll(
+      MobileStoreLayer,
+      ReactNativeCryptoLayer,
+      EventTimeZone.EventTrackingTimeZone.layerLocal
+    )
+  )
 );
 
 export const RuntimeClient = ManagedRuntime.make(MobileLayer);
