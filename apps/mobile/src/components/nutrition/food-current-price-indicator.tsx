@@ -1,5 +1,5 @@
 import { color } from "@/theme/tokens";
-import type { Domain } from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
 import { BadgeEuro } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
 

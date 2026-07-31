@@ -6,6 +6,7 @@ import { LoadingOverlay } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
+import { BackupRuntimeClient } from "@/lib/backup-runtime-client";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent, LocalDataResetMachine } from "@mai/machines";
@@ -109,7 +110,7 @@ const exportBackupMachine = setup({
         ),
       },
       run: ({ input }) =>
-        RuntimeClient.runPromise(
+        BackupRuntimeClient.runPromise(
           Effect.gen(function* () {
             const backups = yield* Backup.Backups;
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
@@ -212,7 +213,7 @@ const importBackupMachine = setup({
         output: Schema.toStandardSchemaV1(MobileBackupImportResult),
       },
       run: () =>
-        RuntimeClient.runPromise(
+        BackupRuntimeClient.runPromise(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
 
@@ -323,7 +324,7 @@ const catalogExportMachine = setup({
         ),
       },
       run: () =>
-        RuntimeClient.runPromise(
+        BackupRuntimeClient.runPromise(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
             const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
@@ -435,7 +436,7 @@ const catalogImportMachine = setup({
         output: Schema.toStandardSchemaV1(MobileCatalogFilePreviewResult),
       },
       run: () =>
-        RuntimeClient.runPromise(
+        BackupRuntimeClient.runPromise(
           Effect.gen(function* () {
             const fileTransfers = yield* BackupFileTransfer.BackupFileTransfer;
             const pickedFile = yield* fileTransfers.pickFile({
@@ -502,7 +503,7 @@ const catalogImportMachine = setup({
         ),
       },
       run: ({ input }) =>
-        RuntimeClient.runPromise(
+        BackupRuntimeClient.runPromise(
           Effect.gen(function* () {
             const transfers = yield* FoodCatalogTransfer.FoodCatalogTransfers;
             const importedCatalog = yield* transfers.importSelectedFromJson({

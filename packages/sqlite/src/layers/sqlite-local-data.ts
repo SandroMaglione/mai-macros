@@ -1,4 +1,4 @@
-import { LocalData as NutritionLocalData } from "@mai/nutrition";
+import * as NutritionLocalData from "@mai/nutrition/services/local-data";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 

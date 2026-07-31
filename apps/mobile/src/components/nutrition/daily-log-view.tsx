@@ -15,15 +15,13 @@ import {
 } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
-import {
-  DailyLogs,
-  Domain,
-  Foods,
-  MealEntries,
-  Reporting,
-  Utils,
-} from "@mai/nutrition";
-import { EmptyEvent } from "@mai/machines";
+import { EmptyEvent } from "@mai/machines/schemas";
+import * as Domain from "@mai/nutrition/domain";
+import * as Reporting from "@mai/nutrition/reporting";
+import * as DailyLogs from "@mai/nutrition/services/daily-logs";
+import * as Foods from "@mai/nutrition/services/foods";
+import * as MealEntries from "@mai/nutrition/services/meal-entries";
+import * as Utils from "@mai/nutrition/utils";
 import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
 import { Array, Effect, Match, Option, Schema } from "effect";
@@ -171,23 +169,15 @@ const dailyLogRouteMachine = setup({
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const dailyLogs = yield* DailyLogs.DailyLogs;
-            const foodsService = yield* Foods.Foods;
-            const mealEntriesService = yield* MealEntries.MealEntries;
             const day = yield* dailyLogs.create({
               input,
-            });
-            const foods = yield* foodsService.list();
-            const mealEntries = yield* mealEntriesService.listForDay({
-              input: {
-                dateKey: day.dailyLog.dateKey,
-              },
             });
 
             return {
               _tag: "RecordedDay" as const,
               day,
-              foods,
-              mealEntries,
+              foods: [],
+              mealEntries: [],
             };
           })
         ),
@@ -245,10 +235,14 @@ const dailyLogRouteMachine = setup({
               };
             }
 
-            const foods = yield* foodsService.list();
             const mealEntries = yield* mealEntriesService.listForDay({
               input: {
                 dateKey: day.dailyLog.dateKey,
+              },
+            });
+            const foods = yield* foodsService.getMany({
+              input: {
+                foodIds: mealEntries.map((mealEntry) => mealEntry.foodId),
               },
             });
 

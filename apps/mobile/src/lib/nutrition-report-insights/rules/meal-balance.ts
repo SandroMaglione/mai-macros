@@ -1,4 +1,4 @@
-import { Reporting } from "@mai/nutrition";
+import * as Reporting from "@mai/nutrition/reporting";
 
 import { sortedByScore } from "../selection.ts";
 import type {

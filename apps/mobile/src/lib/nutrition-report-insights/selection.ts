@@ -1,3 +1,5 @@
+import { MutableHashSet } from "effect";
+
 import type {
   NutritionReportInsight,
   NutritionReportInsightModule,
@@ -27,18 +29,23 @@ export function selectNutritionReportInsights({
     )
     .slice(0, limit);
   const allCandidates = moduleResults.flatMap(({ insights }) => insights);
-
-  return allCandidates.reduce<readonly NutritionReportInsight[]>(
-    (insights, candidate) => {
-      if (
-        insights.length >= limit ||
-        insights.some((insight) => insight.id === candidate.id)
-      ) {
-        return insights;
-      }
-
-      return [...insights, candidate];
-    },
-    selectedByPriority
+  const selected = [...selectedByPriority];
+  const selectedIds = MutableHashSet.fromIterable(
+    selected.map((insight) => insight.id)
   );
+
+  for (const candidate of allCandidates) {
+    if (selected.length >= limit) {
+      break;
+    }
+
+    if (MutableHashSet.has(selectedIds, candidate.id)) {
+      continue;
+    }
+
+    selected.push(candidate);
+    MutableHashSet.add(selectedIds, candidate.id);
+  }
+
+  return selected;
 }

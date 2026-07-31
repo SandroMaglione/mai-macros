@@ -1,9 +1,7 @@
-import {
-  Measurements,
-  NutritionReports,
-  Reporting,
-  type Domain,
-} from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
+import * as Measurements from "@mai/nutrition/measurements";
+import * as Reporting from "@mai/nutrition/reporting";
+import type * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 
 import { insightNutrients } from "./constants.ts";
 import type {
@@ -12,38 +10,134 @@ import type {
   MealInsightContributor,
 } from "./types.ts";
 
+const insightDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
 export function buildInsightContext({
   report,
 }: {
   readonly report: NutritionReports.NutritionReportRange;
 }): InsightContext {
   const dayCount = report.days.length;
-  const totals = report.days.reduce<Reporting.NutrientTotals>(
-    (currentTotals, day) =>
-      Reporting.addNutrientTotals({
-        left: currentTotals,
-        right: day.totals,
-      }),
-    Reporting.emptyNutrientTotals()
-  );
-  const totalQuantityGrams = report.days.reduce(
-    (rangeTotal, day) =>
-      rangeTotal +
-      day.entries.reduce(
-        (dayTotal, entry) => dayTotal + _entryMassGrams({ entry }),
-        0
-      ),
-    0
-  );
-  const weightCoverageComplete = report.days.every((day) =>
-    day.entries.every(
-      (entry) =>
-        Measurements.massGramsFromQuantity({
-          food: entry.food,
-          quantity: entry.mealEntry.quantity,
-        }) !== undefined
-    )
-  );
+  const totals: MutableNutrientTotals = {
+    carbsGrams: 0,
+    energyKcal: 0,
+    fatGrams: 0,
+    fiberGrams: 0,
+    proteinGrams: 0,
+    saltGrams: 0,
+    saturatedFatGrams: 0,
+    sugarGrams: 0,
+  };
+  const mealLabelsById: Record<string, string> = {};
+  const foodContributorsById: Record<string, MutableFoodInsightContributor> =
+    {};
+  const mealContributorsById: Record<string, MutableMealInsightContributor> =
+    {};
+  const dayVolumeContributors: InsightContext["dayVolumeContributors"][number][] =
+    [];
+  let totalQuantityGrams = 0;
+  let weightCoverageComplete = true;
+
+  for (const day of report.days) {
+    _addNutrientTotalsInPlace({ target: totals, value: day.totals });
+
+    for (const meal of day.plan.meals) {
+      mealLabelsById[meal.id] = meal.name;
+    }
+
+    let dayQuantityGrams = 0;
+
+    for (const entry of day.entries) {
+      const quantityGrams = Measurements.massGramsFromQuantity({
+        food: entry.food,
+        quantity: entry.mealEntry.quantity,
+      });
+      const resolvedQuantityGrams = quantityGrams ?? 0;
+      const entryTotals: Reporting.NutrientTotals = {
+        carbsGrams: entry.nutrients.carbsGrams,
+        energyKcal: entry.nutrients.energyKcal,
+        fatGrams: entry.nutrients.fatGrams,
+        fiberGrams: entry.nutrients.fiberGrams ?? 0,
+        proteinGrams: entry.nutrients.proteinGrams,
+        saltGrams: entry.nutrients.saltGrams ?? 0,
+        saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
+        sugarGrams: entry.nutrients.sugarGrams ?? 0,
+      };
+      const mealId = entry.mealEntry.mealId;
+      weightCoverageComplete &&= quantityGrams !== undefined;
+      dayQuantityGrams += resolvedQuantityGrams;
+
+      const foodContributor =
+        foodContributorsById[entry.food.id] ??
+        ({
+          daysByDateKey: {},
+          foodId: entry.food.id,
+          mealsByName: {},
+          name: entry.food.name,
+          quantityGrams: 0,
+          totals: {
+            carbsGrams: 0,
+            energyKcal: 0,
+            fatGrams: 0,
+            fiberGrams: 0,
+            proteinGrams: 0,
+            saltGrams: 0,
+            saturatedFatGrams: 0,
+            sugarGrams: 0,
+          },
+        } satisfies MutableFoodInsightContributor);
+      foodContributorsById[entry.food.id] = foodContributor;
+      foodContributor.daysByDateKey[day.dateKey] = true;
+      const mealDays = foodContributor.mealsByName[mealId] ?? {};
+      foodContributor.mealsByName[mealId] = mealDays;
+      mealDays[day.dateKey] = true;
+      foodContributor.quantityGrams += resolvedQuantityGrams;
+      _addNutrientTotalsInPlace({
+        target: foodContributor.totals,
+        value: entryTotals,
+      });
+
+      const mealContributor =
+        mealContributorsById[mealId] ??
+        ({
+          mealId,
+          mealLabel: "Meal",
+          quantityGrams: 0,
+          totals: {
+            carbsGrams: 0,
+            energyKcal: 0,
+            fatGrams: 0,
+            fiberGrams: 0,
+            proteinGrams: 0,
+            saltGrams: 0,
+            saturatedFatGrams: 0,
+            sugarGrams: 0,
+          },
+        } satisfies MutableMealInsightContributor);
+      mealContributorsById[mealId] = mealContributor;
+      mealContributor.quantityGrams += resolvedQuantityGrams;
+      _addNutrientTotalsInPlace({
+        target: mealContributor.totals,
+        value: entryTotals,
+      });
+    }
+
+    totalQuantityGrams += dayQuantityGrams;
+    dayVolumeContributors.push({
+      dateKey: day.dateKey,
+      energyKcal: day.totals.energyKcal,
+      quantityGrams: dayQuantityGrams,
+    });
+  }
+
+  for (const contributor of Object.values(mealContributorsById)) {
+    contributor.mealLabel = mealLabelsById[contributor.mealId] ?? "Meal";
+  }
+
   const averageTotals =
     dayCount === 0
       ? Reporting.emptyNutrientTotals()
@@ -51,106 +145,8 @@ export function buildInsightContext({
           divisor: dayCount,
           totals,
         });
-  const mealLabelsById = report.days.reduce<Record<string, string>>(
-    (labels, day) =>
-      day.plan.meals.reduce<Record<string, string>>(
-        (nextLabels, meal) => ({
-          ...nextLabels,
-          [meal.id]: meal.name,
-        }),
-        labels
-      ),
-    {}
-  );
   const mealLabel = ({ mealId }: { readonly mealId: string }) =>
     mealLabelsById[mealId] ?? "Meal";
-  const foodContributors = Object.values(
-    report.days.reduce<Record<string, FoodInsightContributor>>(
-      (contributors, day) =>
-        day.entries.reduce<Record<string, FoodInsightContributor>>(
-          (nextContributors, entry) => {
-            const mealId = entry.mealEntry.mealId;
-            const current =
-              nextContributors[entry.food.id] ??
-              ({
-                daysByDateKey: {},
-                foodId: entry.food.id,
-                mealsByName: {},
-                name: entry.food.name,
-                quantityGrams: 0,
-                totals: Reporting.emptyNutrientTotals(),
-              } satisfies FoodInsightContributor);
-
-            return {
-              ...nextContributors,
-              [entry.food.id]: {
-                ...current,
-                daysByDateKey: {
-                  ...current.daysByDateKey,
-                  [day.dateKey]: true,
-                },
-                mealsByName: {
-                  ...current.mealsByName,
-                  [mealId]: {
-                    ...current.mealsByName[mealId],
-                    [day.dateKey]: true,
-                  },
-                },
-                quantityGrams:
-                  current.quantityGrams + _entryMassGrams({ entry }),
-                totals: Reporting.addNutrientTotals({
-                  left: current.totals,
-                  right: _entryTotals({ entry }),
-                }),
-              },
-            };
-          },
-          contributors
-        ),
-      {}
-    )
-  );
-  const mealContributors = Object.values(
-    report.days.reduce<Record<string, MealInsightContributor>>(
-      (contributors, day) =>
-        day.entries.reduce<Record<string, MealInsightContributor>>(
-          (nextContributors, entry) => {
-            const mealId = entry.mealEntry.mealId;
-            const current =
-              nextContributors[mealId] ??
-              ({
-                mealId,
-                mealLabel: mealLabel({ mealId }),
-                quantityGrams: 0,
-                totals: Reporting.emptyNutrientTotals(),
-              } satisfies MealInsightContributor);
-
-            return {
-              ...nextContributors,
-              [mealId]: {
-                ...current,
-                quantityGrams:
-                  current.quantityGrams + _entryMassGrams({ entry }),
-                totals: Reporting.addNutrientTotals({
-                  left: current.totals,
-                  right: _entryTotals({ entry }),
-                }),
-              },
-            };
-          },
-          contributors
-        ),
-      {}
-    )
-  );
-  const dayVolumeContributors = report.days.map((day) => ({
-    dateKey: day.dateKey,
-    energyKcal: day.totals.energyKcal,
-    quantityGrams: day.entries.reduce(
-      (total, entry) => total + _entryMassGrams({ entry }),
-      0
-    ),
-  }));
   const averageTargetTotals = insightNutrients.reduce<
     Record<Reporting.NutrientName, number | null>
   >(
@@ -190,7 +186,7 @@ export function buildInsightContext({
     averageTotals,
     dayCount,
     dayVolumeContributors,
-    foodContributors,
+    foodContributors: Object.values(foodContributorsById),
     formatDate: ({ dateKey }: { readonly dateKey: Domain.DateKey }) => {
       const [yearString, monthString, dayString] = dateKey.split("-");
       const year = Number(yearString);
@@ -198,15 +194,11 @@ export function buildInsightContext({
       const day = Number(dayString);
       const date = new Date(Date.UTC(year, month - 1, day, 12));
 
-      return new Intl.DateTimeFormat("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }).format(date);
+      return insightDateFormatter.format(date);
     },
     formatPercent: ({ share }) => `${Math.round(share * 100)}%`,
     formatWeight: ({ quantityGrams }) => `${Math.round(quantityGrams)}g`,
-    mealContributors,
+    mealContributors: Object.values(mealContributorsById),
     mealLabel,
     report,
     totalQuantityGrams,
@@ -215,32 +207,40 @@ export function buildInsightContext({
   };
 }
 
-function _entryMassGrams({
-  entry,
-}: {
-  readonly entry: NutritionReports.NutritionReportRange["days"][number]["entries"][number];
-}) {
-  return (
-    Measurements.massGramsFromQuantity({
-      food: entry.food,
-      quantity: entry.mealEntry.quantity,
-    }) ?? 0
-  );
-}
+type MutableNutrientTotals = {
+  -readonly [Key in keyof Reporting.NutrientTotals]: Reporting.NutrientTotals[Key];
+};
 
-function _entryTotals({
-  entry,
+type MutableFoodInsightContributor = Omit<
+  FoodInsightContributor,
+  "quantityGrams" | "totals"
+> & {
+  quantityGrams: number;
+  totals: MutableNutrientTotals;
+};
+
+type MutableMealInsightContributor = Omit<
+  MealInsightContributor,
+  "mealLabel" | "quantityGrams" | "totals"
+> & {
+  mealLabel: string;
+  quantityGrams: number;
+  totals: MutableNutrientTotals;
+};
+
+function _addNutrientTotalsInPlace({
+  target,
+  value,
 }: {
-  readonly entry: NutritionReports.NutritionReportRange["days"][number]["entries"][number];
-}): Reporting.NutrientTotals {
-  return {
-    carbsGrams: entry.nutrients.carbsGrams,
-    energyKcal: entry.nutrients.energyKcal,
-    fatGrams: entry.nutrients.fatGrams,
-    fiberGrams: entry.nutrients.fiberGrams ?? 0,
-    proteinGrams: entry.nutrients.proteinGrams,
-    saltGrams: entry.nutrients.saltGrams ?? 0,
-    saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
-    sugarGrams: entry.nutrients.sugarGrams ?? 0,
-  };
+  readonly target: MutableNutrientTotals;
+  readonly value: Reporting.NutrientTotals;
+}) {
+  target.carbsGrams += value.carbsGrams;
+  target.energyKcal += value.energyKcal;
+  target.fatGrams += value.fatGrams;
+  target.fiberGrams += value.fiberGrams;
+  target.proteinGrams += value.proteinGrams;
+  target.saltGrams += value.saltGrams;
+  target.saturatedFatGrams += value.saturatedFatGrams;
+  target.sugarGrams += value.sugarGrams;
 }

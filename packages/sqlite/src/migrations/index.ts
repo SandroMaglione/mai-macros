@@ -2,46 +2,42 @@ import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
-import migration001 from "./001-initial.ts";
-import migration002 from "./002-custom-plan-meals.ts";
-import migration003 from "./003-body-weight-entries.ts";
-import migration004 from "./004-food-measurements.ts";
-import migration005 from "./005-food-prices.ts";
-
 const EmptyRequest = Schema.Struct({});
 
 const LatestMigrationRow = Schema.Struct({
   migrationId: Schema.Number,
 });
 
-export const SqliteMigrationLoader: readonly {
-  readonly effect: Effect.Effect<void, unknown, SqlClient.SqlClient>;
+const SqliteMigrationLoader: readonly {
   readonly id: number;
+  readonly load: () => Promise<{
+    readonly default: Effect.Effect<void, unknown, SqlClient.SqlClient>;
+  }>;
   readonly name: string;
 }[] = [
   {
-    effect: migration001,
     id: 1,
+    load: () => import("./001-initial.ts"),
     name: "initial",
   },
   {
-    effect: migration002,
     id: 2,
+    load: () => import("./002-custom-plan-meals.ts"),
     name: "custom-plan-meals",
   },
   {
-    effect: migration003,
     id: 3,
+    load: () => import("./003-body-weight-entries.ts"),
     name: "body-weight-entries",
   },
   {
-    effect: migration004,
     id: 4,
+    load: () => import("./004-food-measurements.ts"),
     name: "food-measurements",
   },
   {
-    effect: migration005,
     id: 5,
+    load: () => import("./005-food-prices.ts"),
     name: "food-prices",
   },
 ];
@@ -80,7 +76,9 @@ export const runSqliteMigrations = Effect.gen(function* () {
       pendingMigrations,
       (migration) =>
         Effect.gen(function* () {
-          yield* migration.effect;
+          const migrationModule = yield* Effect.tryPromise(migration.load);
+
+          yield* migrationModule.default;
           yield* sql`
             INSERT INTO mai_migrations ${sql.insert({
               migration_id: migration.id,

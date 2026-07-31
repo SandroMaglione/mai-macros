@@ -1,4 +1,5 @@
-import { Domain, Store } from "@mai/nutrition";
+import * as Domain from "@mai/nutrition/domain";
+import * as Store from "@mai/nutrition/services/store";
 import { Array, Effect, Layer, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -430,6 +431,19 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     execute: () => sql`SELECT ${sql.literal(selectFoodColumns)} FROM foods`,
   });
 
+  const FoodIdsRequest = Schema.Array(Domain.FoodId);
+
+  const findFoodRowsByIds = SqlSchema.findAll({
+    Request: FoodIdsRequest,
+    Result: FoodRow,
+    execute: (foodIds) =>
+      sql`
+        SELECT ${sql.literal(selectFoodColumns)}
+        FROM foods
+        WHERE id IN ${sql.in(foodIds)}
+      `,
+  });
+
   const listFoodPortionRows = SqlSchema.findAll({
     Request: EmptyRequest,
     Result: FoodPortionRow,
@@ -450,6 +464,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         FROM food_portions
         WHERE food_id = ${foodId}
         ORDER BY position
+      `,
+  });
+
+  const findFoodPortionRowsByFoods = SqlSchema.findAll({
+    Request: FoodIdsRequest,
+    Result: FoodPortionRow,
+    execute: (foodIds) =>
+      sql`
+        SELECT ${sql.literal(selectFoodPortionColumns)}
+        FROM food_portions
+        WHERE food_id IN ${sql.in(foodIds)}
+        ORDER BY food_id, position
       `,
   });
 
@@ -476,6 +502,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       `,
   });
 
+  const findFoodPriceRowsByFoods = SqlSchema.findAll({
+    Request: FoodIdsRequest,
+    Result: FoodPriceRow,
+    execute: (foodIds) =>
+      sql`
+        SELECT ${sql.literal(selectFoodPriceColumns)}
+        FROM food_prices
+        WHERE food_id IN ${sql.in(foodIds)}
+        ORDER BY food_id, created_at DESC
+      `,
+  });
+
   const findFoodByIdRows = SqlSchema.findAll({
     Request: Domain.FoodId,
     Result: FoodRow,
@@ -494,6 +532,31 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Request: EmptyRequest,
     Result: PlanRow,
     execute: () => sql`SELECT ${sql.literal(selectPlanColumns)} FROM plans`,
+  });
+
+  const PlanIdsRequest = Schema.Array(Domain.PlanId);
+
+  const findPlanRowsByIds = SqlSchema.findAll({
+    Request: PlanIdsRequest,
+    Result: PlanRow,
+    execute: (planIds) =>
+      sql`
+        SELECT ${sql.literal(selectPlanColumns)}
+        FROM plans
+        WHERE id IN ${sql.in(planIds)}
+      `,
+  });
+
+  const findLatestPlanRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: PlanRow,
+    execute: () =>
+      sql`
+        SELECT ${sql.literal(selectPlanColumns)}
+        FROM plans
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT 1
+      `,
   });
 
   const listPlanMealRows = SqlSchema.findAll({
@@ -516,6 +579,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         FROM plan_meals
         WHERE plan_id = ${planId}
         ORDER BY position
+      `,
+  });
+
+  const findPlanMealRowsByPlans = SqlSchema.findAll({
+    Request: PlanIdsRequest,
+    Result: PlanMealRow,
+    execute: (planIds) =>
+      sql`
+        SELECT ${sql.literal(selectPlanMealColumns)}
+        FROM plan_meals
+        WHERE plan_id IN ${sql.in(planIds)}
+        ORDER BY plan_id, position
       `,
   });
 
@@ -545,6 +620,23 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     Result: DailyLogRow,
     execute: (dateKey) =>
       sql`SELECT ${sql.literal(selectDailyLogColumns)} FROM daily_logs WHERE date_key = ${dateKey}`,
+  });
+
+  const DailyLogRangeRequest = Schema.Struct({
+    endDateKey: Domain.DateKey,
+    startDateKey: Domain.DateKey,
+  });
+
+  const findDailyLogsByRangeRows = SqlSchema.findAll({
+    Request: DailyLogRangeRequest,
+    Result: DailyLogRow,
+    execute: ({ endDateKey, startDateKey }) =>
+      sql`
+        SELECT ${sql.literal(selectDailyLogColumns)}
+        FROM daily_logs
+        WHERE date_key BETWEEN ${startDateKey} AND ${endDateKey}
+        ORDER BY date_key
+      `,
   });
 
   const listBodyWeightEntryRows = SqlSchema.findAll({
@@ -621,6 +713,60 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       sql`SELECT ${sql.literal(selectMealEntryColumns)} FROM meal_entries WHERE date_key = ${dateKey}`,
   });
 
+  const findMealEntriesByFoodRows = SqlSchema.findAll({
+    Request: Domain.FoodId,
+    Result: MealEntryRow,
+    execute: (foodId) =>
+      sql`
+        SELECT ${sql.literal(selectMealEntryColumns)}
+        FROM meal_entries
+        WHERE food_id = ${foodId}
+      `,
+  });
+
+  const MealEntryRangeRequest = Schema.Struct({
+    endDateKey: Domain.DateKey,
+    startDateKey: Domain.DateKey,
+  });
+
+  const findMealEntriesByRangeRows = SqlSchema.findAll({
+    Request: MealEntryRangeRequest,
+    Result: MealEntryRow,
+    execute: ({ endDateKey, startDateKey }) =>
+      sql`
+        SELECT ${sql.literal(selectMealEntryColumns)}
+        FROM meal_entries
+        WHERE date_key BETWEEN ${startDateKey} AND ${endDateKey}
+        ORDER BY date_key
+      `,
+  });
+
+  const findMealEntriesForFoodUsageRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: MealEntryRow,
+    execute: () =>
+      sql`
+        WITH ranked_meal_entries AS (
+          SELECT
+            meal_entries.*,
+            rowid AS source_rowid,
+            ROW_NUMBER() OVER (
+              PARTITION BY food_id
+              ORDER BY created_at DESC, rowid DESC
+            ) AS food_rank,
+            ROW_NUMBER() OVER (
+              PARTITION BY food_id, meal_id
+              ORDER BY created_at DESC, rowid DESC
+            ) AS food_meal_rank
+          FROM meal_entries
+        )
+        SELECT ${sql.literal(selectMealEntryColumns)}
+        FROM ranked_meal_entries
+        WHERE food_rank = 1 OR food_meal_rank = 1
+        ORDER BY created_at ASC, source_rowid ASC
+      `,
+  });
+
   const countMealEntriesByDateRows = SqlSchema.findOne({
     Request: Domain.DateKey,
     Result: CountRow,
@@ -642,36 +788,80 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       sql`SELECT COUNT(*) AS count FROM meal_entries WHERE meal_id = ${mealId}`,
   });
 
+  const decodeFoodRowsWithRelatedRows = ({
+    portionRows,
+    priceRows,
+    rows,
+  }: {
+    readonly portionRows: readonly (typeof FoodPortionRow.Type)[];
+    readonly priceRows: readonly (typeof FoodPriceRow.Type)[];
+    readonly rows: readonly (typeof FoodRow.Type)[];
+  }) =>
+    Effect.gen(function* () {
+      const portionRowsByFoodId = Array.groupBy(
+        portionRows,
+        (portionRow) => portionRow.foodId
+      );
+      const priceRowsByFoodId = Array.groupBy(
+        priceRows,
+        (priceRow) => priceRow.foodId
+      );
+
+      return yield* Effect.forEach(rows, (row) =>
+        Effect.gen(function* () {
+          const portions = yield* Effect.forEach(
+            portionRowsByFoodId[row.id] ?? [],
+            decodeFoodPortionRow
+          );
+          const encodedPortions = yield* Schema.encodeEffect(
+            Schema.Array(Domain.FoodPortion)
+          )(portions);
+          const prices = yield* Effect.forEach(
+            priceRowsByFoodId[row.id] ?? [],
+            decodeFoodPriceRow
+          );
+          const encodedPrices = yield* Schema.encodeEffect(
+            Schema.Array(Domain.FoodPrice)
+          )(prices);
+
+          return yield* decodeFoodRow({
+            prices: encodedPrices,
+            portions: encodedPortions,
+            row,
+          });
+        })
+      );
+    });
+
   const decodeFoodRows = (rows: readonly (typeof FoodRow.Type)[]) =>
     Effect.gen(function* () {
       const portionRows = yield* listFoodPortionRows({});
-      const portions = yield* Effect.forEach(portionRows, decodeFoodPortionRow);
-      const encodedPortions = yield* Schema.encodeEffect(
-        Schema.Array(Domain.FoodPortion)
-      )(portions);
       const priceRows = yield* listFoodPriceRows({});
-      const prices = yield* Effect.forEach(priceRows, decodeFoodPriceRow);
-      const encodedPrices = yield* Schema.encodeEffect(
-        Schema.Array(Domain.FoodPrice)
-      )(prices);
 
-      return yield* Effect.forEach(rows, (row) =>
-        decodeFoodRow({
-          row,
-          prices: encodedPrices.filter((price) =>
-            priceRows.some(
-              (priceRow) =>
-                priceRow.id === price.id && priceRow.foodId === row.id
-            )
-          ),
-          portions: encodedPortions.filter((portion) =>
-            portionRows.some(
-              (portionRow) =>
-                portionRow.id === portion.id && portionRow.foodId === row.id
-            )
-          ),
-        })
-      );
+      return yield* decodeFoodRowsWithRelatedRows({
+        portionRows,
+        priceRows,
+        rows,
+      });
+    });
+
+  const decodeFoodRowsByIds = (
+    foodIds: readonly (typeof Domain.FoodId.Type)[]
+  ) =>
+    Effect.gen(function* () {
+      if (!Array.isReadonlyArrayNonEmpty(foodIds)) {
+        return [];
+      }
+
+      const rows = yield* findFoodRowsByIds(foodIds);
+      const portionRows = yield* findFoodPortionRowsByFoods(foodIds);
+      const priceRows = yield* findFoodPriceRowsByFoods(foodIds);
+
+      return yield* decodeFoodRowsWithRelatedRows({
+        portionRows,
+        priceRows,
+        rows,
+      });
     });
 
   const decodeFoodRowsWithRelatedQueries = (
@@ -703,24 +893,56 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
   const listFoods = listFoodRows({}).pipe(Effect.flatMap(decodeFoodRows));
 
+  const decodePlanRowsWithMealRows = ({
+    mealRows,
+    rows,
+  }: {
+    readonly mealRows: readonly (typeof PlanMealRow.Type)[];
+    readonly rows: readonly (typeof PlanRow.Type)[];
+  }) =>
+    Effect.gen(function* () {
+      const mealRowsByPlanId = Array.groupBy(
+        mealRows,
+        (mealRow) => mealRow.planId
+      );
+
+      return yield* Effect.forEach(rows, (row) =>
+        Effect.gen(function* () {
+          const meals = yield* Effect.forEach(
+            mealRowsByPlanId[row.id] ?? [],
+            decodePlanMealRow
+          );
+          const encodedMeals = yield* Schema.encodeEffect(
+            Schema.Array(Domain.PlanMeal)
+          )(meals);
+
+          return yield* decodePlanRow({
+            meals: encodedMeals,
+            row,
+          });
+        })
+      );
+    });
+
   const decodePlanRows = (rows: readonly (typeof PlanRow.Type)[]) =>
     Effect.gen(function* () {
       const mealRows = yield* listPlanMealRows({});
-      const meals = yield* Effect.forEach(mealRows, decodePlanMealRow);
-      const encodedMeals = yield* Schema.encodeEffect(
-        Schema.Array(Domain.PlanMeal)
-      )(meals);
 
-      return yield* Effect.forEach(rows, (row) =>
-        decodePlanRow({
-          row,
-          meals: encodedMeals.filter((meal) =>
-            mealRows.some(
-              (mealRow) => mealRow.id === meal.id && mealRow.planId === row.id
-            )
-          ),
-        })
-      );
+      return yield* decodePlanRowsWithMealRows({ mealRows, rows });
+    });
+
+  const decodePlanRowsByIds = (
+    planIds: readonly (typeof Domain.PlanId.Type)[]
+  ) =>
+    Effect.gen(function* () {
+      if (!Array.isReadonlyArrayNonEmpty(planIds)) {
+        return [];
+      }
+
+      const rows = yield* findPlanRowsByIds(planIds);
+      const mealRows = yield* findPlanMealRowsByPlans(planIds);
+
+      return yield* decodePlanRowsWithMealRows({ mealRows, rows });
     });
 
   const decodePlanRowsWithPlanMealQuery = (
@@ -1137,6 +1359,13 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         )
       ),
 
+    findDailyLogsByRange: (input) =>
+      _mapStoreError(
+        findDailyLogsByRangeRows(input).pipe(
+          Effect.flatMap((rows) => Effect.forEach(rows, decodeDailyLogRow))
+        )
+      ),
+
     findDailyLogsByPlan: (planId) =>
       _mapStoreError(
         findDailyLogsByPlanRows(planId).pipe(
@@ -1150,6 +1379,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
           Effect.flatMap(decodeFoodRowsWithRelatedQueries)
         )
       ),
+
+    findFoodsByIds: (foodIds) => _mapStoreError(decodeFoodRowsByIds(foodIds)),
 
     findFoodsByName: (name) =>
       _mapStoreError(
@@ -1172,12 +1403,40 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         )
       ),
 
+    findMealEntriesByFood: (foodId) =>
+      _mapStoreError(
+        findMealEntriesByFoodRows(foodId).pipe(
+          Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
+        )
+      ),
+
+    findMealEntriesByRange: (input) =>
+      _mapStoreError(
+        findMealEntriesByRangeRows(input).pipe(
+          Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
+        )
+      ),
+
+    findMealEntriesForFoodUsage: _mapStoreError(
+      findMealEntriesForFoodUsageRows({}).pipe(
+        Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
+      )
+    ),
+
+    findLatestPlan: _mapStoreError(
+      findLatestPlanRows({}).pipe(
+        Effect.flatMap(decodePlanRowsWithPlanMealQuery)
+      )
+    ),
+
     findPlanById: (planId) =>
       _mapStoreError(
         findPlanByIdRows(planId).pipe(
           Effect.flatMap(decodePlanRowsWithPlanMealQuery)
         )
       ),
+
+    findPlansByIds: (planIds) => _mapStoreError(decodePlanRowsByIds(planIds)),
 
     findPlansByName: (name) =>
       _mapStoreError(

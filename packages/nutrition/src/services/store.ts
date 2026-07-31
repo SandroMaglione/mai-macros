@@ -33,6 +33,11 @@ export type NutritionStores = {
   readonly plans: readonly Plan[];
 };
 
+export type NutritionStoreDateRange = {
+  readonly endDateKey: DateKey;
+  readonly startDateKey: DateKey;
+};
+
 export class NutritionStore extends Context.Service<
   NutritionStore,
   {
@@ -72,11 +77,19 @@ export class NutritionStore extends Context.Service<
       dateKey: DateKey
     ) => StoreEffect<readonly DailyLog[]>;
 
+    readonly findDailyLogsByRange: (
+      input: NutritionStoreDateRange
+    ) => StoreEffect<readonly DailyLog[]>;
+
     readonly findDailyLogsByPlan: (
       planId: PlanId
     ) => StoreEffect<readonly DailyLog[]>;
 
     readonly findFoodById: (foodId: FoodId) => StoreEffect<readonly Food[]>;
+
+    readonly findFoodsByIds: (
+      foodIds: readonly FoodId[]
+    ) => StoreEffect<readonly Food[]>;
 
     readonly findFoodsByName: (
       name: Food["name"]
@@ -90,7 +103,23 @@ export class NutritionStore extends Context.Service<
       dateKey: DateKey
     ) => StoreEffect<readonly MealEntry[]>;
 
+    readonly findMealEntriesByFood: (
+      foodId: FoodId
+    ) => StoreEffect<readonly MealEntry[]>;
+
+    readonly findMealEntriesByRange: (
+      input: NutritionStoreDateRange
+    ) => StoreEffect<readonly MealEntry[]>;
+
+    readonly findMealEntriesForFoodUsage: StoreEffect<readonly MealEntry[]>;
+
+    readonly findLatestPlan: StoreEffect<readonly Plan[]>;
+
     readonly findPlanById: (planId: PlanId) => StoreEffect<readonly Plan[]>;
+
+    readonly findPlansByIds: (
+      planIds: readonly PlanId[]
+    ) => StoreEffect<readonly Plan[]>;
 
     readonly findPlansByName: (
       name: Plan["name"]

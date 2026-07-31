@@ -238,12 +238,24 @@ function BodyWeightReportsTestLayer({
           Effect.succeed(
             stores.dailyLogs.filter((dailyLog) => dailyLog.dateKey === dateKey)
           ),
+        findDailyLogsByRange: ({ endDateKey, startDateKey }) =>
+          Effect.succeed(
+            stores.dailyLogs.filter(
+              (dailyLog) =>
+                dailyLog.dateKey >= startDateKey &&
+                dailyLog.dateKey <= endDateKey
+            )
+          ),
         findDailyLogsByPlan: (planId: Domain.PlanId) =>
           Effect.succeed(
             stores.dailyLogs.filter((dailyLog) => dailyLog.planId === planId)
           ),
         findFoodById: (foodId: Domain.FoodId) =>
           Effect.succeed(stores.foods.filter((food) => food.id === foodId)),
+        findFoodsByIds: (foodIds) =>
+          Effect.succeed(
+            stores.foods.filter((food) => foodIds.includes(food.id))
+          ),
         findFoodsByName: (name) =>
           Effect.succeed(stores.foods.filter((food) => food.name === name)),
         findMealEntriesByDate: (dateKey: Domain.DateKey) =>
@@ -252,14 +264,34 @@ function BodyWeightReportsTestLayer({
               (mealEntry) => mealEntry.dateKey === dateKey
             )
           ),
+        findMealEntriesByFood: (foodId) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) => mealEntry.foodId === foodId
+            )
+          ),
+        findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
+          Effect.succeed(
+            stores.mealEntries.filter(
+              (mealEntry) =>
+                mealEntry.dateKey >= startDateKey &&
+                mealEntry.dateKey <= endDateKey
+            )
+          ),
+        findMealEntriesForFoodUsage: Effect.succeed(stores.mealEntries),
         findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
           Effect.succeed(
             stores.mealEntries.filter(
               (mealEntry) => mealEntry.id === mealEntryId
             )
           ),
+        findLatestPlan: Effect.succeed(stores.plans.slice(-1)),
         findPlanById: (planId: Domain.PlanId) =>
           Effect.succeed(stores.plans.filter((plan) => plan.id === planId)),
+        findPlansByIds: (planIds) =>
+          Effect.succeed(
+            stores.plans.filter((plan) => planIds.includes(plan.id))
+          ),
         findPlansByName: (name) =>
           Effect.succeed(stores.plans.filter((plan) => plan.name === name)),
         insertFood: () => Effect.void,

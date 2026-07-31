@@ -1,4 +1,4 @@
-import type { Domain } from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
 
 const _dateKeyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 

@@ -10,10 +10,12 @@ import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate, shiftDateKey } from "@/lib/date-keys";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
-import { Domain, NutritionReports, Reporting } from "@mai/nutrition";
+import { EmptyEvent } from "@mai/machines/schemas";
+import * as Domain from "@mai/nutrition/domain";
+import * as Reporting from "@mai/nutrition/reporting";
+import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 import { useMachine } from "@xstate/react";
 import { DateTime, Effect, Match, Option, Schema } from "effect";
 import { router, useRouter } from "expo-router";
@@ -197,7 +199,7 @@ const nutritionInsightsRouteMachine = setup({
         input: Schema.toStandardSchemaV1(LoadNutritionInsightsInput),
       },
       run: ({ input }) =>
-        RuntimeClient.runPromise(
+        InsightsRuntimeClient.runPromise(
           Effect.gen(function* () {
             const today = yield* Schema.decodeEffect(Domain.DateKey)(
               dateKeyFromDate({

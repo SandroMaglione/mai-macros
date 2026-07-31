@@ -1,4 +1,6 @@
-import { NutritionReports, Reporting, type Domain } from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
+import type * as Reporting from "@mai/nutrition/reporting";
+import type * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 
 export type NutritionReportInsightKind =
   | "diet-concentration"

@@ -253,6 +253,14 @@ function _getRange({
                   (dailyLog) => dailyLog.dateKey === dateKey
                 )
               ),
+            findDailyLogsByRange: ({ endDateKey, startDateKey }) =>
+              Effect.succeed(
+                stores.dailyLogs.filter(
+                  (dailyLog) =>
+                    dailyLog.dateKey >= startDateKey &&
+                    dailyLog.dateKey <= endDateKey
+                )
+              ),
             findDailyLogsByPlan: (planId: Domain.PlanId) =>
               Effect.succeed(
                 stores.dailyLogs.filter(
@@ -261,6 +269,10 @@ function _getRange({
               ),
             findFoodById: (foodId: Domain.FoodId) =>
               Effect.succeed(stores.foods.filter((food) => food.id === foodId)),
+            findFoodsByIds: (foodIds) =>
+              Effect.succeed(
+                stores.foods.filter((food) => foodIds.includes(food.id))
+              ),
             findFoodsByName: (name) =>
               Effect.succeed(stores.foods.filter((food) => food.name === name)),
             findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
@@ -275,18 +287,60 @@ function _getRange({
                   (mealEntry) => mealEntry.dateKey === dateKey
                 )
               ),
+            findMealEntriesByFood: (foodId) =>
+              Effect.succeed(
+                stores.mealEntries.filter(
+                  (mealEntry) => mealEntry.foodId === foodId
+                )
+              ),
+            findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
+              Effect.succeed(
+                stores.mealEntries.filter(
+                  (mealEntry) =>
+                    mealEntry.dateKey >= startDateKey &&
+                    mealEntry.dateKey <= endDateKey
+                )
+              ),
+            findMealEntriesForFoodUsage: Effect.succeed(stores.mealEntries),
+            findLatestPlan: stores.activeMealPlanSelections.some((selection) =>
+              stores.plans.some((plan) => plan.id === selection.planId)
+            )
+              ? Effect.die(
+                  "NutritionReports must not load a fallback when the selected plan exists."
+                )
+              : Effect.succeed(
+                  stores.plans
+                    .filter((candidate) =>
+                      stores.plans.every(
+                        (plan) => candidate.createdAt >= plan.createdAt
+                      )
+                    )
+                    .slice(-1)
+                ),
             findPlanById: (planId: Domain.PlanId) =>
               Effect.succeed(stores.plans.filter((plan) => plan.id === planId)),
+            findPlansByIds: (planIds) =>
+              Effect.succeed(
+                stores.plans.filter((plan) => planIds.includes(plan.id))
+              ),
             findPlansByName: (name) =>
               Effect.succeed(stores.plans.filter((plan) => plan.name === name)),
             insertFood: () => Effect.void,
             insertMealEntry: () => Effect.void,
             insertPlan: () => Effect.void,
-            listDailyLogs: Effect.succeed(stores.dailyLogs),
+            listDailyLogs: Effect.die(
+              "NutritionReports must use a bounded daily-log query."
+            ),
             listBodyWeightEntries: Effect.succeed(stores.bodyWeightEntries),
-            listFoods: Effect.succeed(stores.foods),
-            listMealEntries: Effect.succeed(stores.mealEntries),
-            listPlans: Effect.succeed(stores.plans),
+            listFoods: Effect.die(
+              "NutritionReports must load only referenced foods."
+            ),
+            listMealEntries: Effect.die(
+              "NutritionReports must use a bounded meal-entry query."
+            ),
+            listPlans: Effect.die(
+              "NutritionReports must load only referenced plans."
+            ),
             readStores: Effect.succeed(stores),
             replaceStores: () => Effect.void,
             upsertActiveMealPlanSelection: () => Effect.void,

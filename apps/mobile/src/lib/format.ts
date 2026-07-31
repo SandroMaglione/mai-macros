@@ -1,5 +1,6 @@
 import type { FoodFormMachine } from "@mai/machines";
-import { Measurements, type Domain } from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
+import * as Measurements from "@mai/nutrition/measurements";
 
 export type ChartDomain = readonly [minimum: number, maximum: number];
 

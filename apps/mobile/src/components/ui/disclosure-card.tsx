@@ -1,5 +1,5 @@
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
+import { EmptyEvent } from "@mai/machines/schemas";
 import { useMachine } from "@xstate/react";
 import { Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";

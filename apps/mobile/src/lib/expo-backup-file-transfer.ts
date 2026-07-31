@@ -1,4 +1,4 @@
-import { BackupFileTransfer } from "@mai/services";
+import * as BackupFileTransfer from "@mai/services/services/backup-file-transfer";
 import { Array, Effect, Layer } from "effect";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";

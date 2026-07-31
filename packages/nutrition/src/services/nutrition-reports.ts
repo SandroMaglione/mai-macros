@@ -114,48 +114,74 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                 })
             )
           );
-          const dateKeySet = HashSet.fromIterable(dateKeys);
-          const foods = yield* store.listFoods;
-          const plans = yield* store.listPlans;
-
-          if (!Array.isReadonlyArrayNonEmpty(plans)) {
-            return yield* new NoNutritionReportPlans();
-          }
-
-          const foodsById = HashMap.fromIterable(
-            foods.map((food): readonly [Food["id"], Food] => [food.id, food])
-          );
-          const plansById = HashMap.fromIterable(
-            plans.map((plan): readonly [Plan["id"], Plan] => [plan.id, plan])
-          );
-          const dailyLogs = yield* store.listDailyLogs;
-          const mealEntries = yield* store.listMealEntries;
+          const range = {
+            endDateKey: decodedInput.endDateKey,
+            startDateKey: decodedInput.startDateKey,
+          };
+          const dailyLogs = yield* store.findDailyLogsByRange(range);
+          const mealEntries = yield* store.findMealEntriesByRange(range);
           const selections = yield* store.findActiveMealPlanSelectionById(
             "active-meal-plan" satisfies ActiveMealPlanSelectionId
           );
-
-          const activePlan = yield* Array.head(selections).pipe(
-            Option.flatMap((selection) =>
-              HashMap.get(plansById, selection.planId)
-            ),
-            Option.orElse(() => Array.last(plans)),
+          const selectedPlanId = Array.head(selections).pipe(
+            Option.map((selection) => selection.planId)
+          );
+          const planIds = Array.fromIterable(
+            HashSet.fromIterable([
+              ...dailyLogs.map((dailyLog) => dailyLog.planId),
+              ...Option.match(selectedPlanId, {
+                onNone: () => [],
+                onSome: (planId) => [planId],
+              }),
+            ])
+          );
+          const plans = yield* store.findPlansByIds(planIds);
+          const referencedPlansById = HashMap.fromIterable(
+            plans.map((plan): readonly [Plan["id"], Plan] => [plan.id, plan])
+          );
+          const selectedPlan = selectedPlanId.pipe(
+            Option.flatMap((planId) => HashMap.get(referencedPlansById, planId))
+          );
+          const activePlan = yield* selectedPlan.pipe(
             Option.match({
-              onNone: () => new NoNutritionReportPlans(),
+              onNone: () =>
+                store.findLatestPlan.pipe(
+                  Effect.flatMap(
+                    Effect.fnUntraced(function* (fallbackPlans) {
+                      return yield* Array.head(fallbackPlans).pipe(
+                        Option.match({
+                          onNone: () => new NoNutritionReportPlans(),
+                          onSome: Effect.succeed,
+                        })
+                      );
+                    })
+                  )
+                ),
               onSome: Effect.succeed,
             })
           );
+          const plansById = HashMap.set(
+            referencedPlansById,
+            activePlan.id,
+            activePlan
+          );
+          const foodIds = Array.fromIterable(
+            HashSet.fromIterable(
+              mealEntries.map((mealEntry) => mealEntry.foodId)
+            )
+          );
+          const foods = yield* store.findFoodsByIds(foodIds);
+          const foodsById = HashMap.fromIterable(
+            foods.map((food): readonly [Food["id"], Food] => [food.id, food])
+          );
           const dailyLogsByDateKey = HashMap.fromIterable(
-            dailyLogs
-              .filter((dailyLog) => HashSet.has(dateKeySet, dailyLog.dateKey))
-              .map((dailyLog): readonly [DateKey, DailyLog] => [
-                dailyLog.dateKey,
-                dailyLog,
-              ])
+            dailyLogs.map((dailyLog): readonly [DateKey, DailyLog] => [
+              dailyLog.dateKey,
+              dailyLog,
+            ])
           );
           const mealEntriesByDateKey = Array.groupBy(
-            mealEntries.filter((mealEntry) =>
-              HashSet.has(dateKeySet, mealEntry.dateKey)
-            ),
+            mealEntries,
             (mealEntry) => mealEntry.dateKey
           );
           const days = dateKeys.flatMap((dateKey) =>

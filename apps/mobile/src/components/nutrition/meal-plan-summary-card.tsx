@@ -1,6 +1,7 @@
 import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
-import { Utils, type Domain } from "@mai/nutrition";
+import type * as Domain from "@mai/nutrition/domain";
+import * as Utils from "@mai/nutrition/utils";
 import { Circle, CircleCheck } from "lucide-react-native";
 import {
   Pressable,

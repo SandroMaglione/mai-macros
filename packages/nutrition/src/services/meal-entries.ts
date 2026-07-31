@@ -17,6 +17,7 @@ import {
   DateTime,
   Effect,
   Layer,
+  MutableHashMap,
   Option,
   Order,
   Schema,
@@ -88,6 +89,18 @@ export type MealFoodUsage = {
   }[];
 };
 
+type MutableMealFoodUsage = {
+  foodId: MealFoodUsage["foodId"];
+  latestQuantity: MealFoodUsage["latestQuantity"];
+  latestUsedAt: MealFoodUsage["latestUsedAt"];
+  meals: {
+    latestQuantity: MealEntry["quantity"];
+    latestUsedAt: MealEntry["createdAt"];
+    mealId: MealEntry["mealId"];
+  }[];
+  mealIndexes: MutableHashMap.MutableHashMap<MealId, number>;
+};
+
 export class CreatedMealEntry extends Data.TaggedClass("CreatedMealEntry")<{
   readonly mealEntry: MealEntry;
 }> {}
@@ -142,77 +155,87 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
       }),
 
       listFoodUsage: Effect.fn("MealEntries.listFoodUsage")(function* () {
-        const mealEntries = yield* store.listMealEntries;
+        const mealEntries = yield* store.findMealEntriesForFoodUsage;
+        const foodUsage: MutableMealFoodUsage[] = [];
+        const foodUsageById = MutableHashMap.empty<
+          FoodId,
+          MutableMealFoodUsage
+        >();
 
-        return mealEntries.reduce<readonly MealFoodUsage[]>(
-          (foodUsage, mealEntry) => {
-            const existingFoodUsage = foodUsage.find(
-              (usage) => usage.foodId === mealEntry.foodId
-            );
+        for (const mealEntry of mealEntries) {
+          const existingFoodUsage = MutableHashMap.get(
+            foodUsageById,
+            mealEntry.foodId
+          ).pipe(Option.getOrUndefined);
 
-            if (existingFoodUsage === undefined) {
-              return [
-                ...foodUsage,
+          if (existingFoodUsage === undefined) {
+            const usage: MutableMealFoodUsage = {
+              foodId: mealEntry.foodId,
+              latestQuantity: mealEntry.quantity,
+              latestUsedAt: mealEntry.createdAt,
+              meals: [
                 {
-                  foodId: mealEntry.foodId,
                   latestQuantity: mealEntry.quantity,
                   latestUsedAt: mealEntry.createdAt,
-                  meals: [
-                    {
-                      latestQuantity: mealEntry.quantity,
-                      latestUsedAt: mealEntry.createdAt,
-                      mealId: mealEntry.mealId,
-                    },
-                  ],
+                  mealId: mealEntry.mealId,
                 },
-              ];
-            }
+              ],
+              mealIndexes: MutableHashMap.make([mealEntry.mealId, 0]),
+            };
 
-            const latestFoodUsage =
-              mealEntry.createdAt.epochMilliseconds >=
-              existingFoodUsage.latestUsedAt.epochMilliseconds
-                ? {
-                    latestQuantity: mealEntry.quantity,
-                    latestUsedAt: mealEntry.createdAt,
-                  }
-                : {};
-            const existingMealUsage = existingFoodUsage.meals.find(
-              (usage) => usage.mealId === mealEntry.mealId
-            );
-            const meals =
-              existingMealUsage === undefined
-                ? [
-                    ...existingFoodUsage.meals,
-                    {
-                      latestQuantity: mealEntry.quantity,
-                      latestUsedAt: mealEntry.createdAt,
-                      mealId: mealEntry.mealId,
-                    },
-                  ]
-                : existingFoodUsage.meals.map((usage) =>
-                    usage.mealId === mealEntry.mealId &&
-                    mealEntry.createdAt.epochMilliseconds >=
-                      usage.latestUsedAt.epochMilliseconds
-                      ? {
-                          latestQuantity: mealEntry.quantity,
-                          latestUsedAt: mealEntry.createdAt,
-                          mealId: mealEntry.mealId,
-                        }
-                      : usage
-                  );
+            foodUsage.push(usage);
+            MutableHashMap.set(foodUsageById, mealEntry.foodId, usage);
+            continue;
+          }
 
-            return foodUsage.map((usage) =>
-              usage.foodId === mealEntry.foodId
-                ? {
-                    ...usage,
-                    ...latestFoodUsage,
-                    meals,
-                  }
-                : usage
+          if (
+            mealEntry.createdAt.epochMilliseconds >=
+            existingFoodUsage.latestUsedAt.epochMilliseconds
+          ) {
+            existingFoodUsage.latestQuantity = mealEntry.quantity;
+            existingFoodUsage.latestUsedAt = mealEntry.createdAt;
+          }
+
+          const mealIndex = MutableHashMap.get(
+            existingFoodUsage.mealIndexes,
+            mealEntry.mealId
+          ).pipe(Option.getOrUndefined);
+
+          if (mealIndex === undefined) {
+            MutableHashMap.set(
+              existingFoodUsage.mealIndexes,
+              mealEntry.mealId,
+              existingFoodUsage.meals.length
             );
-          },
-          []
-        );
+            existingFoodUsage.meals.push({
+              latestQuantity: mealEntry.quantity,
+              latestUsedAt: mealEntry.createdAt,
+              mealId: mealEntry.mealId,
+            });
+            continue;
+          }
+
+          const existingMealUsage = existingFoodUsage.meals[mealIndex];
+
+          if (
+            existingMealUsage !== undefined &&
+            mealEntry.createdAt.epochMilliseconds >=
+              existingMealUsage.latestUsedAt.epochMilliseconds
+          ) {
+            existingFoodUsage.meals[mealIndex] = {
+              latestQuantity: mealEntry.quantity,
+              latestUsedAt: mealEntry.createdAt,
+              mealId: mealEntry.mealId,
+            };
+          }
+        }
+
+        return foodUsage.map<MealFoodUsage>((usage) => ({
+          foodId: usage.foodId,
+          latestQuantity: usage.latestQuantity,
+          latestUsedAt: usage.latestUsedAt,
+          meals: usage.meals,
+        }));
       }),
 
       create: Effect.fn("MealEntries.create")(function* ({

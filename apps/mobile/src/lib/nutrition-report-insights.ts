@@ -1,4 +1,4 @@
-import { NutritionReports } from "@mai/nutrition";
+import type * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 
 import { buildInsightContext } from "./nutrition-report-insights/context.ts";
 import { dietConcentrationInsightModule } from "./nutrition-report-insights/rules/diet-concentration.ts";

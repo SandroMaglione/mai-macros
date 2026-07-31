@@ -1,5 +1,7 @@
-import { EmptyEvent } from "@mai/machines";
-import { BodyWeightReports, BodyWeights, Domain } from "@mai/nutrition";
+import { EmptyEvent } from "@mai/machines/schemas";
+import * as Domain from "@mai/nutrition/domain";
+import * as BodyWeightReports from "@mai/nutrition/services/body-weight-reports";
+import * as BodyWeights from "@mai/nutrition/services/body-weights";
 import {
   Circle as SkiaCircle,
   DashPathEffect,
@@ -42,6 +44,7 @@ import { Notice } from "@/components/ui/notice";
 import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
+import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 
@@ -587,7 +590,7 @@ const bodyWeightRouteMachine = setup({
         output: Schema.toStandardSchemaV1(LoadBodyWeightOutput),
       },
       run: ({ input }) =>
-        RuntimeClient.runPromise(
+        InsightsRuntimeClient.runPromise(
           Effect.gen(function* () {
             const bodyWeights = yield* BodyWeights.BodyWeights;
             const reports = yield* BodyWeightReports.BodyWeightReports;

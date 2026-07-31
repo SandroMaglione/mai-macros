@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./layers/*": "./src/layers/*.ts",
+    "./migrations": "./src/migrations/index.ts"
   },
   "scripts": {
     "test": "vitest run",

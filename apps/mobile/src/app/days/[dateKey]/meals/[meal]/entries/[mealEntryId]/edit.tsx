@@ -14,8 +14,11 @@ import * as FoodMeasurements from "@/lib/food-measurements";
 import { formatLoggedFoodQuantity } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
-import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
+import { EmptyEvent } from "@mai/machines/schemas";
+import * as Domain from "@mai/nutrition/domain";
+import * as DailyLogs from "@mai/nutrition/services/daily-logs";
+import * as Foods from "@mai/nutrition/services/foods";
+import * as MealEntries from "@mai/nutrition/services/meal-entries";
 import { useMachine } from "@xstate/react";
 import { Effect, Match, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
@@ -131,13 +134,17 @@ const editMealEntryRouteLoaderMachine = setup({
               };
             }
 
-            const foods = yield* foodsService.list();
+            const food = yield* foodsService.get({
+              input: {
+                foodId: mealEntry.foodId,
+              },
+            });
 
             return {
               _tag: "Ready" as const,
               data: {
                 dateKey,
-                food: foods.find((food) => food.id === mealEntry.foodId),
+                food,
                 meal,
                 mealLabel: planMeal.name,
                 mealEntry,

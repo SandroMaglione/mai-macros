@@ -419,6 +419,13 @@ function _foodCatalogTestLayer({
           (dailyLog) => dailyLog.dateKey === dateKey
         )
       ),
+    findDailyLogsByRange: ({ endDateKey, startDateKey }) =>
+      Effect.sync(() =>
+        currentStores.dailyLogs.filter(
+          (dailyLog) =>
+            dailyLog.dateKey >= startDateKey && dailyLog.dateKey <= endDateKey
+        )
+      ),
     findDailyLogsByPlan: (planId) =>
       Effect.sync(() =>
         currentStores.dailyLogs.filter((dailyLog) => dailyLog.planId === planId)
@@ -426,6 +433,10 @@ function _foodCatalogTestLayer({
     findFoodById: (foodId) =>
       Effect.sync(() =>
         currentStores.foods.filter((food) => food.id === foodId)
+      ),
+    findFoodsByIds: (foodIds) =>
+      Effect.sync(() =>
+        currentStores.foods.filter((food) => foodIds.includes(food.id))
       ),
     findFoodsByName: (name) =>
       Effect.sync(() =>
@@ -443,9 +454,28 @@ function _foodCatalogTestLayer({
           (mealEntry) => mealEntry.dateKey === dateKey
         )
       ),
+    findMealEntriesByFood: (foodId) =>
+      Effect.sync(() =>
+        currentStores.mealEntries.filter(
+          (mealEntry) => mealEntry.foodId === foodId
+        )
+      ),
+    findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
+      Effect.sync(() =>
+        currentStores.mealEntries.filter(
+          (mealEntry) =>
+            mealEntry.dateKey >= startDateKey && mealEntry.dateKey <= endDateKey
+        )
+      ),
+    findMealEntriesForFoodUsage: Effect.sync(() => currentStores.mealEntries),
+    findLatestPlan: Effect.sync(() => currentStores.plans.slice(-1)),
     findPlanById: (planId) =>
       Effect.sync(() =>
         currentStores.plans.filter((plan) => plan.id === planId)
+      ),
+    findPlansByIds: (planIds) =>
+      Effect.sync(() =>
+        currentStores.plans.filter((plan) => planIds.includes(plan.id))
       ),
     findPlansByName: (name) =>
       Effect.sync(() =>

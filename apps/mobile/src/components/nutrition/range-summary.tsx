@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { EmptyEvent } from "@mai/machines";
-import { NutritionReports, Reporting } from "@mai/nutrition";
+import { EmptyEvent } from "@mai/machines/schemas";
+import * as Reporting from "@mai/nutrition/reporting";
+import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 import { useMachine } from "@xstate/react";
 import { Array, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
@@ -37,6 +38,10 @@ type FoodContributor = {
   readonly name: string;
   readonly quantityGrams: number;
   readonly totals: Reporting.NutrientTotals;
+};
+
+type MutableFoodContributor = {
+  -readonly [Key in keyof FoodContributor]: FoodContributor[Key];
 };
 
 const trackedNutrients = [
@@ -232,56 +237,48 @@ export function RangeSummary({
       sugarGrams: null,
     }
   );
-  const foodContributors = Object.values(
-    entries.reduce<Record<string, FoodContributor>>((contributors, entry) => {
-      const current =
-        contributors[entry.food.id] ??
-        ({
-          foodId: entry.food.id,
-          costMinor: 0,
-          name: entry.food.name,
-          quantityGrams: 0,
-          totals: Reporting.emptyNutrientTotals(),
-        } satisfies FoodContributor);
+  const foodContributorsById: Record<string, MutableFoodContributor> = {};
 
-      return {
-        ...contributors,
-        [entry.food.id]: {
-          ...current,
-          costMinor:
-            current.costMinor +
-            (entry.cost?.currency === "EUR" ? entry.cost.costMinor : 0),
-          quantityGrams:
-            current.quantityGrams +
-            (mealEntryMassGrams({
-              food: entry.food,
-              mealEntry: entry.mealEntry,
-            }) ?? 0),
-          totals: Reporting.addNutrientTotals({
-            left: current.totals,
-            right: {
-              carbsGrams: entry.nutrients.carbsGrams,
-              energyKcal: entry.nutrients.energyKcal,
-              fatGrams: entry.nutrients.fatGrams,
-              fiberGrams: entry.nutrients.fiberGrams ?? 0,
-              proteinGrams: entry.nutrients.proteinGrams,
-              saltGrams: entry.nutrients.saltGrams ?? 0,
-              saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
-              sugarGrams: entry.nutrients.sugarGrams ?? 0,
-            },
-          }),
-        },
-      };
-    }, {})
-  );
-  const defaultInsights = getNutritionReportInsights({
-    limit: summaryInsightLimit,
-    report,
-  });
+  for (const entry of entries) {
+    const current =
+      foodContributorsById[entry.food.id] ??
+      ({
+        foodId: entry.food.id,
+        costMinor: 0,
+        name: entry.food.name,
+        quantityGrams: 0,
+        totals: Reporting.emptyNutrientTotals(),
+      } satisfies MutableFoodContributor);
+    foodContributorsById[entry.food.id] = current;
+    current.costMinor +=
+      entry.cost?.currency === "EUR" ? entry.cost.costMinor : 0;
+    current.quantityGrams +=
+      mealEntryMassGrams({
+        food: entry.food,
+        mealEntry: entry.mealEntry,
+      }) ?? 0;
+    current.totals = Reporting.addNutrientTotals({
+      left: current.totals,
+      right: {
+        carbsGrams: entry.nutrients.carbsGrams,
+        energyKcal: entry.nutrients.energyKcal,
+        fatGrams: entry.nutrients.fatGrams,
+        fiberGrams: entry.nutrients.fiberGrams ?? 0,
+        proteinGrams: entry.nutrients.proteinGrams,
+        saltGrams: entry.nutrients.saltGrams ?? 0,
+        saturatedFatGrams: entry.nutrients.saturatedFatGrams ?? 0,
+        sugarGrams: entry.nutrients.sugarGrams ?? 0,
+      },
+    });
+  }
+
+  const foodContributors: readonly FoodContributor[] =
+    Object.values(foodContributorsById);
   const allInsights = getNutritionReportInsights({
     limit: Number.MAX_SAFE_INTEGER,
     report,
   });
+  const defaultInsights = allInsights.slice(0, summaryInsightLimit);
 
   return (
     <View style={styles.root}>

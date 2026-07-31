@@ -61,9 +61,22 @@ describe("SqliteNutritionStore", () => {
         yield* store.upsertBodyWeightEntry(yield* testBodyWeightEntry);
 
         const foods = yield* store.findFoodsByName(food.name);
+        const foodsByIds = yield* store.findFoodsByIds([food.id]);
+        const emptyFoodsByIds = yield* store.findFoodsByIds([]);
         const mealEntries = yield* store.findMealEntriesByDate(
           dailyLog.dateKey
         );
+        const mealEntriesByFood = yield* store.findMealEntriesByFood(food.id);
+        const mealEntriesByRange = yield* store.findMealEntriesByRange({
+          endDateKey: dailyLog.dateKey,
+          startDateKey: dailyLog.dateKey,
+        });
+        const dailyLogsByRange = yield* store.findDailyLogsByRange({
+          endDateKey: dailyLog.dateKey,
+          startDateKey: dailyLog.dateKey,
+        });
+        const plansByIds = yield* store.findPlansByIds([plan.id]);
+        const latestPlan = yield* store.findLatestPlan;
         const bodyWeightEntries = yield* store.findBodyWeightEntriesByRange({
           endDateKey: dailyLog.dateKey,
           startDateKey: dailyLog.dateKey,
@@ -73,14 +86,23 @@ describe("SqliteNutritionStore", () => {
         return {
           bodyWeightEntries,
           count,
+          dailyLogsByRange,
+          emptyFoodsByIds,
           foods,
+          foodsByIds,
+          latestPlan,
           mealEntries,
+          mealEntriesByFood,
+          mealEntriesByRange,
+          plansByIds,
         };
       }).pipe(Effect.provide(testLayer))
     );
 
     assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.count, 1);
+    assert.equal(result.dailyLogsByRange[0]?.dateKey, "2026-06-20");
+    assert.deepEqual(result.emptyFoodsByIds, []);
     const persistedFood = result.foods.find(
       (food) =>
         food.id === "9535a059-a61f-42e1-a2e0-35ec87203c24" &&
@@ -95,6 +117,12 @@ describe("SqliteNutritionStore", () => {
     assert.equal(persistedFood.prices[0]?.currency, "EUR");
     assert.isTrue(persistedFood.prices[0]?.isCurrent);
     assert.equal(persistedFood.massVolumeConversion?.mass.amount, 103);
+    assert.equal(result.foodsByIds[0]?.portions[0]?.name, "X");
+    assert.equal(result.foodsByIds[0]?.prices[0]?.priceMinor, 599);
+    assert.equal(result.latestPlan[0]?.id, testPlanId);
+    assert.equal(result.plansByIds[0]?.meals[0]?.name, "Breakfast");
+    assert.equal(result.mealEntriesByFood.length, 1);
+    assert.equal(result.mealEntriesByRange.length, 1);
     assert.equal(
       result.mealEntries[0]?.quantity._tag === "MeasuredFoodQuantity"
         ? result.mealEntries[0].quantity.amount
@@ -226,6 +254,119 @@ describe("SqliteNutritionStore", () => {
           name: "Early breakfast",
           position: 0,
         },
+      ]
+    );
+  });
+
+  it("finds the latest plan by creation time rather than insertion order", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const newerPlan = yield* Schema.decodeEffect(Domain.Plan)({
+          carbsTargetGrams: 200,
+          createdAt: 200,
+          fatTargetGrams: 60,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c30",
+          meals: [
+            {
+              createdAt: 200,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c30:lunch",
+              name: "Lunch",
+              position: 0,
+            },
+          ],
+          name: "Newer plan",
+          proteinTargetGrams: 150,
+        });
+        const olderPlan = yield* Schema.decodeEffect(Domain.Plan)({
+          carbsTargetGrams: 180,
+          createdAt: 100,
+          fatTargetGrams: 50,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c31",
+          meals: [
+            {
+              createdAt: 100,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c31:lunch",
+              name: "Lunch",
+              position: 0,
+            },
+          ],
+          name: "Older plan",
+          proteinTargetGrams: 140,
+        });
+
+        yield* store.insertPlan(newerPlan);
+        yield* store.insertPlan(olderPlan);
+
+        return yield* store.findLatestPlan;
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    assert.equal(result[0]?.name, "Newer plan");
+  });
+
+  it("bounds food usage history to the latest entry per food and meal", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const store = yield* Store.NutritionStore;
+        const plan = yield* testPlanWithExtraMeal;
+        const food = yield* testFood;
+        const entries = yield* Effect.forEach(
+          [
+            {
+              createdAt: 100,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c32",
+              mealId: `${plan.id}:breakfast`,
+              nutritionMultiplier: 1,
+            },
+            {
+              createdAt: 300,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c33",
+              mealId: `${plan.id}:breakfast`,
+              nutritionMultiplier: 2,
+            },
+            {
+              createdAt: 200,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c34",
+              mealId: `${plan.id}:lunch`,
+              nutritionMultiplier: 3,
+            },
+            {
+              createdAt: 200,
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c35",
+              mealId: `${plan.id}:lunch`,
+              nutritionMultiplier: 4,
+            },
+          ],
+          (input) =>
+            Schema.decodeEffect(Domain.MealEntry)({
+              ...input,
+              dateKey: "2026-06-20",
+              foodId: food.id,
+              quantity: {
+                _tag: "MeasuredFoodQuantity",
+                amount: input.nutritionMultiplier * 100,
+                unit: "g",
+              },
+              updatedAt: input.createdAt,
+            })
+        );
+
+        yield* store.insertPlan(plan);
+        yield* store.insertFood(food);
+        yield* Effect.forEach(entries, store.insertMealEntry, {
+          discard: true,
+        });
+
+        return yield* store.findMealEntriesForFoodUsage;
+      }).pipe(Effect.provide(testLayer))
+    );
+
+    assert.deepEqual(
+      result.map((mealEntry) => mealEntry.id),
+      [
+        "9535a059-a61f-42e1-a2e0-35ec87203c35",
+        "9535a059-a61f-42e1-a2e0-35ec87203c33",
       ]
     );
   });
@@ -711,6 +852,8 @@ describe("SqliteNutritionStore", () => {
     );
   });
 });
+
+const testPlanId = "9535a059-a61f-42e1-a2e0-35ec87203c25";
 
 const testFood = Schema.decodeEffect(Domain.Food)({
   carbsGrams: 3.6,

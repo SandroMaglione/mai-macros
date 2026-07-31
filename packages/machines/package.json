@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/main.ts"
+    ".": "./src/main.ts",
+    "./schemas": "./src/schemas.ts"
   },
   "scripts": {
     "test": "vitest run",

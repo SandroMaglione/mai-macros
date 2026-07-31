@@ -5,6 +5,7 @@ import {
   Data,
   DateTime,
   Effect,
+  HashMap,
   HashSet,
   Layer,
   Option,
@@ -114,6 +115,10 @@ const _CreateFoodInput = Schema.Struct({
 
 const _GetFoodInput = Schema.Struct({ foodId: FoodId });
 
+const _GetFoodsInput = Schema.Struct({
+  foodIds: Schema.Array(FoodId),
+});
+
 const _CopyFoodInput = Schema.Struct({
   sourceFoodId: FoodId,
   ...foodDetailsInputFields,
@@ -163,6 +168,7 @@ const _SelectCurrentFoodPriceInput = Schema.Struct({
 
 export type CreateFoodInput = typeof _CreateFoodInput.Encoded;
 export type GetFoodInput = typeof _GetFoodInput.Encoded;
+export type GetFoodsInput = typeof _GetFoodsInput.Encoded;
 export type CopyFoodInput = typeof _CopyFoodInput.Encoded;
 export type EditFoodDetailsInput = typeof _EditFoodDetailsInput.Encoded;
 export type AddFoodPortionInput = typeof _AddFoodPortionInput.Encoded;
@@ -323,9 +329,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
     const mealEntriesForFood = Effect.fn("Foods.mealEntriesForFood")(function* (
       foodId: FoodId
     ) {
-      return (yield* store.listMealEntries).filter(
-        (mealEntry) => mealEntry.foodId === foodId
-      );
+      return yield* store.findMealEntriesByFood(foodId);
     });
 
     const inspectFood = Effect.fn("Foods.inspectFood")(function* (food: Food) {
@@ -527,6 +531,30 @@ export class Foods extends Context.Service<Foods>()("Foods", {
       }) {
         const decodedInput = yield* Schema.decodeEffect(_GetFoodInput)(input);
         return yield* findFood(decodedInput.foodId);
+      }),
+
+      getMany: Effect.fn("Foods.getMany")(function* ({
+        input,
+      }: {
+        readonly input: GetFoodsInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_GetFoodsInput)(input);
+        const uniqueFoodIds = Array.fromIterable(
+          HashSet.fromIterable(decodedInput.foodIds)
+        );
+        const foods = yield* store.findFoodsByIds(uniqueFoodIds);
+        const foodsById = HashMap.fromIterable(
+          foods.map((food): readonly [FoodId, Food] => [food.id, food])
+        );
+
+        return yield* Effect.forEach(uniqueFoodIds, (foodId) =>
+          HashMap.get(foodsById, foodId).pipe(
+            Option.match({
+              onNone: () => new FoodNotFound({ foodId }),
+              onSome: Effect.succeed,
+            })
+          )
+        );
       }),
 
       inspectEdit: Effect.fn("Foods.inspectEdit")(function* ({

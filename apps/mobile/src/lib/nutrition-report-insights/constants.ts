@@ -1,4 +1,4 @@
-import { Reporting } from "@mai/nutrition";
+import type * as Reporting from "@mai/nutrition/reporting";
 
 export const insightNutrients = [
   "energyKcal",
