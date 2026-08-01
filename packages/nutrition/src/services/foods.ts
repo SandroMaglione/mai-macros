@@ -129,6 +129,11 @@ const _EditFoodDetailsInput = Schema.Struct({
   ...foodDetailsInputFields,
 });
 
+const _SetFoodMassVolumeConversionInput = Schema.Struct({
+  foodId: FoodId,
+  massVolumeConversion: Schema.optional(_MassVolumeConversionInput),
+});
+
 const _AddFoodPortionInput = Schema.Struct({
   foodId: FoodId,
   ..._FoodPortionFieldsInput.fields,
@@ -171,6 +176,8 @@ export type GetFoodInput = typeof _GetFoodInput.Encoded;
 export type GetFoodsInput = typeof _GetFoodsInput.Encoded;
 export type CopyFoodInput = typeof _CopyFoodInput.Encoded;
 export type EditFoodDetailsInput = typeof _EditFoodDetailsInput.Encoded;
+export type SetFoodMassVolumeConversionInput =
+  typeof _SetFoodMassVolumeConversionInput.Encoded;
 export type AddFoodPortionInput = typeof _AddFoodPortionInput.Encoded;
 export type EditFoodPortionInput = typeof _EditFoodPortionInput.Encoded;
 export type RemoveFoodPortionInput = typeof _RemoveFoodPortionInput.Encoded;
@@ -419,6 +426,45 @@ export class Foods extends Context.Service<Foods>()("Foods", {
       }
     );
 
+    const planFoodMassVolumeConversionEdit = Effect.fn(
+      "Foods.planFoodMassVolumeConversionEdit"
+    )(function* ({
+      decodedInput,
+      previousFood,
+    }: {
+      readonly decodedInput: typeof _SetFoodMassVolumeConversionInput.Type;
+      readonly previousFood: Food;
+    }) {
+      const previousMealEntries = yield* mealEntriesForFood(previousFood.id);
+      const now = DateTime.toEpochMillis(yield* DateTime.now);
+      const encodedPreviousFood =
+        yield* Schema.encodeEffect(Food)(previousFood);
+      const {
+        massVolumeConversion: previousMassVolumeConversion,
+        ...foodWithoutMassVolumeConversion
+      } = encodedPreviousFood;
+      void previousMassVolumeConversion;
+      const food = yield* Schema.decodeEffect(Food)({
+        ...foodWithoutMassVolumeConversion,
+        ...(decodedInput.massVolumeConversion === undefined
+          ? {}
+          : { massVolumeConversion: decodedInput.massVolumeConversion }),
+        updatedAt: now,
+      });
+      const mealEntries = yield* Effect.forEach(
+        previousMealEntries,
+        (previousMealEntry) =>
+          _mealEntryWithQuantity({
+            food,
+            now,
+            previousMealEntry,
+            quantity: previousMealEntry.quantity,
+          })
+      );
+
+      return { food, mealEntries, previousMealEntries };
+    });
+
     const planFoodPortionEdit = Effect.fn("Foods.planFoodPortionEdit")(
       function* ({
         decodedInput,
@@ -651,6 +697,51 @@ export class Foods extends Context.Service<Foods>()("Foods", {
 
       previewFoodDetailsEdit,
       editFoodDetails,
+
+      previewFoodMassVolumeConversionEdit: Effect.fn(
+        "Foods.previewFoodMassVolumeConversionEdit"
+      )(function* ({
+        input,
+      }: {
+        readonly input: SetFoodMassVolumeConversionInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(
+          _SetFoodMassVolumeConversionInput
+        )(input);
+        const previousFood = yield* findFood(decodedInput.foodId);
+        yield* planFoodMassVolumeConversionEdit({
+          decodedInput,
+          previousFood,
+        });
+
+        return new FoodEditPreview({ usage: yield* inspectFood(previousFood) });
+      }),
+
+      setFoodMassVolumeConversion: Effect.fn(
+        "Foods.setFoodMassVolumeConversion"
+      )(function* ({
+        input,
+      }: {
+        readonly input: SetFoodMassVolumeConversionInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(
+          _SetFoodMassVolumeConversionInput
+        )(input);
+        const previousFood = yield* findFood(decodedInput.foodId);
+        const { food, mealEntries, previousMealEntries } =
+          yield* planFoodMassVolumeConversionEdit({
+            decodedInput,
+            previousFood,
+          });
+
+        yield* store.applyFoodEdit({ food, mealEntries });
+
+        return new EditedFood({
+          food,
+          previousFood,
+          revisedMealEntryCount: previousMealEntries.length,
+        });
+      }),
 
       addFoodPortion: Effect.fn("Foods.addFoodPortion")(function* ({
         input,

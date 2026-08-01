@@ -1,7 +1,14 @@
 import { Crypto, Effect, Layer, Schema } from "effect";
 import { assert, describe, it } from "vitest";
 
-import { Domain, Foods, MealEntries, MealPlans, Store } from "../src/index.ts";
+import {
+  Domain,
+  Foods,
+  MealEntries,
+  MealPlans,
+  Reporting,
+  Store,
+} from "../src/index.ts";
 
 const emptyStores: Store.NutritionStores = {
   activeMealPlanSelections: [],
@@ -251,6 +258,150 @@ describe("nutrition revisions", () => {
     assert.equal(result.stores.foods.length, 1);
     assert.equal(result.stores.mealEntries[0]?.foodId, foodInput.id);
     assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 3);
+  });
+
+  it("sets a conversion on an app-default food without changing its identity", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...foodInput,
+          name: "olive oil",
+          origin: "app-default",
+          prices: [
+            {
+              createdAt: 0,
+              currency: "EUR",
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
+              isCurrent: true,
+              priceMinor: 200,
+              referenceQuantity: { amount: 1, unit: "l" },
+              updatedAt: 0,
+            },
+          ],
+        });
+        const mealEntry = yield* _mealEntry({ foodId: food.id });
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const store = yield* Store.NutritionStore;
+          const input = {
+            foodId: food.id,
+            massVolumeConversion: {
+              mass: { amount: "0.91", unit: "kg" as const },
+              volume: { amount: "1", unit: "l" as const },
+            },
+          };
+          const preview = yield* foods.previewFoodMassVolumeConversionEdit({
+            input,
+          });
+          const edited = yield* foods.setFoodMassVolumeConversion({ input });
+
+          return {
+            edited,
+            preview,
+            stores: yield* store.readStores,
+          };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: {
+                ...emptyStores,
+                foods: [food],
+                mealEntries: [mealEntry],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.preview.usage.mealEntryCount, 1);
+    assert.equal(result.edited.food.id, foodInput.id);
+    assert.equal(result.edited.food.origin, "app-default");
+    assert.equal(result.edited.food.name, "olive oil");
+    assert.equal(result.edited.food.prices.length, 1);
+    assert.equal(result.edited.food.massVolumeConversion?.mass.amount, 0.91);
+    assert.equal(result.edited.food.massVolumeConversion?.mass.unit, "kg");
+    assert.equal(result.edited.food.massVolumeConversion?.volume.amount, 1);
+    assert.equal(result.edited.food.massVolumeConversion?.volume.unit, "l");
+    assert.equal(result.edited.revisedMealEntryCount, 1);
+    assert.equal(result.stores.foods.length, 1);
+    assert.equal(result.stores.foods[0]?.origin, "app-default");
+    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 1.5);
+
+    const pricedQuantity = await Effect.runPromise(
+      Schema.decodeEffect(Domain.LoggedFoodQuantity)({
+        _tag: "MeasuredFoodQuantity",
+        amount: 910,
+        unit: "g",
+      })
+    );
+    const price = Reporting.calculateEntryCost({
+      food: result.edited.food,
+      quantity: pricedQuantity,
+    });
+    assert.equal(price?.currency, "EUR");
+    assert.closeTo(price?.costMinor ?? 0, 200, 0.000_001);
+  });
+
+  it("does not remove a default food conversion required by previous entries", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...foodInput,
+          massVolumeConversion: {
+            mass: { amount: 0.91, unit: "kg" },
+            volume: { amount: 1, unit: "l" },
+          },
+          name: "olive oil",
+          origin: "app-default",
+        });
+        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          createdAt: 0,
+          dateKey: "2026-06-20",
+          foodId: food.id,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c26",
+          mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+          nutritionMultiplier: 9.1,
+          quantity: {
+            _tag: "MeasuredFoodQuantity",
+            amount: 1,
+            unit: "l",
+          },
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const foods = yield* Foods.Foods;
+          const failure = yield* Effect.flip(
+            foods.setFoodMassVolumeConversion({
+              input: { foodId: food.id },
+            })
+          );
+          const store = yield* Store.NutritionStore;
+
+          return { failure, stores: yield* store.readStores };
+        }).pipe(
+          Effect.provide(
+            _revisionTestLayer({
+              stores: {
+                ...emptyStores,
+                foods: [food],
+                mealEntries: [mealEntry],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.failure._tag, "IncompatibleFoodMeasurement");
+    assert.equal(result.stores.foods[0]?.origin, "app-default");
+    assert.equal(
+      result.stores.foods[0]?.massVolumeConversion?.mass.amount,
+      0.91
+    );
+    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 9.1);
   });
 
   it("changes a used portion everywhere but still rejects removing it", async () => {

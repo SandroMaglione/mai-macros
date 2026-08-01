@@ -122,8 +122,8 @@ const conversionManagerMachine = setup({
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const foods = yield* Foods.Foods;
-            return yield* foods.previewFoodDetailsEdit({
-              input: _editFoodDetailsInput(input),
+            return yield* foods.previewFoodMassVolumeConversionEdit({
+              input: _setFoodMassVolumeConversionInput(input),
             });
           })
         ),
@@ -137,8 +137,8 @@ const conversionManagerMachine = setup({
         RuntimeClient.runPromise(
           Effect.gen(function* () {
             const foods = yield* Foods.Foods;
-            const result = yield* foods.editFoodDetails({
-              input: _editFoodDetailsInput(input),
+            const result = yield* foods.setFoodMassVolumeConversion({
+              input: _setFoodMassVolumeConversionInput(input),
             });
             return {
               food: result.food,
@@ -295,17 +295,6 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           Back
         </Button>
       </AppScreen>
-    );
-  }
-
-  if (food.origin === "app-default") {
-    return (
-      <ConversionPage food={food}>
-        <Notice
-          message="Pre-installed foods cannot be edited. Create your own food copy to define a conversion."
-          tone="warning"
-        />
-      </ConversionPage>
     );
   }
 
@@ -596,33 +585,13 @@ function _conversionFromForm(form: ConversionForm) {
   } satisfies ConversionValue;
 }
 
-function _editFoodDetailsInput({
+function _setFoodMassVolumeConversionInput({
   food,
   form,
-}: typeof ConversionMutationInput.Type): Foods.EditFoodDetailsInput {
+}: typeof ConversionMutationInput.Type): Foods.SetFoodMassVolumeConversionInput {
   const conversion = _conversionFromForm(form);
   return {
     foodId: food.id,
-    name: food.name,
-    ...(food.brand === undefined ? {} : { brand: food.brand }),
-    nutritionReference: {
-      amount: `${food.nutritionReference.amount}`,
-      unit: food.nutritionReference.unit,
-    },
-    energyKcal: `${food.energyKcal}`,
-    proteinGrams: `${food.proteinGrams}`,
-    carbsGrams: `${food.carbsGrams}`,
-    fatGrams: `${food.fatGrams}`,
-    ...(food.fiberGrams === undefined
-      ? {}
-      : { fiberGrams: `${food.fiberGrams}` }),
-    ...(food.sugarGrams === undefined
-      ? {}
-      : { sugarGrams: `${food.sugarGrams}` }),
-    ...(food.saturatedFatGrams === undefined
-      ? {}
-      : { saturatedFatGrams: `${food.saturatedFatGrams}` }),
-    ...(food.saltGrams === undefined ? {} : { saltGrams: `${food.saltGrams}` }),
     ...(conversion === undefined
       ? {}
       : {
@@ -666,9 +635,6 @@ function _usageDateRange(usage: Foods.FoodEditUsage) {
 function _mutationErrorMessage(error: unknown) {
   if (Predicate.isTagged(error, "IncompatibleFoodMeasurement")) {
     return "This conversion cannot interpret every previous meal entry.";
-  }
-  if (Predicate.isTagged(error, "AppDefaultFoodEditNotAllowed")) {
-    return "Pre-installed foods cannot be edited. Create your own copy first.";
   }
   return "Could not save the conversion. Check the values and try again.";
 }

@@ -554,21 +554,14 @@ function FoodEditorScreen({
           }
           title="Weight and volume conversion"
         >
-          {food.origin === "app-default" ? (
-            <Notice
-              message="Pre-installed foods cannot be edited. Create your own food copy to define a conversion."
-              tone="warning"
-            />
-          ) : (
-            <Button
-              icon={Ruler}
-              onPress={() => {
-                router.push(`/foods/${food.id}/conversion`);
-              }}
-            >
-              Manage conversion
-            </Button>
-          )}
+          <Button
+            icon={Ruler}
+            onPress={() => {
+              router.push(`/foods/${food.id}/conversion`);
+            }}
+          >
+            Manage conversion
+          </Button>
         </SectionCard>
         <SectionCard
           subtitle="Add a portion, change one everywhere, or create a new portion while keeping earlier entries unchanged."
