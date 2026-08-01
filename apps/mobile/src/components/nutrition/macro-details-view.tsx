@@ -698,75 +698,112 @@ function CostContributors({
       };
     }, {})
   ).sort((left, right) => right.costMinor - left.costMinor);
+  const unresolvedFoods = Object.values(
+    entries.reduce<Record<string, Domain.Food>>((foodsById, entry) => {
+      if (entry.cost !== null) {
+        return foodsById;
+      }
+
+      return {
+        ...foodsById,
+        [entry.food.id]: entry.food,
+      };
+    }, {})
+  ).sort((left, right) => left.name.localeCompare(right.name));
 
   return (
     <View style={styles.contributors}>
-      {!Array.isReadonlyArrayNonEmpty(contributions) ? (
+      {!Array.isReadonlyArrayNonEmpty(contributions) &&
+      !Array.isReadonlyArrayNonEmpty(unresolvedFoods) ? (
         <View style={styles.emptyContributors}>
           <Text style={styles.emptyContributorsText}>
-            No logged foods have a compatible current price.
+            No foods are logged for this selection.
           </Text>
         </View>
-      ) : (
-        contributions.map((contribution) => {
-          const share =
-            totalMinor <= 0 ? 0 : contribution.costMinor / totalMinor;
-          const clampedShare = Math.max(0, Math.min(1, share));
-          const percentLabel = formatNumber({
-            maximumFractionDigits: 0,
-            value: clampedShare * 100,
-          });
+      ) : null}
+      {!Array.isReadonlyArrayNonEmpty(contributions)
+        ? null
+        : contributions.map((contribution) => {
+            const share =
+              totalMinor <= 0 ? 0 : contribution.costMinor / totalMinor;
+            const clampedShare = Math.max(0, Math.min(1, share));
+            const percentLabel = formatNumber({
+              maximumFractionDigits: 0,
+              value: clampedShare * 100,
+            });
 
-          return (
-            <View key={contribution.food.id} style={styles.contributionRow}>
-              <View style={styles.contributionCopy}>
-                <Text numberOfLines={1} style={styles.contributionName}>
-                  {contribution.food.name}
-                </Text>
-                {contribution.food.brand === undefined ? null : (
-                  <Text numberOfLines={1} style={styles.contributionDetail}>
-                    {contribution.food.brand}
-                  </Text>
-                )}
-              </View>
-              <View style={styles.contributionImpact}>
-                <View style={styles.contributionValueRow}>
-                  <Text
-                    style={[
-                      styles.contributionPercent,
-                      { color: color.safeText },
-                    ]}
-                  >
-                    ({percentLabel}%)
-                  </Text>
-                  <Text
-                    style={[
-                      styles.contributionValue,
-                      { color: color.safeText },
-                    ]}
-                  >
-                    {formatCurrencyMinor({
-                      currency: "EUR",
-                      minorValue: contribution.costMinor,
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.contributionTrack}>
-                  <View
-                    style={[
-                      styles.contributionFill,
-                      {
-                        backgroundColor: color.safeText,
-                        width: `${clampedShare * 100}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            </View>
-          );
-        })
-      )}
+            return (
+              <CostContributionRow
+                food={contribution.food}
+                key={contribution.food.id}
+                percentLabel={percentLabel}
+                progress={clampedShare}
+                value={formatCurrencyMinor({
+                  currency: "EUR",
+                  minorValue: contribution.costMinor,
+                })}
+              />
+            );
+          })}
+      {!Array.isReadonlyArrayNonEmpty(unresolvedFoods)
+        ? null
+        : unresolvedFoods.map((food) => (
+            <CostContributionRow
+              food={food}
+              key={`unresolved-${food.id}`}
+              percentLabel="0"
+              progress={0}
+              value="–"
+            />
+          ))}
+    </View>
+  );
+}
+
+function CostContributionRow({
+  food,
+  percentLabel,
+  progress,
+  value,
+}: {
+  readonly food: Domain.Food;
+  readonly percentLabel: string;
+  readonly progress: number;
+  readonly value: string;
+}) {
+  return (
+    <View style={styles.contributionRow}>
+      <View style={styles.contributionCopy}>
+        <Text numberOfLines={1} style={styles.contributionName}>
+          {food.name}
+        </Text>
+        {food.brand === undefined ? null : (
+          <Text numberOfLines={1} style={styles.contributionDetail}>
+            {food.brand}
+          </Text>
+        )}
+      </View>
+      <View style={styles.contributionImpact}>
+        <View style={styles.contributionValueRow}>
+          <Text style={[styles.contributionPercent, { color: color.safeText }]}>
+            ({percentLabel}%)
+          </Text>
+          <Text style={[styles.contributionValue, { color: color.safeText }]}>
+            {value}
+          </Text>
+        </View>
+        <View style={styles.contributionTrack}>
+          <View
+            style={[
+              styles.contributionFill,
+              {
+                backgroundColor: color.safeText,
+                width: `${progress * 100}%`,
+              },
+            ]}
+          />
+        </View>
+      </View>
     </View>
   );
 }

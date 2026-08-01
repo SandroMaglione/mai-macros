@@ -108,6 +108,70 @@ describe("food search base order", () => {
 });
 
 describe("food search price order", () => {
+  it("orders price coverage by missing price, usage, then food name", async () => {
+    const missingUsedBanana = await _food({
+      createdAt: 100,
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Banana",
+    });
+    const missingUsedApple = await _food({
+      createdAt: 200,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Apple",
+    });
+    const missingUnused = await _food({
+      createdAt: 300,
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Carrot",
+    });
+    const pricedUsed = await _food({
+      createdAt: 400,
+      currentPrice: {
+        priceMinor: 200,
+        referenceAmount: 1,
+        referenceUnit: "kg",
+      },
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Dates",
+    });
+    const pricedUnused = await _food({
+      createdAt: 500,
+      currentPrice: {
+        priceMinor: 300,
+        referenceAmount: 1,
+        referenceUnit: "kg",
+      },
+      id: "66666666-6666-4666-8666-666666666666",
+      name: "Eggs",
+    });
+    const actor = createActor(foodSearchMachine, {
+      input: {
+        foods: [
+          pricedUnused,
+          missingUsedBanana,
+          pricedUsed,
+          missingUnused,
+          missingUsedApple,
+        ],
+        macroOrder: "priceCoverage",
+        usedFoodIds: [missingUsedBanana.id, missingUsedApple.id, pricedUsed.id],
+      },
+    });
+
+    actor.start();
+
+    assert.deepEqual(
+      actor.getSnapshot().context.matchingFoods.map((food) => food.id),
+      [
+        missingUsedApple.id,
+        missingUsedBanana.id,
+        missingUnused.id,
+        pricedUsed.id,
+        pricedUnused.id,
+      ]
+    );
+  });
+
   it("normalizes current euro prices and leaves unpriced foods last", async () => {
     const cheap = await _food({
       createdAt: 100,

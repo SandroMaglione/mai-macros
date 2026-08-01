@@ -11,7 +11,7 @@ import { formatCurrencyMinor, formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines";
-import { Domain, Foods } from "@mai/nutrition";
+import { Domain, Foods, Measurements } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
@@ -418,6 +418,10 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
       priceValue > 0 &&
       Number.isFinite(quantityAmount) &&
       quantityAmount > 0;
+    const needsMassVolumeConversion =
+      Measurements.isMassUnit(food.nutritionReference.unit) !==
+        Measurements.isMassUnit(snapshot.context.form.quantityUnit) &&
+      food.massVolumeConversion === undefined;
     return (
       <PricePage food={food} title={editing ? "Edit price" : "Add price"}>
         <Notice
@@ -437,6 +441,13 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             actor.send({ type: "changeQuantityUnit", unit })
           }
         />
+        {needsMassVolumeConversion ? (
+          <Notice
+            message="This price uses volume while the food uses weight, or vice versa. Add a weight and volume conversion in the food details so spending can be calculated."
+            title="Conversion needed"
+            tone="warning"
+          />
+        ) : null}
         {snapshot.context.message === null ? null : (
           <Notice message={snapshot.context.message} tone="danger" />
         )}

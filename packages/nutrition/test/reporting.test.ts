@@ -312,4 +312,40 @@ describe("nutrition reporting", () => {
     assert.equal(result.entriesCount, 2);
     assert.equal(result.resolvedEntriesCount, 1);
   });
+
+  it("uses a food weight-volume conversion for liter-based prices", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const food = yield* Schema.decodeEffect(Domain.Food)({
+          ...completeFoodInput,
+          massVolumeConversion: {
+            mass: { amount: 1.03, unit: "kg" },
+            volume: { amount: 1, unit: "l" },
+          },
+          prices: [
+            {
+              priceMinor: 200,
+              createdAt: 0,
+              currency: "EUR",
+              id: "9535a059-a61f-42e1-a2e0-35ec87203c27",
+              isCurrent: true,
+              referenceQuantity: { amount: 1, unit: "l" },
+              updatedAt: 0,
+            },
+          ],
+        });
+        const quantity = yield* Schema.decodeEffect(Domain.LoggedFoodQuantity)({
+          _tag: "MeasuredFoodQuantity",
+          amount: 1.03,
+          unit: "kg",
+        });
+
+        return Reporting.calculateEntryCost({ food, quantity });
+      })
+    );
+
+    assert.isNotNull(result);
+    assert.closeTo(result?.costMinor ?? 0, 200, 0.000_001);
+    assert.equal(result?.currency, "EUR");
+  });
 });

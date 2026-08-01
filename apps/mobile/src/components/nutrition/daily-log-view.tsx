@@ -1,4 +1,3 @@
-import { DailyBodyWeightInput } from "@/components/body-weight/daily-body-weight-input";
 import { FoodCurrentPriceIndicator } from "@/components/nutrition/food-current-price-indicator";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { AppScreen } from "@/components/ui/app-screen";
@@ -611,26 +610,45 @@ function RecordedDailyLogView({
 
         <DailyProgress day={data.day} nutrients={nutrients} />
 
-        <DailyBodyWeightInput dateKey={dateKey} />
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            router.push({
-              pathname: "/days/[dateKey]/details",
-              params: {
-                dateKey,
-              },
-            });
-          }}
-          style={({ pressed }) => [
-            styles.dayDetailsAction,
-            pressed ? styles.pressed : null,
-          ]}
-        >
-          <Text style={styles.detailsText}>Details</Text>
-          <ChevronRight color={color.text} size={16} strokeWidth={3} />
-        </Pressable>
+        <View style={styles.dayPrimaryActions}>
+          <Pressable
+            accessibilityLabel="Open weight insights"
+            accessibilityRole="button"
+            onPress={() => {
+              router.push({
+                pathname: "/insights",
+                params: {
+                  tab: "weight",
+                },
+              });
+            }}
+            style={({ pressed }) => [
+              styles.dayPrimaryAction,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={styles.detailsText}>Weight</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Open day details"
+            accessibilityRole="button"
+            onPress={() => {
+              router.push({
+                pathname: "/days/[dateKey]/details",
+                params: {
+                  dateKey,
+                },
+              });
+            }}
+            style={({ pressed }) => [
+              styles.dayPrimaryAction,
+              styles.dayPrimaryActionDivider,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={styles.detailsText}>Details</Text>
+          </Pressable>
+        </View>
 
         {canDeleteDay ? (
           <EmptyDayDeleteAction disabled={disabled} onDeleteDay={onDeleteDay} />
@@ -708,7 +726,26 @@ function UnrecordedDailyLogView({
       >
         <DayNavigationHeader dateKey={dateKey} />
 
-        <DailyBodyWeightInput dateKey={dateKey} />
+        <View style={styles.dayPrimaryActions}>
+          <Pressable
+            accessibilityLabel="Open weight insights"
+            accessibilityRole="button"
+            onPress={() => {
+              router.push({
+                pathname: "/insights",
+                params: {
+                  tab: "weight",
+                },
+              });
+            }}
+            style={({ pressed }) => [
+              styles.dayPrimaryAction,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <Text style={styles.detailsText}>Weight</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.unrecordedBody}>
           <Notice
@@ -1751,16 +1788,25 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     backgroundColor: color.sheet,
   },
-  dayDetailsAction: {
+  dayPrimaryActions: {
     marginHorizontal: -spacing.lg,
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#222226",
+    backgroundColor: color.sheet,
+  },
+  dayPrimaryAction: {
     minHeight: 40,
+    minWidth: 0,
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222226",
-    backgroundColor: color.sheet,
+  },
+  dayPrimaryActionDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: "#222226",
   },
   detailsText: {
     color: color.text,

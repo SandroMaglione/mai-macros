@@ -9,7 +9,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { describeFoodChanges } from "@/lib/food-change-summary";
-import { formatShortDate } from "@/lib/format";
+import { formatNumber, formatShortDate } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent, FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
@@ -458,6 +458,7 @@ function FoodEditorScreen({
         }
         onBack={actor.trigger.backToChoice}
         portionUsage={[]}
+        showMassVolumeConversion={false}
         showPortions={false}
         submitLabel="Review copy"
       />
@@ -493,6 +494,7 @@ function FoodEditorScreen({
           heading="Edit food details"
           onBack={actor.trigger.backToChoice}
           portionUsage={usage.portions}
+          showMassVolumeConversion={false}
           showPortions={false}
           submitLabel={
             editing
@@ -543,6 +545,30 @@ function FoodEditorScreen({
           >
             Manage prices
           </Button>
+        </SectionCard>
+        <SectionCard
+          subtitle={
+            food.massVolumeConversion === undefined
+              ? "Define how a weight such as kilograms equals a volume such as liters, so prices and logged quantities can be converted."
+              : `${formatNumber({ maximumFractionDigits: 2, value: food.massVolumeConversion.mass.amount })} ${food.massVolumeConversion.mass.unit} = ${formatNumber({ maximumFractionDigits: 2, value: food.massVolumeConversion.volume.amount })} ${food.massVolumeConversion.volume.unit}. This conversion is used for spending and weight estimates.`
+          }
+          title="Weight and volume conversion"
+        >
+          {food.origin === "app-default" ? (
+            <Notice
+              message="Pre-installed foods cannot be edited. Create your own food copy to define a conversion."
+              tone="warning"
+            />
+          ) : (
+            <Button
+              icon={Ruler}
+              onPress={() => {
+                router.push(`/foods/${food.id}/conversion`);
+              }}
+            >
+              Manage conversion
+            </Button>
+          )}
         </SectionCard>
         <SectionCard
           subtitle="Add a portion, change one everywhere, or create a new portion while keeping earlier entries unchanged."
@@ -639,10 +665,7 @@ function FoodEditorScreen({
         onPress={() => {
           router.replace({
             pathname: "/foods",
-            params: {
-              tab: "manage",
-              ...(dateKey === undefined ? {} : { dateKey }),
-            },
+            params: dateKey === undefined ? {} : { dateKey },
           });
         }}
       >

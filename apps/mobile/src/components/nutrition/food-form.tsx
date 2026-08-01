@@ -120,6 +120,7 @@ export function FoodForm({
   layout = "screen",
   onBack,
   portionUsage = [],
+  showMassVolumeConversion = true,
   showPortions = true,
   submitLabel,
   intro,
@@ -138,6 +139,7 @@ export function FoodForm({
   readonly layout?: "screen" | "embedded";
   readonly onBack: () => void;
   readonly portionUsage?: readonly Foods.FoodPortionUsage[];
+  readonly showMassVolumeConversion?: boolean;
   readonly showPortions?: boolean;
   readonly submitLabel?: string;
 }) {
@@ -183,6 +185,7 @@ export function FoodForm({
         portions={portions}
         portionUsage={portionUsage}
         showInitialPrice={isCreating}
+        showMassVolumeConversion={showMassVolumeConversion}
         showPortions={showPortions}
         values={formValues}
       />
@@ -305,6 +308,7 @@ function FoodFormFields({
   portions,
   portionUsage,
   showInitialPrice,
+  showMassVolumeConversion,
   showPortions,
   values,
 }: {
@@ -313,6 +317,7 @@ function FoodFormFields({
   readonly portions: readonly FoodFormMachine.FoodPortionFormValue[];
   readonly portionUsage: readonly Foods.FoodPortionUsage[];
   readonly showInitialPrice: boolean;
+  readonly showMassVolumeConversion: boolean;
   readonly showPortions: boolean;
   readonly values: FoodFormMachine.FoodFormValues;
 }) {
@@ -554,78 +559,81 @@ function FoodFormFields({
         </DisclosureCard>
       ) : null}
 
-      <DisclosureCard icon={Scale} title="Weight and volume conversion">
-        <View style={styles.disclosureContent}>
-          <Text style={styles.helperText}>
-            Optional. Add this when you want to enter the same food using both a
-            scale and a volume measure.
-          </Text>
-          <View style={styles.fieldGroup}>
-            <NumberField
-              editable={!disabled}
-              label="Mass amount"
-              onChangeText={(value) => {
-                _sendFoodFormValueChange({
-                  actor,
-                  name: "conversionMassAmount",
-                  value,
-                });
-              }}
-              placeholder="103"
-              rightElement={
-                <MeasurementUnitSelect
-                  disabled={disabled}
-                  onSelect={(unit) => {
-                    _sendFoodFormValueChange({
-                      actor,
-                      name: "conversionMassUnit",
-                      value: unit,
-                    });
-                  }}
-                  selectedUnit={measurementUnitFromValue({
-                    fallback: "g",
-                    value: values.conversionMassUnit,
-                  })}
-                  title="Mass unit"
-                  units={["g", "kg", "oz", "lb"]}
-                />
-              }
-              value={values.conversionMassAmount}
-            />
-            <NumberField
-              editable={!disabled}
-              label="Equivalent volume"
-              onChangeText={(value) => {
-                _sendFoodFormValueChange({
-                  actor,
-                  name: "conversionVolumeAmount",
-                  value,
-                });
-              }}
-              placeholder="100"
-              rightElement={
-                <MeasurementUnitSelect
-                  disabled={disabled}
-                  onSelect={(unit) => {
-                    _sendFoodFormValueChange({
-                      actor,
-                      name: "conversionVolumeUnit",
-                      value: unit,
-                    });
-                  }}
-                  selectedUnit={measurementUnitFromValue({
-                    fallback: "ml",
-                    value: values.conversionVolumeUnit,
-                  })}
-                  title="Volume unit"
-                  units={["ml", "l"]}
-                />
-              }
-              value={values.conversionVolumeAmount}
-            />
+      {showMassVolumeConversion ? (
+        <DisclosureCard icon={Scale} title="Weight and volume conversion">
+          <View style={styles.disclosureContent}>
+            <Text style={styles.helperText}>
+              Optional. Define how weight and volume compare for this food, for
+              example 1 kg = 1 L. This also lets volume-based prices resolve
+              food logged by weight, and vice versa.
+            </Text>
+            <View style={styles.fieldGroup}>
+              <NumberField
+                editable={!disabled}
+                label="Mass amount"
+                onChangeText={(value) => {
+                  _sendFoodFormValueChange({
+                    actor,
+                    name: "conversionMassAmount",
+                    value,
+                  });
+                }}
+                placeholder="103"
+                rightElement={
+                  <MeasurementUnitSelect
+                    disabled={disabled}
+                    onSelect={(unit) => {
+                      _sendFoodFormValueChange({
+                        actor,
+                        name: "conversionMassUnit",
+                        value: unit,
+                      });
+                    }}
+                    selectedUnit={measurementUnitFromValue({
+                      fallback: "g",
+                      value: values.conversionMassUnit,
+                    })}
+                    title="Mass unit"
+                    units={["g", "kg", "oz", "lb"]}
+                  />
+                }
+                value={values.conversionMassAmount}
+              />
+              <NumberField
+                editable={!disabled}
+                label="Equivalent volume"
+                onChangeText={(value) => {
+                  _sendFoodFormValueChange({
+                    actor,
+                    name: "conversionVolumeAmount",
+                    value,
+                  });
+                }}
+                placeholder="100"
+                rightElement={
+                  <MeasurementUnitSelect
+                    disabled={disabled}
+                    onSelect={(unit) => {
+                      _sendFoodFormValueChange({
+                        actor,
+                        name: "conversionVolumeUnit",
+                        value: unit,
+                      });
+                    }}
+                    selectedUnit={measurementUnitFromValue({
+                      fallback: "ml",
+                      value: values.conversionVolumeUnit,
+                    })}
+                    title="Volume unit"
+                    units={["ml", "l"]}
+                  />
+                }
+                value={values.conversionVolumeAmount}
+              />
+            </View>
           </View>
-        </View>
-      </DisclosureCard>
+        </DisclosureCard>
+      ) : null}
     </>
   );
 }

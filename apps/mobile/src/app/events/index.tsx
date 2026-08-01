@@ -5,7 +5,6 @@ import { IconButton } from "@/components/ui/icon-button";
 import { LoadingOverlay, LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
-import { PagerTabs } from "@/components/ui/pager-tabs";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { dateKeyFromDate } from "@/lib/date-keys";
@@ -57,9 +56,9 @@ import { createAsyncLogic, createCallbackLogic, setup } from "xstate";
 
 const EventsSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(NutritionDomain.DateKey),
+  view: Schema.optionalKey(Schema.Literal("manage")),
 });
 
-const EventTrackerTabIndex = Schema.Literals([0, 1]);
 const EventTimelinePageSize = 30;
 
 const TrackerNotice = Schema.Struct({
@@ -177,7 +176,6 @@ const eventTrackerMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(
       Schema.Struct({
-        activeTab: EventTrackerTabIndex,
         data: Schema.NullOr(EventTrackerData),
         detailDateKey: Schema.NullOr(EventDomain.DateKey),
         detailRecordableEventId: Schema.NullOr(EventDomain.RecordableEventId),
@@ -223,9 +221,6 @@ const eventTrackerMachine = setup({
       ),
       reload: Schema.toStandardSchemaV1(EmptyEvent),
       saveRecordableEvent: Schema.toStandardSchemaV1(EmptyEvent),
-      selectTab: Schema.toStandardSchemaV1(
-        Schema.Struct({ index: EventTrackerTabIndex })
-      ),
       unarchiveRecordableEvent: Schema.toStandardSchemaV1(RecordEventInput),
     },
     input: Schema.toStandardSchemaV1(
@@ -570,7 +565,6 @@ const eventTrackerMachine = setup({
   },
 }).createMachine({
   context: ({ input }) => ({
-    activeTab: 0,
     data: null,
     detailDateKey: null,
     detailRecordableEventId: null,
@@ -700,7 +694,6 @@ const eventTrackerMachine = setup({
               }
             : {
                 context: {
-                  activeTab: 1,
                   editingRecordableEventId: recordableEvent.id,
                   emojiInput: recordableEvent.emoji,
                   nameInput: recordableEvent.name,
@@ -774,9 +767,6 @@ const eventTrackerMachine = setup({
             notice: null,
           },
         },
-        selectTab: ({ event }) => ({
-          context: { activeTab: event.index },
-        }),
         unarchiveRecordableEvent: {
           target: "TogglingRecordableEvent",
           context: {
@@ -1112,6 +1102,7 @@ export default function EventsScreen() {
     <EventTrackerRoute
       originDateKey={search.value.dateKey}
       todayDateKey={today.value}
+      view={search.value.view}
     />
   );
 }
@@ -1119,13 +1110,16 @@ export default function EventsScreen() {
 function EventTrackerRoute({
   originDateKey,
   todayDateKey,
+  view,
 }: {
   readonly originDateKey: NutritionDomain.DateKey | undefined;
   readonly todayDateKey: EventDomain.DateKey;
+  readonly view: "manage" | undefined;
 }) {
   const [snapshot, , actor] = useMachine(eventTrackerMachine, {
     input: { todayDateKey },
   });
+  const managing = view === "manage";
 
   if (snapshot.matches("Loading")) {
     return (
@@ -1140,9 +1134,15 @@ function EventTrackerRoute({
       <AppScreen contentStyle={styles.stateScreen}>
         <AppHeader
           embedded
-          leading={<EventTrackerBackButton originDateKey={originDateKey} />}
+          leading={
+            managing ? (
+              <ManageEventsBackButton originDateKey={originDateKey} />
+            ) : (
+              <EventTrackerBackButton originDateKey={originDateKey} />
+            )
+          }
           shadow
-          title="Events"
+          title={managing ? "Manage events" : "Events"}
         />
         <Notice
           message={
@@ -1178,18 +1178,6 @@ function EventTrackerRoute({
   const activeRecordableEvents = _sortRecordableEvents({
     recordableEvents: snapshot.context.data.recordableEvents,
   }).filter((recordableEvent) => recordableEvent.archivedAt === undefined);
-  const tabs = [
-    {
-      accessibilityLabel: "Record events",
-      key: "record",
-      label: "Record",
-    },
-    {
-      accessibilityLabel: "Manage events",
-      key: "manage",
-      label: "Manage",
-    },
-  ] as const;
 
   return (
     <View style={styles.screen}>
@@ -1199,9 +1187,35 @@ function EventTrackerRoute({
       >
         <AppHeader
           embedded
-          leading={<EventTrackerBackButton originDateKey={originDateKey} />}
+          leading={
+            managing ? (
+              <ManageEventsBackButton originDateKey={originDateKey} />
+            ) : (
+              <EventTrackerBackButton originDateKey={originDateKey} />
+            )
+          }
           shadow
-          title="Events"
+          title={managing ? "Manage events" : "Events"}
+          trailing={
+            managing ? null : (
+              <IconButton
+                accessibilityLabel="Manage events"
+                icon={Plus}
+                onPress={() => {
+                  router.push({
+                    pathname: "/events",
+                    params: {
+                      ...(originDateKey === undefined
+                        ? {}
+                        : { dateKey: originDateKey }),
+                      view: "manage",
+                    },
+                  });
+                }}
+                variant="ghost"
+              />
+            )
+          }
         />
 
         {snapshot.context.notice === null ? null : (
@@ -1211,105 +1225,83 @@ function EventTrackerRoute({
           />
         )}
 
-        <PagerTabs
-          activeIndex={snapshot.context.activeTab}
-          onActiveIndexChange={(index) => {
-            actor.trigger.selectTab({ index: index === 0 ? 0 : 1 });
-          }}
-          tabBarPosition="bottom"
-          tabs={[
-            {
-              ...tabs[0],
-              content: (
-                <RecordEventsPanel
-                  activeRecordableEvents={activeRecordableEvents}
-                  busy={busy}
-                  detailDateKey={snapshot.context.detailDateKey}
-                  detailRecordableEventId={
-                    snapshot.context.detailRecordableEventId
-                  }
-                  editingDateKey={snapshot.context.editingDateKey}
-                  loadedStartDateKey={snapshot.context.data.loadedStartDateKey}
-                  loadingOlder={loadingOlder}
-                  onCloseDayEditor={() => {
-                    actor.trigger.closeDayEditor();
-                  }}
-                  onCloseEventDetails={() => {
-                    actor.trigger.closeEventDetails();
-                  }}
-                  onDecrementPastEvent={(recordableEventId) => {
-                    actor.trigger.decrementPastEvent({ recordableEventId });
-                  }}
-                  onDeleteRecordedEvent={(recordedEventId) => {
-                    actor.trigger.deleteRecordedEvent({ recordedEventId });
-                  }}
-                  onLoadOlder={() => {
-                    actor.trigger.loadOlder();
-                  }}
-                  onIncrementPastEvent={(recordableEventId) => {
-                    actor.trigger.incrementPastEvent({ recordableEventId });
-                  }}
-                  onOpenDayEditor={(dateKey) => {
-                    actor.trigger.openDayEditor({ dateKey });
-                  }}
-                  onOpenEventDetails={(input) => {
-                    actor.trigger.openEventDetails(input);
-                  }}
-                  onRecordNow={(recordableEventId) => {
-                    actor.trigger.recordNow({ recordableEventId });
-                  }}
-                  onRecordPastEvents={(input) => {
-                    actor.trigger.recordPastEvents(input);
-                  }}
-                  pastEventSelections={snapshot.context.pastEventSelections}
-                  recordableEvents={snapshot.context.data.recordableEvents}
-                  recordedEvents={snapshot.context.data.recordedEvents}
-                  todayDateKey={snapshot.context.todayDateKey}
-                />
-              ),
-            },
-            {
-              ...tabs[1],
-              content: (
-                <ManageEventsPanel
-                  busy={busy}
-                  editingRecordableEventId={
-                    snapshot.context.editingRecordableEventId
-                  }
-                  emojiInput={snapshot.context.emojiInput}
-                  nameInput={snapshot.context.nameInput}
-                  onArchive={(recordableEventId) => {
-                    actor.trigger.archiveRecordableEvent({ recordableEventId });
-                  }}
-                  onBeginCreate={() => {
-                    actor.trigger.beginCreate();
-                  }}
-                  onCancelEdit={() => {
-                    actor.trigger.cancelEdit();
-                  }}
-                  onChangeEmoji={(value) => {
-                    actor.trigger.changeEmoji({ value });
-                  }}
-                  onChangeName={(value) => {
-                    actor.trigger.changeName({ value });
-                  }}
-                  onEdit={(recordableEventId) => {
-                    actor.trigger.editRecordableEvent({ recordableEventId });
-                  }}
-                  onSave={() => {
-                    actor.trigger.saveRecordableEvent();
-                  }}
-                  onUnarchive={(recordableEventId) => {
-                    actor.trigger.unarchiveRecordableEvent({
-                      recordableEventId,
-                    });
-                  }}
-                  recordableEvents={snapshot.context.data.recordableEvents}
-                />
-              ),
-            },
-          ]}
-        />
+        {managing ? (
+          <ManageEventsPanel
+            busy={busy}
+            editingRecordableEventId={snapshot.context.editingRecordableEventId}
+            emojiInput={snapshot.context.emojiInput}
+            nameInput={snapshot.context.nameInput}
+            onArchive={(recordableEventId) => {
+              actor.trigger.archiveRecordableEvent({ recordableEventId });
+            }}
+            onBeginCreate={() => {
+              actor.trigger.beginCreate();
+            }}
+            onCancelEdit={() => {
+              actor.trigger.cancelEdit();
+            }}
+            onChangeEmoji={(value) => {
+              actor.trigger.changeEmoji({ value });
+            }}
+            onChangeName={(value) => {
+              actor.trigger.changeName({ value });
+            }}
+            onEdit={(recordableEventId) => {
+              actor.trigger.editRecordableEvent({ recordableEventId });
+            }}
+            onSave={() => {
+              actor.trigger.saveRecordableEvent();
+            }}
+            onUnarchive={(recordableEventId) => {
+              actor.trigger.unarchiveRecordableEvent({ recordableEventId });
+            }}
+            recordableEvents={snapshot.context.data.recordableEvents}
+          />
+        ) : (
+          <RecordEventsPanel
+            activeRecordableEvents={activeRecordableEvents}
+            busy={busy}
+            detailDateKey={snapshot.context.detailDateKey}
+            detailRecordableEventId={snapshot.context.detailRecordableEventId}
+            editingDateKey={snapshot.context.editingDateKey}
+            loadedStartDateKey={snapshot.context.data.loadedStartDateKey}
+            loadingOlder={loadingOlder}
+            onCloseDayEditor={() => {
+              actor.trigger.closeDayEditor();
+            }}
+            onCloseEventDetails={() => {
+              actor.trigger.closeEventDetails();
+            }}
+            onDecrementPastEvent={(recordableEventId) => {
+              actor.trigger.decrementPastEvent({ recordableEventId });
+            }}
+            onDeleteRecordedEvent={(recordedEventId) => {
+              actor.trigger.deleteRecordedEvent({ recordedEventId });
+            }}
+            onLoadOlder={() => {
+              actor.trigger.loadOlder();
+            }}
+            onIncrementPastEvent={(recordableEventId) => {
+              actor.trigger.incrementPastEvent({ recordableEventId });
+            }}
+            onOpenDayEditor={(dateKey) => {
+              actor.trigger.openDayEditor({ dateKey });
+            }}
+            onOpenEventDetails={(input) => {
+              actor.trigger.openEventDetails(input);
+            }}
+            onRecordNow={(recordableEventId) => {
+              actor.trigger.recordNow({ recordableEventId });
+            }}
+            onRecordPastEvents={(input) => {
+              actor.trigger.recordPastEvents(input);
+            }}
+            pastEventSelections={snapshot.context.pastEventSelections}
+            recordableEvents={snapshot.context.data.recordableEvents}
+            recordedEvents={snapshot.context.data.recordedEvents}
+            todayDateKey={snapshot.context.todayDateKey}
+          />
+        )}
       </AppScreen>
 
       <LoadingOverlay
@@ -1345,6 +1337,31 @@ function EventTrackerBackButton({
         router.replace({
           pathname: "/days/[dateKey]",
           params: { dateKey: originDateKey },
+        });
+      }}
+      variant="ghost"
+    />
+  );
+}
+
+function ManageEventsBackButton({
+  originDateKey,
+}: {
+  readonly originDateKey: NutritionDomain.DateKey | undefined;
+}) {
+  return (
+    <IconButton
+      accessibilityLabel="Back to events"
+      icon={ChevronLeft}
+      onPress={() => {
+        if (router.canGoBack()) {
+          router.back();
+          return;
+        }
+
+        router.replace({
+          pathname: "/events",
+          params: originDateKey === undefined ? {} : { dateKey: originDateKey },
         });
       }}
       variant="ghost"
@@ -1951,7 +1968,10 @@ function EventDetailsDialog({
             />
           </View>
 
-          <View style={styles.eventOccurrenceList}>
+          <ScrollView
+            contentContainerStyle={styles.eventOccurrenceList}
+            style={styles.eventOccurrenceScroll}
+          >
             {recordedEvents.map((recordedEvent, index) => (
               <View key={recordedEvent.id} style={styles.eventOccurrenceRow}>
                 <View style={styles.eventOccurrenceCopy}>
@@ -1990,7 +2010,7 @@ function EventDetailsDialog({
                 />
               </View>
             ))}
-          </View>
+          </ScrollView>
 
           <Button disabled={busy} onPress={onClose} variant="secondary">
             Close
@@ -2059,8 +2079,12 @@ function ManageEventsPanel({
       style={styles.panelScroll}
     >
       <SectionCard
-        subtitle="Names must be unique. Use exactly one emoji from your device keyboard."
-        title={editing ? "Edit event" : "Create event"}
+        subtitle={
+          editing
+            ? "Names must be unique. Use exactly one emoji from your device keyboard."
+            : undefined
+        }
+        title={editing ? "Edit event" : undefined}
       >
         <View style={styles.formStack}>
           <Field
@@ -2081,7 +2105,6 @@ function ManageEventsPanel({
                 ? "Enter exactly one emoji."
                 : undefined
             }
-            helperText="Open your device emoji keyboard and choose one emoji."
             label="Emoji"
             onChangeText={onChangeEmoji}
             placeholder="🚶"
@@ -2828,6 +2851,9 @@ const styles = StyleSheet.create({
   },
   eventOccurrenceList: {
     gap: spacing.sm,
+  },
+  eventOccurrenceScroll: {
+    flexShrink: 1,
   },
   eventOccurrenceRow: {
     flexDirection: "row",

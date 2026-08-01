@@ -30,6 +30,7 @@ export default function SettingsScreen() {
         contentStyle={styles.content}
         safeAreaEdges={["top", "bottom"]}
         scroll
+        topSafeAreaColor={color.primary}
       >
         <AppHeader
           embedded

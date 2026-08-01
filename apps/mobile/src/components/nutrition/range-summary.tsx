@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import { EmptyEvent } from "@mai/machines/schemas";
 import * as Reporting from "@mai/nutrition/reporting";
 import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
@@ -7,13 +8,22 @@ import { Array, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Minus,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react-native";
 import { Fragment } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { setup } from "xstate";
 
 import {
@@ -42,6 +52,13 @@ type FoodContributor = {
 
 type MutableFoodContributor = {
   -readonly [Key in keyof FoodContributor]: FoodContributor[Key];
+};
+
+type UnresolvedFoodCost = {
+  readonly brand: string | undefined;
+  readonly entryCount: number;
+  readonly foodId: string;
+  readonly name: string;
 };
 
 const trackedNutrients = [
@@ -142,6 +159,21 @@ const summaryInsightsVisibilityMachine = setup({
   },
 });
 
+const costCoverageDialogMachine = setup({
+  schemas: {
+    events: {
+      close: Schema.toStandardSchemaV1(EmptyEvent),
+      open: Schema.toStandardSchemaV1(EmptyEvent),
+    },
+  },
+}).createMachine({
+  initial: "Closed",
+  states: {
+    Closed: { on: { open: { target: "Open" } } },
+    Open: { on: { close: { target: "Closed" } } },
+  },
+});
+
 export function RangeSummary({
   rangeDayCount,
   report,
@@ -149,6 +181,9 @@ export function RangeSummary({
   readonly rangeDayCount: 7 | 30 | 90;
   readonly report: NutritionReports.NutritionReportRange;
 }) {
+  const [costCoverageSnapshot, , costCoverageActor] = useMachine(
+    costCoverageDialogMachine
+  );
   const dayCount = report.days.length;
   const entries = report.days.flatMap((day) => day.entries);
   const totalQuantityGrams = entries.reduce(
@@ -274,6 +309,31 @@ export function RangeSummary({
 
   const foodContributors: readonly FoodContributor[] =
     Object.values(foodContributorsById);
+  const unresolvedFoodCosts = Object.values(
+    entries.reduce<Record<string, UnresolvedFoodCost>>(
+      (unresolvedFoods, entry) => {
+        if (entry.cost !== null) {
+          return unresolvedFoods;
+        }
+
+        const previous = unresolvedFoods[entry.food.id];
+
+        return {
+          ...unresolvedFoods,
+          [entry.food.id]: {
+            brand: entry.food.brand,
+            entryCount: (previous?.entryCount ?? 0) + 1,
+            foodId: entry.food.id,
+            name: entry.food.name,
+          },
+        };
+      },
+      {}
+    )
+  ).sort(
+    (left, right) =>
+      right.entryCount - left.entryCount || left.name.localeCompare(right.name)
+  );
   const allInsights = getNutritionReportInsights({
     limit: Number.MAX_SAFE_INTEGER,
     report,
@@ -337,6 +397,7 @@ export function RangeSummary({
           />
           <SecondaryMetricBalanceCard
             label="Costs recorded"
+            onPress={costCoverageActor.trigger.open}
             showTargetStatus={false}
             value={`${pricedEntryCount} / ${entries.length}`}
           />
@@ -352,6 +413,14 @@ export function RangeSummary({
           />
         </View>
       </View>
+
+      <CostCoverageDialog
+        foods={unresolvedFoodCosts}
+        onClose={costCoverageActor.trigger.close}
+        pricedEntryCount={pricedEntryCount}
+        totalEntryCount={entries.length}
+        visible={costCoverageSnapshot.matches("Open")}
+      />
 
       <View style={styles.section}>
         <SectionTitle
@@ -386,6 +455,94 @@ export function RangeSummary({
         </View>
       </View>
     </View>
+  );
+}
+
+function CostCoverageDialog({
+  foods,
+  onClose,
+  pricedEntryCount,
+  totalEntryCount,
+  visible,
+}: {
+  readonly foods: readonly UnresolvedFoodCost[];
+  readonly onClose: () => void;
+  readonly pricedEntryCount: number;
+  readonly totalEntryCount: number;
+  readonly visible: boolean;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={visible}
+    >
+      <Pressable
+        accessibilityLabel="Close cost coverage"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.dialogBackdrop}
+      >
+        <View style={styles.dialog} onStartShouldSetResponder={() => true}>
+          <View style={styles.dialogHeader}>
+            <View style={styles.dialogHeading}>
+              <Text style={styles.dialogTitle}>Costs recorded</Text>
+              <Text style={styles.dialogSubtitle}>
+                {pricedEntryCount} of {totalEntryCount} food entries are
+                included in spending.
+              </Text>
+            </View>
+            <IconButton
+              accessibilityLabel="Close cost coverage"
+              icon={X}
+              iconColor={color.textMuted}
+              iconSize={20}
+              onPress={onClose}
+              variant="ghost"
+            />
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.dialogList}
+            showsVerticalScrollIndicator={false}
+            style={styles.dialogScroll}
+          >
+            {!Array.isReadonlyArrayNonEmpty(foods) ? (
+              <Text style={styles.emptyText}>
+                Every logged food has a compatible current price.
+              </Text>
+            ) : (
+              foods.map((food) => (
+                <View key={food.foodId} style={styles.dialogFoodRow}>
+                  <View style={styles.dialogFoodCopy}>
+                    <Text numberOfLines={1} style={styles.foodName}>
+                      {food.name}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.dialogFoodBrand,
+                        food.brand === undefined
+                          ? styles.dialogFoodBrandMissing
+                          : null,
+                      ]}
+                    >
+                      {food.brand ?? "No brand"}
+                    </Text>
+                  </View>
+                  <Text
+                    accessibilityLabel={`${food.entryCount} ${food.entryCount === 1 ? "entry" : "entries"}`}
+                    style={styles.dialogFoodCount}
+                  >
+                    {food.entryCount}
+                  </Text>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -509,21 +666,31 @@ function NutrientBalanceCard({
 
 function SecondaryMetricBalanceCard({
   label,
+  onPress,
   showTargetStatus = true,
   value,
 }: {
   readonly label: string;
+  readonly onPress?: (() => void) | undefined;
   readonly showTargetStatus?: boolean | undefined;
   readonly value: string;
 }) {
-  return (
-    <View style={styles.nutrientCard}>
+  const title = (
+    <View style={styles.nutrientCardHeader}>
       <Text
         numberOfLines={1}
         style={[styles.nutrientCardTitle, { color: color.secondaryMetric }]}
       >
         {label}
       </Text>
+      {onPress === undefined ? null : (
+        <ChevronRight color={color.textMuted} size={18} strokeWidth={3} />
+      )}
+    </View>
+  );
+  const content = (
+    <>
+      {title}
       <Text
         adjustsFontSizeToFit
         numberOfLines={1}
@@ -536,7 +703,23 @@ function SecondaryMetricBalanceCard({
           No target
         </Text>
       ) : null}
-    </View>
+    </>
+  );
+
+  return onPress === undefined ? (
+    <View style={styles.nutrientCard}>{content}</View>
+  ) : (
+    <Pressable
+      accessibilityLabel={`${label}, ${value}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.nutrientCard,
+        pressed ? styles.nutrientCardPressed : null,
+      ]}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -753,6 +936,9 @@ const styles = StyleSheet.create({
     backgroundColor: color.sheet,
     padding: spacing.lg,
   },
+  nutrientCardPressed: {
+    opacity: 0.84,
+  },
   nutrientCardHeader: {
     minWidth: 0,
     flexDirection: "row",
@@ -788,6 +974,89 @@ const styles = StyleSheet.create({
   },
   foodGroups: {
     gap: spacing.lg,
+  },
+  dialogBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+    backgroundColor: color.overlay,
+  },
+  dialog: {
+    width: "100%",
+    maxHeight: "80%",
+    maxWidth: 480,
+    gap: spacing.lg,
+    borderWidth: 1,
+    borderColor: color.sheetBorder,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    backgroundColor: color.sheet,
+  },
+  dialogHeader: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  dialogHeading: {
+    minWidth: 0,
+    flex: 1,
+    gap: spacing.xs,
+  },
+  dialogTitle: {
+    color: color.text,
+    fontSize: tokens.type.size.lg,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.lg,
+  },
+  dialogSubtitle: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  dialogScroll: {
+    flexShrink: 1,
+  },
+  dialogList: {
+    borderTopWidth: 1,
+    borderTopColor: color.sheetBorder,
+  },
+  dialogFoodRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: color.sheetBorder,
+    paddingRight: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  dialogFoodCopy: {
+    minWidth: 0,
+    flex: 1,
+    justifyContent: "center",
+    gap: spacing.xxs,
+  },
+  dialogFoodBrand: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  dialogFoodBrandMissing: {
+    opacity: 0.55,
+    fontStyle: "italic",
+  },
+  dialogFoodCount: {
+    minWidth: 32,
+    flexShrink: 0,
+    color: color.text,
+    textAlign: "right",
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.md,
   },
   foodGroup: {
     gap: spacing.sm,

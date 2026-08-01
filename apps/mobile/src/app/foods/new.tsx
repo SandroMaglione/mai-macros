@@ -16,6 +16,7 @@ type CreateFoodRouteMode = typeof CreateFoodRouteMode.Type;
 
 const SearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
+  source: Schema.optionalKey(Schema.Literal("foods")),
 });
 
 const FoodFormInput = Schema.Struct({
@@ -80,6 +81,7 @@ const CreateFoodRouteInput = Schema.Struct({
   dateKey: Schema.UndefinedOr(Domain.DateKey),
   initialNotice: Schema.NullOr(Schema.String),
   mode: CreateFoodRouteMode,
+  returnToFoods: Schema.Boolean,
 });
 
 const FoodFormActorSchema = Schema.declare<FoodFormMachine.FoodFormActorRef>(
@@ -96,6 +98,7 @@ const createFoodRouteMachine = setup({
         foodFormActor: FoodFormActorSchema,
         mode: CreateFoodRouteMode,
         notice: Schema.NullOr(Schema.String),
+        returnToFoods: Schema.Boolean,
       })
     ),
     events: {
@@ -125,7 +128,21 @@ const createFoodRouteMachine = setup({
     },
     navigateAfterCreate: (params: {
       readonly dateKey: Domain.DateKey | undefined;
+      readonly returnToFoods: boolean;
     }) => {
+      if (params.returnToFoods) {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace({
+            pathname: "/foods",
+            params:
+              params.dateKey === undefined ? {} : { dateKey: params.dateKey },
+          });
+        }
+        return;
+      }
+
       const today = todayDateKey();
       const targetDateKey = params.dateKey ?? today;
 
@@ -190,6 +207,7 @@ const createFoodRouteMachine = setup({
     }),
     mode: input.mode,
     notice: input.initialNotice,
+    returnToFoods: input.returnToFoods,
   }),
   initial: "Idle",
   states: {
@@ -227,6 +245,7 @@ const createFoodRouteMachine = setup({
                 if (context.mode === "screen") {
                   enq(actions.navigateAfterCreate, {
                     dateKey: context.dateKey,
+                    returnToFoods: context.returnToFoods,
                   });
 
                   return {
@@ -300,12 +319,14 @@ export default function NewFoodScreen() {
       onSome: (decodedSearch) => ({
         _tag: "Valid" as const,
         dateKey: decodedSearch.dateKey,
+        source: decodedSearch.source,
       }),
     })
   ) satisfies
     | {
         readonly _tag: "Valid";
         readonly dateKey: Domain.DateKey | undefined;
+        readonly source: "foods" | undefined;
       }
     | {
         readonly _tag: "Invalid";
@@ -320,7 +341,20 @@ export default function NewFoodScreen() {
           : null
       }
       mode="screen"
+      returnToFoods={search._tag === "Valid" && search.source === "foods"}
       onBack={() => {
+        if (search._tag === "Valid" && search.source === "foods") {
+          if (expoRouter.canGoBack()) {
+            expoRouter.back();
+          } else {
+            expoRouter.replace({
+              pathname: "/foods",
+              params: dateKey === undefined ? {} : { dateKey },
+            });
+          }
+          return;
+        }
+
         if (dateKey === undefined) {
           expoRouter.replace("/");
           return;
@@ -342,17 +376,20 @@ export function CreateFoodPanel({
   initialNotice,
   mode,
   onBack,
+  returnToFoods = false,
 }: {
   readonly dateKey: Domain.DateKey | undefined;
   readonly initialNotice: string | null;
   readonly mode: CreateFoodRouteMode;
   readonly onBack: () => void;
+  readonly returnToFoods?: boolean;
 }) {
   const [rawSnapshot] = useMachine(createFoodRouteMachine, {
     input: {
       dateKey,
       initialNotice,
       mode,
+      returnToFoods,
     },
   });
   const { foodFormActor } = rawSnapshot.context;

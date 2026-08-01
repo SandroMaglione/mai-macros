@@ -23,6 +23,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -1147,7 +1148,7 @@ function BodyWeightEntryDialog({
           style={styles.editorKeyboardAvoiding}
         >
           <View
-            style={styles.editorDialog}
+            style={[styles.editorDialog, styles.editorDialogContent]}
             onStartShouldSetResponder={() => true}
           >
             <View style={styles.editorHeader}>
@@ -1266,68 +1267,77 @@ function BodyWeightImportDialog({
           style={styles.editorKeyboardAvoiding}
         >
           <View
-            style={styles.editorDialog}
+            style={[styles.editorDialog, styles.editorDialogScrollable]}
             onStartShouldSetResponder={() => true}
           >
-            <View style={styles.editorHeader}>
-              <View style={styles.editorTitleCopy}>
-                <Text style={styles.editorTitle}>Import weights</Text>
+            <ScrollView
+              contentContainerStyle={styles.editorDialogContent}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              style={styles.editorDialogScroll}
+            >
+              <View style={styles.editorHeader}>
+                <View style={styles.editorTitleCopy}>
+                  <Text style={styles.editorTitle}>Import weights</Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close weight importer"
+                  accessibilityRole="button"
+                  disabled={disabled}
+                  onPress={() => {
+                    actor.send({
+                      type: "close",
+                    });
+                  }}
+                  style={({ pressed }) => [
+                    styles.editorCloseButton,
+                    pressed && !disabled
+                      ? styles.editorCloseButtonPressed
+                      : null,
+                    disabled ? styles.editorCloseButtonDisabled : null,
+                  ]}
+                >
+                  <X color={color.textMuted} size={18} strokeWidth={3} />
+                </Pressable>
               </View>
-              <Pressable
-                accessibilityLabel="Close weight importer"
-                accessibilityRole="button"
-                disabled={disabled}
-                onPress={() => {
+              {snapshot.context.message === null ? null : (
+                <Notice message={snapshot.context.message} tone="danger" />
+              )}
+              <TextArea
+                accessibilityLabel="Weight import rows"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                editable={!disabled}
+                helperText="Use one date and weight per line."
+                inputStyle={styles.importTextAreaInput}
+                key="weight-import-open"
+                onChangeText={(value) => {
                   actor.send({
-                    type: "close",
+                    type: "changeImportInput",
+                    value,
                   });
                 }}
-                style={({ pressed }) => [
-                  styles.editorCloseButton,
-                  pressed && !disabled ? styles.editorCloseButtonPressed : null,
-                  disabled ? styles.editorCloseButtonDisabled : null,
-                ]}
-              >
-                <X color={color.textMuted} size={18} strokeWidth={3} />
-              </Pressable>
-            </View>
-            {snapshot.context.message === null ? null : (
-              <Notice message={snapshot.context.message} tone="danger" />
-            )}
-            <TextArea
-              accessibilityLabel="Weight import rows"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              editable={!disabled}
-              helperText="Use one date and weight per line."
-              inputStyle={styles.importTextAreaInput}
-              key="weight-import-open"
-              onChangeText={(value) => {
-                actor.send({
-                  type: "changeImportInput",
-                  value,
-                });
-              }}
-              placeholder={"26-06-26 77.40\n26-06-23 77.40"}
-              scrollEnabled
-              value={snapshot.context.input}
-            />
-            <View style={styles.editorActions}>
-              <Button
-                disabled={disabled || !canImport}
-                icon={Upload}
-                loading={importing}
-                onPress={() => {
-                  actor.send({
-                    type: "importWeights",
-                  });
-                }}
-                style={styles.editorAction}
-              >
-                Import
-              </Button>
-            </View>
+                placeholder={"26-06-26 77.40\n26-06-23 77.40"}
+                scrollEnabled
+                value={snapshot.context.input}
+              />
+              <View style={styles.editorActions}>
+                <Button
+                  disabled={disabled || !canImport}
+                  icon={Upload}
+                  loading={importing}
+                  onPress={() => {
+                    actor.send({
+                      type: "importWeights",
+                    });
+                  }}
+                  style={styles.editorAction}
+                >
+                  Import
+                </Button>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Pressable>
@@ -2268,7 +2278,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   editorDialog: {
-    gap: spacing.md,
     width: "100%",
     maxWidth: 440,
     alignSelf: "center",
@@ -2277,6 +2286,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     backgroundColor: color.sheet,
+  },
+  editorDialogContent: {
+    gap: spacing.md,
+  },
+  editorDialogScrollable: {
+    maxHeight: "88%",
+  },
+  editorDialogScroll: {
+    flexShrink: 1,
   },
   editorHeader: {
     flexDirection: "row",

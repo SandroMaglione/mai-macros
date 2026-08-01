@@ -1,5 +1,5 @@
 import { Domain, Measurements } from "@mai/nutrition";
-import { Array, Order, Schema } from "effect";
+import { Array, HashSet, Order, Schema } from "effect";
 import { setup, type ActorRefFrom } from "xstate";
 import { EmptyEvent } from "./schemas";
 
@@ -37,6 +37,7 @@ export type FoodSearchMacroOrder =
   | "energy"
   | "fat"
   | "fiber"
+  | "priceCoverage"
   | "priceHigh"
   | "priceLow"
   | "protein"
@@ -51,6 +52,7 @@ const FoodSearchMacroOrderSchema = Schema.Literals([
   "energy",
   "fat",
   "fiber",
+  "priceCoverage",
   "priceHigh",
   "priceLow",
   "protein",
@@ -68,6 +70,7 @@ const FoodSearchContextSchema = Schema.Struct({
   matchingFoods: Schema.Array(Domain.Food),
   query: Schema.String,
   selectedFoodId: Schema.NullOr(Domain.FoodId),
+  usedFoodIds: Schema.Array(Domain.FoodId),
 });
 
 const FoodSearchInputSchema = Schema.Struct({
@@ -76,6 +79,7 @@ const FoodSearchInputSchema = Schema.Struct({
   macroOrder: Schema.optionalKey(Schema.NullOr(FoodSearchMacroOrderSchema)),
   query: Schema.optionalKey(Schema.String),
   selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
+  usedFoodIds: Schema.optionalKey(Schema.Array(Domain.FoodId)),
 });
 
 export type FoodSearchEvent =
@@ -85,6 +89,7 @@ export type FoodSearchEvent =
       readonly foods: readonly Domain.Food[];
       readonly query?: string;
       readonly selectedFoodId?: Domain.Food["id"] | null;
+      readonly usedFoodIds?: readonly Domain.FoodId[];
     }
   | {
       readonly type: "changeFoods";
@@ -133,7 +138,7 @@ const foodMacroOrderValueKey = {
   saturatedFat: "saturatedFatGrams",
   sugar: "sugarGrams",
 } satisfies Record<
-  Exclude<FoodSearchMacroOrder, "priceHigh" | "priceLow">,
+  Exclude<FoodSearchMacroOrder, "priceCoverage" | "priceHigh" | "priceLow">,
   | "carbsGrams"
   | "energyKcal"
   | "fatGrams"
@@ -157,7 +162,10 @@ const foodMacroOrderValueDirection = {
   salt: "descending",
   saturatedFat: "descending",
   sugar: "descending",
-} satisfies Record<FoodSearchMacroOrder, "ascending" | "descending">;
+} satisfies Record<
+  Exclude<FoodSearchMacroOrder, "priceCoverage">,
+  "ascending" | "descending"
+>;
 
 export function getFoodCategoryLabel({
   category,
@@ -240,11 +248,33 @@ export function sortFoodsByMacroOrder({
   baseOrder,
   foods,
   macroOrder,
+  usedFoodIds = [],
 }: {
   readonly baseOrder: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
   readonly macroOrder: FoodSearchMacroOrder | null;
+  readonly usedFoodIds?: readonly Domain.FoodId[];
 }) {
+  if (macroOrder === "priceCoverage") {
+    const usedFoodIdSet = HashSet.fromIterable(usedFoodIds);
+
+    return [...foods].sort((left, right) => {
+      const groupDifference =
+        _foodPriceCoverageGroup({ food: left, usedFoodIdSet }) -
+        _foodPriceCoverageGroup({ food: right, usedFoodIdSet });
+
+      if (groupDifference !== 0) {
+        return groupDifference;
+      }
+
+      const nameDifference = foodLowercaseNameOrder(left, right);
+
+      return nameDifference === 0
+        ? left.id.localeCompare(right.id)
+        : nameDifference;
+    });
+  }
+
   const valueOrder =
     macroOrder !== null &&
     foodMacroOrderValueDirection[macroOrder] === "ascending"
@@ -306,6 +336,23 @@ function _foodsShareNameGroup({
   );
 }
 
+function _foodPriceCoverageGroup({
+  food,
+  usedFoodIdSet,
+}: {
+  readonly food: Domain.Food;
+  readonly usedFoodIdSet: HashSet.HashSet<Domain.FoodId>;
+}) {
+  const hasCurrentPrice = food.prices.some((price) => price.isCurrent);
+  const wasUsed = HashSet.has(usedFoodIdSet, food.id);
+
+  if (!hasCurrentPrice) {
+    return wasUsed ? 0 : 1;
+  }
+
+  return wasUsed ? 2 : 3;
+}
+
 function _normalizeFoodNameGroupValue(value: string) {
   return value.trim().normalize("NFKC").toLocaleLowerCase();
 }
@@ -331,12 +378,14 @@ const _foodSearchContextFromInput = ({
   macroOrder = null,
   query = "",
   selectedFoodId = null,
+  usedFoodIds = [],
 }: {
   readonly baseOrder?: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
   readonly macroOrder?: FoodSearchMacroOrder | null;
   readonly query?: string;
   readonly selectedFoodId?: Domain.Food["id"] | null;
+  readonly usedFoodIds?: readonly Domain.FoodId[];
 }): {
   readonly baseOrder: FoodSearchBaseOrder;
   readonly foods: readonly Domain.Food[];
@@ -344,6 +393,7 @@ const _foodSearchContextFromInput = ({
   readonly matchingFoods: readonly Domain.Food[];
   readonly query: string;
   readonly selectedFoodId: Domain.Food["id"] | null;
+  readonly usedFoodIds: readonly Domain.FoodId[];
 } => ({
   baseOrder,
   foods,
@@ -352,6 +402,7 @@ const _foodSearchContextFromInput = ({
     baseOrder,
     foods: filterFoodsByQuery({ foods, query }),
     macroOrder,
+    usedFoodIds,
   }),
   query,
   selectedFoodId:
@@ -360,6 +411,7 @@ const _foodSearchContextFromInput = ({
       : foods.some((food) => food.id === selectedFoodId)
         ? selectedFoodId
         : null,
+  usedFoodIds,
 });
 
 export const foodSearchMachine = setup({
@@ -372,6 +424,7 @@ export const foodSearchMachine = setup({
           foods: Schema.Array(Domain.Food),
           query: Schema.optionalKey(Schema.String),
           selectedFoodId: Schema.optionalKey(Schema.NullOr(Domain.FoodId)),
+          usedFoodIds: Schema.optionalKey(Schema.Array(Domain.FoodId)),
         })
       ),
       changeFoods: Schema.toStandardSchemaV1(
@@ -415,6 +468,7 @@ export const foodSearchMachine = setup({
             macroOrder: context.macroOrder,
             query: context.query,
             selectedFoodId: context.selectedFoodId,
+            usedFoodIds: context.usedFoodIds,
           }),
         }),
         changeMacroOrder: ({ context, event }) => ({
@@ -427,6 +481,7 @@ export const foodSearchMachine = setup({
                 query: context.query,
               }),
               macroOrder: event.macroOrder,
+              usedFoodIds: context.usedFoodIds,
             }),
           },
         }),
@@ -439,6 +494,7 @@ export const foodSearchMachine = setup({
                 query: event.query,
               }),
               macroOrder: context.macroOrder,
+              usedFoodIds: context.usedFoodIds,
             }),
             query: event.query,
           },
@@ -452,6 +508,7 @@ export const foodSearchMachine = setup({
           context: _foodSearchContextFromInput({
             ...event,
             baseOrder: event.baseOrder ?? context.baseOrder,
+            usedFoodIds: event.usedFoodIds ?? context.usedFoodIds,
           }),
         }),
         selectFirstMatchingFood: ({ context, parent }, enq) => {

@@ -16,8 +16,9 @@ import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
 import { Domain, Foods, MealEntries } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import { ChevronLeft, RotateCcw } from "lucide-react-native";
+import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
 import { Actor, createAsyncLogic, setup } from "xstate";
 
@@ -96,7 +97,11 @@ const manageFoodsMachine = setup({
     dateKey: input.dateKey,
     foodSearchActor: spawn(actorSources.foodSearch, {
       id: "manageFoodsSearch",
-      input: { foods: input.foods },
+      input: {
+        foods: input.foods,
+        macroOrder: null,
+        usedFoodIds: input.foodUsage.map((usage) => usage.foodId),
+      },
     }),
     foodUsage: input.foodUsage,
   }),
@@ -132,6 +137,7 @@ const manageFoodsLoaderMachine = setup({
       Schema.Struct({ dateKey: Schema.UndefinedOr(Domain.DateKey) })
     ),
     events: {
+      refresh: Schema.toStandardSchemaV1(EmptyEvent),
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
     input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
@@ -176,9 +182,14 @@ const manageFoodsLoaderMachine = setup({
       },
     },
     Failed: {
-      on: { retry: { target: "Loading" } },
+      on: {
+        refresh: { target: "Loading" },
+        retry: { target: "Loading" },
+      },
     },
-    Ready: {},
+    Ready: {
+      on: { refresh: { target: "Loading" } },
+    },
   },
 });
 
@@ -206,6 +217,11 @@ export function ManageFoodsPanelLoader({
   const [snapshot, , actor] = useMachine(manageFoodsLoaderMachine, {
     input: { dateKey },
   });
+  useFocusEffect(
+    useCallback(() => {
+      actor.trigger.refresh();
+    }, [actor])
+  );
 
   if (snapshot.matches("Loading")) {
     return layout === "embedded" ? (
@@ -293,11 +309,17 @@ function ManageFoodsPanel({
               value: food.energyKcal,
             })} kcal`
           }
-          getSecondaryLabel={(food) =>
-            foodUsage.some((usage) => usage.foodId === food.id)
+          getSecondaryLabel={(food) => {
+            const usageLabel = foodUsage.some(
+              (usage) => usage.foodId === food.id
+            )
               ? "Used"
-              : "Unused"
-          }
+              : "Unused";
+
+            return food.prices.some((price) => price.isCurrent)
+              ? usageLabel
+              : `${usageLabel} · No price`;
+          }}
         />
       </View>
     </>

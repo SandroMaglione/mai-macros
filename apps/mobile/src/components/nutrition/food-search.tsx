@@ -11,6 +11,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -90,6 +91,13 @@ const foodSearchDefaultMacroOrderOption = {
 
 const foodSearchMacroOrderOptions = [
   foodSearchDefaultMacroOrderOption,
+  {
+    accessibilityLabel: "Order foods by price coverage and usage",
+    color: color.warningText,
+    key: "price-coverage",
+    label: "Price coverage",
+    macroOrder: "priceCoverage",
+  },
   {
     accessibilityLabel: "Order foods by calories",
     color: color.nutritionEnergy,
@@ -369,39 +377,47 @@ function FoodSearchMacroOrderDialog({
       >
         <View style={styles.orderDialog} onStartShouldSetResponder={() => true}>
           <Text style={styles.orderDialogTitle}>Order foods</Text>
-          {foodSearchMacroOrderOptions.map((option) => (
-            <Pressable
-              accessibilityLabel={option.accessibilityLabel}
-              accessibilityRole="button"
-              key={option.key}
-              onPress={() => {
-                actor.send({
-                  type: "changeMacroOrder",
-                  macroOrder: option.macroOrder,
-                });
-                onClose();
-              }}
-              style={({ pressed }) => [
-                styles.orderDialogOption,
-                selectedOption.key === option.key
-                  ? styles.orderDialogOptionSelected
-                  : null,
-                pressed ? styles.orderDialogOptionPressed : null,
-              ]}
-            >
-              <View
-                accessible={false}
-                style={[
-                  styles.orderDialogOptionDot,
-                  { backgroundColor: option.color },
+          <ScrollView
+            contentContainerStyle={styles.orderDialogOptions}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {foodSearchMacroOrderOptions.map((option) => (
+              <Pressable
+                accessibilityLabel={option.accessibilityLabel}
+                accessibilityRole="button"
+                key={option.key}
+                onPress={() => {
+                  actor.send({
+                    type: "changeMacroOrder",
+                    macroOrder: option.macroOrder,
+                  });
+                  onClose();
+                }}
+                style={({ pressed }) => [
+                  styles.orderDialogOption,
+                  selectedOption.key === option.key
+                    ? styles.orderDialogOptionSelected
+                    : null,
+                  pressed ? styles.orderDialogOptionPressed : null,
                 ]}
-              />
-              <Text style={styles.orderDialogOptionLabel}>{option.label}</Text>
-              {selectedOption.key === option.key ? (
-                <Check color={color.text} size={18} strokeWidth={3} />
-              ) : null}
-            </Pressable>
-          ))}
+              >
+                <View
+                  accessible={false}
+                  style={[
+                    styles.orderDialogOptionDot,
+                    { backgroundColor: option.color },
+                  ]}
+                />
+                <Text style={styles.orderDialogOptionLabel}>
+                  {option.label}
+                </Text>
+                {selectedOption.key === option.key ? (
+                  <Check color={color.text} size={18} strokeWidth={3} />
+                ) : null}
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       </Pressable>
     </Modal>
@@ -670,12 +686,16 @@ const styles = StyleSheet.create({
     backgroundColor: color.overlay,
   },
   orderDialog: {
+    maxHeight: "80%",
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: color.sheetBorder,
     borderRadius: radius.md,
     padding: spacing.md,
     backgroundColor: color.sheet,
+  },
+  orderDialogOptions: {
+    gap: spacing.sm,
   },
   orderDialogTitle: {
     paddingHorizontal: spacing.sm,
