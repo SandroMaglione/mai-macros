@@ -95,6 +95,7 @@ const nutrientColors = {
 } satisfies Record<Reporting.NutrientName, string>;
 
 const summaryInsightLimit = 5;
+const foodContributorPreviewLimit = 3;
 
 type TargetTrendKind = NutritionTargetTrend | "none";
 
@@ -128,7 +129,7 @@ const targetTrendIndicators = {
   }
 >;
 
-const summaryInsightsVisibilityMachine = setup({
+const listVisibilityMachine = setup({
   schemas: {
     events: {
       collapse: Schema.toStandardSchemaV1(EmptyEvent),
@@ -436,8 +437,7 @@ export function RangeSummary({
               .sort(
                 (left, right) =>
                   right.totals[nutrientName] - left.totals[nutrientName]
-              )
-              .slice(0, 3);
+              );
 
             return (
               <FoodContributorGroup
@@ -450,8 +450,7 @@ export function RangeSummary({
           <FoodWeightContributorGroup
             foods={foodContributors
               .filter((food) => food.quantityGrams > 0)
-              .sort((left, right) => right.quantityGrams - left.quantityGrams)
-              .slice(0, 3)}
+              .sort((left, right) => right.quantityGrams - left.quantityGrams)}
             isComplete={weightCoverageComplete}
           />
         </View>
@@ -555,7 +554,7 @@ function SummaryInsights({
   readonly allInsights: readonly NutritionReportInsight[];
   readonly insights: readonly NutritionReportInsight[];
 }) {
-  const [snapshot, , actor] = useMachine(summaryInsightsVisibilityMachine);
+  const [snapshot, , actor] = useMachine(listVisibilityMachine);
   const isExpanded = snapshot.value === "Expanded";
   const visibleInsights = isExpanded ? allInsights : insights;
   const canToggle = allInsights.length > insights.length;
@@ -755,24 +754,14 @@ function FoodWeightContributorGroup({
       {!Array.isReadonlyArrayNonEmpty(foods) ? (
         <Text style={styles.emptyText}>No tracked foods.</Text>
       ) : (
-        <View style={styles.foodRows}>
-          {foods.map((food, index) => (
-            <Fragment key={`food-weight-${food.foodId}`}>
-              {index === 0 ? null : <View style={styles.divider} />}
-              <View style={styles.foodRow}>
-                <Text numberOfLines={1} style={styles.foodName}>
-                  {food.name}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.foodAmount, { color: color.secondaryMetric }]}
-                >
-                  {_formatWeight({ value: food.quantityGrams })}
-                </Text>
-              </View>
-            </Fragment>
-          ))}
-        </View>
+        <FoodContributorRows
+          amountColor={color.secondaryMetric}
+          accessibilityGroupLabel="food weight"
+          foods={foods}
+          formatValue={(food) => _formatWeight({ value: food.quantityGrams })}
+          getValue={(food) => food.quantityGrams}
+          rowKeyPrefix="food-weight"
+        />
       )}
     </View>
   );
@@ -795,25 +784,109 @@ function FoodContributorGroup({
       {!Array.isReadonlyArrayNonEmpty(foods) ? (
         <Text style={styles.emptyText}>No tracked foods.</Text>
       ) : (
-        <View style={styles.foodRows}>
-          {foods.map((food, index) => (
-            <Fragment key={`${nutrientName}-${food.foodId}`}>
-              {index === 0 ? null : <View style={styles.divider} />}
-              <View style={styles.foodRow}>
-                <Text numberOfLines={1} style={styles.foodName}>
-                  {food.name}
+        <FoodContributorRows
+          amountColor={color.textMuted}
+          accessibilityGroupLabel={nutrientLabels[nutrientName]}
+          foods={foods}
+          formatValue={(food) =>
+            _formatNutrient({
+              nutrientName,
+              value: food.totals[nutrientName],
+            })
+          }
+          getValue={(food) => food.totals[nutrientName]}
+          rowKeyPrefix={nutrientName}
+        />
+      )}
+    </View>
+  );
+}
+
+function FoodContributorRows({
+  amountColor,
+  accessibilityGroupLabel,
+  foods,
+  formatValue,
+  getValue,
+  rowKeyPrefix,
+}: {
+  readonly amountColor: string;
+  readonly accessibilityGroupLabel: string;
+  readonly foods: readonly FoodContributor[];
+  readonly formatValue: (food: FoodContributor) => string;
+  readonly getValue: (food: FoodContributor) => number;
+  readonly rowKeyPrefix: string;
+}) {
+  const [snapshot, , actor] = useMachine(listVisibilityMachine);
+  const isExpanded = snapshot.value === "Expanded";
+  const canToggle = foods.length > foodContributorPreviewLimit;
+  const visibleFoods = isExpanded
+    ? foods
+    : foods.slice(0, foodContributorPreviewLimit);
+  const total = foods.reduce((sum, food) => sum + getValue(food), 0);
+  const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
+
+  return (
+    <View style={styles.foodRows}>
+      {visibleFoods.map((food, index) => {
+        const percentage = (getValue(food) / total) * 100;
+        const percentageFractionDigits = percentage < 1 ? 2 : 0;
+
+        return (
+          <Fragment key={`${rowKeyPrefix}-${food.foodId}`}>
+            {index === 0 ? null : <View style={styles.divider} />}
+            <View style={styles.foodRow}>
+              <Text numberOfLines={1} style={styles.foodName}>
+                {food.name}
+              </Text>
+              <View style={styles.foodContributionValues}>
+                <Text numberOfLines={1} style={styles.foodPercentage}>
+                  {`${formatNumber({
+                    maximumFractionDigits: percentageFractionDigits,
+                    minimumFractionDigits: percentageFractionDigits,
+                    value: percentage,
+                  })}%`}
                 </Text>
-                <Text numberOfLines={1} style={styles.foodAmount}>
-                  {_formatNutrient({
-                    nutrientName,
-                    value: food.totals[nutrientName],
-                  })}
+                <Text
+                  numberOfLines={1}
+                  style={[styles.foodAmount, { color: amountColor }]}
+                >
+                  {formatValue(food)}
                 </Text>
               </View>
-            </Fragment>
-          ))}
-        </View>
-      )}
+            </View>
+          </Fragment>
+        );
+      })}
+      {canToggle ? (
+        <>
+          <View style={styles.divider} />
+          <Pressable
+            accessibilityLabel={`${isExpanded ? "View less" : "View more"} ${accessibilityGroupLabel.toLocaleLowerCase()} food contributors`}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isExpanded }}
+            onPress={() => {
+              if (isExpanded) {
+                actor.trigger.collapse();
+                return;
+              }
+
+              actor.trigger.expand();
+            }}
+            style={({ pressed }) => [
+              styles.foodContributorToggle,
+              pressed ? styles.foodContributorTogglePressed : null,
+            ]}
+          >
+            <View style={styles.foodContributorToggleContent}>
+              <Text numberOfLines={1} style={styles.foodContributorToggleText}>
+                {isExpanded ? "View less" : "View more"}
+              </Text>
+              <ToggleIcon color={color.textMuted} size={16} strokeWidth={3} />
+            </View>
+          </Pressable>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -1085,6 +1158,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
   },
+  foodContributionValues: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: spacing.sm,
+  },
   foodName: {
     minWidth: 0,
     flex: 1,
@@ -1094,6 +1173,31 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.sm,
   },
   foodAmount: {
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  foodPercentage: {
+    color: color.textSubtle,
+    fontSize: tokens.type.size.xs,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  foodContributorToggle: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  foodContributorToggleContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  foodContributorTogglePressed: {
+    opacity: 0.7,
+  },
+  foodContributorToggleText: {
+    flexShrink: 0,
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
     fontWeight: tokens.type.weight.black,
