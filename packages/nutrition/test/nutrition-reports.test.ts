@@ -107,7 +107,7 @@ describe("NutritionReports", () => {
     assert.equal(day?.totals.energyKcal, 0);
   });
 
-  it("uses created daily logs as the report day count when dates are missing", async () => {
+  it("keeps fasting logs in the range but excludes them from counted days", async () => {
     const program = Effect.gen(function* () {
       const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
       const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
@@ -120,6 +120,7 @@ describe("NutritionReports", () => {
       const secondDailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
         createdAt: 0,
         dateKey: "2026-06-21",
+        mode: "fasting",
         planId: plan.id,
         updatedAt: 0,
       });
@@ -175,15 +176,20 @@ describe("NutritionReports", () => {
       (total, day) => total + day.totals.energyKcal,
       0
     );
+    const countedDays = NutritionReports.countedNutritionDays({
+      report: result,
+    });
 
     assert.deepEqual(
       result.days.map((day) => day.dateKey),
       ["2026-06-18", "2026-06-21"]
     );
     assert.equal(result.days.length, 2);
-    assert.equal(totalEnergyKcal / result.days.length, 50);
+    assert.equal(countedDays.length, 1);
+    assert.equal(totalEnergyKcal / countedDays.length, 100);
     assert.equal(result.days[0]?.entries.length, 1);
     assert.equal(result.days[1]?.entries.length, 0);
+    assert.equal(result.days[1]?.dailyLog.mode, "fasting");
   });
 });
 

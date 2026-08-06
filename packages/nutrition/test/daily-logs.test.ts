@@ -324,6 +324,69 @@ describe("DailyLogs", () => {
     assert.equal(result.stores.dailyLogs[0]?.dateKey, "2026-06-20");
     assert.equal(result.stores.mealEntries.length, 1);
   });
+
+  it("changes the mode of a day without modifying its meal entries", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+        const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+          createdAt: 0,
+          dateKey: "2026-06-20",
+          planId: plan.id,
+          updatedAt: 0,
+        });
+        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+          createdAt: 0,
+          dateKey: dailyLog.dateKey,
+          foodId: "9535a059-a61f-42e1-a2e0-35ec87203c55",
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c45",
+          mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:breakfast",
+          nutritionMultiplier: 1,
+          quantity: {
+            _tag: "MeasuredFoodQuantity",
+            amount: 100,
+            unit: "g",
+          },
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const store = yield* Store.NutritionStore;
+          const changed = yield* dailyLogs.setMode({
+            input: {
+              dateKey: dailyLog.dateKey,
+              mode: "fasting",
+            },
+          });
+
+          return {
+            changed,
+            stores: yield* store.readStores,
+          };
+        }).pipe(
+          Effect.provide(
+            _dailyLogsTestLayer({
+              stores: {
+                ...emptyStores,
+                dailyLogs: [dailyLog],
+                mealEntries: [mealEntry],
+                plans: [plan],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.equal(result.changed.dailyLog.mode, "fasting");
+    assert.equal(result.stores.dailyLogs[0]?.mode, "fasting");
+    assert.equal(result.stores.mealEntries.length, 1);
+    assert.equal(
+      result.stores.mealEntries[0]?.id,
+      "9535a059-a61f-42e1-a2e0-35ec87203c45"
+    );
+  });
 });
 
 function _dailyLogsTestLayer({

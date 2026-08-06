@@ -184,8 +184,10 @@ export function RangeSummary({
   const [costCoverageSnapshot, , costCoverageActor] = useMachine(
     costCoverageDialogMachine
   );
-  const dayCount = report.days.length;
-  const entries = report.days.flatMap((day) => day.entries);
+  const countedDays = NutritionReports.countedNutritionDays({ report });
+  const dayCount = countedDays.length;
+  const fastingDayCount = report.days.length - dayCount;
+  const entries = countedDays.flatMap((day) => day.entries);
   const totalQuantityGrams = entries.reduce(
     (total, entry) =>
       total +
@@ -202,16 +204,16 @@ export function RangeSummary({
         mealEntry: entry.mealEntry,
       }) !== undefined
   );
-  const totalCostMinor = report.days.reduce(
+  const totalCostMinor = countedDays.reduce(
     (total, day) => total + day.costTotals.costMinorByCurrency.EUR,
     0
   );
-  const pricedEntryCount = report.days.reduce(
+  const pricedEntryCount = countedDays.reduce(
     (total, day) => total + day.costTotals.resolvedEntriesCount,
     0
   );
   const costCoverageComplete = pricedEntryCount === entries.length;
-  const totals = report.days.reduce<Reporting.NutrientTotals>(
+  const totals = countedDays.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
       Reporting.addNutrientTotals({
         left: currentTotals,
@@ -243,7 +245,7 @@ export function RangeSummary({
     Record<Reporting.NutrientName, number | null>
   >(
     (targets, nutrientName) => {
-      const targetAmounts = report.days.flatMap((day) => {
+      const targetAmounts = countedDays.flatMap((day) => {
         const amount = Reporting.getPlanNutrientTargetAmount({
           nutrientName,
           plan: day.plan,
@@ -346,8 +348,8 @@ export function RangeSummary({
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle={`Average daily intake across ${dayCount} recorded days in the selected ${rangeDayCount}-day period, compared with daily targets when available.`}
-          title="Recorded-day average"
+          subtitle={`Average daily intake across ${dayCount} counted days in the selected ${rangeDayCount}-day period${fastingDayCount === 0 ? "" : `; ${fastingDayCount} fasting ${fastingDayCount === 1 ? "day was" : "days were"} excluded`}, compared with daily targets when available.`}
+          title="Counted-day average"
         />
         <View style={styles.nutrientGrid}>
           {trackedNutrients.map((nutrientName) => (

@@ -1,7 +1,7 @@
 import type * as Domain from "@mai/nutrition/domain";
 import * as Measurements from "@mai/nutrition/measurements";
 import * as Reporting from "@mai/nutrition/reporting";
-import type * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
+import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 
 import { insightNutrients } from "./constants.ts";
 import type {
@@ -21,7 +21,8 @@ export function buildInsightContext({
 }: {
   readonly report: NutritionReports.NutritionReportRange;
 }): InsightContext {
-  const dayCount = report.days.length;
+  const countedDays = NutritionReports.countedNutritionDays({ report });
+  const dayCount = countedDays.length;
   const totals: MutableNutrientTotals = {
     carbsGrams: 0,
     energyKcal: 0,
@@ -42,7 +43,7 @@ export function buildInsightContext({
   let totalQuantityGrams = 0;
   let weightCoverageComplete = true;
 
-  for (const day of report.days) {
+  for (const day of countedDays) {
     _addNutrientTotalsInPlace({ target: totals, value: day.totals });
 
     for (const meal of day.plan.meals) {
@@ -151,7 +152,7 @@ export function buildInsightContext({
     Record<Reporting.NutrientName, number | null>
   >(
     (targets, nutrientName) => {
-      const targetAmounts = report.days.flatMap((day) => {
+      const targetAmounts = countedDays.flatMap((day) => {
         const amount = Reporting.getPlanNutrientTargetAmount({
           nutrientName,
           plan: day.plan,

@@ -68,6 +68,13 @@ export type NutritionReportRange = {
   readonly startDateKey: DateKey;
 };
 
+export const countedNutritionDays = ({
+  report,
+}: {
+  readonly report: NutritionReportRange;
+}): readonly NutritionReportDay[] =>
+  report.days.filter((day) => day.dailyLog.mode === "eating");
+
 export class InvalidNutritionReportRange extends Data.TaggedError(
   "InvalidNutritionReportRange"
 )<{

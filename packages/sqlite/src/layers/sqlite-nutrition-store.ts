@@ -91,6 +91,7 @@ const PlanMealRow = Schema.Struct({
 const DailyLogRow = Schema.Struct({
   createdAt: Schema.Number,
   dateKey: Domain.DateKey,
+  mode: Domain.DailyLogMode,
   planId: Domain.PlanId,
   updatedAt: Schema.Number,
 });
@@ -193,6 +194,7 @@ const selectPlanMealColumns = `
 
 const selectDailyLogColumns = `
   date_key AS dateKey,
+  mode,
   plan_id AS planId,
   created_at AS createdAt,
   updated_at AS updatedAt
@@ -1061,6 +1063,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   const dailyLogRowValues = (dailyLog: typeof Domain.DailyLog.Encoded) => ({
     created_at: dailyLog.createdAt,
     date_key: dailyLog.dateKey,
+    mode: dailyLog.mode ?? "eating",
     plan_id: dailyLog.planId,
     updated_at: dailyLog.updatedAt,
   });

@@ -262,8 +262,15 @@ export class Plan extends Schema.Class<Plan>("Plan")({
   createdAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+export const DailyLogMode = Schema.Literals(["eating", "fasting"]);
+
+export type DailyLogMode = typeof DailyLogMode.Type;
+
 export class DailyLog extends Schema.Class<DailyLog>("DailyLog")({
   dateKey: DateKey,
+  mode: DailyLogMode.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("eating"))
+  ),
   planId: PlanId,
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,

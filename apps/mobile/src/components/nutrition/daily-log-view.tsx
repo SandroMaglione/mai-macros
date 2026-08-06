@@ -32,10 +32,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Moon,
   Settings,
   Trash2,
+  Utensils,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { createAsyncLogic, setup } from "xstate";
 
 const OpenedDay = Schema.TaggedStruct("OpenedDay", {
@@ -97,6 +99,11 @@ const CreateDailyLogInput = Schema.Struct({
   planId: Domain.PlanId,
 });
 
+const SetDailyLogModeInput = Schema.Struct({
+  dateKey: Domain.DateKey,
+  mode: Domain.DailyLogMode,
+});
+
 const macroProgress = [
   {
     color: color.nutritionCarbs,
@@ -134,6 +141,11 @@ const dailyLogRouteMachine = setup({
       createDay: Schema.toStandardSchemaV1(EmptyEvent),
       deleteDay: Schema.toStandardSchemaV1(EmptyEvent),
       reload: Schema.toStandardSchemaV1(EmptyEvent),
+      setDayMode: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          mode: Domain.DailyLogMode,
+        })
+      ),
       selectPlan: Schema.toStandardSchemaV1(
         Schema.Struct({
           plan: Domain.Plan,
@@ -149,6 +161,7 @@ const dailyLogRouteMachine = setup({
     Creating: {},
     Deleting: {},
     Redirected: {},
+    UpdatingMode: {},
   },
   actions: {
     redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
@@ -264,6 +277,21 @@ const dailyLogRouteMachine = setup({
           )
         ),
     }),
+    setDailyLogMode: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(SetDailyLogModeInput),
+        output: Schema.toStandardSchemaV1(Domain.DailyLog),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const changedDay = yield* dailyLogs.setMode({ input });
+
+            return changedDay.dailyLog;
+          })
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -346,6 +374,18 @@ const dailyLogRouteMachine = setup({
             message: null,
           },
         },
+        setDayMode: ({ context }) => {
+          if (context.data === null || context.data._tag !== "RecordedDay") {
+            return undefined;
+          }
+
+          return {
+            target: "UpdatingMode",
+            context: {
+              message: null,
+            },
+          };
+        },
         selectPlan: ({ context, event }) => {
           if (context.data === null || context.data._tag !== "UnrecordedDay") {
             return undefined;
@@ -418,6 +458,52 @@ const dailyLogRouteMachine = setup({
           target: "Ready",
           context: {
             message: "Could not create this day. Please try again.",
+          },
+        },
+      },
+    },
+    UpdatingMode: {
+      invoke: {
+        src: "setDailyLogMode",
+        input: ({ context, event }) => {
+          if (
+            context.data === null ||
+            context.data._tag !== "RecordedDay" ||
+            event.type !== "setDayMode"
+          ) {
+            throw new Error("Cannot change a day mode before it loads.");
+          }
+
+          return {
+            dateKey: context.data.day.dailyLog.dateKey,
+            mode: event.mode,
+          };
+        },
+        onDone: ({ context, event }) => {
+          if (context.data === null || context.data._tag !== "RecordedDay") {
+            return {
+              target: "Loading" as const,
+            };
+          }
+
+          return {
+            target: "Ready" as const,
+            context: {
+              data: {
+                ...context.data,
+                day: {
+                  ...context.data.day,
+                  dailyLog: event.output,
+                },
+              },
+              message: null,
+            },
+          };
+        },
+        onError: {
+          target: "Ready",
+          context: {
+            message: "Could not change this day mode. Please try again.",
           },
         },
       },
@@ -508,7 +594,11 @@ export function DailyLogRoute({
     <DailyLogView
       canDeleteDay={snapshot.can(deleteDayEvent)}
       data={snapshot.context.data}
-      disabled={routeState === "Creating" || routeState === "Deleting"}
+      disabled={
+        routeState === "Creating" ||
+        routeState === "Deleting" ||
+        routeState === "UpdatingMode"
+      }
       notice={snapshot.context.message}
       onCreateDay={() => {
         actor.trigger.createDay();
@@ -518,6 +608,9 @@ export function DailyLogRoute({
       }}
       onSelectPlan={(plan) => {
         actor.trigger.selectPlan({ plan });
+      }}
+      onSetDayMode={(mode) => {
+        actor.trigger.setDayMode({ mode });
       }}
     />
   );
@@ -548,6 +641,7 @@ export function DailyLogView({
   onCreateDay,
   onDeleteDay,
   onSelectPlan,
+  onSetDayMode,
 }: {
   readonly canDeleteDay: boolean;
   readonly data: DailyLogViewData;
@@ -556,6 +650,7 @@ export function DailyLogView({
   readonly onCreateDay: () => void;
   readonly onDeleteDay: () => void;
   readonly onSelectPlan: (plan: Domain.Plan) => void;
+  readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
 }) {
   return data._tag === "UnrecordedDay" ? (
     <UnrecordedDailyLogView
@@ -571,6 +666,7 @@ export function DailyLogView({
       data={data}
       disabled={disabled}
       onDeleteDay={onDeleteDay}
+      onSetDayMode={onSetDayMode}
     />
   );
 }
@@ -580,11 +676,13 @@ function RecordedDailyLogView({
   data,
   disabled,
   onDeleteDay,
+  onSetDayMode,
 }: {
   readonly canDeleteDay: boolean;
   readonly data: RecordedDailyLogViewData;
   readonly disabled: boolean;
   readonly onDeleteDay: () => void;
+  readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
 }) {
   const mealOptions = [...data.day.selectedPlan.meals].sort(
     (left, right) => left.position - right.position
@@ -594,6 +692,7 @@ function RecordedDailyLogView({
     mealEntries: data.mealEntries,
   }).totals;
   const dateKey = data.day.dailyLog.dateKey;
+  const isFasting = data.day.dailyLog.mode === "fasting";
 
   return (
     <View style={styles.screen}>
@@ -604,9 +703,12 @@ function RecordedDailyLogView({
         scrollProps={{
           contentInsetAdjustmentBehavior: "never",
         }}
-        style={styles.headerSafeArea}
+        style={[
+          styles.headerSafeArea,
+          isFasting ? styles.fastingHeaderSafeArea : null,
+        ]}
       >
-        <DayNavigationHeader dateKey={dateKey} />
+        <DayNavigationHeader dateKey={dateKey} isFasting={isFasting} />
 
         <DailyProgress day={data.day} nutrients={nutrients} />
 
@@ -668,9 +770,58 @@ function RecordedDailyLogView({
             />
           ))}
         </View>
+
+        <DayModeAction
+          disabled={disabled}
+          mode={data.day.dailyLog.mode}
+          onSetDayMode={onSetDayMode}
+        />
       </AppScreen>
 
       <DayBottomActionBar dateKey={dateKey} />
+    </View>
+  );
+}
+
+function DayModeAction({
+  disabled,
+  mode,
+  onSetDayMode,
+}: {
+  readonly disabled: boolean;
+  readonly mode: Domain.DailyLogMode;
+  readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
+}) {
+  const isFasting = mode === "fasting";
+  const nextMode = isFasting ? "eating" : "fasting";
+
+  return (
+    <View style={styles.dayModeAction}>
+      <Button
+        disabled={disabled}
+        icon={isFasting ? Utensils : Moon}
+        loading={disabled}
+        onPress={() => {
+          Alert.alert(
+            isFasting ? "Count this day again?" : "Mark as a fasting day?",
+            isFasting
+              ? "All meals and entries on this day will be included in nutrition averages, trends, and insights again."
+              : "You can keep adding and editing meals. The entire day, including any logged food, will be excluded from nutrition averages, trends, and insights.",
+            [
+              { style: "cancel", text: "Cancel" },
+              {
+                onPress: () => {
+                  onSetDayMode(nextMode);
+                },
+                text: isFasting ? "Count day" : "Mark fasting",
+              },
+            ]
+          );
+        }}
+        variant="secondary"
+      >
+        {isFasting ? "Count in insights" : "Mark as fasting"}
+      </Button>
     </View>
   );
 }
@@ -724,7 +875,7 @@ function UnrecordedDailyLogView({
         }}
         style={styles.headerSafeArea}
       >
-        <DayNavigationHeader dateKey={dateKey} />
+        <DayNavigationHeader dateKey={dateKey} isFasting={false} />
 
         <View style={styles.dayPrimaryActions}>
           <Pressable
@@ -795,8 +946,10 @@ function UnrecordedDailyLogView({
 
 function DayNavigationHeader({
   dateKey,
+  isFasting,
 }: {
   readonly dateKey: Domain.DateKey;
+  readonly isFasting: boolean;
 }) {
   const previousDateKey = shiftDateKey({
     dateKey,
@@ -877,7 +1030,7 @@ function DayNavigationHeader({
         />
       }
       shadow
-      style={styles.dayHeader}
+      style={[styles.dayHeader, isFasting ? styles.fastingHeader : null]}
       trailing={
         <HeaderIconButton
           accessibilityLabel="Next day"
@@ -1704,6 +1857,12 @@ const styles = StyleSheet.create({
   headerSafeArea: {
     backgroundColor: color.primary,
   },
+  fastingHeaderSafeArea: {
+    backgroundColor: color.safeBorder,
+  },
+  fastingHeader: {
+    backgroundColor: color.safeBorder,
+  },
   unrecordedBody: {
     gap: spacing.lg,
     paddingTop: spacing.lg,
@@ -1732,6 +1891,9 @@ const styles = StyleSheet.create({
   },
   emptyDayDeleteButton: {
     width: "100%",
+  },
+  dayModeAction: {
+    marginTop: spacing.xl,
   },
   centeredContent: {
     justifyContent: "center",

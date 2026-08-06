@@ -257,6 +257,14 @@ class MaiBackupSourceV7 extends Schema.Class<MaiBackupSourceV7>(
   exportedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+class MaiBackupSourceV8 extends Schema.Class<MaiBackupSourceV8>(
+  "MaiBackupSourceV8"
+)({
+  databaseName: Schema.Literal(DatabaseName),
+  databaseVersion: Schema.Literal(8),
+  exportedAt: Schema.DateTimeUtcFromMillis,
+}) {}
+
 class LegacyMaiBackupStores extends Schema.Class<LegacyMaiBackupStores>(
   "LegacyMaiBackupStores"
 )({
@@ -368,6 +376,16 @@ class MaiBackupV1DatabaseVersion7 extends Schema.Class<MaiBackupV1DatabaseVersio
   stores: MaiBackupImportStoresV7,
 }) {}
 
+class MaiBackupV1DatabaseVersion8 extends Schema.Class<MaiBackupV1DatabaseVersion8>(
+  "MaiBackupV1DatabaseVersion8"
+)({
+  format: MaiBackupFormat,
+  formatVersion: MaiBackupFormatVersion,
+  integrity: MaiBackupIntegrity,
+  source: MaiBackupSourceV8,
+  stores: MaiBackupStores,
+}) {}
+
 export type MaiBackup = typeof MaiBackupV1.Type;
 
 export type MaiBackupEncoded = typeof MaiBackupV1.Encoded;
@@ -382,6 +400,7 @@ export const MaiBackupImportV1 = Schema.Union([
   LegacyMaiBackupV1DatabaseVersion5,
   LegacyMaiBackupV1DatabaseVersion6,
   MaiBackupV1DatabaseVersion7,
+  MaiBackupV1DatabaseVersion8,
   MaiBackupV1,
 ]);
 
@@ -393,12 +412,13 @@ const MaiBackupUnknownJson = Schema.fromJsonString(Schema.Unknown);
 
 const MaiBackupImportVersionProbe = Schema.Struct({
   source: Schema.Struct({
-    databaseVersion: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8]),
+    databaseVersion: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9]),
   }),
 });
 
 const isMaiBackupImportV7 = Schema.is(MaiBackupV1DatabaseVersion7);
-const isMaiBackupImportV8 = Schema.is(MaiBackupV1);
+const isMaiBackupImportV8 = Schema.is(MaiBackupV1DatabaseVersion8);
+const isMaiBackupImportV9 = Schema.is(MaiBackupV1);
 
 const isLegacyMaiBackupImportV1 = Schema.is(LegacyMaiBackupV1DatabaseVersion1);
 const isLegacyMaiBackupImportV2 = Schema.is(LegacyMaiBackupV1DatabaseVersion2);
@@ -576,7 +596,26 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       Match.when(isMaiBackupImportV7, (backup) =>
         _migrateModernBackup({ backup, foods: backup.stores.foods })
       ),
-      Match.when(isMaiBackupImportV8, (backup) => Effect.succeed(backup)),
+      Match.when(isMaiBackupImportV8, (backup) =>
+        Effect.gen(function* () {
+          const stores = yield* Schema.encodeEffect(MaiBackupStores)(
+            backup.stores
+          );
+
+          return yield* Schema.decodeEffect(MaiBackupV1)({
+            format: backup.format,
+            formatVersion: backup.formatVersion,
+            integrity: backup.integrity,
+            source: {
+              databaseName: backup.source.databaseName,
+              databaseVersion: CurrentDatabaseVersion,
+              exportedAt: DateTime.toEpochMillis(backup.source.exportedAt),
+            },
+            stores,
+          });
+        })
+      ),
+      Match.when(isMaiBackupImportV9, (backup) => Effect.succeed(backup)),
       Match.exhaustive
     );
   }
@@ -1256,6 +1295,9 @@ export class Backups extends Context.Service<Backups>()("Backups", {
             Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion7)(rawBackup)
           ),
           Match.when(8, () =>
+            Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion8)(rawBackup)
+          ),
+          Match.when(9, () =>
             Schema.decodeUnknownEffect(MaiBackupV1)(rawBackup)
           ),
           Match.exhaustive

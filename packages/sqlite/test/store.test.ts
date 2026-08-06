@@ -102,6 +102,7 @@ describe("SqliteNutritionStore", () => {
     assert.equal(result.bodyWeightEntries[0]?.weightKilograms, 82.4);
     assert.equal(result.count, 1);
     assert.equal(result.dailyLogsByRange[0]?.dateKey, "2026-06-20");
+    assert.equal(result.dailyLogsByRange[0]?.mode, "fasting");
     assert.deepEqual(result.emptyFoodsByIds, []);
     const persistedFood = result.foods.find(
       (food) =>
@@ -791,7 +792,7 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":8', '"databaseVersion":4')
+          .replace('"databaseVersion":9', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
           .replace('"bodyWeightEntries":[],', "")
           .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")
@@ -951,6 +952,7 @@ const testPlanWithRemovedMeal = Schema.decodeEffect(Domain.Plan)({
 const testDailyLog = Schema.decodeEffect(Domain.DailyLog)({
   createdAt: 0,
   dateKey: "2026-06-20",
+  mode: "fasting",
   planId: "9535a059-a61f-42e1-a2e0-35ec87203c25",
   updatedAt: 0,
 });

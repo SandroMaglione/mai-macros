@@ -1,5 +1,6 @@
 import {
   DailyLog,
+  DailyLogMode,
   DateKey,
   PlanId,
   type ActiveMealPlanSelectionId,
@@ -32,11 +33,18 @@ const _RemoveDayInput = Schema.Struct({
   dateKey: DateKey,
 });
 
+const _SetDayModeInput = Schema.Struct({
+  dateKey: DateKey,
+  mode: DailyLogMode,
+});
+
 export type OpenDayInput = typeof _OpenDayInput.Encoded;
 
 export type ChangeDayPlanInput = typeof _ChangeDayPlanInput.Encoded;
 
 export type RemoveDayInput = typeof _RemoveDayInput.Encoded;
+
+export type SetDayModeInput = typeof _SetDayModeInput.Encoded;
 
 export class OpenedDay extends Data.TaggedClass("OpenedDay")<{
   readonly dailyLog: DailyLog;
@@ -56,6 +64,10 @@ export class ChangedDayPlan extends Data.TaggedClass("ChangedDayPlan")<{
   readonly dailyLog: DailyLog;
   readonly plans: readonly Plan[];
   readonly selectedPlan: Plan;
+}> {}
+
+export class ChangedDayMode extends Data.TaggedClass("ChangedDayMode")<{
+  readonly dailyLog: DailyLog;
 }> {}
 
 export class RemovedDay extends Data.TaggedClass("RemovedDay")<{
@@ -302,6 +314,45 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
             dateKey: day.dateKey,
             planId: day.selectedPlan.id,
           },
+        });
+      }),
+
+      setMode: Effect.fn("DailyLogs.setMode")(function* ({
+        input,
+      }: {
+        readonly input: SetDayModeInput;
+      }) {
+        const decodedInput =
+          yield* Schema.decodeEffect(_SetDayModeInput)(input);
+        const dailyLogs = yield* store.findDailyLogByDateKey(
+          decodedInput.dateKey
+        );
+        const dailyLog = yield* Array.head(dailyLogs).pipe(
+          Option.match({
+            onNone: () =>
+              new DailyLogNotFound({
+                dateKey: decodedInput.dateKey,
+              }),
+            onSome: Effect.succeed,
+          })
+        );
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const updatedDailyLog = yield* Schema.encodeEffect(DailyLog)(
+          dailyLog
+        ).pipe(
+          Effect.flatMap((encodedDailyLog) =>
+            Schema.decodeEffect(DailyLog)({
+              ...encodedDailyLog,
+              mode: decodedInput.mode,
+              updatedAt: now,
+            })
+          )
+        );
+
+        yield* store.upsertDailyLog(updatedDailyLog);
+
+        return new ChangedDayMode({
+          dailyLog: updatedDailyLog,
         });
       }),
 
