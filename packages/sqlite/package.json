@@ -13,13 +13,13 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@effect/sql-sqlite-react-native": "4.0.0-beta.78",
+    "@effect/sql-sqlite-react-native": "4.0.0-rc.111",
     "@mai/event-tracking": "workspace:^",
     "@mai/nutrition": "workspace:^",
-    "effect": "4.0.0-beta.84"
+    "effect": "4.0.0-rc.111"
   },
   "devDependencies": {
-    "@effect/sql-sqlite-node": "4.0.0-beta.78",
+    "@effect/sql-sqlite-node": "4.0.0-rc.111",
     "vitest": "^4.0.8"
   }
 }

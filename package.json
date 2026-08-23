@@ -15,7 +15,7 @@
     "verify": "pnpm run format && pnpm run typecheck && pnpm run lint:all && pnpm run lint:types"
   },
   "devDependencies": {
-    "@effect/language-service": "^0.86.2",
+    "@effect/language-service": "^0.87.2",
     "@mai/oxc": "workspace:^",
     "@mai/typed-lint": "workspace:^",
     "@types/node": "latest",
