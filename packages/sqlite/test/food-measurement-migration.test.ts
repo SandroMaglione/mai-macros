@@ -311,6 +311,7 @@ describe("food measurement SQLite migration", () => {
       { id: 5, name: "food-prices" },
       { id: 6, name: "event-tracking" },
       { id: 7, name: "fasting-days" },
+      { id: 8, name: "not-recorded-days" },
     ]);
     assert.deepStrictEqual(result.firstStartup.food, {
       brand: "Legacy brand",

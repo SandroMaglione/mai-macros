@@ -117,7 +117,7 @@ const _encodedBackup = ({
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 9,
+      databaseVersion: 10,
       exportedAt: 300,
     },
     stores,
@@ -226,10 +226,10 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.exported.backup.source.databaseVersion, 9);
+    assert.equal(result.exported.backup.source.databaseVersion, 10);
     assert.equal(result.exported.backup.integrity.counts.recordableEvents, 1);
     assert.equal(result.exported.backup.integrity.counts.recordedEvents, 1);
-    assert.equal(result.imported.backup.source.databaseVersion, 9);
+    assert.equal(result.imported.backup.source.databaseVersion, 10);
     assert.equal(result.stores.recordableEvents[0]?.name, "Water");
     assert.equal(result.stores.recordableEvents[0]?.emoji, "💧");
     assert.equal(
@@ -239,7 +239,7 @@ describe("backup database version 9", () => {
     assert.equal(result.stores.recordedEvents[0]?.dateKey, "2026-07-31");
   });
 
-  it("round-trips fasting day modes", async () => {
+  it("round-trips excluded day modes", async () => {
     const testContext = _makeTestContext();
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -252,11 +252,20 @@ describe("backup database version 9", () => {
           planId,
           updatedAt: 100,
         });
+        const notRecordedDailyLog = yield* Schema.decodeEffect(Domain.DailyLog)(
+          {
+            createdAt: 200,
+            dateKey: "2026-08-01",
+            mode: "not-recorded",
+            planId,
+            updatedAt: 200,
+          }
+        );
         const plan = yield* Schema.decodeEffect(Domain.Plan)(encodedPlan);
 
         yield* store.replaceStores({
           ...emptyStores,
-          dailyLogs: [dailyLog],
+          dailyLogs: [dailyLog, notRecordedDailyLog],
           plans: [plan],
         });
         const exported = yield* backups.exportToJson();
@@ -269,8 +278,9 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.imported.backup.source.databaseVersion, 9);
+    assert.equal(result.imported.backup.source.databaseVersion, 10);
     assert.equal(result.stores.dailyLogs[0]?.mode, "fasting");
+    assert.equal(result.stores.dailyLogs[1]?.mode, "not-recorded");
   });
 
   it("migrates version 8 daily logs to eating mode", async () => {
@@ -304,7 +314,7 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.backup.source.databaseVersion, 9);
+    assert.equal(result.backup.source.databaseVersion, 10);
     assert.equal(result.backup.stores.dailyLogs[0]?.mode, "eating");
     assert.equal(testContext.readStores().dailyLogs[0]?.mode, "eating");
   });
@@ -347,7 +357,7 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.backup.source.databaseVersion, 9);
+    assert.equal(result.backup.source.databaseVersion, 10);
     assert.deepEqual(result.backup.stores.recordableEvents, []);
     assert.deepEqual(result.backup.stores.recordedEvents, []);
     assert.equal(result.backup.integrity.counts.foods, 0);
@@ -394,7 +404,7 @@ describe("backup database version 9", () => {
         }).pipe(Effect.provide(testContext.layer))
       );
 
-      assert.equal(result.backup.source.databaseVersion, 9);
+      assert.equal(result.backup.source.databaseVersion, 10);
       assert.deepEqual(result.backup.stores.recordableEvents, []);
       assert.deepEqual(result.backup.stores.recordedEvents, []);
     }

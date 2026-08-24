@@ -90,8 +90,8 @@ const nutritionTrendMetricMachine = setup({
 const NutritionCalendarDay = Schema.Struct({
   dateKey: Domain.DateKey,
   hasEntries: Schema.Boolean,
-  isFasting: Schema.Boolean,
   isInsideTargetMargin: Schema.Boolean,
+  mode: Domain.DailyLogMode,
 });
 
 const NutritionCalendarInput = Schema.Struct({
@@ -384,6 +384,7 @@ function NutritionTrendChart({
       actual: 0,
       average: 0,
       fastingActual: 0,
+      notRecordedActual: 0,
       target: 0,
     },
   });
@@ -439,7 +440,13 @@ function NutritionTrendChart({
               }}
               padding={{ bottom: 10, left: 44, right: 24, top: 10 }}
               xKey="dayIndex"
-              yKeys={["actual", "average", "fastingActual", "target"]}
+              yKeys={[
+                "actual",
+                "average",
+                "fastingActual",
+                "notRecordedActual",
+                "target",
+              ]}
             >
               {({ chartBounds, points, yScale }) => (
                 <>
@@ -484,6 +491,11 @@ function NutritionTrendChart({
                         points={points.fastingActual}
                         radius={4}
                       />
+                      <Scatter
+                        color={color.notRecordedText}
+                        points={points.notRecordedActual}
+                        radius={4}
+                      />
                     </>
                   ) : (
                     <>
@@ -499,6 +511,13 @@ function NutritionTrendChart({
                         color={color.safeBorder}
                         innerPadding={0.32}
                         points={points.fastingActual}
+                        roundedCorners={{ topLeft: 3, topRight: 3 }}
+                      />
+                      <Bar
+                        chartBounds={chartBounds}
+                        color={color.notRecordedText}
+                        innerPadding={0.32}
+                        points={points.notRecordedActual}
                         roundedCorners={{ topLeft: 3, topRight: 3 }}
                       />
                     </>
@@ -571,6 +590,11 @@ function NutritionTrendChart({
                 />
               )}
               <ChartLegendItem color={color.textMuted} label="Target" />
+              <ChartLegendItem color={color.safeBorder} label="Fasting" />
+              <ChartLegendItem
+                color={color.notRecordedText}
+                label="Not recorded"
+              />
             </View>
           </View>
         </View>
@@ -773,6 +797,7 @@ function NutritionCalendar({
             <CalendarLegendItem label="Outside targets" status="outside" />
             <CalendarLegendItem label="Empty day" status="empty" />
             <CalendarLegendItem label="Fasting day" status="fasting" />
+            <CalendarLegendItem label="Not recorded" status="notRecorded" />
           </View>
         </View>
       )}
@@ -780,7 +805,13 @@ function NutritionCalendar({
   );
 }
 
-type CalendarStatus = "empty" | "fasting" | "inside" | "none" | "outside";
+type CalendarStatus =
+  | "empty"
+  | "fasting"
+  | "inside"
+  | "none"
+  | "notRecorded"
+  | "outside";
 
 function CalendarLegendItem({
   label,
@@ -806,6 +837,9 @@ const calendarStatusStyles = StyleSheet.create({
   },
   inside: {
     backgroundColor: color.successText,
+  },
+  notRecorded: {
+    backgroundColor: color.notRecordedText,
   },
   outside: {
     backgroundColor: color.warningText,
@@ -899,13 +933,15 @@ const CalendarMonthModel = {
         const status: CalendarStatus =
           !isCurrentMonth || day === undefined
             ? "none"
-            : day.isFasting
+            : day.mode === "fasting"
               ? "fasting"
-              : !day.hasEntries
-                ? "empty"
-                : day.isInsideTargetMargin
-                  ? "inside"
-                  : "outside";
+              : day.mode === "not-recorded"
+                ? "notRecorded"
+                : !day.hasEntries
+                  ? "empty"
+                  : day.isInsideTargetMargin
+                    ? "inside"
+                    : "outside";
         const fullDateLabel =
           calendarAccessibilityDateFormatter.format(cellDate);
         const statusLabel = {
@@ -913,6 +949,8 @@ const CalendarMonthModel = {
           fasting: "fasting day, excluded from nutrition averages and insights",
           inside: "inside nutrition targets",
           none: "no nutrition log",
+          notRecorded:
+            "not recorded day, excluded from nutrition averages and insights",
           outside: "outside nutrition targets",
         } satisfies Record<CalendarStatus, string>;
 
@@ -1069,9 +1107,10 @@ const NutritionChartDataModel = {
     let windowTotal = 0;
     let windowDayCount = 0;
     const data = dayValues.map(({ rawActual, day, dayIndex }) => {
-      const isFasting = day.dailyLog.mode === "fasting";
+      const mode = day.dailyLog.mode;
+      const isCounted = mode === "eating";
 
-      if (!isFasting) {
+      if (isCounted) {
         windowTotal += rawActual;
         windowDayCount += 1;
       }
@@ -1086,7 +1125,7 @@ const NutritionChartDataModel = {
           break;
         }
 
-        if (firstWindowDay.day.dailyLog.mode !== "fasting") {
+        if (firstWindowDay.day.dailyLog.mode === "eating") {
           windowTotal -= firstWindowDay.rawActual;
           windowDayCount -= 1;
         }
@@ -1095,9 +1134,11 @@ const NutritionChartDataModel = {
 
       const actual = rawActual;
       const average =
-        isFasting || windowDayCount === 0 ? null : windowTotal / windowDayCount;
+        !isCounted || windowDayCount === 0
+          ? null
+          : windowTotal / windowDayCount;
       const targetStatus =
-        nutrientName === "costEur" || isFasting
+        nutrientName === "costEur" || !isCounted
           ? undefined
           : day.targetStatuses.find(
               (status) => status.nutrientName === nutrientName
@@ -1113,12 +1154,16 @@ const NutritionChartDataModel = {
         average,
         dateKey: day.dateKey,
         dayIndex,
-        fastingActual: isFasting ? rawActual : null,
+        fastingActual: mode === "fasting" ? rawActual : null,
+        notRecordedActual: mode === "not-recorded" ? rawActual : null,
         target,
         targetSemantics: targetStatus?.semantics ?? null,
-        tooltipPrimary: isFasting
-          ? `${_formatShortDate({ dateKey: day.dateKey })} · Fasting day`
-          : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}`,
+        tooltipPrimary:
+          mode === "fasting"
+            ? `${_formatShortDate({ dateKey: day.dateKey })} · Fasting day`
+            : mode === "not-recorded"
+              ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
+              : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}`,
         tooltipSecondary:
           average === null
             ? "Excluded from averages"
@@ -1219,7 +1264,6 @@ function _calendarDaysFromReport({
   return report.days.map((day) => ({
     dateKey: day.dateKey,
     hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
-    isFasting: day.dailyLog.mode === "fasting",
     isInsideTargetMargin:
       Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
       day.targetStatuses.every((status) =>
@@ -1229,6 +1273,7 @@ function _calendarDaysFromReport({
           target: status.amount,
         })
       ),
+    mode: day.dailyLog.mode,
   }));
 }
 

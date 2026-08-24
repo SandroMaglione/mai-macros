@@ -80,8 +80,8 @@ describe("fasting days SQLite migration", () => {
       }
     );
     assert.deepEqual(result.migrations.at(-1), {
-      id: 7,
-      name: "fasting-days",
+      id: 8,
+      name: "not-recorded-days",
     });
   });
 

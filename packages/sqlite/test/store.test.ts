@@ -792,7 +792,7 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":9', '"databaseVersion":4')
+          .replace('"databaseVersion":10', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
           .replace('"bodyWeightEntries":[],', "")
           .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")

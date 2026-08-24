@@ -187,7 +187,24 @@ export function RangeSummary({
   );
   const countedDays = NutritionReports.countedNutritionDays({ report });
   const dayCount = countedDays.length;
-  const fastingDayCount = report.days.length - dayCount;
+  const fastingDayCount = report.days.filter(
+    (day) => day.dailyLog.mode === "fasting"
+  ).length;
+  const notRecordedDayCount = report.days.filter(
+    (day) => day.dailyLog.mode === "not-recorded"
+  ).length;
+  const excludedDayDescriptions = [
+    ...(fastingDayCount === 0
+      ? []
+      : [
+          `${fastingDayCount} fasting ${fastingDayCount === 1 ? "day" : "days"}`,
+        ]),
+    ...(notRecordedDayCount === 0
+      ? []
+      : [
+          `${notRecordedDayCount} ${notRecordedDayCount === 1 ? "day" : "days"} marked not recorded`,
+        ]),
+  ];
   const entries = countedDays.flatMap((day) => day.entries);
   const totalQuantityGrams = entries.reduce(
     (total, entry) =>
@@ -349,7 +366,7 @@ export function RangeSummary({
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle={`Average daily intake across ${dayCount} counted days in the selected ${rangeDayCount}-day period${fastingDayCount === 0 ? "" : `; ${fastingDayCount} fasting ${fastingDayCount === 1 ? "day was" : "days were"} excluded`}, compared with daily targets when available.`}
+          subtitle={`Average daily intake across ${dayCount} counted days in the selected ${rangeDayCount}-day period${Array.isReadonlyArrayNonEmpty(excludedDayDescriptions) ? `, excluding ${excludedDayDescriptions.join(" and ")}` : ""}, compared with daily targets when available.`}
           title="Counted-day average"
         />
         <View style={styles.nutrientGrid}>

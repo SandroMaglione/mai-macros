@@ -28,6 +28,7 @@ import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
   Apple,
+  Ban,
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
@@ -74,6 +75,60 @@ const DailyLogViewData = Schema.Union([
 export type DailyLogViewData = typeof DailyLogViewData.Type;
 
 type MacroDisplayMode = "consumed" | "remaining";
+
+const dayModeOptions = [
+  {
+    description: "Included in averages, trends, and insights.",
+    icon: Utensils,
+    label: "Active",
+    mode: "eating",
+  },
+  {
+    description: "Excluded and identified as an intentional fast.",
+    icon: Moon,
+    label: "Fasting",
+    mode: "fasting",
+  },
+  {
+    description: "Excluded and identified as missing or incomplete tracking.",
+    icon: Ban,
+    label: "Not recorded",
+    mode: "not-recorded",
+  },
+] as const satisfies readonly {
+  readonly description: string;
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly mode: Domain.DailyLogMode;
+}[];
+
+const dayModeConfirmationCopy = {
+  eating: {
+    action: "Count day",
+    message:
+      "All meals and entries on this day will be included in nutrition averages, trends, and insights.",
+    title: "Count this day?",
+  },
+  fasting: {
+    action: "Mark fasting",
+    message:
+      "You can keep adding and editing meals. The entire day, including any logged food, will be excluded from nutrition averages, trends, and insights.",
+    title: "Mark as a fasting day?",
+  },
+  "not-recorded": {
+    action: "Mark not recorded",
+    message:
+      "You can keep adding and editing meals. The entire day, including any logged food, will be excluded from nutrition averages, trends, and insights as missing or incomplete tracking.",
+    title: "Mark as not recorded?",
+  },
+} satisfies Record<
+  Domain.DailyLogMode,
+  {
+    readonly action: string;
+    readonly message: string;
+    readonly title: string;
+  }
+>;
 
 const LoadDailyLogResult = Schema.Union([
   Schema.TaggedStruct("Ready", {
@@ -692,7 +747,7 @@ function RecordedDailyLogView({
     mealEntries: data.mealEntries,
   }).totals;
   const dateKey = data.day.dailyLog.dateKey;
-  const isFasting = data.day.dailyLog.mode === "fasting";
+  const dayMode = data.day.dailyLog.mode;
 
   return (
     <View style={styles.screen}>
@@ -705,10 +760,11 @@ function RecordedDailyLogView({
         }}
         style={[
           styles.headerSafeArea,
-          isFasting ? styles.fastingHeaderSafeArea : null,
+          dayMode === "fasting" ? styles.fastingHeaderSafeArea : null,
+          dayMode === "not-recorded" ? styles.notRecordedHeaderSafeArea : null,
         ]}
       >
-        <DayNavigationHeader dateKey={dateKey} isFasting={isFasting} />
+        <DayNavigationHeader dateKey={dateKey} mode={dayMode} />
 
         <DailyProgress day={data.day} nutrients={nutrients} />
 
@@ -792,36 +848,80 @@ function DayModeAction({
   readonly mode: Domain.DailyLogMode;
   readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
 }) {
-  const isFasting = mode === "fasting";
-  const nextMode = isFasting ? "eating" : "fasting";
-
   return (
     <View style={styles.dayModeAction}>
-      <Button
-        disabled={disabled}
-        icon={isFasting ? Utensils : Moon}
-        loading={disabled}
-        onPress={() => {
-          Alert.alert(
-            isFasting ? "Count this day again?" : "Mark as a fasting day?",
-            isFasting
-              ? "All meals and entries on this day will be included in nutrition averages, trends, and insights again."
-              : "You can keep adding and editing meals. The entire day, including any logged food, will be excluded from nutrition averages, trends, and insights.",
-            [
-              { style: "cancel", text: "Cancel" },
-              {
-                onPress: () => {
-                  onSetDayMode(nextMode);
-                },
-                text: isFasting ? "Count day" : "Mark fasting",
-              },
-            ]
+      <Text style={styles.dayModeTitle}>Day mode</Text>
+      <View accessibilityRole="radiogroup" style={styles.dayModeOptions}>
+        {dayModeOptions.map((option) => {
+          const selected = option.mode === mode;
+          const OptionIcon = option.icon;
+          const selectedStyle =
+            option.mode === "eating"
+              ? styles.dayModeOptionSelectedEating
+              : option.mode === "fasting"
+                ? styles.dayModeOptionSelectedFasting
+                : styles.dayModeOptionSelectedNotRecorded;
+          const selectedColor =
+            option.mode === "eating"
+              ? color.primary
+              : option.mode === "fasting"
+                ? color.safeText
+                : color.notRecordedText;
+
+          return (
+            <Pressable
+              accessibilityLabel={`${option.label}. ${option.description}`}
+              accessibilityRole="radio"
+              accessibilityState={{ disabled, selected }}
+              disabled={disabled}
+              key={option.mode}
+              onPress={() => {
+                if (selected) return;
+
+                const confirmation = dayModeConfirmationCopy[option.mode];
+                Alert.alert(confirmation.title, confirmation.message, [
+                  { style: "cancel", text: "Cancel" },
+                  {
+                    onPress: () => {
+                      onSetDayMode(option.mode);
+                    },
+                    text: confirmation.action,
+                  },
+                ]);
+              }}
+              style={({ pressed }) => [
+                styles.dayModeOption,
+                selected ? selectedStyle : null,
+                pressed ? styles.pressed : null,
+                disabled ? styles.dayModeOptionDisabled : null,
+              ]}
+            >
+              <OptionIcon
+                color={selected ? selectedColor : color.textMuted}
+                size={20}
+                strokeWidth={2.5}
+              />
+              <View style={styles.dayModeOptionCopy}>
+                <Text style={styles.dayModeOptionLabel}>{option.label}</Text>
+                <Text style={styles.dayModeOptionDescription}>
+                  {option.description}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.dayModeIndicator,
+                  selected
+                    ? {
+                        backgroundColor: selectedColor,
+                        borderColor: selectedColor,
+                      }
+                    : null,
+                ]}
+              />
+            </Pressable>
           );
-        }}
-        variant="secondary"
-      >
-        {isFasting ? "Count in insights" : "Mark as fasting"}
-      </Button>
+        })}
+      </View>
     </View>
   );
 }
@@ -875,7 +975,7 @@ function UnrecordedDailyLogView({
         }}
         style={styles.headerSafeArea}
       >
-        <DayNavigationHeader dateKey={dateKey} isFasting={false} />
+        <DayNavigationHeader dateKey={dateKey} mode="eating" />
 
         <View style={styles.dayPrimaryActions}>
           <Pressable
@@ -946,10 +1046,10 @@ function UnrecordedDailyLogView({
 
 function DayNavigationHeader({
   dateKey,
-  isFasting,
+  mode,
 }: {
   readonly dateKey: Domain.DateKey;
-  readonly isFasting: boolean;
+  readonly mode: Domain.DailyLogMode;
 }) {
   const previousDateKey = shiftDateKey({
     dateKey,
@@ -1030,7 +1130,11 @@ function DayNavigationHeader({
         />
       }
       shadow
-      style={[styles.dayHeader, isFasting ? styles.fastingHeader : null]}
+      style={[
+        styles.dayHeader,
+        mode === "fasting" ? styles.fastingHeader : null,
+        mode === "not-recorded" ? styles.notRecordedHeader : null,
+      ]}
       trailing={
         <HeaderIconButton
           accessibilityLabel="Next day"
@@ -1863,6 +1967,12 @@ const styles = StyleSheet.create({
   fastingHeader: {
     backgroundColor: color.safeBorder,
   },
+  notRecordedHeaderSafeArea: {
+    backgroundColor: color.notRecordedBorder,
+  },
+  notRecordedHeader: {
+    backgroundColor: color.notRecordedBorder,
+  },
   unrecordedBody: {
     gap: spacing.lg,
     paddingTop: spacing.lg,
@@ -1893,7 +2003,68 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   dayModeAction: {
+    gap: spacing.sm,
     marginTop: spacing.xl,
+  },
+  dayModeTitle: {
+    color: color.text,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  dayModeOptions: {
+    gap: spacing.sm,
+  },
+  dayModeOption: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderColor: color.divider,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    backgroundColor: color.surfaceRaised,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  dayModeOptionSelectedEating: {
+    borderColor: color.primary,
+    backgroundColor: color.primarySoft,
+  },
+  dayModeOptionSelectedFasting: {
+    borderColor: color.safeBorder,
+    backgroundColor: color.safeBg,
+  },
+  dayModeOptionSelectedNotRecorded: {
+    borderColor: color.notRecordedBorder,
+    backgroundColor: color.notRecordedBg,
+  },
+  dayModeOptionDisabled: {
+    opacity: 0.58,
+  },
+  dayModeOptionCopy: {
+    minWidth: 0,
+    flex: 1,
+    gap: spacing.xxs,
+  },
+  dayModeOptionLabel: {
+    color: color.text,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  dayModeOptionDescription: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  dayModeIndicator: {
+    width: 14,
+    height: 14,
+    borderColor: color.fieldBorder,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    backgroundColor: color.field,
   },
   centeredContent: {
     justifyContent: "center",

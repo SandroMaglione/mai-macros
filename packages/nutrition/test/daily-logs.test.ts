@@ -356,7 +356,7 @@ describe("DailyLogs", () => {
           const changed = yield* dailyLogs.setMode({
             input: {
               dateKey: dailyLog.dateKey,
-              mode: "fasting",
+              mode: "not-recorded",
             },
           });
 
@@ -379,8 +379,8 @@ describe("DailyLogs", () => {
       })
     );
 
-    assert.equal(result.changed.dailyLog.mode, "fasting");
-    assert.equal(result.stores.dailyLogs[0]?.mode, "fasting");
+    assert.equal(result.changed.dailyLog.mode, "not-recorded");
+    assert.equal(result.stores.dailyLogs[0]?.mode, "not-recorded");
     assert.equal(result.stores.mealEntries.length, 1);
     assert.equal(
       result.stores.mealEntries[0]?.id,

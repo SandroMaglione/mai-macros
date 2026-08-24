@@ -262,7 +262,11 @@ export class Plan extends Schema.Class<Plan>("Plan")({
   createdAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
-export const DailyLogMode = Schema.Literals(["eating", "fasting"]);
+export const DailyLogMode = Schema.Literals([
+  "eating",
+  "fasting",
+  "not-recorded",
+]);
 
 export type DailyLogMode = typeof DailyLogMode.Type;
 

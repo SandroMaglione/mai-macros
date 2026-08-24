@@ -107,7 +107,7 @@ describe("NutritionReports", () => {
     assert.equal(day?.totals.energyKcal, 0);
   });
 
-  it("keeps fasting logs in the range but excludes them from counted days", async () => {
+  it("keeps excluded-mode logs in the range but only counts eating days", async () => {
     const program = Effect.gen(function* () {
       const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
       const food = yield* Schema.decodeEffect(Domain.Food)(foodInput);
@@ -121,6 +121,13 @@ describe("NutritionReports", () => {
         createdAt: 0,
         dateKey: "2026-06-21",
         mode: "fasting",
+        planId: plan.id,
+        updatedAt: 0,
+      });
+      const thirdDailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+        createdAt: 0,
+        dateKey: "2026-06-20",
+        mode: "not-recorded",
         planId: plan.id,
         updatedAt: 0,
       });
@@ -154,11 +161,31 @@ describe("NutritionReports", () => {
         nutritionMultiplier: 1,
         updatedAt: 0,
       });
+      const notRecordedMealEntry = yield* Schema.decodeEffect(Domain.MealEntry)(
+        {
+          createdAt: 0,
+          dateKey: thirdDailyLog.dateKey,
+          foodId: food.id,
+          id: "9535a059-a61f-42e1-a2e0-35ec87203c24",
+          mealId: "9535a059-a61f-42e1-a2e0-35ec87203c25:lunch",
+          quantity: {
+            _tag: "MeasuredFoodQuantity",
+            amount: 100,
+            unit: "g",
+          },
+          nutritionMultiplier: 1,
+          updatedAt: 0,
+        }
+      );
       const stores: Store.NutritionStores = {
         ...emptyStores,
-        dailyLogs: [firstDailyLog, secondDailyLog],
+        dailyLogs: [firstDailyLog, secondDailyLog, thirdDailyLog],
         foods: [food],
-        mealEntries: [recordedMealEntry, uncreatedDayMealEntry],
+        mealEntries: [
+          recordedMealEntry,
+          uncreatedDayMealEntry,
+          notRecordedMealEntry,
+        ],
         plans: [plan],
       };
 
@@ -182,14 +209,17 @@ describe("NutritionReports", () => {
 
     assert.deepEqual(
       result.days.map((day) => day.dateKey),
-      ["2026-06-18", "2026-06-21"]
+      ["2026-06-18", "2026-06-20", "2026-06-21"]
     );
-    assert.equal(result.days.length, 2);
+    assert.equal(result.days.length, 3);
     assert.equal(countedDays.length, 1);
-    assert.equal(totalEnergyKcal / countedDays.length, 100);
+    assert.equal(totalEnergyKcal, 200);
+    assert.equal(countedDays[0]?.totals.energyKcal, 100);
     assert.equal(result.days[0]?.entries.length, 1);
-    assert.equal(result.days[1]?.entries.length, 0);
-    assert.equal(result.days[1]?.dailyLog.mode, "fasting");
+    assert.equal(result.days[1]?.entries.length, 1);
+    assert.equal(result.days[1]?.dailyLog.mode, "not-recorded");
+    assert.equal(result.days[2]?.entries.length, 0);
+    assert.equal(result.days[2]?.dailyLog.mode, "fasting");
   });
 });
 
