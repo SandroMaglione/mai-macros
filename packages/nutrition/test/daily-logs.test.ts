@@ -387,6 +387,81 @@ describe("DailyLogs", () => {
       "9535a059-a61f-42e1-a2e0-35ec87203c45"
     );
   });
+
+  it("distinguishes unrecorded water from an explicit zero and can clear it", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const plan = yield* Schema.decodeEffect(Domain.Plan)(planInput);
+        const dailyLog = yield* Schema.decodeEffect(Domain.DailyLog)({
+          createdAt: 0,
+          dateKey: "2026-06-20",
+          planId: plan.id,
+          updatedAt: 0,
+        });
+
+        return yield* Effect.gen(function* () {
+          const dailyLogs = yield* DailyLogs.DailyLogs;
+          const store = yield* Store.NutritionStore;
+          const recorded = yield* dailyLogs.setWaterServings({
+            input: {
+              dateKey: dailyLog.dateKey,
+              waterServings: 8,
+            },
+          });
+          const recordedZero = yield* dailyLogs.setWaterServings({
+            input: {
+              dateKey: dailyLog.dateKey,
+              waterServings: 0,
+            },
+          });
+          const removeZeroOutcome = yield* dailyLogs
+            .remove({ input: { dateKey: dailyLog.dateKey } })
+            .pipe(
+              Effect.catchTag("CannotRemoveLoggedDay", () =>
+                Effect.succeed("CannotRemoveLoggedDay" as const)
+              )
+            );
+          const cleared = yield* dailyLogs.setWaterServings({
+            input: {
+              dateKey: dailyLog.dateKey,
+              waterServings: null,
+            },
+          });
+          const removed = yield* dailyLogs.remove({
+            input: { dateKey: dailyLog.dateKey },
+          });
+
+          return {
+            cleared,
+            initialWaterServings: dailyLog.waterServings,
+            recorded,
+            recordedZero,
+            removeZeroOutcome,
+            removed,
+            stores: yield* store.readStores,
+          };
+        }).pipe(
+          Effect.provide(
+            _dailyLogsTestLayer({
+              stores: {
+                ...emptyStores,
+                dailyLogs: [dailyLog],
+                plans: [plan],
+              },
+            })
+          )
+        );
+      })
+    );
+
+    assert.isNull(result.initialWaterServings);
+    assert.equal(result.recorded.dailyLog.waterServings, 8);
+    assert.equal(result.recordedZero.dailyLog.waterServings, 0);
+    assert.equal(result.removeZeroOutcome, "CannotRemoveLoggedDay");
+    assert.isNull(result.cleared.dailyLog.waterServings);
+    assert.equal(result.removed._tag, "RemovedDay");
+    assert.equal(result.stores.dailyLogs.length, 0);
+  });
 });
 
 function _dailyLogsTestLayer({

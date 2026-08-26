@@ -209,6 +209,7 @@ describe("event tracking SQLite migration", () => {
       { id: 6, name: "event-tracking" },
       { id: 7, name: "fasting-days" },
       { id: 8, name: "not-recorded-days" },
+      { id: 9, name: "daily-water" },
     ]);
     assert.deepStrictEqual(
       result.schemaObjects.map(({ name, type }) => ({ name, type })),
@@ -302,6 +303,7 @@ describe("event tracking SQLite migration", () => {
       { id: 6, name: "event-tracking" },
       { id: 7, name: "fasting-days" },
       { id: 8, name: "not-recorded-days" },
+      { id: 9, name: "daily-water" },
     ]);
   });
 
@@ -464,6 +466,7 @@ describe("event tracking SQLite migration", () => {
       { id: 6, name: "event-tracking" },
       { id: 7, name: "fasting-days" },
       { id: 8, name: "not-recorded-days" },
+      { id: 9, name: "daily-water" },
     ]);
   });
 

@@ -381,6 +381,13 @@ describe("not-recorded days SQLite migration", () => {
         primaryKey: 0,
         type: "TEXT",
       },
+      {
+        defaultValue: "NULL",
+        isNotNull: 0,
+        name: "water_servings",
+        primaryKey: 0,
+        type: "INTEGER",
+      },
     ]);
     assert.deepEqual(result.afterFirstStartup.foreignKeys, [
       {
@@ -396,8 +403,8 @@ describe("not-recorded days SQLite migration", () => {
       { quick_check: "ok" },
     ]);
     assert.deepEqual(result.afterFirstStartup.migrations.at(-1), {
-      id: 8,
-      name: "not-recorded-days",
+      id: 9,
+      name: "daily-water",
     });
     assert.equal(
       result.afterFirstStartup.migrations.filter(({ id }) => id === 8).length,
@@ -471,8 +478,8 @@ describe("not-recorded days SQLite migration", () => {
     assert.deepEqual(result.afterRetry.dailyLogs, result.before.dailyLogs);
     assert.deepEqual(result.afterRetry.mealEntries, result.before.mealEntries);
     assert.deepEqual(result.afterRetry.migrations.at(-1), {
-      id: 8,
-      name: "not-recorded-days",
+      id: 9,
+      name: "daily-water",
     });
     assert.deepEqual(result.afterRetry.foreignKeyViolations, []);
     assert.isTrue(
@@ -544,8 +551,8 @@ describe("not-recorded days SQLite migration", () => {
     assert.deepEqual(result.reopened.foreignKeyViolations, []);
     assert.deepEqual(result.reopened.quickCheck, [{ quick_check: "ok" }]);
     assert.deepEqual(result.reopened.migrations.at(-1), {
-      id: 8,
-      name: "not-recorded-days",
+      id: 9,
+      name: "daily-water",
     });
   });
 });

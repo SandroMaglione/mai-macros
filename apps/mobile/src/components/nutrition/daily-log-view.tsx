@@ -30,8 +30,11 @@ import {
   Apple,
   Ban,
   CalendarCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  Droplet,
   Plus,
   Moon,
   Settings,
@@ -159,6 +162,11 @@ const SetDailyLogModeInput = Schema.Struct({
   mode: Domain.DailyLogMode,
 });
 
+const SetWaterServingsInput = Schema.Struct({
+  dateKey: Domain.DateKey,
+  waterServings: Schema.NullOr(Domain.WaterServingCount),
+});
+
 const macroProgress = [
   {
     color: color.nutritionCarbs,
@@ -201,6 +209,11 @@ const dailyLogRouteMachine = setup({
           mode: Domain.DailyLogMode,
         })
       ),
+      setWaterServings: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          waterServings: Schema.NullOr(Domain.WaterServingCount),
+        })
+      ),
       selectPlan: Schema.toStandardSchemaV1(
         Schema.Struct({
           plan: Domain.Plan,
@@ -217,6 +230,7 @@ const dailyLogRouteMachine = setup({
     Deleting: {},
     Redirected: {},
     UpdatingMode: {},
+    UpdatingWater: {},
   },
   actions: {
     redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
@@ -347,6 +361,21 @@ const dailyLogRouteMachine = setup({
           })
         ),
     }),
+    setWaterServings: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(SetWaterServingsInput),
+        output: Schema.toStandardSchemaV1(Domain.DailyLog),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const dailyLogs = yield* DailyLogs.DailyLogs;
+            const changedDay = yield* dailyLogs.setWaterServings({ input });
+
+            return changedDay.dailyLog;
+          })
+        ),
+    }),
   },
 }).createMachine({
   context: ({ input }) => ({
@@ -410,7 +439,8 @@ const dailyLogRouteMachine = setup({
           if (
             context.data === null ||
             context.data._tag !== "RecordedDay" ||
-            Array.isReadonlyArrayNonEmpty(context.data.mealEntries)
+            Array.isReadonlyArrayNonEmpty(context.data.mealEntries) ||
+            context.data.day.dailyLog.waterServings !== null
           ) {
             return undefined;
           }
@@ -436,6 +466,18 @@ const dailyLogRouteMachine = setup({
 
           return {
             target: "UpdatingMode",
+            context: {
+              message: null,
+            },
+          };
+        },
+        setWaterServings: ({ context }) => {
+          if (context.data === null || context.data._tag !== "RecordedDay") {
+            return undefined;
+          }
+
+          return {
+            target: "UpdatingWater",
             context: {
               message: null,
             },
@@ -563,6 +605,52 @@ const dailyLogRouteMachine = setup({
         },
       },
     },
+    UpdatingWater: {
+      invoke: {
+        src: "setWaterServings",
+        input: ({ context, event }) => {
+          if (
+            context.data === null ||
+            context.data._tag !== "RecordedDay" ||
+            event.type !== "setWaterServings"
+          ) {
+            throw new Error("Cannot change daily water before the day loads.");
+          }
+
+          return {
+            dateKey: context.data.day.dailyLog.dateKey,
+            waterServings: event.waterServings,
+          };
+        },
+        onDone: ({ context, event }) => {
+          if (context.data === null || context.data._tag !== "RecordedDay") {
+            return {
+              target: "Loading" as const,
+            };
+          }
+
+          return {
+            target: "Ready" as const,
+            context: {
+              data: {
+                ...context.data,
+                day: {
+                  ...context.data.day,
+                  dailyLog: event.output,
+                },
+              },
+              message: null,
+            },
+          };
+        },
+        onError: {
+          target: "Ready",
+          context: {
+            message: "Could not update daily water. Please try again.",
+          },
+        },
+      },
+    },
     Redirected: {},
   },
 });
@@ -652,7 +740,8 @@ export function DailyLogRoute({
       disabled={
         routeState === "Creating" ||
         routeState === "Deleting" ||
-        routeState === "UpdatingMode"
+        routeState === "UpdatingMode" ||
+        routeState === "UpdatingWater"
       }
       notice={snapshot.context.message}
       onCreateDay={() => {
@@ -666,6 +755,9 @@ export function DailyLogRoute({
       }}
       onSetDayMode={(mode) => {
         actor.trigger.setDayMode({ mode });
+      }}
+      onSetWaterServings={(waterServings) => {
+        actor.trigger.setWaterServings({ waterServings });
       }}
     />
   );
@@ -697,6 +789,7 @@ export function DailyLogView({
   onDeleteDay,
   onSelectPlan,
   onSetDayMode,
+  onSetWaterServings,
 }: {
   readonly canDeleteDay: boolean;
   readonly data: DailyLogViewData;
@@ -706,6 +799,9 @@ export function DailyLogView({
   readonly onDeleteDay: () => void;
   readonly onSelectPlan: (plan: Domain.Plan) => void;
   readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
+  readonly onSetWaterServings: (
+    waterServings: Domain.WaterServingCount | null
+  ) => void;
 }) {
   return data._tag === "UnrecordedDay" ? (
     <UnrecordedDailyLogView
@@ -722,6 +818,7 @@ export function DailyLogView({
       disabled={disabled}
       onDeleteDay={onDeleteDay}
       onSetDayMode={onSetDayMode}
+      onSetWaterServings={onSetWaterServings}
     />
   );
 }
@@ -732,12 +829,16 @@ function RecordedDailyLogView({
   disabled,
   onDeleteDay,
   onSetDayMode,
+  onSetWaterServings,
 }: {
   readonly canDeleteDay: boolean;
   readonly data: RecordedDailyLogViewData;
   readonly disabled: boolean;
   readonly onDeleteDay: () => void;
   readonly onSetDayMode: (mode: Domain.DailyLogMode) => void;
+  readonly onSetWaterServings: (
+    waterServings: Domain.WaterServingCount | null
+  ) => void;
 }) {
   const mealOptions = [...data.day.selectedPlan.meals].sort(
     (left, right) => left.position - right.position
@@ -827,6 +928,12 @@ function RecordedDailyLogView({
           ))}
         </View>
 
+        <WaterTracker
+          disabled={disabled}
+          onSetWaterServings={onSetWaterServings}
+          waterServings={data.day.dailyLog.waterServings}
+        />
+
         <DayModeAction
           disabled={disabled}
           mode={data.day.dailyLog.mode}
@@ -835,6 +942,163 @@ function RecordedDailyLogView({
       </AppScreen>
 
       <DayBottomActionBar dateKey={dateKey} />
+    </View>
+  );
+}
+
+const waterServingsPerRow = 8;
+
+const waterTrackerDisclosureMachine = setup({
+  schemas: {
+    events: {
+      toggle: Schema.toStandardSchemaV1(EmptyEvent),
+    },
+  },
+  states: {
+    Collapsed: {},
+    Expanded: {},
+  },
+}).createMachine({
+  initial: "Collapsed",
+  states: {
+    Collapsed: {
+      on: {
+        toggle: {
+          target: "Expanded",
+        },
+      },
+    },
+    Expanded: {
+      on: {
+        toggle: {
+          target: "Collapsed",
+        },
+      },
+    },
+  },
+});
+
+function WaterTracker({
+  disabled,
+  onSetWaterServings,
+  waterServings,
+}: {
+  readonly disabled: boolean;
+  readonly onSetWaterServings: (
+    waterServings: Domain.WaterServingCount | null
+  ) => void;
+  readonly waterServings: Domain.WaterServingCount | null;
+}) {
+  const [disclosureSnapshot, , disclosureActor] = useMachine(
+    waterTrackerDisclosureMachine
+  );
+  const isExpanded = disclosureSnapshot.matches("Expanded");
+  const recordedWaterServings = waterServings ?? 0;
+  const visibleDropCount =
+    (Math.floor(recordedWaterServings / waterServingsPerRow) + 1) *
+    waterServingsPerRow;
+  const liters = recordedWaterServings / 4;
+  const toggleColor = waterServings === null ? color.textMuted : color.water;
+
+  return (
+    <View style={styles.waterTracker}>
+      <View style={styles.waterTrackerContent}>
+        <View style={styles.waterTrackerHeader}>
+          <View style={styles.waterTrackerCopy}>
+            <Text style={styles.waterTrackerTitle}>Water</Text>
+            <Text style={styles.waterTrackerDescription}>
+              Each drop is 250 ml
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel={`${isExpanded ? "Hide" : "Show"} water controls`}
+            accessibilityRole="button"
+            accessibilityState={{ disabled, expanded: isExpanded }}
+            disabled={disabled}
+            onPress={disclosureActor.trigger.toggle}
+            style={({ pressed }) => [
+              styles.waterTrackerToggle,
+              pressed ? styles.pressed : null,
+              disabled ? styles.waterTrackerToggleDisabled : null,
+            ]}
+          >
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.waterTrackerToggleLabel, { color: toggleColor }]}
+            >
+              {waterServings === null
+                ? "Add"
+                : `${formatNumber({ maximumFractionDigits: 2, value: liters })} L`}
+            </Text>
+            {isExpanded ? (
+              <ChevronUp color={toggleColor} size={18} strokeWidth={2.6} />
+            ) : (
+              <ChevronDown color={toggleColor} size={18} strokeWidth={2.6} />
+            )}
+          </Pressable>
+        </View>
+        {isExpanded ? (
+          <View style={styles.waterDropGrid}>
+            {globalThis.Array.from(
+              { length: visibleDropCount / waterServingsPerRow },
+              (_, rowIndex) => (
+                <View key={rowIndex} style={styles.waterDropRow}>
+                  {globalThis.Array.from(
+                    { length: waterServingsPerRow },
+                    (_, columnIndex) => {
+                      const index =
+                        rowIndex * waterServingsPerRow + columnIndex;
+                      const selected = index < recordedWaterServings;
+                      const nextWaterServings = selected ? index : index + 1;
+                      const nextLiters = nextWaterServings / 4;
+
+                      return (
+                        <Pressable
+                          accessibilityLabel={`${selected ? "Remove water through" : "Add water through"} ${formatNumber({ maximumFractionDigits: 2, value: nextLiters })} liters`}
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled, selected }}
+                          disabled={disabled}
+                          key={columnIndex}
+                          onPress={() => {
+                            Schema.decodeOption(Domain.WaterServingCount)(
+                              nextWaterServings
+                            ).pipe(Option.map(onSetWaterServings));
+                          }}
+                          style={({ pressed }) => [
+                            styles.waterDropButton,
+                            pressed ? styles.pressed : null,
+                            disabled ? styles.waterDropButtonDisabled : null,
+                          ]}
+                        >
+                          <Droplet
+                            color={selected ? color.water : color.textSubtle}
+                            fill={selected ? color.water : "transparent"}
+                            size={30}
+                            strokeWidth={2.4}
+                          />
+                        </Pressable>
+                      );
+                    }
+                  )}
+                </View>
+              )
+            )}
+          </View>
+        ) : null}
+      </View>
+      {isExpanded ? (
+        <Button
+          accessibilityLabel="Clear water recording"
+          disabled={disabled || waterServings === null}
+          onPress={() => {
+            onSetWaterServings(null);
+          }}
+          style={styles.waterTrackerClear}
+          variant="secondary"
+        >
+          Clear water
+        </Button>
+      ) : null}
     </View>
   );
 }
@@ -2001,6 +2265,83 @@ const styles = StyleSheet.create({
   },
   emptyDayDeleteButton: {
     width: "100%",
+  },
+  waterTracker: {
+    overflow: "hidden",
+    marginTop: spacing.xl,
+    borderColor: color.divider,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    backgroundColor: color.surfaceRaised,
+  },
+  waterTrackerContent: {
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  waterTrackerHeader: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  waterTrackerCopy: {
+    minWidth: 0,
+    flex: 1,
+    gap: spacing.xxs,
+  },
+  waterTrackerTitle: {
+    color: color.text,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  waterTrackerDescription: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    lineHeight: tokens.type.lineHeight.xs,
+  },
+  waterTrackerToggle: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: "transparent",
+  },
+  waterTrackerToggleLabel: {
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.black,
+    lineHeight: tokens.type.lineHeight.sm,
+  },
+  waterTrackerToggleDisabled: {
+    opacity: 0.58,
+  },
+  waterTrackerClear: {
+    alignSelf: "stretch",
+    borderRadius: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+  },
+  waterDropGrid: {
+    gap: spacing.xs,
+  },
+  waterDropRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  waterDropButton: {
+    width: "12%",
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  waterDropButtonDisabled: {
+    opacity: 0.58,
   },
   dayModeAction: {
     gap: spacing.sm,

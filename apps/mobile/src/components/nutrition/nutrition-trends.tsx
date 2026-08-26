@@ -41,6 +41,7 @@ const NutritionTrendMetric = Schema.Literals([
   "saturatedFatGrams",
   "saltGrams",
   "costEur",
+  "waterLiters",
 ]);
 
 type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
@@ -268,6 +269,7 @@ const trendMetrics = [
   "saturatedFatGrams",
   "saltGrams",
   "costEur",
+  "waterLiters",
 ] as const satisfies readonly NutritionTrendMetric[];
 
 const metricLabels = {
@@ -280,6 +282,7 @@ const metricLabels = {
   saturatedFatGrams: "Saturated fat",
   sugarGrams: "Sugar",
   costEur: "Food cost",
+  waterLiters: "Water",
 } satisfies Record<NutritionTrendMetric, string>;
 
 const metricAbbreviations = {
@@ -292,6 +295,7 @@ const metricAbbreviations = {
   saturatedFatGrams: "Sat",
   sugarGrams: "Sug",
   costEur: "Cost",
+  waterLiters: "Water",
 } satisfies Record<NutritionTrendMetric, string>;
 
 const metricColors = {
@@ -304,6 +308,7 @@ const metricColors = {
   saturatedFatGrams: color.warningText,
   sugarGrams: color.nutritionSugar,
   costEur: color.safeText,
+  waterLiters: color.water,
 } satisfies Record<NutritionTrendMetric, string>;
 
 const nutritionChartTabs = [
@@ -358,6 +363,7 @@ function NutritionTrendChart({
   const [snapshot, , actor] = useMachine(nutritionTrendMetricMachine);
   const chartKind = snapshot.context.chartKind;
   const nutrientName = snapshot.context.nutrientName;
+  const isWaterMetric = nutrientName === "waterLiters";
   const chart = useMemo(
     () =>
       NutritionChartDataModel.make({
@@ -371,13 +377,17 @@ function NutritionTrendChart({
       ? "kcal"
       : nutrientName === "costEur"
         ? "€"
-        : "g";
+        : isWaterMetric
+          ? "L"
+          : "g";
   const unitLabel =
     nutrientName === "energyKcal"
       ? "Kilocalories"
       : nutrientName === "costEur"
         ? "Euros"
-        : "Grams";
+        : isWaterMetric
+          ? "Liters"
+          : "Grams";
   const { state: pressState, isActive: isPressActive } = useChartPressState({
     x: 0,
     y: {
@@ -404,9 +414,11 @@ function NutritionTrendChart({
         }}
         tabs={nutritionChartTabs}
       />
-      {!Array.isReadonlyArrayNonEmpty(chart.data) ? (
+      {!chart.hasRecordedValues ? (
         <Text style={styles.emptyText}>
-          Record nutrition days to display this trend.
+          {isWaterMetric
+            ? "Record daily water to display this trend."
+            : "Record nutrition days to display this trend."}
         </Text>
       ) : (
         <View
@@ -589,12 +601,16 @@ function NutritionTrendChart({
                   label={unit}
                 />
               )}
-              <ChartLegendItem color={color.textMuted} label="Target" />
-              <ChartLegendItem color={color.safeBorder} label="Fasting" />
-              <ChartLegendItem
-                color={color.notRecordedText}
-                label="Not recorded"
-              />
+              {isWaterMetric ? null : (
+                <>
+                  <ChartLegendItem color={color.textMuted} label="Target" />
+                  <ChartLegendItem color={color.safeBorder} label="Fasting" />
+                  <ChartLegendItem
+                    color={color.notRecordedText}
+                    label="Not recorded"
+                  />
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -1083,7 +1099,9 @@ const NutritionChartDataModel = {
         ? "kcal"
         : nutrientName === "costEur"
           ? "€"
-          : "g";
+          : nutrientName === "waterLiters"
+            ? "L"
+            : "g";
     const dayValues = report.days.map((day) => {
       const [yearString, monthString, dayString] = day.dateKey.split("-");
 
@@ -1091,7 +1109,11 @@ const NutritionChartDataModel = {
         rawActual:
           nutrientName === "costEur"
             ? day.costTotals.costMinorByCurrency.EUR / 100
-            : day.totals[nutrientName],
+            : nutrientName === "waterLiters"
+              ? day.dailyLog.waterServings === null
+                ? null
+                : day.dailyLog.waterServings / 4
+              : day.totals[nutrientName],
         day,
         dayIndex: Math.floor(
           Date.UTC(
@@ -1108,9 +1130,11 @@ const NutritionChartDataModel = {
     let windowDayCount = 0;
     const data = dayValues.map(({ rawActual, day, dayIndex }) => {
       const mode = day.dailyLog.mode;
-      const isCounted = mode === "eating";
+      const isWaterMetric = nutrientName === "waterLiters";
+      const isCounted =
+        rawActual !== null && (isWaterMetric || mode === "eating");
 
-      if (isCounted) {
+      if (isCounted && rawActual !== null) {
         windowTotal += rawActual;
         windowDayCount += 1;
       }
@@ -1125,7 +1149,10 @@ const NutritionChartDataModel = {
           break;
         }
 
-        if (firstWindowDay.day.dailyLog.mode === "eating") {
+        if (
+          firstWindowDay.rawActual !== null &&
+          (isWaterMetric || firstWindowDay.day.dailyLog.mode === "eating")
+        ) {
           windowTotal -= firstWindowDay.rawActual;
           windowDayCount -= 1;
         }
@@ -1138,7 +1165,7 @@ const NutritionChartDataModel = {
           ? null
           : windowTotal / windowDayCount;
       const targetStatus =
-        nutrientName === "costEur" || !isCounted
+        nutrientName === "costEur" || isWaterMetric || !isCounted
           ? undefined
           : day.targetStatuses.find(
               (status) => status.nutrientName === nutrientName
@@ -1154,16 +1181,19 @@ const NutritionChartDataModel = {
         average,
         dateKey: day.dateKey,
         dayIndex,
-        fastingActual: mode === "fasting" ? rawActual : null,
-        notRecordedActual: mode === "not-recorded" ? rawActual : null,
+        fastingActual: !isWaterMetric && mode === "fasting" ? rawActual : null,
+        notRecordedActual:
+          !isWaterMetric && mode === "not-recorded" ? rawActual : null,
         target,
         targetSemantics: targetStatus?.semantics ?? null,
         tooltipPrimary:
-          mode === "fasting"
-            ? `${_formatShortDate({ dateKey: day.dateKey })} · Fasting day`
-            : mode === "not-recorded"
-              ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
-              : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}`,
+          rawActual === null
+            ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
+            : !isWaterMetric && mode === "fasting"
+              ? `${_formatShortDate({ dateKey: day.dateKey })} · Fasting day`
+              : !isWaterMetric && mode === "not-recorded"
+                ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
+                : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}`,
         tooltipSecondary:
           average === null
             ? "Excluded from averages"
@@ -1195,6 +1225,7 @@ const NutritionChartDataModel = {
           };
     return {
       data,
+      hasRecordedValues: data.some((point) => point.actual !== null),
       maximumValue,
       targetReference,
     };
@@ -1205,13 +1236,13 @@ function _formatNutritionChartValue({
   unit,
   value,
 }: {
-  readonly unit: "€" | "g" | "kcal";
+  readonly unit: "€" | "g" | "kcal" | "L";
   readonly value: number;
 }) {
   return unit === "€"
     ? euroChartValueFormatter.format(value)
     : `${formatNumber({
-        maximumFractionDigits: unit === "kcal" ? 0 : 1,
+        maximumFractionDigits: unit === "kcal" ? 0 : unit === "L" ? 2 : 1,
         value,
       })} ${unit}`;
 }
@@ -1220,7 +1251,7 @@ function _formatNutritionChartAxisValue({
   unit,
   value,
 }: {
-  readonly unit: "€" | "g" | "kcal";
+  readonly unit: "€" | "g" | "kcal" | "L";
   readonly value: number;
 }) {
   return unit === "kcal" && value >= 1000

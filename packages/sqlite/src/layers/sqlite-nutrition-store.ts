@@ -94,6 +94,7 @@ const DailyLogRow = Schema.Struct({
   mode: Domain.DailyLogMode,
   planId: Domain.PlanId,
   updatedAt: Schema.Number,
+  waterServings: Schema.NullOr(Domain.WaterServingCount),
 });
 
 const BodyWeightEntryRow = Schema.Struct({
@@ -197,7 +198,8 @@ const selectDailyLogColumns = `
   mode,
   plan_id AS planId,
   created_at AS createdAt,
-  updated_at AS updatedAt
+  updated_at AS updatedAt,
+  water_servings AS waterServings
 `;
 
 const selectBodyWeightEntryColumns = `
@@ -1066,6 +1068,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     mode: dailyLog.mode ?? "eating",
     plan_id: dailyLog.planId,
     updated_at: dailyLog.updatedAt,
+    water_servings: dailyLog.waterServings ?? null,
   });
 
   const bodyWeightEntryRowValues = (

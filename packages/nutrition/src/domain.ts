@@ -270,12 +270,21 @@ export const DailyLogMode = Schema.Literals([
 
 export type DailyLogMode = typeof DailyLogMode.Type;
 
+export const WaterServingCount = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0)
+).pipe(Schema.brand("WaterServingCount"));
+
+export type WaterServingCount = typeof WaterServingCount.Type;
+
 export class DailyLog extends Schema.Class<DailyLog>("DailyLog")({
   dateKey: DateKey,
   mode: DailyLogMode.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed("eating"))
   ),
   planId: PlanId,
+  waterServings: Schema.NullOr(WaterServingCount).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null))
+  ),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}

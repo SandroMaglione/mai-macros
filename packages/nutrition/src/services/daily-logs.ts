@@ -3,6 +3,7 @@ import {
   DailyLogMode,
   DateKey,
   PlanId,
+  WaterServingCount,
   type ActiveMealPlanSelectionId,
   type Plan,
 } from "../domain.ts";
@@ -38,6 +39,11 @@ const _SetDayModeInput = Schema.Struct({
   mode: DailyLogMode,
 });
 
+const _SetWaterServingsInput = Schema.Struct({
+  dateKey: DateKey,
+  waterServings: Schema.NullOr(WaterServingCount),
+});
+
 export type OpenDayInput = typeof _OpenDayInput.Encoded;
 
 export type ChangeDayPlanInput = typeof _ChangeDayPlanInput.Encoded;
@@ -45,6 +51,8 @@ export type ChangeDayPlanInput = typeof _ChangeDayPlanInput.Encoded;
 export type RemoveDayInput = typeof _RemoveDayInput.Encoded;
 
 export type SetDayModeInput = typeof _SetDayModeInput.Encoded;
+
+export type SetWaterServingsInput = typeof _SetWaterServingsInput.Encoded;
 
 export class OpenedDay extends Data.TaggedClass("OpenedDay")<{
   readonly dailyLog: DailyLog;
@@ -67,6 +75,12 @@ export class ChangedDayPlan extends Data.TaggedClass("ChangedDayPlan")<{
 }> {}
 
 export class ChangedDayMode extends Data.TaggedClass("ChangedDayMode")<{
+  readonly dailyLog: DailyLog;
+}> {}
+
+export class ChangedWaterServings extends Data.TaggedClass(
+  "ChangedWaterServings"
+)<{
   readonly dailyLog: DailyLog;
 }> {}
 
@@ -265,7 +279,7 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
           decodedInput.dateKey
         );
 
-        if (mealEntryCount > 0) {
+        if (mealEntryCount > 0 || dailyLog.waterServings !== null) {
           return yield* new CannotRemoveLoggedDay({
             dateKey: decodedInput.dateKey,
           });
@@ -352,6 +366,46 @@ export class DailyLogs extends Context.Service<DailyLogs>()("DailyLogs", {
         yield* store.upsertDailyLog(updatedDailyLog);
 
         return new ChangedDayMode({
+          dailyLog: updatedDailyLog,
+        });
+      }),
+
+      setWaterServings: Effect.fn("DailyLogs.setWaterServings")(function* ({
+        input,
+      }: {
+        readonly input: SetWaterServingsInput;
+      }) {
+        const decodedInput = yield* Schema.decodeEffect(_SetWaterServingsInput)(
+          input
+        );
+        const dailyLogs = yield* store.findDailyLogByDateKey(
+          decodedInput.dateKey
+        );
+        const dailyLog = yield* Array.head(dailyLogs).pipe(
+          Option.match({
+            onNone: () =>
+              new DailyLogNotFound({
+                dateKey: decodedInput.dateKey,
+              }),
+            onSome: Effect.succeed,
+          })
+        );
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const updatedDailyLog = yield* Schema.encodeEffect(DailyLog)(
+          dailyLog
+        ).pipe(
+          Effect.flatMap((encodedDailyLog) =>
+            Schema.decodeEffect(DailyLog)({
+              ...encodedDailyLog,
+              updatedAt: now,
+              waterServings: decodedInput.waterServings,
+            })
+          )
+        );
+
+        yield* store.upsertDailyLog(updatedDailyLog);
+
+        return new ChangedWaterServings({
           dailyLog: updatedDailyLog,
         });
       }),
