@@ -1,3 +1,7 @@
+import { NutrientProgressFill } from "@/components/nutrition/nutrient-progress-fill";
+import { NutrientBreakdown } from "./nutrient-breakdown";
+import { OneOffEntryList } from "./one-off-entry-list";
+import { hasNutrientUncertainty } from "@/lib/nutrient-quality";
 import { AppScreen } from "@/components/ui/app-screen";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -250,7 +254,7 @@ const macroDetailsRouteMachine = setup({
                   );
             const foods = yield* foodsService.getMany({
               input: {
-                foodIds: mealEntries.map((mealEntry) => mealEntry.foodId),
+                foodIds: Domain.mealEntryFoodIds(mealEntries),
               },
             });
 
@@ -444,32 +448,35 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
     meal === null
       ? data.mealEntries
       : data.mealEntries.filter((mealEntry) => mealEntry.mealId === meal);
-  const totals = Reporting.calculateMealEntriesNutrientTotals({
+  const nutrition = Reporting.calculateMealEntriesNutrientTotals({
     foods: data.foods,
     mealEntries,
-  }).totals;
-  const entries = mealEntries.flatMap((mealEntry) => {
-    const food = data.foods.find(
-      (candidate) => candidate.id === mealEntry.foodId
-    );
-
-    return food === undefined
-      ? []
-      : [
-          {
-            cost: Reporting.calculateEntryCost({
-              food,
-              quantity: mealEntry.quantity,
-            }),
-            food,
-            mealEntry,
-            nutrients: Utils.calculateEntryNutrients({
-              food,
-              nutritionMultiplier: mealEntry.nutritionMultiplier,
-            }),
-          },
-        ];
   });
+  const totals = nutrition.totals;
+  const entries = mealEntries
+    .filter(Domain.isCatalogMealEntry)
+    .flatMap((mealEntry) => {
+      const food = data.foods.find(
+        (candidate) => candidate.id === mealEntry.foodId
+      );
+
+      return food === undefined
+        ? []
+        : [
+            {
+              cost: Reporting.calculateEntryCost({
+                food,
+                quantity: mealEntry.quantity,
+              }),
+              food,
+              mealEntry,
+              nutrients: Utils.calculateEntryNutrients({
+                food,
+                nutritionMultiplier: mealEntry.nutritionMultiplier,
+              }),
+            },
+          ];
+    });
   const weightTotals = Reporting.calculateMealEntriesWeightTotals({
     foods: data.foods,
     mealEntries,
@@ -516,6 +523,13 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
       />
 
       <View style={styles.nutrientList}>
+        <NutrientBreakdown
+          nutrition={nutrition}
+          plan={data.scope._tag === "Day" ? data.day.selectedPlan : undefined}
+        />
+        <OneOffEntryList
+          entries={mealEntries.filter(Domain.isOneOffMealEntry)}
+        />
         {nutrientDetails.map((nutrient) => {
           const selected =
             snapshot.context.selectedMetricName === nutrient.nutrientName;
@@ -527,6 +541,15 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
           return (
             <View key={nutrient.nutrientName} style={styles.nutrientGroup}>
               <NutrientRow
+                estimatedAmount={nutrition.estimated[nutrient.nutrientName]}
+                estimated={
+                  nutrition.estimatedCoverage[nutrient.nutrientName] > 0
+                }
+                missing={nutrition.missing[nutrient.nutrientName] > 0}
+                unknown={
+                  nutrition.coverage[nutrient.nutrientName] === 0 &&
+                  nutrition.entriesCount > 0
+                }
                 nutrient={nutrient}
                 onPress={() => {
                   actor.trigger.selectMetric({
@@ -539,7 +562,10 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
                   plan: data.day.selectedPlan,
                 })}
                 total={total}
-                withTarget={data.scope._tag === "Day"}
+                withTarget={
+                  data.scope._tag === "Day" &&
+                  !hasNutrientUncertainty(nutrition)
+                }
               />
               {selected ? (
                 <NutrientContributors
@@ -809,6 +835,10 @@ function CostContributionRow({
 }
 
 function NutrientRow({
+  estimatedAmount,
+  unknown,
+  estimated,
+  missing,
   nutrient,
   onPress,
   selected,
@@ -816,6 +846,10 @@ function NutrientRow({
   total,
   withTarget,
 }: {
+  readonly estimatedAmount: number;
+  readonly unknown: boolean;
+  readonly estimated: boolean;
+  readonly missing: boolean;
   readonly nutrient: NutrientDetail;
   readonly onPress: () => void;
   readonly selected: boolean;
@@ -824,9 +858,6 @@ function NutrientRow({
   readonly withTarget: boolean;
 }) {
   const hasTarget = withTarget && target !== undefined;
-  const progress =
-    target === undefined || target <= 0 ? (total > 0 ? 1 : 0) : total / target;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
   const valueLabel = hasTarget
     ? `${_formatNutrientValue({
         unit: nutrient.unit,
@@ -870,7 +901,9 @@ function NutrientRow({
           numberOfLines={1}
           style={[styles.nutrientValue, { color: nutrient.colorValue }]}
         >
-          {valueLabel}
+          {estimated ? "≈ " : ""}
+          {unknown ? "—" : valueLabel}
+          {missing && !unknown ? "+" : ""}
         </Text>
       </View>
       <View
@@ -881,14 +914,11 @@ function NutrientRow({
           },
         ]}
       >
-        <View
-          style={[
-            styles.nutrientFill,
-            {
-              backgroundColor: nutrient.colorValue,
-              width: `${clampedProgress * 100}%`,
-            },
-          ]}
+        <NutrientProgressFill
+          colorValue={nutrient.colorValue}
+          total={total}
+          estimated={estimatedAmount}
+          target={target}
         />
       </View>
     </Pressable>

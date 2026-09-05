@@ -41,7 +41,14 @@ export function buildInsightContext({
   const dayVolumeContributors: InsightContext["dayVolumeContributors"][number][] =
     [];
   let totalQuantityGrams = 0;
-  let weightCoverageComplete = true;
+  let weightCoverageComplete = countedDays.every((day) =>
+    day.entries.every(
+      (entry) =>
+        entry.food !== null &&
+        entry.mealEntry.kind === "catalog" &&
+        entry.mealEntry.quantityAccuracy !== "estimated"
+    )
+  );
 
   for (const day of countedDays) {
     _addNutrientTotalsInPlace({ target: totals, value: day.totals });
@@ -52,7 +59,9 @@ export function buildInsightContext({
 
     let dayQuantityGrams = 0;
 
-    for (const entry of day.entries) {
+    for (const entry of day.entries.filter(
+      NutritionReports.isCatalogReportEntry
+    )) {
       const quantityGrams = Measurements.massGramsFromQuantity({
         food: entry.food,
         quantity: entry.mealEntry.quantity,

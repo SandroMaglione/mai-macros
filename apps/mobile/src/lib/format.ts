@@ -174,6 +174,11 @@ export function mealEntryMassGrams({
   readonly food: Domain.Food;
   readonly mealEntry: Domain.MealEntry;
 }) {
+  if (
+    mealEntry.kind === "one-off" ||
+    mealEntry.quantityAccuracy === "estimated"
+  )
+    return undefined;
   return Measurements.massGramsFromQuantity({
     food,
     quantity: mealEntry.quantity,

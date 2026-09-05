@@ -390,7 +390,8 @@ function _foodCatalogTestLayer({
       Effect.sync(
         () =>
           currentStores.mealEntries.filter(
-            (mealEntry) => mealEntry.foodId === foodId
+            (mealEntry) =>
+              mealEntry.kind === "catalog" && mealEntry.foodId === foodId
           ).length
       ),
     countMealEntriesByMealIds: (mealIds) =>
@@ -490,9 +491,9 @@ function _foodCatalogTestLayer({
       ),
     findMealEntriesByFood: (foodId) =>
       Effect.sync(() =>
-        currentStores.mealEntries.filter(
-          (mealEntry) => mealEntry.foodId === foodId
-        )
+        currentStores.mealEntries
+          .filter(Domain.isCatalogMealEntry)
+          .filter((mealEntry) => mealEntry.foodId === foodId)
       ),
     findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
       Effect.sync(() =>
@@ -501,7 +502,9 @@ function _foodCatalogTestLayer({
             mealEntry.dateKey >= startDateKey && mealEntry.dateKey <= endDateKey
         )
       ),
-    findMealEntriesForFoodUsage: Effect.sync(() => currentStores.mealEntries),
+    findMealEntriesForFoodUsage: Effect.sync(() =>
+      currentStores.mealEntries.filter(Domain.isCatalogMealEntry)
+    ),
     findLatestPlan: Effect.sync(() => currentStores.plans.slice(-1)),
     findPlanById: (planId) =>
       Effect.sync(() =>

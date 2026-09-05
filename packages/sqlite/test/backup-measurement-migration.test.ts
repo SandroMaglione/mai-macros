@@ -141,6 +141,7 @@ describe("food measurement backup migration", () => {
     assert.equal(result.mealEntries.length, 1);
     const mealEntry = result.mealEntries[0];
     assert.isDefined(mealEntry);
+    assert(mealEntry.kind === "catalog");
     assert.equal(mealEntry.quantity._tag, "MeasuredFoodQuantity");
     if (mealEntry.quantity._tag === "MeasuredFoodQuantity") {
       assert.equal(mealEntry.quantity.amount, 150);

@@ -297,16 +297,82 @@ export class ActiveMealPlanSelection extends Schema.Class<ActiveMealPlanSelectio
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
-export class MealEntry extends Schema.Class<MealEntry>("MealEntry")({
+export const QuantityAccuracy = Schema.Literals([
+  "unspecified",
+  "measured",
+  "estimated",
+]);
+export type QuantityAccuracy = typeof QuantityAccuracy.Type;
+
+export const NutrientValue = Schema.Union([
+  Schema.TaggedStruct("Unknown", {}),
+  Schema.TaggedStruct("Recorded", { value: NonNegativeNumber }),
+  Schema.TaggedStruct("Estimated", { value: NonNegativeNumber }),
+]);
+export type NutrientValue = typeof NutrientValue.Type;
+
+export const OneOffNutrients = Schema.Struct({
+  energyKcal: NutrientValue,
+  proteinGrams: NutrientValue,
+  carbsGrams: NutrientValue,
+  fatGrams: NutrientValue,
+  fiberGrams: NutrientValue,
+  sugarGrams: NutrientValue,
+  saturatedFatGrams: NutrientValue,
+  saltGrams: NutrientValue,
+});
+export type OneOffNutrients = typeof OneOffNutrients.Type;
+
+const MealEntryFields = {
   id: MealEntryId,
   dateKey: DateKey,
   mealId: MealId,
+  createdAt: Schema.DateTimeUtcFromMillis,
+  updatedAt: Schema.DateTimeUtcFromMillis,
+};
+
+export class CatalogMealEntry extends Schema.Class<CatalogMealEntry>(
+  "CatalogMealEntry"
+)({
+  ...MealEntryFields,
+  kind: Schema.Literal("catalog").pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("catalog"))
+  ),
   foodId: FoodId,
   quantity: LoggedFoodQuantity,
   nutritionMultiplier: NutritionMultiplier,
-  createdAt: Schema.DateTimeUtcFromMillis,
-  updatedAt: Schema.DateTimeUtcFromMillis,
+  quantityAccuracy: QuantityAccuracy.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("unspecified"))
+  ),
 }) {}
+
+export const OneOffDetails = Schema.Struct({
+  name: NonEmptyString.check(Schema.isPattern(/\S/)),
+  amountDescription: Schema.String,
+  note: Schema.String,
+  nutrients: OneOffNutrients,
+});
+
+export class OneOffMealEntry extends Schema.Class<OneOffMealEntry>(
+  "OneOffMealEntry"
+)({
+  ...MealEntryFields,
+  kind: Schema.Literal("one-off"),
+  ...OneOffDetails.fields,
+}) {}
+
+export const MealEntry = Schema.Union([CatalogMealEntry, OneOffMealEntry]);
+export type MealEntry = typeof MealEntry.Type;
+
+export const isCatalogMealEntry = (
+  entry: MealEntry
+): entry is CatalogMealEntry => entry.kind === "catalog";
+export const isOneOffMealEntry = (entry: MealEntry): entry is OneOffMealEntry =>
+  entry.kind === "one-off";
+export const mealEntryFoodIds = (
+  entries: readonly MealEntry[]
+): readonly FoodId[] =>
+  entries.filter(isCatalogMealEntry).map((entry) => entry.foodId);
 
 export class BodyWeightEntry extends Schema.Class<BodyWeightEntry>(
   "BodyWeightEntry"

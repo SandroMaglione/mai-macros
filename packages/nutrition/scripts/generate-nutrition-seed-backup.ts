@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 
 import { Effect, Schema } from "effect";
 
-import { Backup, DefaultFoods, Metadata, Migrations } from "../src/index.ts";
+import {
+  Backup,
+  DefaultFoods,
+  Metadata,
+  Migrations,
+  Domain,
+} from "../src/index.ts";
 
 const CustomPlanMealsMigration = Migrations.Version004CustomPlanMeals;
 
@@ -17,7 +23,7 @@ type SeedFoodDefinition = readonly [
   >,
 ];
 type MealSeedEntry = {
-  readonly foodId: Backup.MaiBackupEncoded["stores"]["mealEntries"][number]["foodId"];
+  readonly foodId: typeof Domain.FoodId.Encoded;
   readonly quantityGrams: number;
 };
 type MealSeedTemplate = Record<
@@ -1187,9 +1193,9 @@ function calculateSummary({
         fatGrams: 0,
         proteinGrams: 0,
       };
-      const entries = backup.stores.mealEntries.filter(
-        (mealEntry) => mealEntry.dateKey === dailyLog.dateKey
-      );
+      const entries = backup.stores.mealEntries
+        .filter(Domain.isCatalogMealEntry)
+        .filter((mealEntry) => mealEntry.dateKey === dailyLog.dateKey);
 
       for (const entry of entries) {
         const food = foodByIdFor({

@@ -124,6 +124,7 @@ describe("SqliteNutritionStore", () => {
     assert.equal(result.plansByIds[0]?.meals[0]?.name, "Breakfast");
     assert.equal(result.mealEntriesByFood.length, 1);
     assert.equal(result.mealEntriesByRange.length, 1);
+    assert(result.mealEntries[0]?.kind === "catalog");
     assert.equal(
       result.mealEntries[0]?.quantity._tag === "MeasuredFoodQuantity"
         ? result.mealEntries[0].quantity.amount
@@ -152,7 +153,7 @@ describe("SqliteNutritionStore", () => {
         });
         const plan = yield* testPlan;
         const dailyLog = yield* testDailyLog;
-        const mealEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+        const mealEntry = yield* Schema.decodeEffect(Domain.CatalogMealEntry)({
           createdAt: 0,
           dateKey: dailyLog.dateKey,
           foodId: food.id,
@@ -186,10 +187,12 @@ describe("SqliteNutritionStore", () => {
           ],
           updatedAt: 1,
         });
-        const encodedEntry = yield* Schema.encodeEffect(Domain.MealEntry)(
-          mealEntry
-        );
-        const revisedEntry = yield* Schema.decodeEffect(Domain.MealEntry)({
+        const encodedEntry = yield* Schema.encodeEffect(
+          Domain.CatalogMealEntry
+        )(mealEntry);
+        const revisedEntry = yield* Schema.decodeEffect(
+          Domain.CatalogMealEntry
+        )({
           ...encodedEntry,
           nutritionMultiplier: 6.6,
           quantity: {
@@ -221,6 +224,7 @@ describe("SqliteNutritionStore", () => {
       })),
       [{ name: "Small bottle", position: 1 }]
     );
+    assert(result.mealEntries[0]?.kind === "catalog");
     const quantity = result.mealEntries[0]?.quantity;
     assert.equal(quantity?._tag, "PortionFoodQuantity");
     if (quantity?._tag === "PortionFoodQuantity") {
@@ -340,7 +344,7 @@ describe("SqliteNutritionStore", () => {
             },
           ],
           (input) =>
-            Schema.decodeEffect(Domain.MealEntry)({
+            Schema.decodeEffect(Domain.CatalogMealEntry)({
               ...input,
               dateKey: "2026-06-20",
               foodId: food.id,
@@ -792,7 +796,7 @@ describe("SqliteNutritionStore", () => {
 
         const exported = yield* backups.exportToJson();
         const legacyJson = exported.json
-          .replace('"databaseVersion":11', '"databaseVersion":4')
+          .replace('"databaseVersion":12', '"databaseVersion":4')
           .replace('"bodyWeightEntries":0,', "")
           .replace('"bodyWeightEntries":[],', "")
           .replaceAll('"nutritionReference":{"amount":100,"unit":"g"},', "")
@@ -963,7 +967,7 @@ const testSelection = Schema.decodeEffect(Domain.ActiveMealPlanSelection)({
   updatedAt: 0,
 });
 
-const testMealEntry = Schema.decodeEffect(Domain.MealEntry)({
+const testMealEntry = Schema.decodeEffect(Domain.CatalogMealEntry)({
   createdAt: 0,
   dateKey: "2026-06-20",
   foodId: "9535a059-a61f-42e1-a2e0-35ec87203c24",

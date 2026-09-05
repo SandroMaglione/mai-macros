@@ -16,11 +16,16 @@ import {
   type DailyLog,
   type Food,
   type MealEntry,
+  type CatalogMealEntry,
+  type OneOffMealEntry,
+  mealEntryFoodIds,
   type Plan,
 } from "../domain.ts";
 import {
-  calculateEntriesCostTotals,
-  calculateEntriesNutrientTotals,
+  calculateMealEntriesCostTotals,
+  calculateMealEntriesNutrientTotals,
+  resolveMealEntryNutrients,
+  type MealEntriesNutrientTotals,
   calculateEntryCost,
   type EntriesCostTotals,
   type EntryCost,
@@ -41,16 +46,30 @@ const _GetNutritionReportRangeInput = Schema.Struct({
 export type GetNutritionReportRangeInput =
   typeof _GetNutritionReportRangeInput.Encoded;
 
-export type NutritionReportEntry = {
+export type CatalogNutritionReportEntry = {
   readonly cost: EntryCost | null;
   readonly food: Food;
-  readonly mealEntry: MealEntry;
+  readonly mealEntry: CatalogMealEntry;
   readonly nutrients: ReturnType<typeof calculateEntryNutrients>;
 };
+
+export type OneOffNutritionReportEntry = {
+  readonly mealEntry: OneOffMealEntry;
+  readonly food: null;
+  readonly cost: null;
+  readonly nutrients: Partial<ReturnType<typeof calculateEntryNutrients>>;
+};
+export type NutritionReportEntry =
+  | CatalogNutritionReportEntry
+  | OneOffNutritionReportEntry;
+export const isCatalogReportEntry = (
+  entry: NutritionReportEntry
+): entry is CatalogNutritionReportEntry => entry.food !== null;
 
 export type NutritionReportDay = {
   readonly costTotals: EntriesCostTotals;
   readonly coverage: NutrientCoverage;
+  readonly nutrition: MealEntriesNutrientTotals;
   readonly dailyLog: DailyLog;
   readonly dateKey: DateKey;
   readonly entries: readonly NutritionReportEntry[];
@@ -173,9 +192,7 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
             activePlan
           );
           const foodIds = Array.fromIterable(
-            HashSet.fromIterable(
-              mealEntries.map((mealEntry) => mealEntry.foodId)
-            )
+            HashSet.fromIterable(mealEntryFoodIds(mealEntries))
           );
           const foods = yield* store.findFoodsByIds(foodIds);
           const foodsById = HashMap.fromIterable(
@@ -203,55 +220,90 @@ export class NutritionReports extends Context.Service<NutritionReports>()(
                     })
                   );
                   const dayMealEntries = mealEntriesByDateKey[dateKey] ?? [];
-                  const entries = dayMealEntries.flatMap((mealEntry) => {
-                    return HashMap.get(foodsById, mealEntry.foodId).pipe(
-                      Option.match({
-                        onNone: () => [],
-                        onSome: (food) => [
-                          {
-                            cost: calculateEntryCost({
+                  const entries = dayMealEntries.flatMap<NutritionReportEntry>(
+                    (mealEntry) => {
+                      if (mealEntry.kind === "one-off") {
+                        const quality = resolveMealEntryNutrients({
+                          mealEntry,
+                          food: undefined,
+                        });
+                        let nutrients: Partial<
+                          ReturnType<typeof calculateEntryNutrients>
+                        > = {};
+                        for (const name of [
+                          "energyKcal",
+                          "proteinGrams",
+                          "carbsGrams",
+                          "fatGrams",
+                          "fiberGrams",
+                          "sugarGrams",
+                          "saturatedFatGrams",
+                          "saltGrams",
+                        ] as const) {
+                          const value = quality[name];
+                          if (value._tag !== "Unknown")
+                            nutrients = { ...nutrients, [name]: value.value };
+                        }
+                        return [
+                          { mealEntry, food: null, cost: null, nutrients },
+                        ];
+                      }
+                      return HashMap.get(foodsById, mealEntry.foodId).pipe(
+                        Option.match({
+                          onNone: () => [],
+                          onSome: (food) => [
+                            {
+                              cost: calculateEntryCost({
+                                food,
+                                quantity: mealEntry.quantity,
+                              }),
                               food,
-                              quantity: mealEntry.quantity,
-                            }),
-                            food,
-                            mealEntry,
-                            nutrients: calculateEntryNutrients({
-                              food,
-                              nutritionMultiplier:
-                                mealEntry.nutritionMultiplier,
-                            }),
-                          },
-                        ],
-                      })
-                    );
+                              mealEntry,
+                              nutrients: calculateEntryNutrients({
+                                food,
+                                nutritionMultiplier:
+                                  mealEntry.nutritionMultiplier,
+                              }),
+                            },
+                          ],
+                        })
+                      );
+                    }
+                  );
+                  const aggregate = calculateMealEntriesNutrientTotals({
+                    foods,
+                    mealEntries: dayMealEntries,
                   });
-                  const aggregate = calculateEntriesNutrientTotals({
-                    entries: entries.map((entry) => ({
-                      food: entry.food,
-                      nutritionMultiplier: entry.mealEntry.nutritionMultiplier,
-                    })),
+                  const costTotals = calculateMealEntriesCostTotals({
+                    foods,
+                    mealEntries: dayMealEntries,
                   });
-                  const costTotals = calculateEntriesCostTotals({
-                    entries: entries.map((entry) => ({
-                      food: entry.food,
-                      quantity: entry.mealEntry.quantity,
-                    })),
-                  });
-                  const targetStatuses = evaluatePlanNutrientTargets({
+                  const allTargetStatuses = evaluatePlanNutrientTargets({
                     plan,
                     totals: aggregate.totals,
                   });
+                  const targetStatuses = allTargetStatuses.filter(
+                    (status) =>
+                      aggregate.missing[status.nutrientName] === 0 &&
+                      aggregate.estimatedCoverage[status.nutrientName] === 0
+                  );
 
                   return [
                     {
                       costTotals,
                       coverage: aggregate.coverage,
+                      nutrition: aggregate,
                       dailyLog,
                       dateKey,
                       entries,
-                      isInsideExpectedPlanRange: isInsideExpectedPlanRange({
-                        statuses: targetStatuses,
-                      }),
+                      isInsideExpectedPlanRange:
+                        aggregate.missing.energyKcal === 0 &&
+                        aggregate.estimatedCoverage.energyKcal === 0 &&
+                        targetStatuses.length === allTargetStatuses.length &&
+                        Array.isReadonlyArrayNonEmpty(targetStatuses) &&
+                        isInsideExpectedPlanRange({
+                          statuses: targetStatuses,
+                        }),
                       mealEntries: dayMealEntries,
                       plan,
                       targetStatuses,

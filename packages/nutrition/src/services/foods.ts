@@ -23,7 +23,7 @@ import {
   CurrencyCode,
   MassUnit,
   MeasurementUnit,
-  MealEntry,
+  CatalogMealEntry as MealEntry,
   NonNegativeNumber,
   PortionFoodQuantity,
   VolumeUnit,

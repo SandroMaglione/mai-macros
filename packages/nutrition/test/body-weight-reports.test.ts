@@ -201,9 +201,9 @@ function BodyWeightReportsTestLayer({
           ),
         countMealEntriesByFood: (foodId: Domain.FoodId) =>
           Effect.succeed(
-            stores.mealEntries.filter(
-              (mealEntry) => mealEntry.foodId === foodId
-            ).length
+            stores.mealEntries
+              .filter(Domain.isCatalogMealEntry)
+              .filter((mealEntry) => mealEntry.foodId === foodId).length
           ),
         countMealEntriesByMealIds: (mealIds: readonly Domain.MealId[]) =>
           Effect.succeed(
@@ -266,9 +266,9 @@ function BodyWeightReportsTestLayer({
           ),
         findMealEntriesByFood: (foodId) =>
           Effect.succeed(
-            stores.mealEntries.filter(
-              (mealEntry) => mealEntry.foodId === foodId
-            )
+            stores.mealEntries
+              .filter(Domain.isCatalogMealEntry)
+              .filter((mealEntry) => mealEntry.foodId === foodId)
           ),
         findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
           Effect.succeed(
@@ -278,7 +278,9 @@ function BodyWeightReportsTestLayer({
                 mealEntry.dateKey <= endDateKey
             )
           ),
-        findMealEntriesForFoodUsage: Effect.succeed(stores.mealEntries),
+        findMealEntriesForFoodUsage: Effect.succeed(
+          stores.mealEntries.filter(Domain.isCatalogMealEntry)
+        ),
         findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
           Effect.succeed(
             stores.mealEntries.filter(
@@ -300,7 +302,9 @@ function BodyWeightReportsTestLayer({
         listBodyWeightEntries: Effect.succeed(stores.bodyWeightEntries),
         listDailyLogs: Effect.succeed(stores.dailyLogs),
         listFoods: Effect.succeed(stores.foods),
-        listMealEntries: Effect.succeed(stores.mealEntries),
+        listMealEntries: Effect.succeed(
+          stores.mealEntries.filter(Domain.isCatalogMealEntry)
+        ),
         listPlans: Effect.succeed(stores.plans),
         readStores: Effect.succeed(stores),
         replaceStores: () => Effect.void,

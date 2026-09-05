@@ -1,3 +1,6 @@
+import { OneOffIndicator } from "@/components/nutrition/one-off-indicator";
+import { NutrientProgressFill } from "@/components/nutrition/nutrient-progress-fill";
+import { formatNutrientValue } from "@/lib/nutrient-quality";
 import { FoodCurrentPriceIndicator } from "@/components/nutrition/food-current-price-indicator";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { AppScreen } from "@/components/ui/app-screen";
@@ -76,8 +79,6 @@ const DailyLogViewData = Schema.Union([
 ]);
 
 export type DailyLogViewData = typeof DailyLogViewData.Type;
-
-type MacroDisplayMode = "consumed" | "remaining";
 
 const dayModeOptions = [
   {
@@ -161,6 +162,8 @@ const SetDailyLogModeInput = Schema.Struct({
   dateKey: Domain.DateKey,
   mode: Domain.DailyLogMode,
 });
+
+type MacroDisplayMode = "consumed" | "remaining";
 
 const SetWaterServingsInput = Schema.Struct({
   dateKey: Domain.DateKey,
@@ -323,7 +326,7 @@ const dailyLogRouteMachine = setup({
             });
             const foods = yield* foodsService.getMany({
               input: {
-                foodIds: mealEntries.map((mealEntry) => mealEntry.foodId),
+                foodIds: Domain.mealEntryFoodIds(mealEntries),
               },
             });
 
@@ -843,10 +846,10 @@ function RecordedDailyLogView({
   const mealOptions = [...data.day.selectedPlan.meals].sort(
     (left, right) => left.position - right.position
   );
-  const nutrients = Reporting.calculateMealEntriesNutrientTotals({
+  const nutrition = Reporting.calculateMealEntriesNutrientTotals({
     foods: data.foods,
     mealEntries: data.mealEntries,
-  }).totals;
+  });
   const dateKey = data.day.dailyLog.dateKey;
   const dayMode = data.day.dailyLog.mode;
 
@@ -867,7 +870,7 @@ function RecordedDailyLogView({
       >
         <DayNavigationHeader dateKey={dateKey} mode={dayMode} />
 
-        <DailyProgress day={data.day} nutrients={nutrients} />
+        <DailyProgress day={data.day} nutrition={nutrition} />
 
         <View style={styles.dayPrimaryActions}>
           <Pressable
@@ -1469,12 +1472,13 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
 
 function DailyProgress({
   day,
-  nutrients,
+  nutrition,
 }: {
   readonly day: typeof OpenedDay.Type;
-  readonly nutrients: Reporting.NutrientTotals;
+  readonly nutrition: Reporting.MealEntriesNutrientTotals;
 }) {
   const plan = day.selectedPlan;
+  const nutrients = nutrition.totals;
   const targetEnergyKcal = Utils.calculatePlanEnergyKcal({ plan });
   const [snapshot, , actor] = useMachine(macroDisplayModeMachine);
   const displayMode = snapshot.value === "Remaining" ? "remaining" : "consumed";
@@ -1502,6 +1506,7 @@ function DailyProgress({
             trackColor={macro.trackColor}
             unit="g"
             value={nutrients[macro.key]}
+            quality={_nutrientQuality({ nutrition, name: macro.key })}
           />
         ))}
       </View>
@@ -1510,6 +1515,7 @@ function DailyProgress({
         displayMode={displayMode}
         target={targetEnergyKcal}
         value={nutrients.energyKcal}
+        quality={_nutrientQuality({ nutrition, name: "energyKcal" })}
       />
 
       <View style={styles.dailyNutrientGrid}>
@@ -1520,6 +1526,7 @@ function DailyProgress({
           target={plan.fiberTargetGrams}
           trackColor="#4a2031"
           value={nutrients.fiberGrams}
+          quality={_nutrientQuality({ nutrition, name: "fiberGrams" })}
         />
         <DailyNutrientMetric
           colorValue={color.nutritionCarbs}
@@ -1528,6 +1535,7 @@ function DailyProgress({
           target={plan.sugarTargetGrams}
           trackColor="#4a2031"
           value={nutrients.sugarGrams}
+          quality={_nutrientQuality({ nutrition, name: "sugarGrams" })}
         />
         <DailyNutrientMetric
           colorValue={color.nutritionFat}
@@ -1536,6 +1544,7 @@ function DailyProgress({
           target={plan.saturatedFatTargetGrams}
           trackColor="#443719"
           value={nutrients.saturatedFatGrams}
+          quality={_nutrientQuality({ nutrition, name: "saturatedFatGrams" })}
         />
         <DailyNutrientMetric
           colorValue={color.nutritionSalt}
@@ -1544,6 +1553,7 @@ function DailyProgress({
           target={plan.saltTargetGrams}
           trackColor="#303034"
           value={nutrients.saltGrams}
+          quality={_nutrientQuality({ nutrition, name: "saltGrams" })}
         />
       </View>
     </Pressable>
@@ -1551,6 +1561,7 @@ function DailyProgress({
 }
 
 function DailyProgressMetric({
+  quality,
   colorValue,
   displayMode,
   label,
@@ -1560,6 +1571,7 @@ function DailyProgressMetric({
   value,
 }: {
   readonly colorValue: string;
+  readonly quality: NutrientQuality;
   readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number;
@@ -1567,8 +1579,6 @@ function DailyProgressMetric({
   readonly unit: "g" | "kcal";
   readonly value: number;
 }) {
-  const progress = target <= 0 ? (value > 0 ? 1 : 0) : value / target;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
   const isAboveTarget = value > target;
   const contentColor = isAboveTarget ? color.primary : colorValue;
 
@@ -1581,51 +1591,45 @@ function DailyProgressMetric({
         {label}
       </Text>
       <View style={[styles.dailyMetricTrack, { backgroundColor: trackColor }]}>
-        <View
-          style={[
-            styles.dailyMetricFill,
-            {
-              backgroundColor: contentColor,
-              width: `${clampedProgress * 100}%`,
-            },
-          ]}
+        <NutrientProgressFill
+          colorValue={contentColor}
+          total={value}
+          estimated={quality.estimatedAmount}
+          target={target}
         />
       </View>
       <Text
         numberOfLines={1}
         style={[styles.dailyMetricValue, { color: contentColor }]}
       >
-        {_formatDisplayValue({ displayMode, target, unit, value })}
+        {_formatDisplayValue({ displayMode, target, unit, value, quality })}
       </Text>
     </View>
   );
 }
 
 function DailyEnergyProgress({
+  quality,
   displayMode,
   target,
   value,
 }: {
+  readonly quality: NutrientQuality;
   readonly displayMode: MacroDisplayMode;
   readonly target: number;
   readonly value: number;
 }) {
-  const progress = target <= 0 ? (value > 0 ? 1 : 0) : value / target;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
   const isAboveTarget = value > target;
   const contentColor = isAboveTarget ? color.primary : color.nutritionEnergy;
 
   return (
     <View style={styles.energyProgress}>
       <View style={styles.energyTrack}>
-        <View
-          style={[
-            styles.energyFill,
-            {
-              backgroundColor: contentColor,
-              width: `${clampedProgress * 100}%`,
-            },
-          ]}
+        <NutrientProgressFill
+          colorValue={contentColor}
+          total={value}
+          estimated={quality.estimatedAmount}
+          target={target}
         />
       </View>
       <Text
@@ -1634,6 +1638,7 @@ function DailyEnergyProgress({
       >
         {_formatDisplayValue({
           displayMode,
+          quality,
           target,
           unit: "kcal",
           value,
@@ -1644,6 +1649,7 @@ function DailyEnergyProgress({
 }
 
 function DailyNutrientMetric({
+  quality,
   colorValue,
   displayMode,
   label,
@@ -1652,16 +1658,13 @@ function DailyNutrientMetric({
   value,
 }: {
   readonly colorValue: string;
+  readonly quality: NutrientQuality;
   readonly displayMode: MacroDisplayMode;
   readonly label: string;
   readonly target: number | undefined;
   readonly trackColor: string;
   readonly value: number;
 }) {
-  const hasTarget = target !== undefined;
-  const progress =
-    target === undefined || target <= 0 ? (value > 0 ? 1 : 0) : value / target;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
   const isAboveTarget = target !== undefined && value > target;
   const contentColor = isAboveTarget ? color.primary : colorValue;
 
@@ -1676,28 +1679,24 @@ function DailyNutrientMetric({
       <View
         style={[styles.dailyNutrientTrack, { backgroundColor: trackColor }]}
       >
-        <View
-          style={[
-            styles.dailyNutrientFill,
-            {
-              backgroundColor: contentColor,
-              width: `${clampedProgress * 100}%`,
-            },
-          ]}
+        <NutrientProgressFill
+          colorValue={contentColor}
+          total={value}
+          estimated={quality.estimatedAmount}
+          target={target}
         />
       </View>
       <Text
         numberOfLines={1}
         style={[styles.dailyNutrientValue, { color: contentColor }]}
       >
-        {hasTarget
-          ? _formatDisplayValue({
-              displayMode,
-              target,
-              unit: "g",
-              value,
-            })
-          : `${_formatMacroValue({ value })}g`}
+        {_formatDisplayValue({
+          displayMode,
+          target,
+          unit: "g",
+          value,
+          quality,
+        })}
       </Text>
     </View>
   );
@@ -1716,10 +1715,11 @@ function MealSection({
   readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
 }) {
-  const nutrients = Reporting.calculateMealEntriesNutrientTotals({
+  const nutrition = Reporting.calculateMealEntriesNutrientTotals({
     foods,
     mealEntries,
-  }).totals;
+  });
+  const nutrients = nutrition.totals;
   const weightTotals = Reporting.calculateMealEntriesWeightTotals({
     foods,
     mealEntries,
@@ -1761,7 +1761,9 @@ function MealSection({
         <View style={styles.mealEntries}>
           {mealEntries.map((mealEntry) => {
             const food = foods.find(
-              (candidate) => candidate.id === mealEntry.foodId
+              (candidate) =>
+                mealEntry.kind === "catalog" &&
+                candidate.id === mealEntry.foodId
             );
 
             return (
@@ -1770,6 +1772,13 @@ function MealSection({
                 key={mealEntry.id}
                 mealEntry={mealEntry}
                 onPress={() => {
+                  if (mealEntry.kind === "one-off") {
+                    router.push({
+                      pathname: "/days/[dateKey]/meals/[meal]/one-off",
+                      params: { dateKey, meal, mealEntryId: mealEntry.id },
+                    });
+                    return;
+                  }
                   router.push({
                     pathname:
                       "/days/[dateKey]/meals/[meal]/entries/[mealEntryId]/edit",
@@ -1786,8 +1795,8 @@ function MealSection({
         </View>
       ) : null}
 
-      <MealTotalColumns nutrients={nutrients} />
-      <MealNutrientColumns nutrients={nutrients} />
+      <MealTotalColumns nutrition={nutrition} />
+      <MealNutrientColumns nutrition={nutrition} />
       <MealCalorieWeightRatio
         costIsComplete={
           costTotals.resolvedEntriesCount === costTotals.entriesCount
@@ -1873,31 +1882,44 @@ function MealCalorieWeightRatio({
 }
 
 function MealTotalColumns({
-  nutrients,
+  nutrition,
 }: {
-  readonly nutrients: Reporting.NutrientTotals;
+  readonly nutrition: Reporting.MealEntriesNutrientTotals;
 }) {
+  const nutrients = nutrition.totals;
   return (
     <View style={styles.mealTotalColumns}>
       <MealTotalColumn
         colorValue={color.nutritionCarbs}
         label="Carbs"
-        value={_formatMacroValue({ value: nutrients.carbsGrams })}
+        value={_formatNutrientAmount({
+          value: nutrients.carbsGrams,
+          quality: _nutrientQuality({ nutrition, name: "carbsGrams" }),
+        })}
       />
       <MealTotalColumn
         colorValue={color.nutritionProtein}
         label="Protein"
-        value={_formatMacroValue({ value: nutrients.proteinGrams })}
+        value={_formatNutrientAmount({
+          value: nutrients.proteinGrams,
+          quality: _nutrientQuality({ nutrition, name: "proteinGrams" }),
+        })}
       />
       <MealTotalColumn
         colorValue={color.nutritionFat}
         label="Fat"
-        value={_formatMacroValue({ value: nutrients.fatGrams })}
+        value={_formatNutrientAmount({
+          value: nutrients.fatGrams,
+          quality: _nutrientQuality({ nutrition, name: "fatGrams" }),
+        })}
       />
       <MealTotalColumn
         colorValue={color.nutritionEnergy}
         label="Calories"
-        value={_formatMacroValue({ value: nutrients.energyKcal })}
+        value={_formatNutrientAmount({
+          value: nutrients.energyKcal,
+          quality: _nutrientQuality({ nutrition, name: "energyKcal" }),
+        })}
       />
     </View>
   );
@@ -1931,26 +1953,42 @@ function MealTotalColumn({
 }
 
 function MealNutrientColumns({
-  nutrients,
+  nutrition,
 }: {
-  readonly nutrients: Reporting.NutrientTotals;
+  readonly nutrition: Reporting.MealEntriesNutrientTotals;
 }) {
+  const nutrients = nutrition.totals;
   return (
     <View style={styles.mealNutrientColumns}>
       <MealNutrientColumn
         colorValue={color.nutritionCarbs}
         label="Fiber"
-        value={`${_formatMacroValue({ value: nutrients.fiberGrams })}g`}
+        value={_formatDisplayValue({
+          value: nutrients.fiberGrams,
+          quality: _nutrientQuality({ nutrition, name: "fiberGrams" }),
+          unit: "g",
+          displayMode: "consumed",
+        })}
       />
       <MealNutrientColumn
         colorValue={color.nutritionSalt}
         label="Salt"
-        value={`${_formatMacroValue({ value: nutrients.saltGrams })}g`}
+        value={_formatDisplayValue({
+          value: nutrients.saltGrams,
+          quality: _nutrientQuality({ nutrition, name: "saltGrams" }),
+          unit: "g",
+          displayMode: "consumed",
+        })}
       />
       <MealNutrientColumn
         colorValue={color.nutritionFat}
         label="Sat fat"
-        value={`${_formatMacroValue({ value: nutrients.saturatedFatGrams })}g`}
+        value={_formatDisplayValue({
+          value: nutrients.saturatedFatGrams,
+          quality: _nutrientQuality({ nutrition, name: "saturatedFatGrams" }),
+          unit: "g",
+          displayMode: "consumed",
+        })}
       />
     </View>
   );
@@ -2037,16 +2075,11 @@ function MealEntryRow({
   readonly mealEntry: Domain.MealEntry;
   readonly onPress: () => void;
 }) {
-  const nutrients =
-    food === undefined
-      ? undefined
-      : Utils.calculateEntryNutrients({
-          food,
-          nutritionMultiplier: mealEntry.nutritionMultiplier,
-        });
-  const quantityLabel = formatLoggedFoodQuantity({
-    quantity: mealEntry.quantity,
-  });
+  const quality = Reporting.resolveMealEntryNutrients({ food, mealEntry });
+  const quantityLabel =
+    mealEntry.kind === "one-off"
+      ? mealEntry.amountDescription
+      : `${mealEntry.quantityAccuracy === "estimated" ? "≈ " : ""}${formatLoggedFoodQuantity({ quantity: mealEntry.quantity })}`;
   const dominantMacronutrientColorsForFood =
     food === undefined
       ? []
@@ -2064,10 +2097,16 @@ function MealEntryRow({
     >
       <View style={styles.entryCopy}>
         <Text numberOfLines={1} style={styles.entryName}>
-          {food?.name ?? "Unknown food"}
+          {mealEntry.kind === "one-off"
+            ? mealEntry.name
+            : (food?.name ?? "Unknown food")}
         </Text>
         <View style={styles.entryDetailRow}>
-          <FoodCurrentPriceIndicator food={food} />
+          {mealEntry.kind === "one-off" ? (
+            <OneOffIndicator />
+          ) : (
+            <FoodCurrentPriceIndicator food={food} />
+          )}
           {!Array.isReadonlyArrayNonEmpty(
             dominantMacronutrientColorsForFood
           ) ? null : (
@@ -2094,30 +2133,40 @@ function MealEntryRow({
       </View>
       <View style={styles.entryNumbers}>
         <Text style={styles.entryKcal}>
-          {nutrients === undefined
-            ? "-"
-            : _formatMacroValue({ value: nutrients.energyKcal })}
+          {formatNutrientValue(quality.energyKcal)}
         </Text>
-        <Text numberOfLines={1} style={styles.entryMacros}>
-          {nutrients === undefined ? (
-            "C: - P: - F: -"
-          ) : (
-            <>
-              <Text style={styles.entryMacroLabel}>C: </Text>
-              <Text style={styles.entryCarbs}>
-                {_formatMacroValue({ value: nutrients.carbsGrams })}
-              </Text>
-              <Text style={styles.entryMacroLabel}> P: </Text>
-              <Text style={styles.entryProtein}>
-                {_formatMacroValue({ value: nutrients.proteinGrams })}
-              </Text>
-              <Text style={styles.entryMacroLabel}> F: </Text>
-              <Text style={styles.entryFat}>
-                {_formatMacroValue({ value: nutrients.fatGrams })}
-              </Text>
-            </>
-          )}
-        </Text>
+        {quality.carbsGrams._tag === "Unknown" &&
+        quality.proteinGrams._tag === "Unknown" &&
+        quality.fatGrams._tag === "Unknown" ? null : (
+          <Text numberOfLines={1} style={styles.entryMacros}>
+            {[
+              {
+                label: "C",
+                nutrient: quality.carbsGrams,
+                style: styles.entryCarbs,
+              },
+              {
+                label: "P",
+                nutrient: quality.proteinGrams,
+                style: styles.entryProtein,
+              },
+              {
+                label: "F",
+                nutrient: quality.fatGrams,
+                style: styles.entryFat,
+              },
+            ]
+              .filter(({ nutrient }) => nutrient._tag !== "Unknown")
+              .map(({ label, nutrient, style }, index) => (
+                <Text key={label}>
+                  <Text
+                    style={styles.entryMacroLabel}
+                  >{`${index === 0 ? "" : " "}${label}: `}</Text>
+                  <Text style={style}>{formatNutrientValue(nutrient)}</Text>
+                </Text>
+              ))}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -2180,31 +2229,63 @@ function _formatMacroValue({ value }: { readonly value: number }) {
   });
 }
 
+type NutrientQuality = {
+  readonly estimatedAmount: number;
+  readonly estimated: boolean;
+  readonly incomplete: boolean;
+  readonly unknown: boolean;
+};
+
+function _nutrientQuality({
+  nutrition,
+  name,
+}: {
+  readonly nutrition: Reporting.MealEntriesNutrientTotals;
+  readonly name: Reporting.NutrientName;
+}): NutrientQuality {
+  return {
+    estimatedAmount: nutrition.estimated[name],
+    estimated: nutrition.estimatedCoverage[name] > 0,
+    incomplete: nutrition.missing[name] > 0,
+    unknown: nutrition.entriesCount > 0 && nutrition.coverage[name] === 0,
+  };
+}
+
+function _formatNutrientAmount({
+  value,
+  quality,
+}: {
+  readonly value: number;
+  readonly quality: NutrientQuality;
+}): string {
+  if (quality.unknown) return "—";
+  return `${quality.estimated ? "≈ " : ""}${_formatMacroValue({ value })}${quality.incomplete ? "+" : ""}`;
+}
+
 function _formatDisplayValue({
   displayMode,
   target,
   unit,
   value,
+  quality,
 }: {
   readonly displayMode: MacroDisplayMode;
-  readonly target: number;
+  readonly target?: number;
   readonly unit: "g" | "kcal";
   readonly value: number;
+  readonly quality: NutrientQuality;
 }) {
-  if (displayMode === "consumed") {
-    return `${_formatMacroValue({ value })} / ${_formatMacroValue({
-      value: target,
-    })} ${unit}`;
-  }
-
+  if (quality.unknown) return "—";
+  if (target === undefined)
+    return `${_formatNutrientAmount({ value, quality })}${unit}`;
+  if (displayMode === "consumed" || quality.incomplete)
+    return `${_formatNutrientAmount({ value, quality })} / ${_formatMacroValue({ value: target })} ${unit}`;
   const remainingValue = target - value;
-  const formattedValue = _formatMacroValue({
-    value: Math.abs(remainingValue),
-  });
-
+  const formattedValue = _formatMacroValue({ value: Math.abs(remainingValue) });
+  const prefix = quality.estimated ? "≈ " : "";
   return remainingValue < 0
-    ? `-${formattedValue} ${unit}`
-    : `${formattedValue} ${unit} left`;
+    ? `${prefix}-${formattedValue} ${unit}`
+    : `${prefix}${formattedValue} ${unit} left`;
 }
 
 const styles = StyleSheet.create({
@@ -2509,10 +2590,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderRadius: radius.pill,
   },
-  dailyMetricFill: {
-    height: "100%",
-    borderRadius: radius.pill,
-  },
   dailyMetricValue: {
     fontSize: tokens.type.size.lg,
     fontWeight: tokens.type.weight.black,
@@ -2528,10 +2605,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderRadius: radius.pill,
     backgroundColor: "#233059",
-  },
-  energyFill: {
-    height: "100%",
-    borderRadius: radius.pill,
   },
   energyProgressValue: {
     fontSize: tokens.type.size.md,
@@ -2557,10 +2630,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 5,
     overflow: "hidden",
-    borderRadius: radius.pill,
-  },
-  dailyNutrientFill: {
-    height: "100%",
     borderRadius: radius.pill,
   },
   dailyNutrientValue: {

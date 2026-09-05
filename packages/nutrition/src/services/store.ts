@@ -9,6 +9,7 @@ import type {
   Food,
   FoodId,
   MealEntry,
+  CatalogMealEntry,
   MealEntryId,
   MealId,
   Plan,
@@ -43,7 +44,7 @@ export class NutritionStore extends Context.Service<
   {
     readonly applyFoodEdit: (input: {
       readonly food: Food;
-      readonly mealEntries: readonly MealEntry[];
+      readonly mealEntries: readonly CatalogMealEntry[];
     }) => StoreMutation;
 
     readonly countMealEntriesByDate: (dateKey: DateKey) => StoreEffect<number>;
@@ -105,13 +106,15 @@ export class NutritionStore extends Context.Service<
 
     readonly findMealEntriesByFood: (
       foodId: FoodId
-    ) => StoreEffect<readonly MealEntry[]>;
+    ) => StoreEffect<readonly CatalogMealEntry[]>;
 
     readonly findMealEntriesByRange: (
       input: NutritionStoreDateRange
     ) => StoreEffect<readonly MealEntry[]>;
 
-    readonly findMealEntriesForFoodUsage: StoreEffect<readonly MealEntry[]>;
+    readonly findMealEntriesForFoodUsage: StoreEffect<
+      readonly CatalogMealEntry[]
+    >;
 
     readonly findLatestPlan: StoreEffect<readonly Plan[]>;
 

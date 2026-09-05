@@ -53,6 +53,7 @@ export function InputSelect<Value extends string>({
   onSelect,
   options,
   selectedValue,
+  triggerLabel,
   title,
   variant = "default",
 }: {
@@ -60,6 +61,7 @@ export function InputSelect<Value extends string>({
   readonly onSelect: (value: Value) => void;
   readonly options: readonly InputSelectOption<Value>[];
   readonly selectedValue: Value;
+  readonly triggerLabel?: string;
   readonly title: string;
   readonly variant?: "default" | "header";
 }) {
@@ -118,7 +120,7 @@ export function InputSelect<Value extends string>({
             variant === "header" ? styles.selectorLabelHeader : null,
           ]}
         >
-          {selectedOption?.label ?? selectedValue}
+          {triggerLabel ?? selectedOption?.label ?? selectedValue}
         </Text>
         <ChevronDown
           color={variant === "header" ? color.white : color.textSubtle}

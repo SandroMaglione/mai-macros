@@ -1,3 +1,5 @@
+export const estimatedNutrientOpacity = 0.4;
+
 export const color = {
   bg: "#090909",
   surface: "#1b1b1e",

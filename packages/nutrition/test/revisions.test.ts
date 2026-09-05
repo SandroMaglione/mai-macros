@@ -213,7 +213,10 @@ describe("nutrition revisions", () => {
 
     assert.notEqual(result.revised.food.id, foodInput.id);
     assert.equal(result.stores.foods.length, 2);
-    assert.equal(result.stores.mealEntries[0]?.foodId, foodInput.id);
+    assert.equal(
+      result.stores.mealEntries.filter(Domain.isCatalogMealEntry)[0]?.foodId,
+      foodInput.id
+    );
     assert.equal(Object.keys(encodedFood).includes("basedOnFoodId"), false);
   });
 
@@ -256,8 +259,15 @@ describe("nutrition revisions", () => {
     assert.equal(result.edited.food.id, foodInput.id);
     assert.equal(result.edited.revisedMealEntryCount, 1);
     assert.equal(result.stores.foods.length, 1);
-    assert.equal(result.stores.mealEntries[0]?.foodId, foodInput.id);
-    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 3);
+    assert.equal(
+      result.stores.mealEntries.filter(Domain.isCatalogMealEntry)[0]?.foodId,
+      foodInput.id
+    );
+    assert.equal(
+      result.stores.mealEntries.filter(Domain.isCatalogMealEntry)[0]
+        ?.nutritionMultiplier,
+      3
+    );
   });
 
   it("sets a conversion on an app-default food without changing its identity", async () => {
@@ -327,7 +337,11 @@ describe("nutrition revisions", () => {
     assert.equal(result.edited.revisedMealEntryCount, 1);
     assert.equal(result.stores.foods.length, 1);
     assert.equal(result.stores.foods[0]?.origin, "app-default");
-    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 1.5);
+    assert.equal(
+      result.stores.mealEntries.filter(Domain.isCatalogMealEntry)[0]
+        ?.nutritionMultiplier,
+      1.5
+    );
 
     const pricedQuantity = await Effect.runPromise(
       Schema.decodeEffect(Domain.LoggedFoodQuantity)({
@@ -401,7 +415,11 @@ describe("nutrition revisions", () => {
       result.stores.foods[0]?.massVolumeConversion?.mass.amount,
       0.91
     );
-    assert.equal(result.stores.mealEntries[0]?.nutritionMultiplier, 9.1);
+    assert.equal(
+      result.stores.mealEntries.filter(Domain.isCatalogMealEntry)[0]
+        ?.nutritionMultiplier,
+      9.1
+    );
   });
 
   it("changes a used portion everywhere but still rejects removing it", async () => {
@@ -488,6 +506,7 @@ describe("nutrition revisions", () => {
     assert.equal(result.edited.revisedMealEntryCount, 1);
     assert.equal(result.stores.foods[0]?.portions[0]?.name, "Small scoop");
     const revisedEntry = result.stores.mealEntries[0];
+    assert(revisedEntry?.kind === "catalog");
     assert.equal(revisedEntry?.nutritionMultiplier, 0.5);
     assert.equal(revisedEntry?.quantity._tag, "PortionFoodQuantity");
     if (revisedEntry?.quantity._tag === "PortionFoodQuantity") {
@@ -962,7 +981,8 @@ function _revisionTestLayer({
       Effect.sync(
         () =>
           currentStores.mealEntries.filter(
-            (mealEntry) => mealEntry.foodId === foodId
+            (mealEntry) =>
+              mealEntry.kind === "catalog" && mealEntry.foodId === foodId
           ).length
       ),
     countMealEntriesByMealIds: (mealIds) =>
@@ -1062,9 +1082,9 @@ function _revisionTestLayer({
       ),
     findMealEntriesByFood: (foodId) =>
       Effect.sync(() =>
-        currentStores.mealEntries.filter(
-          (mealEntry) => mealEntry.foodId === foodId
-        )
+        currentStores.mealEntries
+          .filter(Domain.isCatalogMealEntry)
+          .filter((mealEntry) => mealEntry.foodId === foodId)
       ),
     findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
       Effect.sync(() =>
@@ -1073,7 +1093,9 @@ function _revisionTestLayer({
             mealEntry.dateKey >= startDateKey && mealEntry.dateKey <= endDateKey
         )
       ),
-    findMealEntriesForFoodUsage: Effect.sync(() => currentStores.mealEntries),
+    findMealEntriesForFoodUsage: Effect.sync(() =>
+      currentStores.mealEntries.filter(Domain.isCatalogMealEntry)
+    ),
     findLatestPlan: Effect.sync(() => currentStores.plans.slice(-1)),
     findPlanById: (planId) =>
       Effect.sync(() =>

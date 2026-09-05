@@ -60,6 +60,11 @@ const SqliteMigrationLoader: readonly {
     load: () => import("./009-daily-water.ts"),
     name: "daily-water",
   },
+  {
+    id: 10,
+    load: () => import("./010-one-off-meal-entries.ts"),
+    name: "one-off-meal-entries",
+  },
 ];
 
 export const runSqliteMigrations = Effect.gen(function* () {

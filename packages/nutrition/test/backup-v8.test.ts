@@ -117,7 +117,7 @@ const _encodedBackup = ({
     },
     source: {
       databaseName: "mai",
-      databaseVersion: 11,
+      databaseVersion: 12,
       exportedAt: 300,
     },
     stores,
@@ -226,10 +226,10 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.exported.backup.source.databaseVersion, 11);
+    assert.equal(result.exported.backup.source.databaseVersion, 12);
     assert.equal(result.exported.backup.integrity.counts.recordableEvents, 1);
     assert.equal(result.exported.backup.integrity.counts.recordedEvents, 1);
-    assert.equal(result.imported.backup.source.databaseVersion, 11);
+    assert.equal(result.imported.backup.source.databaseVersion, 12);
     assert.equal(result.stores.recordableEvents[0]?.name, "Water");
     assert.equal(result.stores.recordableEvents[0]?.emoji, "💧");
     assert.equal(
@@ -280,7 +280,7 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.imported.backup.source.databaseVersion, 11);
+    assert.equal(result.imported.backup.source.databaseVersion, 12);
     assert.equal(result.stores.dailyLogs[0]?.mode, "fasting");
     assert.equal(result.stores.dailyLogs[0]?.waterServings, 8);
     assert.equal(result.stores.dailyLogs[1]?.mode, "not-recorded");
@@ -318,7 +318,7 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.backup.source.databaseVersion, 11);
+    assert.equal(result.backup.source.databaseVersion, 12);
     assert.equal(result.backup.stores.dailyLogs[0]?.mode, "eating");
     assert.isNull(result.backup.stores.dailyLogs[0]?.waterServings);
     assert.equal(testContext.readStores().dailyLogs[0]?.mode, "eating");
@@ -363,7 +363,7 @@ describe("backup database version 9", () => {
       }).pipe(Effect.provide(testContext.layer))
     );
 
-    assert.equal(result.backup.source.databaseVersion, 11);
+    assert.equal(result.backup.source.databaseVersion, 12);
     assert.deepEqual(result.backup.stores.recordableEvents, []);
     assert.deepEqual(result.backup.stores.recordedEvents, []);
     assert.equal(result.backup.integrity.counts.foods, 0);
@@ -410,7 +410,7 @@ describe("backup database version 9", () => {
         }).pipe(Effect.provide(testContext.layer))
       );
 
-      assert.equal(result.backup.source.databaseVersion, 11);
+      assert.equal(result.backup.source.databaseVersion, 12);
       assert.deepEqual(result.backup.stores.recordableEvents, []);
       assert.deepEqual(result.backup.stores.recordedEvents, []);
     }

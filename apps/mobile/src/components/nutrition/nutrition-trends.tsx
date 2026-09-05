@@ -1,12 +1,19 @@
+import * as Reporting from "@mai/nutrition/reporting";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
-import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
 import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
-import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import {
+  color,
+  estimatedNutrientOpacity,
+  radius,
+  shadow,
+  spacing,
+  tokens,
+} from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
 import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
@@ -21,7 +28,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
-  Bar,
+  StackedBar,
   CartesianChart,
   Line,
   Scatter,
@@ -46,10 +53,10 @@ const NutritionTrendMetric = Schema.Literals([
 
 type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
 
-const NutritionChartKind = Schema.Literals(["trend", "daily"]);
+export const NutritionChartKind = Schema.Literals(["trend", "daily"]);
+export type NutritionChartKind = typeof NutritionChartKind.Type;
 
 const NutritionTrendMetricContext = Schema.Struct({
-  chartKind: NutritionChartKind,
   nutrientName: NutritionTrendMetric,
 });
 
@@ -57,11 +64,6 @@ const nutritionTrendMetricMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(NutritionTrendMetricContext),
     events: {
-      selectChartKind: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          chartKind: NutritionChartKind,
-        })
-      ),
       selectMetric: Schema.toStandardSchemaV1(
         Schema.Struct({
           nutrientName: NutritionTrendMetric,
@@ -71,15 +73,9 @@ const nutritionTrendMetricMachine = setup({
   },
 }).createMachine({
   context: {
-    chartKind: "trend",
     nutrientName: "energyKcal",
   },
   on: {
-    selectChartKind: ({ event }) => ({
-      context: {
-        chartKind: event.chartKind,
-      },
-    }),
     selectMetric: ({ event }) => ({
       context: {
         nutrientName: event.nutrientName,
@@ -311,23 +307,14 @@ const metricColors = {
   waterLiters: color.water,
 } satisfies Record<NutritionTrendMetric, string>;
 
-const nutritionChartTabs = [
-  {
-    accessibilityLabel: "Show nutrition trend chart",
-    key: "trend",
-    label: "Trend",
-  },
-  {
-    accessibilityLabel: "Show daily nutrition bar chart",
-    key: "daily",
-    label: "Daily",
-  },
-] as const;
-
 export function NutritionTrends({
+  chartKind,
+  includeEstimates,
   currentReport,
   onSelectDate,
 }: {
+  readonly includeEstimates: boolean;
+  readonly chartKind: NutritionChartKind;
   readonly currentReport: NutritionReports.NutritionReportRange;
   readonly onSelectDate: (dateKey: Domain.DateKey) => void;
 }) {
@@ -342,7 +329,11 @@ export function NutritionTrends({
 
   return (
     <View style={styles.root}>
-      <NutritionTrendChart report={currentReport} />
+      <NutritionTrendChart
+        chartKind={chartKind}
+        report={currentReport}
+        includeEstimates={includeEstimates}
+      />
       <NutritionCalendar
         initialDays={initialCalendar.days}
         initialDateKey={currentReport.endDateKey}
@@ -356,21 +347,25 @@ export function NutritionTrends({
 }
 
 function NutritionTrendChart({
+  chartKind,
+  includeEstimates,
   report,
 }: {
+  readonly includeEstimates: boolean;
+  readonly chartKind: NutritionChartKind;
   readonly report: NutritionReports.NutritionReportRange;
 }) {
   const [snapshot, , actor] = useMachine(nutritionTrendMetricMachine);
-  const chartKind = snapshot.context.chartKind;
   const nutrientName = snapshot.context.nutrientName;
   const isWaterMetric = nutrientName === "waterLiters";
   const chart = useMemo(
     () =>
       NutritionChartDataModel.make({
+        includeEstimates,
         nutrientName,
         report,
       }),
-    [nutrientName, report]
+    [includeEstimates, nutrientName, report]
   );
   const unit =
     nutrientName === "energyKcal"
@@ -392,6 +387,8 @@ function NutritionTrendChart({
     x: 0,
     y: {
       actual: 0,
+      recordedActual: 0,
+      estimatedActual: 0,
       average: 0,
       fastingActual: 0,
       notRecordedActual: 0,
@@ -405,15 +402,6 @@ function NutritionTrendChart({
 
   return (
     <View style={styles.chartSection}>
-      <PagerTabBar
-        activeIndex={chartKind === "trend" ? 0 : 1}
-        onActiveIndexChange={(index) => {
-          actor.trigger.selectChartKind({
-            chartKind: index === 0 ? "trend" : "daily",
-          });
-        }}
-        tabs={nutritionChartTabs}
-      />
       {!chart.hasRecordedValues ? (
         <Text style={styles.emptyText}>
           {isWaterMetric
@@ -454,6 +442,8 @@ function NutritionTrendChart({
               xKey="dayIndex"
               yKeys={[
                 "actual",
+                "recordedActual",
+                "estimatedActual",
                 "average",
                 "fastingActual",
                 "notRecordedActual",
@@ -510,29 +500,27 @@ function NutritionTrendChart({
                       />
                     </>
                   ) : (
-                    <>
-                      <Bar
-                        chartBounds={chartBounds}
-                        color={metricColors[nutrientName]}
-                        innerPadding={0.32}
-                        points={points.actual}
-                        roundedCorners={{ topLeft: 3, topRight: 3 }}
-                      />
-                      <Bar
-                        chartBounds={chartBounds}
-                        color={color.safeBorder}
-                        innerPadding={0.32}
-                        points={points.fastingActual}
-                        roundedCorners={{ topLeft: 3, topRight: 3 }}
-                      />
-                      <Bar
-                        chartBounds={chartBounds}
-                        color={color.notRecordedText}
-                        innerPadding={0.32}
-                        points={points.notRecordedActual}
-                        roundedCorners={{ topLeft: 3, topRight: 3 }}
-                      />
-                    </>
+                    <StackedBar
+                      chartBounds={chartBounds}
+                      innerPadding={0.32}
+                      points={[points.recordedActual, points.estimatedActual]}
+                      barOptions={({ seriesIndex, datumIndex, isTop }) => ({
+                        color:
+                          !isWaterMetric &&
+                          chart.data[datumIndex]?.mode === "fasting"
+                            ? color.safeBorder
+                            : !isWaterMetric &&
+                                chart.data[datumIndex]?.mode === "not-recorded"
+                              ? color.notRecordedText
+                              : metricColors[nutrientName],
+                        opacity:
+                          seriesIndex === 1 ? estimatedNutrientOpacity : 1,
+                        roundedCorners: {
+                          topLeft: isTop ? 3 : 0,
+                          topRight: isTop ? 3 : 0,
+                        },
+                      })}
+                    />
                   )}
                   <Line
                     color={color.textMuted}
@@ -1088,9 +1076,11 @@ const CalendarMonthModel = {
 
 const NutritionChartDataModel = {
   make({
+    includeEstimates,
     nutrientName,
     report,
   }: {
+    readonly includeEstimates: boolean;
     readonly nutrientName: NutritionTrendMetric;
     readonly report: NutritionReports.NutritionReportRange;
   }) {
@@ -1113,7 +1103,12 @@ const NutritionChartDataModel = {
               ? day.dailyLog.waterServings === null
                 ? null
                 : day.dailyLog.waterServings / 4
-              : day.totals[nutrientName],
+              : day.nutrition.coverage[nutrientName] === 0 &&
+                  Array.isReadonlyArrayNonEmpty(day.entries)
+                ? null
+                : includeEstimates
+                  ? day.nutrition.totals[nutrientName]
+                  : day.nutrition.recorded[nutrientName],
         day,
         dayIndex: Math.floor(
           Date.UTC(
@@ -1170,14 +1165,37 @@ const NutritionChartDataModel = {
           : day.targetStatuses.find(
               (status) => status.nutrientName === nutrientName
             );
-      const target = targetStatus?.amount ?? null;
+      const target =
+        nutrientName === "costEur" || isWaterMetric
+          ? (targetStatus?.amount ?? null)
+          : (Reporting.getPlanNutrientTargetAmount({
+              plan: day.plan,
+              nutrientName,
+            }) ?? null);
       const targetLabel =
         target === null
           ? "No target"
           : `target ${_formatNutritionChartValue({ unit, value: target })}`;
 
+      const qualityLabel =
+        nutrientName === "costEur" || isWaterMetric
+          ? ""
+          : ` · ${formatNumber({ value: day.nutrition.recorded[nutrientName], maximumFractionDigits: 1 })} + ≈ ${formatNumber({ value: day.nutrition.estimated[nutrientName], maximumFractionDigits: 1 })}${day.nutrition.missing[nutrientName] > 0 ? ` · — ×${day.nutrition.missing[nutrientName]}` : ""}`;
       return {
         actual,
+        recordedActual:
+          rawActual === null
+            ? null
+            : nutrientName === "costEur" || isWaterMetric
+              ? rawActual
+              : day.nutrition.recorded[nutrientName],
+        estimatedActual:
+          rawActual === null
+            ? null
+            : nutrientName === "costEur" || isWaterMetric || !includeEstimates
+              ? 0
+              : day.nutrition.estimated[nutrientName],
+        mode,
         average,
         dateKey: day.dateKey,
         dayIndex,
@@ -1188,12 +1206,12 @@ const NutritionChartDataModel = {
         targetSemantics: targetStatus?.semantics ?? null,
         tooltipPrimary:
           rawActual === null
-            ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
+            ? `${_formatShortDate({ dateKey: day.dateKey })} · —${qualityLabel}`
             : !isWaterMetric && mode === "fasting"
               ? `${_formatShortDate({ dateKey: day.dateKey })} · Fasting day`
               : !isWaterMetric && mode === "not-recorded"
                 ? `${_formatShortDate({ dateKey: day.dateKey })} · Not recorded`
-                : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}`,
+                : `${_formatShortDate({ dateKey: day.dateKey })} · ${_formatNutritionChartValue({ unit, value: rawActual })}${qualityLabel}`,
         tooltipSecondary:
           average === null
             ? "Excluded from averages"
@@ -1296,6 +1314,7 @@ function _calendarDaysFromReport({
     dateKey: day.dateKey,
     hasEntries: Array.isReadonlyArrayNonEmpty(day.entries),
     isInsideTargetMargin:
+      day.isInsideExpectedPlanRange &&
       Array.isReadonlyArrayNonEmpty(day.targetStatuses) &&
       day.targetStatuses.every((status) =>
         isInsideNutritionTargetMargin({

@@ -16,6 +16,7 @@ type FieldProps = Omit<TextInputProps, "style"> & {
   readonly helperText?: string;
   readonly inputStyle?: StyleProp<TextStyle>;
   readonly label?: string;
+  readonly labelStyle?: StyleProp<TextStyle>;
   readonly rightElement?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
 };
@@ -25,6 +26,7 @@ export function Field({
   helperText,
   inputStyle,
   label,
+  labelStyle,
   placeholderTextColor = color.textSubtle,
   rightElement,
   style,
@@ -34,7 +36,9 @@ export function Field({
 
   return (
     <View style={[styles.root, style]}>
-      {label === undefined ? null : <Text style={styles.label}>{label}</Text>}
+      {label === undefined ? null : (
+        <Text style={[styles.label, labelStyle]}>{label}</Text>
+      )}
       <View
         style={[
           styles.inputShell,

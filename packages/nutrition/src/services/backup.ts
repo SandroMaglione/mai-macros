@@ -19,6 +19,7 @@ import {
   FoodId,
   FoodOrigin,
   MealEntry,
+  CatalogMealEntry,
   MealId,
   MealPosition,
   NonEmptyString,
@@ -85,13 +86,13 @@ class BackupLegacyFood extends Schema.Class<BackupLegacyFood>(
 class BackupLegacyMealEntry extends Schema.Class<BackupLegacyMealEntry>(
   "BackupLegacyMealEntry"
 )({
-  id: MealEntry.fields.id,
-  dateKey: MealEntry.fields.dateKey,
-  mealId: MealEntry.fields.mealId,
-  foodId: MealEntry.fields.foodId,
+  id: CatalogMealEntry.fields.id,
+  dateKey: CatalogMealEntry.fields.dateKey,
+  mealId: CatalogMealEntry.fields.mealId,
+  foodId: CatalogMealEntry.fields.foodId,
   quantityGrams: QuantityGrams,
-  createdAt: MealEntry.fields.createdAt,
-  updatedAt: MealEntry.fields.updatedAt,
+  createdAt: CatalogMealEntry.fields.createdAt,
+  updatedAt: CatalogMealEntry.fields.updatedAt,
 }) {}
 
 class BackupImportPlanMeal extends Schema.Class<BackupImportPlanMeal>(
@@ -179,6 +180,11 @@ export class MaiBackupStores extends Schema.Class<MaiBackupStores>(
   recordedEvents: Schema.Array(EventDomain.RecordedEvent),
 }) {}
 
+const MaiBackupCatalogStores = Schema.Struct({
+  ...MaiBackupStores.fields,
+  mealEntries: Schema.Array(CatalogMealEntry),
+});
+
 class MaiBackupImportStoresV7 extends Schema.Class<MaiBackupImportStoresV7>(
   "MaiBackupImportStoresV7"
 )({
@@ -186,7 +192,7 @@ class MaiBackupImportStoresV7 extends Schema.Class<MaiBackupImportStoresV7>(
   bodyWeightEntries: Schema.Array(BodyWeightEntry),
   dailyLogs: Schema.Array(DailyLog),
   foods: Schema.Array(Food),
-  mealEntries: Schema.Array(MealEntry),
+  mealEntries: Schema.Array(CatalogMealEntry),
   plans: Schema.Array(BackupImportPlan),
 }) {}
 
@@ -197,7 +203,7 @@ class LegacyMaiBackupStoresBeforePrices extends Schema.Class<LegacyMaiBackupStor
   bodyWeightEntries: Schema.Array(BodyWeightEntry),
   dailyLogs: Schema.Array(DailyLog),
   foods: Schema.Array(FoodPricesMigration.FoodBeforePrices),
-  mealEntries: Schema.Array(MealEntry),
+  mealEntries: Schema.Array(CatalogMealEntry),
   plans: Schema.Array(BackupImportPlan),
 }) {}
 
@@ -399,7 +405,7 @@ class MaiBackupV1DatabaseVersion8 extends Schema.Class<MaiBackupV1DatabaseVersio
   formatVersion: MaiBackupFormatVersion,
   integrity: MaiBackupIntegrity,
   source: MaiBackupSourceV8,
-  stores: MaiBackupStores,
+  stores: MaiBackupCatalogStores,
 }) {}
 
 class MaiBackupV1DatabaseVersion9 extends Schema.Class<MaiBackupV1DatabaseVersion9>(
@@ -409,7 +415,7 @@ class MaiBackupV1DatabaseVersion9 extends Schema.Class<MaiBackupV1DatabaseVersio
   formatVersion: MaiBackupFormatVersion,
   integrity: MaiBackupIntegrity,
   source: MaiBackupSourceV9,
-  stores: MaiBackupStores,
+  stores: MaiBackupCatalogStores,
 }) {}
 
 class MaiBackupV1DatabaseVersion10 extends Schema.Class<MaiBackupV1DatabaseVersion10>(
@@ -419,7 +425,21 @@ class MaiBackupV1DatabaseVersion10 extends Schema.Class<MaiBackupV1DatabaseVersi
   formatVersion: MaiBackupFormatVersion,
   integrity: MaiBackupIntegrity,
   source: MaiBackupSourceV10,
-  stores: MaiBackupStores,
+  stores: MaiBackupCatalogStores,
+}) {}
+
+class MaiBackupV1DatabaseVersion11 extends Schema.Class<MaiBackupV1DatabaseVersion11>(
+  "MaiBackupV1DatabaseVersion11"
+)({
+  format: MaiBackupFormat,
+  formatVersion: MaiBackupFormatVersion,
+  integrity: MaiBackupIntegrity,
+  source: Schema.Struct({
+    databaseName: Schema.Literal(DatabaseName),
+    databaseVersion: Schema.Literal(11),
+    exportedAt: Schema.DateTimeUtcFromMillis,
+  }),
+  stores: MaiBackupCatalogStores,
 }) {}
 
 export type MaiBackup = typeof MaiBackupV1.Type;
@@ -439,6 +459,7 @@ export const MaiBackupImportV1 = Schema.Union([
   MaiBackupV1DatabaseVersion8,
   MaiBackupV1DatabaseVersion9,
   MaiBackupV1DatabaseVersion10,
+  MaiBackupV1DatabaseVersion11,
   MaiBackupV1,
 ]);
 
@@ -450,7 +471,7 @@ const MaiBackupUnknownJson = Schema.fromJsonString(Schema.Unknown);
 
 const MaiBackupImportVersionProbe = Schema.Struct({
   source: Schema.Struct({
-    databaseVersion: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+    databaseVersion: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
   }),
 });
 
@@ -458,7 +479,8 @@ const isMaiBackupImportV7 = Schema.is(MaiBackupV1DatabaseVersion7);
 const isMaiBackupImportV8 = Schema.is(MaiBackupV1DatabaseVersion8);
 const isMaiBackupImportV9 = Schema.is(MaiBackupV1DatabaseVersion9);
 const isMaiBackupImportV10 = Schema.is(MaiBackupV1DatabaseVersion10);
-const isMaiBackupImportV11 = Schema.is(MaiBackupV1);
+const isMaiBackupImportV11 = Schema.is(MaiBackupV1DatabaseVersion11);
+const isMaiBackupImportV12 = Schema.is(MaiBackupV1);
 
 const isLegacyMaiBackupImportV1 = Schema.is(LegacyMaiBackupV1DatabaseVersion1);
 const isLegacyMaiBackupImportV2 = Schema.is(LegacyMaiBackupV1DatabaseVersion2);
@@ -494,6 +516,7 @@ export const BackupIntegrityErrorReason = Schema.Literals([
   "duplicate-recorded-event-id",
   "meal-entry-food-missing",
   "meal-entry-meal-missing",
+  "one-off-meal-context-missing",
   "recorded-event-recordable-event-missing",
 ]);
 
@@ -638,7 +661,7 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       ),
       Match.when(isMaiBackupImportV8, (backup) =>
         Effect.gen(function* () {
-          const stores = yield* Schema.encodeEffect(MaiBackupStores)(
+          const stores = yield* Schema.encodeEffect(MaiBackupCatalogStores)(
             backup.stores
           );
 
@@ -657,7 +680,7 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       ),
       Match.when(isMaiBackupImportV9, (backup) =>
         Effect.gen(function* () {
-          const stores = yield* Schema.encodeEffect(MaiBackupStores)(
+          const stores = yield* Schema.encodeEffect(MaiBackupCatalogStores)(
             backup.stores
           );
 
@@ -676,7 +699,7 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
       ),
       Match.when(isMaiBackupImportV10, (backup) =>
         Effect.gen(function* () {
-          const stores = yield* Schema.encodeEffect(MaiBackupStores)(
+          const stores = yield* Schema.encodeEffect(MaiBackupCatalogStores)(
             backup.stores
           );
 
@@ -693,7 +716,24 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
           });
         })
       ),
-      Match.when(isMaiBackupImportV11, (backup) => Effect.succeed(backup)),
+      Match.when(isMaiBackupImportV11, (backup) =>
+        Effect.gen(function* () {
+          return yield* Schema.decodeEffect(MaiBackupV1)({
+            format: backup.format,
+            formatVersion: backup.formatVersion,
+            integrity: backup.integrity,
+            source: {
+              databaseName: backup.source.databaseName,
+              databaseVersion: CurrentDatabaseVersion,
+              exportedAt: DateTime.toEpochMillis(backup.source.exportedAt),
+            },
+            stores: yield* Schema.encodeEffect(MaiBackupCatalogStores)(
+              backup.stores
+            ),
+          });
+        })
+      ),
+      Match.when(isMaiBackupImportV12, (backup) => Effect.succeed(backup)),
       Match.exhaustive
     );
   }
@@ -1252,7 +1292,8 @@ export const validateBackup = Effect.fn("validateBackup")(function* ({
   }
 
   const mealEntryWithMissingFood = mealEntries.find(
-    (mealEntry) => !foodIds.includes(mealEntry.foodId)
+    (mealEntry) =>
+      mealEntry.kind === "catalog" && !foodIds.includes(mealEntry.foodId)
   );
 
   if (mealEntryWithMissingFood !== undefined) {
@@ -1270,6 +1311,19 @@ export const validateBackup = Effect.fn("validateBackup")(function* ({
     return yield* new BackupIntegrityError({
       detail: `Meal entry ${mealEntryWithMissingMeal.id} references a missing meal.`,
       reason: "meal-entry-meal-missing",
+    });
+  }
+
+  const oneOffWithoutMealContext = mealEntries.find((entry) => {
+    if (entry.kind !== "one-off") return false;
+    const day = dailyLogs.find((day) => day.dateKey === entry.dateKey);
+    const plan = plans.find((plan) => plan.id === day?.planId);
+    return !plan?.meals.some((meal) => meal.id === entry.mealId);
+  });
+  if (oneOffWithoutMealContext !== undefined) {
+    return yield* new BackupIntegrityError({
+      detail: `One-off entry ${oneOffWithoutMealContext.id} has no matching day and meal.`,
+      reason: "one-off-meal-context-missing",
     });
   }
 
@@ -1382,6 +1436,9 @@ export class Backups extends Context.Service<Backups>()("Backups", {
             Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion10)(rawBackup)
           ),
           Match.when(11, () =>
+            Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion11)(rawBackup)
+          ),
+          Match.when(12, () =>
             Schema.decodeUnknownEffect(MaiBackupV1)(rawBackup)
           ),
           Match.exhaustive

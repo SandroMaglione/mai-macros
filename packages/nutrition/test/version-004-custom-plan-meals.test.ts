@@ -121,6 +121,7 @@ describe("version 004 custom plan meals migration", () => {
       planBeforeCustomPlanMealsInput.id
     );
     assert.equal(result.mealEntries.length, 1);
+    assert(result.mealEntries[0]?.kind === "catalog");
     assert.equal(
       result.mealEntries[0]?.id,
       mealEntryBeforeCustomPlanMealsInput.id

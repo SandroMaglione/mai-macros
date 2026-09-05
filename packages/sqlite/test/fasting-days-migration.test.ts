@@ -79,10 +79,13 @@ describe("fasting days SQLite migration", () => {
         type: "TEXT",
       }
     );
-    assert.deepEqual(result.migrations.at(-1), {
-      id: 9,
-      name: "daily-water",
-    });
+    assert.deepEqual(
+      result.migrations.find(({ id }) => id === 9),
+      {
+        id: 9,
+        name: "daily-water",
+      }
+    );
   });
 
   it("preserves existing daily logs as eating days and enforces valid modes", async () => {

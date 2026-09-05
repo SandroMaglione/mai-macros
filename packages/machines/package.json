@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/main.ts",
-    "./schemas": "./src/schemas.ts"
+    "./schemas": "./src/schemas.ts",
+    "./one-off-entry-form": "./src/one-off-entry-form.ts",
+    "./insight-range": "./src/insight-range.ts"
   },
   "scripts": {
     "test": "vitest run",

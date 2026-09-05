@@ -1,3 +1,4 @@
+import { QuantityAccuracySelect } from "@/components/nutrition/quantity-accuracy-select";
 import { FoodNutrientOverview } from "@/components/nutrition/food-nutrient-overview";
 import { AppScreen } from "@/components/ui/app-screen";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
@@ -32,7 +33,7 @@ const EditMealEntryRouteData = Schema.Struct({
   food: Schema.UndefinedOr(Domain.Food),
   meal: Domain.MealId,
   mealLabel: Schema.NonEmptyString,
-  mealEntry: Domain.MealEntry,
+  mealEntry: Domain.CatalogMealEntry,
 });
 
 const EditMealEntryRouteLoaderInput = Schema.Struct({
@@ -128,7 +129,7 @@ const editMealEntryRouteLoaderMachine = setup({
               (entry) => entry.id === mealEntryId && entry.mealId === meal
             );
 
-            if (mealEntry === undefined) {
+            if (mealEntry === undefined || mealEntry.kind !== "catalog") {
               return {
                 _tag: "InvalidRoute" as const,
               };
@@ -203,10 +204,14 @@ const editMealEntryRouteMachine = setup({
         notice: Schema.NullOr(Schema.String),
         portionId: Schema.NullOr(Domain.FoodPortionId),
         quantityAmount: Schema.String,
+        quantityAccuracy: Domain.QuantityAccuracy,
         quantityUnit: Domain.MeasurementUnit,
       })
     ),
     events: {
+      changeAccuracy: Schema.toStandardSchemaV1(
+        Schema.Struct({ accuracy: Domain.QuantityAccuracy })
+      ),
       changeQuantity: Schema.toStandardSchemaV1(
         Schema.Struct({ quantityAmount: Schema.String })
       ),
@@ -279,6 +284,7 @@ const editMealEntryRouteMachine = setup({
           Schema.Struct({
             mealEntryId: Domain.MealEntryId,
             quantity: FoodMeasurements.MealEntryQuantityFormInput,
+            quantityAccuracy: Domain.QuantityAccuracy,
           })
         ),
         output: Schema.toStandardSchemaV1(MealEntryMutationResult),
@@ -292,6 +298,7 @@ const editMealEntryRouteMachine = setup({
               input: {
                 mealEntryId: input.mealEntryId,
                 quantity: input.quantity,
+                quantityAccuracy: input.quantityAccuracy,
               },
             });
 
@@ -319,6 +326,7 @@ const editMealEntryRouteMachine = setup({
 
     return {
       data: input,
+      quantityAccuracy: input.mealEntry.quantityAccuracy,
       notice: null,
       portionId:
         quantity._tag === "PortionFoodQuantity" ? quantity.portionId : null,
@@ -342,6 +350,9 @@ const editMealEntryRouteMachine = setup({
   states: {
     Ready: {
       on: {
+        changeAccuracy: ({ event }) => ({
+          context: { quantityAccuracy: event.accuracy },
+        }),
         changeQuantity: ({ event }) => ({
           context: { quantityAmount: event.quantityAmount },
         }),
@@ -401,6 +412,7 @@ const editMealEntryRouteMachine = setup({
         src: "reviseMealEntry",
         input: ({ context }) => ({
           mealEntryId: context.data.mealEntry.id,
+          quantityAccuracy: context.quantityAccuracy,
           quantity:
             context.portionId === null
               ? {
@@ -617,6 +629,11 @@ function ReadyEditMealEntryScreen({
             value={snapshot.context.quantityAmount}
           />
 
+          <QuantityAccuracySelect
+            accuracy={snapshot.context.quantityAccuracy}
+            disabled={disabled}
+            change={(accuracy) => actor.trigger.changeAccuracy({ accuracy })}
+          />
           {data.food === undefined ? (
             <Notice
               message="This entry points to a food that is no longer available."

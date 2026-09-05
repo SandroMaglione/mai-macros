@@ -6,8 +6,11 @@ import type {
   LoggedFoodQuantity,
   MealEntry,
   NutritionMultiplier,
+  OneOffNutrients,
+  NutrientValue,
   Plan,
 } from "./domain.ts";
+import { isCatalogMealEntry } from "./domain.ts";
 import { calculateEntryNutrients, calculatePlanEnergyKcal } from "./utils.ts";
 import { massGramsFromQuantity } from "./measurements.ts";
 import {
@@ -156,14 +159,15 @@ export const calculateMealEntriesCostTotals = ({
 }: {
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
-}): EntriesCostTotals =>
-  calculateEntriesCostTotals({
-    entries: mealEntries.flatMap((mealEntry) => {
-      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
-
-      return food === undefined ? [] : [{ food, quantity: mealEntry.quantity }];
+}): EntriesCostTotals => ({
+  ...calculateEntriesCostTotals({
+    entries: mealEntries.filter(isCatalogMealEntry).flatMap((entry) => {
+      const food = foods.find((food) => food.id === entry.foodId);
+      return food === undefined ? [] : [{ food, quantity: entry.quantity }];
     }),
-  });
+  }),
+  entriesCount: mealEntries.length,
+});
 
 export const NutrientTargetSemanticsByName = {
   carbsGrams: "range",
@@ -305,27 +309,105 @@ export const calculateEntriesNutrientTotals = ({
     }
   );
 
+export type MealEntriesNutrientTotals = EntriesNutrientTotals & {
+  readonly recorded: NutrientTotals;
+  readonly estimated: NutrientTotals;
+  readonly estimatedCoverage: NutrientCoverage;
+  readonly missing: NutrientCoverage;
+};
+
+export const resolveMealEntryNutrients = ({
+  food,
+  mealEntry,
+}: {
+  readonly food: Food | undefined;
+  readonly mealEntry: MealEntry;
+}): OneOffNutrients => {
+  if (mealEntry.kind === "one-off") return mealEntry.nutrients;
+  const values =
+    food === undefined
+      ? undefined
+      : calculateEntryNutrients({
+          food,
+          nutritionMultiplier: mealEntry.nutritionMultiplier,
+        });
+  const nutrient = (name: NutrientName): NutrientValue => {
+    const value = values?.[name];
+    return value === undefined
+      ? { _tag: "Unknown" }
+      : {
+          _tag:
+            mealEntry.quantityAccuracy === "estimated"
+              ? "Estimated"
+              : "Recorded",
+          value,
+        };
+  };
+  return {
+    energyKcal: nutrient("energyKcal"),
+    proteinGrams: nutrient("proteinGrams"),
+    carbsGrams: nutrient("carbsGrams"),
+    fatGrams: nutrient("fatGrams"),
+    fiberGrams: nutrient("fiberGrams"),
+    sugarGrams: nutrient("sugarGrams"),
+    saturatedFatGrams: nutrient("saturatedFatGrams"),
+    saltGrams: nutrient("saltGrams"),
+  };
+};
+
+export const calculateNutrientBreakdown = (
+  entries: readonly OneOffNutrients[]
+): MealEntriesNutrientTotals => {
+  let recorded = emptyNutrientTotals();
+  let estimated = emptyNutrientTotals();
+  const coverage = emptyNutrientCoverage();
+  const estimatedCoverage = emptyNutrientCoverage();
+  const missing = emptyNutrientCoverage();
+  for (const entry of entries) {
+    for (const name of NutrientNames) {
+      const nutrient = entry[name];
+      if (nutrient._tag === "Unknown") {
+        missing[name]++;
+        continue;
+      }
+      coverage[name]++;
+      if (nutrient._tag === "Estimated") {
+        estimated = { ...estimated, [name]: estimated[name] + nutrient.value };
+        estimatedCoverage[name]++;
+      } else {
+        recorded = { ...recorded, [name]: recorded[name] + nutrient.value };
+      }
+    }
+  }
+  return {
+    recorded,
+    estimated,
+    estimatedCoverage,
+    missing,
+    coverage,
+    entriesCount: entries.length,
+    totals: addNutrientTotals({ left: recorded, right: estimated }),
+  };
+};
+
 export const calculateMealEntriesNutrientTotals = ({
   foods,
   mealEntries,
 }: {
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
-}): EntriesNutrientTotals =>
-  calculateEntriesNutrientTotals({
-    entries: mealEntries.flatMap((mealEntry) => {
-      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
-
-      return food === undefined
-        ? []
-        : [
-            {
-              food,
-              nutritionMultiplier: mealEntry.nutritionMultiplier,
-            },
-          ];
-    }),
-  });
+}): MealEntriesNutrientTotals =>
+  calculateNutrientBreakdown(
+    mealEntries.map((mealEntry) =>
+      resolveMealEntryNutrients({
+        mealEntry,
+        food:
+          mealEntry.kind === "catalog"
+            ? foods.find((food) => food.id === mealEntry.foodId)
+            : undefined,
+      })
+    )
+  );
 
 export const calculateEntriesWeightTotals = ({
   entries,
@@ -362,21 +444,17 @@ export const calculateMealEntriesWeightTotals = ({
 }: {
   readonly foods: readonly Food[];
   readonly mealEntries: readonly MealEntry[];
-}): EntriesWeightTotals =>
-  calculateEntriesWeightTotals({
-    entries: mealEntries.flatMap((mealEntry) => {
-      const food = foods.find((candidate) => candidate.id === mealEntry.foodId);
-
-      return food === undefined
+}): EntriesWeightTotals => ({
+  ...calculateEntriesWeightTotals({
+    entries: mealEntries.filter(isCatalogMealEntry).flatMap((entry) => {
+      const food = foods.find((food) => food.id === entry.foodId);
+      return food === undefined || entry.quantityAccuracy === "estimated"
         ? []
-        : [
-            {
-              food,
-              quantity: mealEntry.quantity,
-            },
-          ];
+        : [{ food, quantity: entry.quantity }];
     }),
-  });
+  }),
+  entriesCount: mealEntries.length,
+});
 
 export const calculateCaloriesPerGram = ({
   energyKcal,

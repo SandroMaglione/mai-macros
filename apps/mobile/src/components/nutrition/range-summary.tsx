@@ -176,10 +176,12 @@ const costCoverageDialogMachine = setup({
 });
 
 export function RangeSummary({
+  includeEstimates = true,
   rangeDayCount,
   report,
 }: {
-  readonly rangeDayCount: 7 | 30 | 90;
+  readonly includeEstimates?: boolean;
+  readonly rangeDayCount: number;
   readonly report: NutritionReports.NutritionReportRange;
 }) {
   const [costCoverageSnapshot, , costCoverageActor] = useMachine(
@@ -187,25 +189,17 @@ export function RangeSummary({
   );
   const countedDays = NutritionReports.countedNutritionDays({ report });
   const dayCount = countedDays.length;
-  const fastingDayCount = report.days.filter(
-    (day) => day.dailyLog.mode === "fasting"
-  ).length;
-  const notRecordedDayCount = report.days.filter(
-    (day) => day.dailyLog.mode === "not-recorded"
-  ).length;
-  const excludedDayDescriptions = [
-    ...(fastingDayCount === 0
-      ? []
-      : [
-          `${fastingDayCount} fasting ${fastingDayCount === 1 ? "day" : "days"}`,
-        ]),
-    ...(notRecordedDayCount === 0
-      ? []
-      : [
-          `${notRecordedDayCount} ${notRecordedDayCount === 1 ? "day" : "days"} marked not recorded`,
-        ]),
-  ];
-  const entries = countedDays.flatMap((day) => day.entries);
+  const allEntries = countedDays.flatMap((day) => day.entries);
+  const entries = allEntries.filter(NutritionReports.isCatalogReportEntry);
+  const nutrition = Reporting.calculateNutrientBreakdown(
+    allEntries.map((entry) =>
+      Reporting.resolveMealEntryNutrients({
+        food: entry.food ?? undefined,
+        mealEntry: entry.mealEntry,
+      })
+    )
+  );
+
   const totalQuantityGrams = entries.reduce(
     (total, entry) =>
       total +
@@ -215,13 +209,15 @@ export function RangeSummary({
       }) ?? 0),
     0
   );
-  const weightCoverageComplete = entries.every(
-    (entry) =>
-      mealEntryMassGrams({
-        food: entry.food,
-        mealEntry: entry.mealEntry,
-      }) !== undefined
-  );
+  const weightCoverageComplete =
+    entries.length === allEntries.length &&
+    entries.every(
+      (entry) =>
+        mealEntryMassGrams({
+          food: entry.food,
+          mealEntry: entry.mealEntry,
+        }) !== undefined
+    );
   const totalCostMinor = countedDays.reduce(
     (total, day) => total + day.costTotals.costMinorByCurrency.EUR,
     0
@@ -230,7 +226,7 @@ export function RangeSummary({
     (total, day) => total + day.costTotals.resolvedEntriesCount,
     0
   );
-  const costCoverageComplete = pricedEntryCount === entries.length;
+  const costCoverageComplete = pricedEntryCount === allEntries.length;
   const totals = countedDays.reduce<Reporting.NutrientTotals>(
     (currentTotals, day) =>
       Reporting.addNutrientTotals({
@@ -244,7 +240,7 @@ export function RangeSummary({
       ? Reporting.emptyNutrientTotals()
       : Reporting.divideNutrientTotals({
           divisor: dayCount,
-          totals,
+          totals: includeEstimates ? totals : nutrition.recorded,
         });
   const averageQuantityGrams =
     dayCount === 0 ? 0 : totalQuantityGrams / dayCount;
@@ -366,13 +362,27 @@ export function RangeSummary({
 
       <View style={styles.section}>
         <SectionTitle
-          subtitle={`Average daily intake across ${dayCount} counted days in the selected ${rangeDayCount}-day period${Array.isReadonlyArrayNonEmpty(excludedDayDescriptions) ? `, excluding ${excludedDayDescriptions.join(" and ")}` : ""}, compared with daily targets when available.`}
+          subtitle={`${dayCount} / ${rangeDayCount} days`}
           title="Counted-day average"
         />
         <View style={styles.nutrientGrid}>
           {trackedNutrients.map((nutrientName) => (
             <NutrientBalanceCard
               actual={averageTotals[nutrientName]}
+              estimated={
+                includeEstimates &&
+                nutrition.estimatedCoverage[nutrientName] > 0
+              }
+              incomplete={nutrition.missing[nutrientName] > 0}
+              unknown={
+                nutrition.entriesCount > 0 &&
+                nutrition.coverage[nutrientName] === 0
+              }
+              comparisonAvailable={
+                nutrition.missing[nutrientName] === 0 &&
+                (includeEstimates ||
+                  nutrition.estimatedCoverage[nutrientName] === 0)
+              }
               key={nutrientName}
               nutrientName={nutrientName}
               target={averageTargetTotals[nutrientName]}
@@ -419,7 +429,7 @@ export function RangeSummary({
             label="Costs recorded"
             onPress={costCoverageActor.trigger.open}
             showTargetStatus={false}
-            value={`${pricedEntryCount} / ${entries.length}`}
+            value={`${pricedEntryCount} / ${allEntries.length}`}
           />
           <SecondaryMetricBalanceCard
             label="Most expensive"
@@ -438,15 +448,12 @@ export function RangeSummary({
         foods={unresolvedFoodCosts}
         onClose={costCoverageActor.trigger.close}
         pricedEntryCount={pricedEntryCount}
-        totalEntryCount={entries.length}
+        totalEntryCount={allEntries.length}
         visible={costCoverageSnapshot.matches("Open")}
       />
 
       <View style={styles.section}>
-        <SectionTitle
-          subtitle="Top foods contributing to each nutrient across recorded days in this range."
-          title="Food contributors"
-        />
+        <SectionTitle title="Food contributors" />
         <View style={styles.foodGroups}>
           {trackedNutrients.map((nutrientName) => {
             const foods = foodContributors
@@ -633,18 +640,29 @@ function SummaryInsights({
 }
 
 function NutrientBalanceCard({
+  estimated,
+  incomplete,
+  unknown,
+  comparisonAvailable,
   actual,
   nutrientName,
   target,
 }: {
+  readonly estimated: boolean;
+  readonly incomplete: boolean;
+  readonly unknown: boolean;
+  readonly comparisonAvailable: boolean;
   readonly actual: number;
   readonly nutrientName: Reporting.NutrientName;
   readonly target: number | null;
 }) {
   const unit = nutrientName === "energyKcal" ? "kcal" : "g";
-  const signedValue = target === null ? null : actual - target;
+  const signedValue =
+    target === null || !comparisonAvailable ? null : actual - target;
   const trend =
-    target === null ? "none" : getNutritionTargetTrend({ actual, target });
+    target === null || !comparisonAvailable
+      ? "none"
+      : getNutritionTargetTrend({ actual, target });
   const formattedSignedValue =
     signedValue === null
       ? null
@@ -669,11 +687,15 @@ function NutrientBalanceCard({
         <TargetTrendIcon trend={trend} />
       </View>
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.nutrientValue}>
-        {_formatNutrient({ nutrientName, value: actual })}
+        {unknown
+          ? "—"
+          : `${estimated ? "≈ " : ""}${_formatNutrient({ nutrientName, value: actual })}${incomplete ? "+" : ""}`}
       </Text>
       <Text numberOfLines={1} style={styles.nutrientDelta}>
         {signedValue === null || formattedSignedValue === null
-          ? "No target"
+          ? target === null
+            ? "No target"
+            : "—"
           : signedValue === 0
             ? `0 ${unit}`
             : `${signedValue > 0 ? "+" : "-"}${formattedSignedValue} ${unit}`}
@@ -912,13 +934,15 @@ function SectionTitle({
   subtitle,
   title,
 }: {
-  readonly subtitle: string;
+  readonly subtitle?: string;
   readonly title: string;
 }) {
   return (
     <View style={styles.sectionTitle}>
       <Text style={styles.sectionHeading}>{title}</Text>
-      <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      {subtitle === undefined ? null : (
+        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      )}
     </View>
   );
 }

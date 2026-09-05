@@ -111,18 +111,21 @@ const ActiveMealPlanSelectionRow = Schema.Struct({
 });
 
 const MealEntryRow = Schema.Struct({
+  kind: Schema.Literals(["catalog", "one-off"]),
+  quantityAccuracy: Domain.QuantityAccuracy,
+  oneOff: Schema.NullOr(Schema.String),
   createdAt: Schema.Number,
   dateKey: Domain.DateKey,
-  foodId: Domain.FoodId,
+  foodId: Schema.NullOr(Domain.FoodId),
   id: Domain.MealEntryId,
   mealId: Domain.MealId,
-  nutritionMultiplier: Domain.NutritionMultiplier,
+  nutritionMultiplier: Schema.NullOr(Domain.NutritionMultiplier),
   portionId: Schema.NullOr(Domain.FoodPortionId),
   portionName: Schema.NullOr(Domain.NonEmptyString),
   portionSizeAmount: Schema.NullOr(Domain.PositiveNumber),
   portionSizeUnit: Schema.NullOr(Domain.MeasurementUnit),
-  quantityAmount: Domain.PositiveNumber,
-  quantityKind: Schema.Literals(["measured", "portion"]),
+  quantityAmount: Schema.NullOr(Domain.PositiveNumber),
+  quantityKind: Schema.NullOr(Schema.Literals(["measured", "portion"])),
   quantityUnit: Schema.NullOr(Domain.MeasurementUnit),
   updatedAt: Schema.Number,
 });
@@ -216,6 +219,7 @@ const selectActiveMealPlanSelectionColumns = `
 `;
 
 const selectMealEntryColumns = `
+  kind, quantity_accuracy AS quantityAccuracy, one_off AS oneOff,
   id,
   date_key AS dateKey,
   meal_id AS mealId,
@@ -366,9 +370,33 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     quantityAmount,
     quantityKind,
     quantityUnit,
+    oneOff,
     ...row
   }: typeof MealEntryRow.Type) =>
     Effect.gen(function* () {
+      if (row.kind === "one-off") {
+        const details = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Domain.OneOffDetails)
+        )(oneOff);
+        return yield* Schema.decodeEffect(Domain.OneOffMealEntry)({
+          ...row,
+          ...details,
+          kind: "one-off",
+        });
+      }
+      if (
+        row.foodId === null ||
+        row.nutritionMultiplier === null ||
+        quantityAmount === null
+      ) {
+        return yield* Effect.fail("Catalog entry is missing food or quantity.");
+      }
+      const catalogRow = {
+        ...row,
+        kind: "catalog" as const,
+        foodId: row.foodId,
+        nutritionMultiplier: row.nutritionMultiplier,
+      };
       if (quantityKind === "measured") {
         if (quantityUnit === null) {
           return yield* Effect.fail(
@@ -380,8 +408,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
           quantityUnit
         );
 
-        return yield* Schema.decodeEffect(Domain.MealEntry)({
-          ...row,
+        return yield* Schema.decodeEffect(Domain.CatalogMealEntry)({
+          ...catalogRow,
           quantity: {
             _tag: "MeasuredFoodQuantity",
             amount: quantityAmount,
@@ -414,8 +442,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
         Domain.MeasurementUnit
       )(portionSizeUnit);
 
-      return yield* Schema.decodeEffect(Domain.MealEntry)({
-        ...row,
+      return yield* Schema.decodeEffect(Domain.CatalogMealEntry)({
+        ...catalogRow,
         quantity: {
           _tag: "PortionFoodQuantity",
           count: quantityAmount,
@@ -763,6 +791,7 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
               ORDER BY created_at DESC, rowid DESC
             ) AS food_meal_rank
           FROM meal_entries
+          WHERE kind = 'catalog'
         )
         SELECT ${sql.literal(selectMealEntryColumns)}
         FROM ranked_meal_entries
@@ -1088,7 +1117,12 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     updated_at: selection.updatedAt,
   });
 
-  const mealEntryRowValues = (mealEntry: typeof Domain.MealEntry.Encoded) => ({
+  const mealEntryRowValues = (
+    mealEntry: typeof Domain.CatalogMealEntry.Encoded
+  ) => ({
+    kind: "catalog",
+    quantity_accuracy: mealEntry.quantityAccuracy ?? "unspecified",
+    one_off: null,
     created_at: mealEntry.createdAt,
     date_key: mealEntry.dateKey,
     food_id: mealEntry.foodId,
@@ -1272,17 +1306,69 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     );
 
   const upsertMealEntry = (mealEntry: Domain.MealEntry) =>
-    Schema.encodeEffect(Domain.MealEntry)(mealEntry).pipe(
-      Effect.flatMap((encodedMealEntry) => {
-        const row = mealEntryRowValues(encodedMealEntry);
-
-        return sql`
-          INSERT INTO meal_entries ${sql.insert(row)}
-          ON CONFLICT(id) DO UPDATE SET
-            ${sql.update(row, ["id"])}
-        `;
-      })
-    );
+    Effect.gen(function* () {
+      const encoded = yield* Schema.encodeEffect(Domain.MealEntry)(mealEntry);
+      const oneOff =
+        encoded.kind === "one-off"
+          ? yield* Schema.encodeEffect(
+              Schema.fromJsonString(Domain.OneOffDetails)
+            )(encoded)
+          : null;
+      const row =
+        encoded.kind === "one-off"
+          ? {
+              id: encoded.id,
+              date_key: encoded.dateKey,
+              meal_id: encoded.mealId,
+              created_at: encoded.createdAt,
+              updated_at: encoded.updatedAt,
+              kind: "one-off",
+              quantity_accuracy: "unspecified",
+              one_off: oneOff,
+              food_id: null,
+              nutrition_multiplier: null,
+              quantity_kind: null,
+              quantity_amount: null,
+              quantity_unit: null,
+              portion_id: null,
+              portion_name: null,
+              portion_size_amount: null,
+              portion_size_unit: null,
+            }
+          : mealEntryRowValues(encoded);
+      return yield* sql`
+        INSERT INTO meal_entries (
+          id, date_key, meal_id, food_id, kind, quantity_accuracy, one_off,
+          quantity_kind, quantity_amount, quantity_unit, portion_id, portion_name,
+          portion_size_amount, portion_size_unit, nutrition_multiplier,
+          created_at, updated_at
+        ) VALUES (
+          ${row.id}, ${row.date_key}, ${row.meal_id}, ${row.food_id},
+          ${row.kind}, ${row.quantity_accuracy}, ${row.one_off},
+          ${row.quantity_kind}, ${row.quantity_amount}, ${row.quantity_unit},
+          ${row.portion_id}, ${row.portion_name}, ${row.portion_size_amount},
+          ${row.portion_size_unit}, ${row.nutrition_multiplier},
+          ${row.created_at}, ${row.updated_at}
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          date_key = excluded.date_key,
+          meal_id = excluded.meal_id,
+          food_id = excluded.food_id,
+          kind = excluded.kind,
+          quantity_accuracy = excluded.quantity_accuracy,
+          one_off = excluded.one_off,
+          quantity_kind = excluded.quantity_kind,
+          quantity_amount = excluded.quantity_amount,
+          quantity_unit = excluded.quantity_unit,
+          portion_id = excluded.portion_id,
+          portion_name = excluded.portion_name,
+          portion_size_amount = excluded.portion_size_amount,
+          portion_size_unit = excluded.portion_size_unit,
+          nutrition_multiplier = excluded.nutrition_multiplier,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at
+      `;
+    });
 
   return Store.NutritionStore.of({
     applyFoodEdit: ({ food, mealEntries }) =>
@@ -1412,7 +1498,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     findMealEntriesByFood: (foodId) =>
       _mapStoreError(
         findMealEntriesByFoodRows(foodId).pipe(
-          Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
+          Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow)),
+          Effect.map((entries) => entries.filter(Domain.isCatalogMealEntry))
         )
       ),
 
@@ -1425,7 +1512,8 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
 
     findMealEntriesForFoodUsage: _mapStoreError(
       findMealEntriesForFoodUsageRows({}).pipe(
-        Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow))
+        Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow)),
+        Effect.map((entries) => entries.filter(Domain.isCatalogMealEntry))
       )
     ),
 

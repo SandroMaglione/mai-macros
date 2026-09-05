@@ -1,10 +1,18 @@
+import { CompactToggle } from "@/components/ui/compact-toggle";
 import { BodyWeightPanel } from "@/components/body-weight/body-weight-panel";
-import { NutritionTrends } from "@/components/nutrition/nutrition-trends";
+import {
+  NutritionTrends,
+  NutritionChartKind,
+} from "@/components/nutrition/nutrition-trends";
 import { RangeSummary } from "@/components/nutrition/range-summary";
 import { AppScreen } from "@/components/ui/app-screen";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { Button } from "@/components/ui/button";
-import { InputSelect } from "@/components/ui/input-select";
+import { InsightRangeSelect } from "@/components/nutrition/insight-range-select";
+import {
+  InsightDateRange,
+  InsightRangeDayCount,
+} from "@mai/machines/insight-range";
 import { LoadingView } from "@/components/ui/loading-view";
 import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
@@ -20,13 +28,19 @@ import { useMachine } from "@xstate/react";
 import { DateTime, Effect, Match, Option, Schema } from "effect";
 import { router, useRouter } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
-import { Activity, ChevronLeft, Plus, Scale } from "lucide-react-native";
+import {
+  Activity,
+  ChartColumn,
+  ChevronLeft,
+  Plus,
+  Scale,
+  TrendingUp,
+} from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { createAsyncLogic, setup } from "xstate";
 
 const InsightTab = Schema.Literals(["nutrition", "weight"]);
 
-const InsightRangeDayCount = Schema.Literals([7, 30, 90]);
 type InsightRangeDayCount = typeof InsightRangeDayCount.Type;
 
 const InsightsSearchParams = Schema.Struct({
@@ -38,7 +52,10 @@ const InsightsViewInput = Schema.Struct({
 });
 
 const InsightsViewContext = Schema.Struct({
+  chartKind: NutritionChartKind,
+  includeEstimates: Schema.Boolean,
   activeTab: InsightTab,
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
@@ -46,8 +63,13 @@ const insightsViewMachine = setup({
   schemas: {
     context: Schema.toStandardSchemaV1(InsightsViewContext),
     events: {
+      selectChartKind: Schema.toStandardSchemaV1(
+        Schema.Struct({ chartKind: NutritionChartKind })
+      ),
+      toggleEstimates: Schema.toStandardSchemaV1(EmptyEvent),
       selectRange: Schema.toStandardSchemaV1(
         Schema.Struct({
+          dateRange: Schema.NullOr(InsightDateRange),
           rangeDayCount: InsightRangeDayCount,
         })
       ),
@@ -61,12 +83,22 @@ const insightsViewMachine = setup({
   },
 }).createMachine({
   context: ({ input }) => ({
+    chartKind: "trend",
     activeTab: input.initialTab,
     rangeDayCount: 30,
+    dateRange: null,
+    includeEstimates: true,
   }),
   on: {
+    selectChartKind: ({ event }) => ({
+      context: { chartKind: event.chartKind },
+    }),
+    toggleEstimates: ({ context }) => ({
+      context: { includeEstimates: !context.includeEstimates },
+    }),
     selectRange: ({ event }) => ({
       context: {
+        dateRange: event.dateRange,
         rangeDayCount: event.rangeDayCount,
       },
     }),
@@ -103,17 +135,31 @@ const NutrientTargetStatus = Schema.Struct({
   value: Schema.Number,
 });
 
-const NutritionReportEntry = Schema.Struct({
-  cost: Schema.NullOr(
-    Schema.Struct({
-      costMinor: Schema.Number,
-      currency: Domain.CurrencyCode,
-    })
-  ),
-  food: Domain.Food,
-  mealEntry: Domain.MealEntry,
-  nutrients: Domain.EntryNutrients,
-});
+const NutritionReportEntry = Schema.Union([
+  Schema.Struct({
+    cost: Schema.NullOr(
+      Schema.Struct({ costMinor: Schema.Number, currency: Domain.CurrencyCode })
+    ),
+    food: Domain.Food,
+    mealEntry: Domain.CatalogMealEntry,
+    nutrients: Domain.EntryNutrients,
+  }),
+  Schema.Struct({
+    cost: Schema.Null,
+    food: Schema.Null,
+    mealEntry: Domain.OneOffMealEntry,
+    nutrients: Schema.Struct({
+      energyKcal: Schema.optional(Schema.Number),
+      proteinGrams: Schema.optional(Schema.Number),
+      carbsGrams: Schema.optional(Schema.Number),
+      fatGrams: Schema.optional(Schema.Number),
+      fiberGrams: Schema.optional(Schema.Number),
+      sugarGrams: Schema.optional(Schema.Number),
+      saturatedFatGrams: Schema.optional(Schema.Number),
+      saltGrams: Schema.optional(Schema.Number),
+    }),
+  }),
+]);
 
 const NutritionReportDay = Schema.Struct({
   costTotals: Schema.Struct({
@@ -127,6 +173,15 @@ const NutritionReportDay = Schema.Struct({
     resolvedEntriesCount: Schema.Number,
   }),
   coverage: NutrientTotals,
+  nutrition: Schema.Struct({
+    recorded: NutrientTotals,
+    estimated: NutrientTotals,
+    missing: NutrientTotals,
+    estimatedCoverage: NutrientTotals,
+    coverage: NutrientTotals,
+    totals: NutrientTotals,
+    entriesCount: Schema.Number,
+  }),
   dailyLog: Domain.DailyLog,
   dateKey: Domain.DateKey,
   entries: Schema.Array(NutritionReportEntry),
@@ -145,26 +200,31 @@ const NutritionReportRange = Schema.Struct({
 });
 
 const NutritionInsightsInput = Schema.Struct({
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
 const NutritionInsightsFailureContext = Schema.Struct({
   message: Schema.String,
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
 const NutritionInsightsLoadedContext = Schema.Struct({
   currentReport: NutritionReportRange,
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
 const NutritionInsightsNoPlansContext = Schema.Struct({
   dateKey: Domain.DateKey,
   message: Schema.String,
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
 const LoadNutritionInsightsInput = Schema.Struct({
+  dateRange: Schema.NullOr(InsightDateRange),
   rangeDayCount: InsightRangeDayCount,
 });
 
@@ -206,19 +266,20 @@ const nutritionInsightsRouteMachine = setup({
                 date: yield* DateTime.nowAsDate,
               })
             );
-            const currentStartDateKey = yield* Schema.decodeEffect(
-              Domain.DateKey
-            )(
-              shiftDateKey({
-                dateKey: today,
-                days: -(input.rangeDayCount - 1),
-              })
-            );
+            const currentStartDateKey =
+              input.dateRange?.startDateKey ??
+              (yield* Schema.decodeEffect(Domain.DateKey)(
+                shiftDateKey({
+                  dateKey: today,
+                  days: -(input.rangeDayCount - 1),
+                })
+              ));
             const reports = yield* NutritionReports.NutritionReports;
             const currentReport = yield* reports.getRange({
               input: {
-                endDateKey: today,
-                startDateKey: currentStartDateKey,
+                endDateKey: input.dateRange?.endDateKey ?? today,
+                startDateKey:
+                  input.dateRange?.startDateKey ?? currentStartDateKey,
               },
             });
 
@@ -269,6 +330,7 @@ const nutritionInsightsRouteMachine = setup({
     currentReport: null,
     dateKey: null,
     message: null,
+    dateRange: input.dateRange,
     rangeDayCount: input.rangeDayCount,
   }),
   initial: "Loading",
@@ -277,6 +339,7 @@ const nutritionInsightsRouteMachine = setup({
       invoke: {
         src: "loadRange",
         input: ({ context }) => ({
+          dateRange: context.dateRange,
           rangeDayCount: context.rangeDayCount,
         }),
         onDone: ({ context, event }) =>
@@ -286,6 +349,7 @@ const nutritionInsightsRouteMachine = setup({
                 target: "Failure" as const,
                 context: {
                   message,
+                  dateRange: context.dateRange,
                   rangeDayCount: context.rangeDayCount,
                 },
               }),
@@ -293,6 +357,7 @@ const nutritionInsightsRouteMachine = setup({
                 target: "Loaded" as const,
                 context: {
                   currentReport,
+                  dateRange: context.dateRange,
                   rangeDayCount: context.rangeDayCount,
                 },
               }),
@@ -301,6 +366,7 @@ const nutritionInsightsRouteMachine = setup({
                 context: {
                   dateKey,
                   message: "Create a meal plan to unlock nutrition insights.",
+                  dateRange: context.dateRange,
                   rangeDayCount: context.rangeDayCount,
                 },
               }),
@@ -310,6 +376,7 @@ const nutritionInsightsRouteMachine = setup({
           target: "Failure",
           context: {
             message: "Something went wrong while loading nutrition insights.",
+            dateRange: context.dateRange,
             rangeDayCount: context.rangeDayCount,
           },
         }),
@@ -326,21 +393,6 @@ const nutritionInsightsRouteMachine = setup({
     NoPlans: {},
   },
 });
-
-const rangeSelectOptions = [
-  {
-    label: "7 days",
-    value: "7",
-  },
-  {
-    label: "30 days",
-    value: "30",
-  },
-  {
-    label: "90 days",
-    value: "90",
-  },
-] as const;
 
 export default function InsightsScreen() {
   const initialTab = useSchemaLocalSearchParams(InsightsSearchParams).pipe(
@@ -368,23 +420,73 @@ export default function InsightsScreen() {
         topSafeAreaColor={color.primary}
       >
         <InsightsHeader
-          activeRange={snapshot.context.rangeDayCount}
           onBackToToday={() => {
             appRouter.replace("/");
           }}
-          onSelectRange={(rangeDayCount) => {
-            actor.trigger.selectRange({ rangeDayCount });
-          }}
         />
+        <View style={styles.reportControls}>
+          <View style={styles.rangeControl}>
+            <InsightRangeSelect
+              compact
+              rangeDayCount={snapshot.context.rangeDayCount}
+              dateRange={snapshot.context.dateRange}
+              onSelect={(rangeDayCount, dateRange) =>
+                actor.trigger.selectRange({ rangeDayCount, dateRange })
+              }
+            />
+          </View>
+          {snapshot.context.activeTab === "nutrition" ? (
+            <View style={styles.toggleControls}>
+              <CompactToggle
+                value={snapshot.context.chartKind}
+                onSelect={(chartKind) =>
+                  actor.trigger.selectChartKind({ chartKind })
+                }
+                options={[
+                  { value: "trend", label: "Trend chart", icon: TrendingUp },
+                  { value: "daily", label: "Daily bars", icon: ChartColumn },
+                ]}
+              />
+              <CompactToggle
+                value={
+                  snapshot.context.includeEstimates ? "estimates" : "recorded"
+                }
+                onSelect={(value) => {
+                  if (
+                    (value === "estimates") !==
+                    snapshot.context.includeEstimates
+                  )
+                    actor.trigger.toggleEstimates();
+                }}
+                options={[
+                  {
+                    value: "estimates",
+                    label: "Include estimates",
+                    symbol: "≈",
+                  },
+                  {
+                    value: "recorded",
+                    label: "Recorded values only",
+                    symbol: "=",
+                  },
+                ]}
+              />
+            </View>
+          ) : null}
+        </View>
         {snapshot.context.activeTab === "nutrition" ? (
           <NutritionInsightsPanel
-            key={`nutrition-${snapshot.context.rangeDayCount}`}
+            chartKind={snapshot.context.chartKind}
+            key={`nutrition-${snapshot.context.rangeDayCount}-${snapshot.context.dateRange?.startDateKey}-${snapshot.context.dateRange?.endDateKey}`}
+            dateRange={snapshot.context.dateRange}
+            includeEstimates={snapshot.context.includeEstimates}
             rangeDayCount={snapshot.context.rangeDayCount}
           />
         ) : (
           <BodyWeightPanel
             calendarPosition="bottom"
-            key={`weight-${snapshot.context.rangeDayCount}`}
+            key={`weight-${snapshot.context.rangeDayCount}-${snapshot.context.dateRange?.startDateKey}-${snapshot.context.dateRange?.endDateKey}`}
+            reportDateRange={snapshot.context.dateRange}
             reportDayCount={snapshot.context.rangeDayCount}
             showImport
           />
@@ -413,12 +515,19 @@ export default function InsightsScreen() {
 }
 
 function NutritionInsightsPanel({
+  chartKind,
+  dateRange,
+  includeEstimates,
   rangeDayCount,
 }: {
+  readonly chartKind: NutritionChartKind;
+  readonly dateRange: InsightDateRange | null;
+  readonly includeEstimates: boolean;
   readonly rangeDayCount: InsightRangeDayCount;
 }) {
   const [snapshot, , actor] = useMachine(nutritionInsightsRouteMachine, {
     input: {
+      dateRange,
       rangeDayCount,
     },
   });
@@ -474,6 +583,8 @@ function NutritionInsightsPanel({
   return (
     <View style={styles.nutritionStack}>
       <NutritionTrends
+        chartKind={chartKind}
+        includeEstimates={includeEstimates}
         currentReport={snapshot.context.currentReport}
         onSelectDate={(dateKey) => {
           router.push({
@@ -485,6 +596,7 @@ function NutritionInsightsPanel({
         }}
       />
       <RangeSummary
+        includeEstimates={includeEstimates}
         rangeDayCount={snapshot.context.rangeDayCount}
         report={snapshot.context.currentReport}
       />
@@ -532,13 +644,9 @@ function InsightsBottomTab({
 }
 
 function InsightsHeader({
-  activeRange,
   onBackToToday,
-  onSelectRange,
 }: {
-  readonly activeRange: InsightRangeDayCount;
   readonly onBackToToday: () => void;
-  readonly onSelectRange: (rangeDayCount: InsightRangeDayCount) => void;
 }) {
   return (
     <MaiHeader
@@ -556,24 +664,23 @@ function InsightsHeader({
         </Pressable>
       }
       title="Insights"
-      trailing={
-        <InputSelect
-          onSelect={(value) => {
-            onSelectRange(value === "7" ? 7 : value === "30" ? 30 : 90);
-          }}
-          options={rangeSelectOptions}
-          selectedValue={
-            activeRange === 7 ? "7" : activeRange === 30 ? "30" : "90"
-          }
-          title="Report range"
-          variant="header"
-        />
-      }
     />
   );
 }
 
 const styles = StyleSheet.create({
+  reportControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  rangeControl: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  toggleControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
   screen: {
     flex: 1,
     backgroundColor: color.bg,

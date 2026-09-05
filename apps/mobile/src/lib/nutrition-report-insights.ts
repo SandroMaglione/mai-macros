@@ -1,4 +1,4 @@
-import type * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
+import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
 
 import { buildInsightContext } from "./nutrition-report-insights/context.ts";
 import { dietConcentrationInsightModule } from "./nutrition-report-insights/rules/diet-concentration.ts";
@@ -37,6 +37,17 @@ export function getNutritionReportInsights({
   readonly limit: number;
   readonly report: NutritionReports.NutritionReportRange;
 }): readonly NutritionReportInsight[] {
+  const countedDays = NutritionReports.countedNutritionDays({ report });
+  if (
+    countedDays.some(
+      (day) =>
+        day.entries.some((entry) => entry.food === null) ||
+        Object.values(day.nutrition.estimatedCoverage).some(
+          (count) => count > 0
+        )
+    )
+  )
+    return [];
   const context = buildInsightContext({ report });
   const moduleResults = nutritionReportInsightModules.map((insightModule) => ({
     insights: insightModule.collect(context),

@@ -250,9 +250,9 @@ function _getRange({
               ),
             countMealEntriesByFood: (foodId: Domain.FoodId) =>
               Effect.succeed(
-                stores.mealEntries.filter(
-                  (mealEntry) => mealEntry.foodId === foodId
-                ).length
+                stores.mealEntries
+                  .filter(Domain.isCatalogMealEntry)
+                  .filter((mealEntry) => mealEntry.foodId === foodId).length
               ),
             countMealEntriesByMealIds: (mealIds: readonly Domain.MealId[]) =>
               Effect.succeed(
@@ -325,9 +325,9 @@ function _getRange({
               ),
             findMealEntriesByFood: (foodId) =>
               Effect.succeed(
-                stores.mealEntries.filter(
-                  (mealEntry) => mealEntry.foodId === foodId
-                )
+                stores.mealEntries
+                  .filter(Domain.isCatalogMealEntry)
+                  .filter((mealEntry) => mealEntry.foodId === foodId)
               ),
             findMealEntriesByRange: ({ endDateKey, startDateKey }) =>
               Effect.succeed(
@@ -337,7 +337,9 @@ function _getRange({
                     mealEntry.dateKey <= endDateKey
                 )
               ),
-            findMealEntriesForFoodUsage: Effect.succeed(stores.mealEntries),
+            findMealEntriesForFoodUsage: Effect.succeed(
+              stores.mealEntries.filter(Domain.isCatalogMealEntry)
+            ),
             findLatestPlan: stores.activeMealPlanSelections.some((selection) =>
               stores.plans.some((plan) => plan.id === selection.planId)
             )

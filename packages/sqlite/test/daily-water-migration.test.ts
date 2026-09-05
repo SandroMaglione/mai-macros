@@ -165,10 +165,13 @@ describe("daily water SQLite migration", () => {
         type: "INTEGER",
       }
     );
-    assert.deepEqual(result.migrations.at(-1), {
-      id: 9,
-      name: "daily-water",
-    });
+    assert.deepEqual(
+      result.migrations.find(({ id }) => id === 9),
+      {
+        id: 9,
+        name: "daily-water",
+      }
+    );
     assert.equal(result.migrations.filter(({ id }) => id === 9).length, 1);
   });
 });

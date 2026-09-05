@@ -5,6 +5,10 @@ import {
   FoodPortionId,
   LoggedFoodQuantity,
   MealEntry,
+  CatalogMealEntry,
+  OneOffMealEntry,
+  OneOffDetails,
+  QuantityAccuracy,
   MealEntryId,
   MealId,
   MeasurementUnit,
@@ -49,7 +53,20 @@ const _CreateMealEntryInputSchema = Schema.Struct({
   mealId: MealId,
   foodId: FoodId,
   quantity: MealEntryQuantityInput,
+  quantityAccuracy: Schema.optional(QuantityAccuracy),
 });
+
+export const CreateOneOffEntryInput = Schema.Struct({
+  dateKey: DateKey,
+  mealId: MealId,
+  ...OneOffDetails.fields,
+});
+export type CreateOneOffEntryInput = typeof CreateOneOffEntryInput.Encoded;
+export const ReviseOneOffEntryInput = Schema.Struct({
+  mealEntryId: MealEntryId,
+  ...OneOffDetails.fields,
+});
+export type ReviseOneOffEntryInput = typeof ReviseOneOffEntryInput.Encoded;
 
 const _ListMealEntriesForDayInput = Schema.Struct({
   dateKey: DateKey,
@@ -58,6 +75,7 @@ const _ListMealEntriesForDayInput = Schema.Struct({
 const _ReviseMealEntryInput = Schema.Struct({
   mealEntryId: MealEntryId,
   quantity: MealEntryQuantityInput,
+  quantityAccuracy: Schema.optional(QuantityAccuracy),
 });
 
 const _DeleteMealEntryInput = Schema.Struct({
@@ -80,10 +98,10 @@ export type ReviseMealEntryInput = typeof _ReviseMealEntryInput.Encoded;
 
 export type MealFoodUsage = {
   readonly foodId: FoodId;
-  readonly latestQuantity: MealEntry["quantity"];
+  readonly latestQuantity: CatalogMealEntry["quantity"];
   readonly latestUsedAt: MealEntry["createdAt"];
   readonly meals: readonly {
-    readonly latestQuantity: MealEntry["quantity"];
+    readonly latestQuantity: CatalogMealEntry["quantity"];
     readonly latestUsedAt: MealEntry["createdAt"];
     readonly mealId: MealEntry["mealId"];
   }[];
@@ -94,15 +112,17 @@ type MutableMealFoodUsage = {
   latestQuantity: MealFoodUsage["latestQuantity"];
   latestUsedAt: MealFoodUsage["latestUsedAt"];
   meals: {
-    latestQuantity: MealEntry["quantity"];
+    latestQuantity: CatalogMealEntry["quantity"];
     latestUsedAt: MealEntry["createdAt"];
     mealId: MealEntry["mealId"];
   }[];
   mealIndexes: MutableHashMap.MutableHashMap<MealId, number>;
 };
 
-export class CreatedMealEntry extends Data.TaggedClass("CreatedMealEntry")<{
-  readonly mealEntry: MealEntry;
+export class CreatedMealEntry<
+  Entry extends MealEntry = MealEntry,
+> extends Data.TaggedClass("CreatedMealEntry")<{
+  readonly mealEntry: Entry;
 }> {}
 
 export class DeletedMealEntry extends Data.TaggedClass("DeletedMealEntry")<{
@@ -128,9 +148,11 @@ export class MealNotFound extends Data.TaggedError("MealNotFound")<{
   readonly mealId: MealId;
 }> {}
 
-export class RevisedMealEntry extends Data.TaggedClass("RevisedMealEntry")<{
-  readonly mealEntry: MealEntry;
-  readonly previousMealEntry: MealEntry;
+export class RevisedMealEntry<
+  Entry extends MealEntry = MealEntry,
+> extends Data.TaggedClass("RevisedMealEntry")<{
+  readonly mealEntry: Entry;
+  readonly previousMealEntry: Entry;
 }> {}
 
 export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
@@ -139,6 +161,60 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
     const crypto = yield* Crypto.Crypto;
 
     return {
+      createOneOff: Effect.fn("MealEntries.createOneOff")(function* ({
+        input,
+      }: {
+        readonly input: CreateOneOffEntryInput;
+      }) {
+        const decoded = yield* Schema.decodeEffect(CreateOneOffEntryInput)(
+          input
+        );
+        const day = (yield* store.findDailyLogByDateKey(decoded.dateKey))[0];
+        if (day === undefined)
+          return yield* new MealNotFound({ mealId: decoded.mealId });
+        const plan = (yield* store.findPlanById(day.planId))[0];
+        if (!plan?.meals.some((meal) => meal.id === decoded.mealId))
+          return yield* new MealNotFound({ mealId: decoded.mealId });
+        const now = DateTime.toEpochMillis(yield* DateTime.now);
+        const entry = yield* Schema.decodeEffect(OneOffMealEntry)({
+          ...decoded,
+          name: decoded.name.trim(),
+          kind: "one-off",
+          id: yield* crypto.randomUUIDv4,
+          createdAt: now,
+          updatedAt: now,
+        });
+        yield* store.insertMealEntry(entry);
+        return new CreatedMealEntry({ mealEntry: entry });
+      }),
+      reviseOneOff: Effect.fn("MealEntries.reviseOneOff")(function* ({
+        input,
+      }: {
+        readonly input: ReviseOneOffEntryInput;
+      }) {
+        const decoded = yield* Schema.decodeEffect(ReviseOneOffEntryInput)(
+          input
+        );
+        const previous = (yield* store.findMealEntryById(
+          decoded.mealEntryId
+        ))[0];
+        if (previous?.kind !== "one-off")
+          return yield* new MealEntryNotFound({
+            mealEntryId: decoded.mealEntryId,
+          });
+        const encoded = yield* Schema.encodeEffect(OneOffMealEntry)(previous);
+        const entry = yield* Schema.decodeEffect(OneOffMealEntry)({
+          ...encoded,
+          ...decoded,
+          name: decoded.name.trim(),
+          updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
+        });
+        yield* store.upsertMealEntry(entry);
+        return new RevisedMealEntry({
+          mealEntry: entry,
+          previousMealEntry: previous,
+        });
+      }),
       listForDay: Effect.fn("MealEntries.listForDay")(function* ({
         input,
       }: {
@@ -298,11 +374,13 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                     quantity,
                   });
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
-                const mealEntry = yield* Schema.decodeEffect(MealEntry)({
+                const mealEntry = yield* Schema.decodeEffect(CatalogMealEntry)({
                   id: yield* crypto.randomUUIDv4,
                   dateKey: decodedInput.dateKey,
                   mealId: decodedInput.mealId,
                   foodId: decodedInput.foodId,
+                  quantityAccuracy:
+                    decodedInput.quantityAccuracy ?? "unspecified",
                   quantity,
                   nutritionMultiplier,
                   createdAt: now,
@@ -339,6 +417,10 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
               }),
             onSome: (previousMealEntry) =>
               Effect.gen(function* () {
+                if (previousMealEntry.kind !== "catalog")
+                  return yield* new MealEntryNotFound({
+                    mealEntryId: decodedInput.mealEntryId,
+                  });
                 const foods = yield* store.findFoodById(
                   previousMealEntry.foodId
                 );
@@ -361,9 +443,14 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                     quantity,
                   });
                 const encodedPreviousMealEntry =
-                  yield* Schema.encodeEffect(MealEntry)(previousMealEntry);
-                const mealEntry = yield* Schema.decodeEffect(MealEntry)({
+                  yield* Schema.encodeEffect(CatalogMealEntry)(
+                    previousMealEntry
+                  );
+                const mealEntry = yield* Schema.decodeEffect(CatalogMealEntry)({
                   ...encodedPreviousMealEntry,
+                  quantityAccuracy:
+                    decodedInput.quantityAccuracy ??
+                    previousMealEntry.quantityAccuracy,
                   quantity,
                   nutritionMultiplier,
                   updatedAt: DateTime.toEpochMillis(yield* DateTime.now),

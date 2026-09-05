@@ -18,8 +18,20 @@ A food-owned monetary amount for a reference quantity. A food may keep several p
 The optional food price used to estimate spending. The first price added to a food becomes current automatically; afterward the user may select another price or clear the selection entirely.
 
 **Meal Entry**:
-A record that a quantity of a food was consumed in a meal on a particular day.
+A record of consumption in a meal on a particular day, either referring to a reusable food or owning a one-off description and nutrition.
 _Avoid_: Food instance
+
+**One-off Entry**:
+A meal entry whose description and nutritional values belong only to that occurrence. Its amount can be described without knowing its weight.
+
+**Recorded Nutrient**:
+A supplied nutritional value that the user has not marked as estimated. It does not imply perfect accuracy.
+
+**Estimated Nutrient**:
+A nutritional value the user has approximated, including a value calculated from an estimated amount eaten.
+
+**Unknown Nutrient**:
+A nutrient for which no value has been recorded. It contributes missing coverage rather than zero to a summary.
 
 **Copy Food**:
 The creation of a distinct food initialized from an existing food while leaving the original food and its meal entries unchanged.
@@ -50,7 +62,11 @@ Any food other than the newest food in a food name group containing multiple foo
 
 - A **Food** owns zero or more **Food Portions**
 - A **Food** owns zero or more **Food Prices** and has zero or one **Current Price**
-- A **Meal Entry** refers to exactly one **Food**
+- A catalog **Meal Entry** refers to exactly one **Food**
+- A **One-off Entry** owns its description and nutritional values and does not belong to the food catalog
+- Editing a **One-off Entry** affects only that occurrence
+- Unknown nutrient values are distinct from explicit zero values
+- Estimated contributions remain separate from recorded contributions in nutrition summaries
 - A **Meal Entry** may record exactly one **Food Portion**
 - **Copy Food** creates a new **Food** without changing the source **Food**
 - **Edit Food** preserves the **Food** identity and affects all of its **Meal Entries**

@@ -13,6 +13,7 @@ import {
 } from "@/lib/format";
 import { measurementUnitFromValue } from "@/lib/food-measurements";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { FoodFormMachine } from "@mai/machines";
 import type { FoodQuickInput, Foods } from "@mai/nutrition";
 import { useSelector } from "@xstate/react";
@@ -45,7 +46,7 @@ type FoodNutrientField = {
 
 const nutritionFields: readonly FoodNutrientField[] = [
   {
-    accentColor: color.nutritionEnergy,
+    accentColor: nutrientFieldColors.energyKcal,
     label: "Calories",
     name: "energyKcal",
     placeholder: "62",
@@ -53,7 +54,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "kcal",
   },
   {
-    accentColor: color.nutritionFat,
+    accentColor: nutrientFieldColors.fatGrams,
     label: "Fat",
     name: "fatGrams",
     placeholder: "0.4",
@@ -61,7 +62,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionFat,
+    accentColor: nutrientFieldColors.saturatedFatGrams,
     label: "Saturated fat",
     name: "saturatedFatGrams",
     placeholder: "0.1",
@@ -69,7 +70,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionCarbs,
+    accentColor: nutrientFieldColors.carbsGrams,
     label: "Carbs",
     name: "carbsGrams",
     placeholder: "3.6",
@@ -77,7 +78,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionCarbs,
+    accentColor: nutrientFieldColors.sugarGrams,
     label: "Sugar",
     name: "sugarGrams",
     placeholder: "3.2",
@@ -85,7 +86,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionCarbs,
+    accentColor: nutrientFieldColors.fiberGrams,
     label: "Fiber",
     name: "fiberGrams",
     placeholder: "0",
@@ -93,7 +94,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionEnergy,
+    accentColor: nutrientFieldColors.proteinGrams,
     label: "Protein",
     name: "proteinGrams",
     placeholder: "10",
@@ -101,7 +102,7 @@ const nutritionFields: readonly FoodNutrientField[] = [
     unit: "g",
   },
   {
-    accentColor: color.nutritionSalt,
+    accentColor: nutrientFieldColors.saltGrams,
     label: "Salt",
     name: "saltGrams",
     placeholder: "0.1",

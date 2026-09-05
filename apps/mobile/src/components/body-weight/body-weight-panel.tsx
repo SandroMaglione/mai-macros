@@ -1,3 +1,7 @@
+import {
+  InsightDateRange,
+  InsightRangeDayCount,
+} from "@mai/machines/insight-range";
 import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
 import * as BodyWeightReports from "@mai/nutrition/services/body-weight-reports";
@@ -88,7 +92,7 @@ type BodyWeightReportRange = typeof BodyWeightReportRange.Type;
 
 const estimateWeightWindowDays = 14;
 
-const BodyWeightReportDayCount = Schema.Literals([7, 30, 90]);
+const BodyWeightReportDayCount = InsightRangeDayCount;
 
 export type BodyWeightReportDayCount = typeof BodyWeightReportDayCount.Type;
 
@@ -124,11 +128,13 @@ const bodyWeightChartMachine = setup({
 
 const BodyWeightRouteInput = Schema.Struct({
   dateKey: Domain.DateKey,
+  reportDateRange: Schema.NullOr(InsightDateRange),
   reportDayCount: BodyWeightReportDayCount,
 });
 
 const LoadBodyWeightInput = Schema.Struct({
   dateKey: Domain.DateKey,
+  reportDateRange: Schema.NullOr(InsightDateRange),
   reportDayCount: BodyWeightReportDayCount,
 });
 
@@ -184,6 +190,7 @@ const BodyWeightRouteContext = Schema.Struct({
   message: Schema.NullOr(Schema.String),
   monthEntries: Schema.Array(Domain.BodyWeightEntry),
   report: Schema.NullOr(BodyWeightReportRange),
+  reportDateRange: Schema.NullOr(InsightDateRange),
   reportDayCount: BodyWeightReportDayCount,
 });
 
@@ -603,13 +610,17 @@ const bodyWeightRouteMachine = setup({
                 date: yield* DateTime.nowAsDate,
               })
             );
-            const endDateKey = input.dateKey > today ? input.dateKey : today;
-            const startDateKey = yield* Schema.decodeEffect(Domain.DateKey)(
-              shiftDateKey({
-                dateKey: endDateKey,
-                days: -(input.reportDayCount - 1),
-              })
-            );
+            const endDateKey =
+              input.reportDateRange?.endDateKey ??
+              (input.dateKey > today ? input.dateKey : today);
+            const startDateKey =
+              input.reportDateRange?.startDateKey ??
+              (yield* Schema.decodeEffect(Domain.DateKey)(
+                shiftDateKey({
+                  dateKey: endDateKey,
+                  days: -(input.reportDayCount - 1),
+                })
+              ));
             const monthEntries = yield* bodyWeights.listRange({
               input: monthRange,
             });
@@ -635,6 +646,7 @@ const bodyWeightRouteMachine = setup({
     message: null,
     monthEntries: [],
     report: null,
+    reportDateRange: input.reportDateRange,
     reportDayCount: input.reportDayCount,
   }),
   initial: "Loading",
@@ -644,6 +656,7 @@ const bodyWeightRouteMachine = setup({
         src: "loadBodyWeight",
         input: ({ context }) => ({
           dateKey: context.dateKey,
+          reportDateRange: context.reportDateRange,
           reportDayCount: context.reportDayCount,
         }),
         onDone: ({ context, event }) => ({
@@ -790,17 +803,19 @@ export function BodyWeightPanel({
   calendarPosition = "top",
   initialDateKey,
   onSelectDate,
+  reportDateRange = null,
   reportDayCount = 90,
   showImport = true,
 }: {
   readonly calendarPosition?: "bottom" | "top";
   readonly initialDateKey?: Domain.DateKey;
   readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
+  readonly reportDateRange?: InsightDateRange | null;
   readonly reportDayCount?: BodyWeightReportDayCount;
   readonly showImport?: boolean;
 }) {
   return Schema.decodeOption(Domain.DateKey)(
-    initialDateKey ?? todayDateKey()
+    initialDateKey ?? reportDateRange?.endDateKey ?? todayDateKey()
   ).pipe(
     Option.match({
       onNone: () => (
@@ -817,6 +832,7 @@ export function BodyWeightPanel({
           calendarPosition={calendarPosition}
           dateKey={dateKey}
           onSelectDate={onSelectDate}
+          reportDateRange={reportDateRange}
           reportDayCount={reportDayCount}
           showImport={showImport}
         />
@@ -829,18 +845,21 @@ function BodyWeightRoute({
   calendarPosition,
   dateKey,
   onSelectDate,
+  reportDateRange,
   reportDayCount,
   showImport,
 }: {
   readonly calendarPosition: "bottom" | "top";
   readonly dateKey: Domain.DateKey;
   readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
+  readonly reportDateRange: InsightDateRange | null;
   readonly reportDayCount: BodyWeightReportDayCount;
   readonly showImport: boolean;
 }) {
   const [snapshot, , actor] = useMachine(bodyWeightRouteMachine, {
     input: {
       dateKey,
+      reportDateRange,
       reportDayCount,
     },
   });
@@ -2081,6 +2100,7 @@ function _monthNavigationContext({
     message: null,
     monthEntries: [],
     report: null,
+    reportDateRange: context.reportDateRange,
     reportDayCount: context.reportDayCount,
   };
 }

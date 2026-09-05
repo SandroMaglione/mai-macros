@@ -1,3 +1,4 @@
+import { QuantityAccuracySelect } from "@/components/nutrition/quantity-accuracy-select";
 import { FoodNutrientOverview } from "@/components/nutrition/food-nutrient-overview";
 import {
   FoodSearchField,
@@ -56,6 +57,7 @@ const AddMealEntryInput = Schema.Struct({
   foodId: Domain.FoodId,
   mealId: Domain.MealId,
   quantity: FoodMeasurements.MealEntryQuantityFormInput,
+  quantityAccuracy: Domain.QuantityAccuracy,
 });
 
 const AddMealEntryResult = Schema.Union([
@@ -112,12 +114,16 @@ const addMealFoodRouteMachine = setup({
         mealLabel: Schema.NonEmptyString,
         notice: Schema.NullOr(Schema.String),
         quantityAmount: Schema.String,
+        quantityAccuracy: Domain.QuantityAccuracy,
         quantityUnit: Domain.MeasurementUnit,
         portionId: Schema.NullOr(Domain.FoodPortionId),
         selectedFood: Schema.NullOr(Domain.Food),
       })
     ),
     events: {
+      changeAccuracy: Schema.toStandardSchemaV1(
+        Schema.Struct({ accuracy: Domain.QuantityAccuracy })
+      ),
       changeQuantity: Schema.toStandardSchemaV1(
         Schema.Struct({ quantityAmount: Schema.String })
       ),
@@ -218,6 +224,7 @@ const addMealFoodRouteMachine = setup({
       mealLabel: input.mealLabel,
       notice: null,
       quantityAmount: "",
+      quantityAccuracy: "unspecified",
       quantityUnit: "g",
       portionId: null,
       selectedFood: null,
@@ -279,6 +286,9 @@ const addMealFoodRouteMachine = setup({
     },
     EnteringQuantity: {
       on: {
+        changeAccuracy: ({ event }) => ({
+          context: { quantityAccuracy: event.accuracy },
+        }),
         changeQuantity: ({ event }) => ({
           context: {
             quantityAmount: event.quantityAmount,
@@ -327,6 +337,7 @@ const addMealFoodRouteMachine = setup({
           return {
             dateKey: context.dateKey,
             foodId: context.selectedFood.id,
+            quantityAccuracy: context.quantityAccuracy,
             mealId: context.meal,
             quantity: FoodMeasurements.mealEntryQuantityInputFromSelection({
               quantityAmount: context.quantityAmount,
@@ -713,6 +724,17 @@ function ReadyAddMealFoodRoute({
 
         {selectedFood === null ? (
           <View style={styles.searchBody}>
+            <Button
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: "/days/[dateKey]/meals/[meal]/one-off",
+                  params: { dateKey, meal },
+                })
+              }
+            >
+              One-off entry
+            </Button>
             <FoodSearchResults
               actor={foodSearchActor}
               disabled={disabled}
@@ -760,6 +782,10 @@ function ReadyAddMealFoodRoute({
           </View>
         ) : (
           <QuantityEntry
+            quantityAccuracy={snapshot.context.quantityAccuracy}
+            changeAccuracy={(accuracy) =>
+              actor.trigger.changeAccuracy({ accuracy })
+            }
             changeQuantity={(value) => {
               actor.trigger.changeQuantity({ quantityAmount: value });
             }}
@@ -789,6 +815,8 @@ function ReadyAddMealFoodRoute({
 }
 
 function QuantityEntry({
+  quantityAccuracy,
+  changeAccuracy,
   changeQuantity,
   disabled,
   mealLabel,
@@ -803,6 +831,8 @@ function QuantityEntry({
   submit,
   submitDisabled,
 }: {
+  readonly quantityAccuracy: Domain.QuantityAccuracy;
+  readonly changeAccuracy: (accuracy: Domain.QuantityAccuracy) => void;
   readonly changeQuantity: (quantityAmount: string) => void;
   readonly disabled: boolean;
   readonly mealLabel: string;
@@ -880,6 +910,11 @@ function QuantityEntry({
           }
           selectTextOnFocus
           value={quantityAmount}
+        />
+        <QuantityAccuracySelect
+          accuracy={quantityAccuracy}
+          disabled={disabled}
+          change={changeAccuracy}
         />
         <FoodNutrientOverview
           brand={selectedFood.brand}
