@@ -1,7 +1,6 @@
-import { OneOffIndicator } from "@/components/nutrition/one-off-indicator";
-import { NutrientProgressFill } from "@/components/nutrition/nutrient-progress-fill";
-import { formatNutrientValue } from "@/lib/nutrient-quality";
-import { FoodCurrentPriceIndicator } from "@/components/nutrition/food-current-price-indicator";
+import { useDailyLogScroll } from "@/hooks/use-daily-log-scroll";
+import { DailyNutritionSummary } from "./daily-nutrition-summary";
+import { MealSection } from "./meal-section";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { AppScreen } from "@/components/ui/app-screen";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
@@ -10,20 +9,15 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
-import {
-  formatCurrencyMinor,
-  formatLoggedFoodQuantity,
-  formatNumber,
-} from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
+import { color, radius, spacing, tokens } from "@/theme/tokens";
 import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
 import * as Reporting from "@mai/nutrition/reporting";
 import * as DailyLogs from "@mai/nutrition/services/daily-logs";
 import * as Foods from "@mai/nutrition/services/foods";
 import * as MealEntries from "@mai/nutrition/services/meal-entries";
-import * as Utils from "@mai/nutrition/utils";
 import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
 import { Array, Effect, Match, Option, Schema } from "effect";
@@ -163,42 +157,10 @@ const SetDailyLogModeInput = Schema.Struct({
   mode: Domain.DailyLogMode,
 });
 
-type MacroDisplayMode = "consumed" | "remaining";
-
 const SetWaterServingsInput = Schema.Struct({
   dateKey: Domain.DateKey,
   waterServings: Schema.NullOr(Domain.WaterServingCount),
 });
-
-const macroProgress = [
-  {
-    color: color.nutritionCarbs,
-    key: "carbsGrams",
-    label: "Carbs",
-    targetKey: "carbsTargetGrams",
-    trackColor: "#4a2031",
-  },
-  {
-    color: color.nutritionProtein,
-    key: "proteinGrams",
-    label: "Protein",
-    targetKey: "proteinTargetGrams",
-    trackColor: "#233059",
-  },
-  {
-    color: color.nutritionFat,
-    key: "fatGrams",
-    label: "Fat",
-    targetKey: "fatTargetGrams",
-    trackColor: "#443719",
-  },
-] as const;
-
-const dominantMacronutrientColors = {
-  carbs: color.nutritionCarbs,
-  fat: color.nutritionFat,
-  protein: color.nutritionProtein,
-} satisfies Record<Utils.DominantMacronutrient, string>;
 
 const dailyLogRouteMachine = setup({
   schemas: {
@@ -658,36 +620,6 @@ const dailyLogRouteMachine = setup({
   },
 });
 
-const macroDisplayModeMachine = setup({
-  schemas: {
-    events: {
-      toggle: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Consumed: {},
-    Remaining: {},
-  },
-}).createMachine({
-  initial: "Consumed",
-  states: {
-    Consumed: {
-      on: {
-        toggle: {
-          target: "Remaining",
-        },
-      },
-    },
-    Remaining: {
-      on: {
-        toggle: {
-          target: "Consumed",
-        },
-      },
-    },
-  },
-});
-
 export function DailyLogRoute({
   dateKey,
 }: {
@@ -852,6 +784,7 @@ function RecordedDailyLogView({
   });
   const dateKey = data.day.dailyLog.dateKey;
   const dayMode = data.day.dailyLog.mode;
+  const scrollPosition = useDailyLogScroll(dateKey);
 
   return (
     <View style={styles.screen}>
@@ -859,18 +792,20 @@ function RecordedDailyLogView({
         contentStyle={styles.content}
         safeAreaEdges={["top"]}
         scroll
+        scrollRef={scrollPosition.scrollRef}
         scrollProps={{
+          ...scrollPosition.scrollProps,
           contentInsetAdjustmentBehavior: "never",
         }}
-        style={[
-          styles.headerSafeArea,
-          dayMode === "fasting" ? styles.fastingHeaderSafeArea : null,
-          dayMode === "not-recorded" ? styles.notRecordedHeaderSafeArea : null,
-        ]}
+        style={styles.headerSafeArea}
       >
         <DayNavigationHeader dateKey={dateKey} mode={dayMode} />
 
-        <DailyProgress day={data.day} nutrition={nutrition} />
+        <DailyNutritionSummary
+          dayMode={dayMode}
+          plan={data.day.selectedPlan}
+          nutrition={nutrition}
+        />
 
         <View style={styles.dayPrimaryActions}>
           <Pressable
@@ -904,7 +839,6 @@ function RecordedDailyLogView({
             }}
             style={({ pressed }) => [
               styles.dayPrimaryAction,
-              styles.dayPrimaryActionDivider,
               pressed ? styles.pressed : null,
             ]}
           >
@@ -1356,7 +1290,11 @@ function DayNavigationHeader({
           }).format(displayedDateValue),
         }
       : {
-          eyebrow: null,
+          eyebrow: new Intl.DateTimeFormat("en-US", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+          }).format(displayedDateValue),
           label: displayedDateRelativeLabel,
         };
 
@@ -1365,6 +1303,13 @@ function DayNavigationHeader({
       center={
         <Pressable
           accessibilityRole="button"
+          accessibilityHint={
+            mode === "eating"
+              ? "Active day"
+              : mode === "fasting"
+                ? "Fasting day"
+                : "Not recorded"
+          }
           onPress={() => {
             router.push("/");
           }}
@@ -1397,11 +1342,7 @@ function DayNavigationHeader({
         />
       }
       shadow
-      style={[
-        styles.dayHeader,
-        mode === "fasting" ? styles.fastingHeader : null,
-        mode === "not-recorded" ? styles.notRecordedHeader : null,
-      ]}
+      style={styles.dayHeader}
       trailing={
         <HeaderIconButton
           accessibilityLabel="Next day"
@@ -1470,708 +1411,6 @@ function DayBottomActionBar({ dateKey }: { readonly dateKey: Domain.DateKey }) {
   );
 }
 
-function DailyProgress({
-  day,
-  nutrition,
-}: {
-  readonly day: typeof OpenedDay.Type;
-  readonly nutrition: Reporting.MealEntriesNutrientTotals;
-}) {
-  const plan = day.selectedPlan;
-  const nutrients = nutrition.totals;
-  const targetEnergyKcal = Utils.calculatePlanEnergyKcal({ plan });
-  const [snapshot, , actor] = useMachine(macroDisplayModeMachine);
-  const displayMode = snapshot.value === "Remaining" ? "remaining" : "consumed";
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: displayMode === "remaining" }}
-      onPress={() => {
-        actor.trigger.toggle();
-      }}
-      style={({ pressed }) => [
-        styles.dailyProgress,
-        pressed ? styles.pressed : null,
-      ]}
-    >
-      <View style={styles.macroGrid}>
-        {macroProgress.map((macro) => (
-          <DailyProgressMetric
-            colorValue={macro.color}
-            displayMode={displayMode}
-            key={macro.key}
-            label={macro.label}
-            target={plan[macro.targetKey]}
-            trackColor={macro.trackColor}
-            unit="g"
-            value={nutrients[macro.key]}
-            quality={_nutrientQuality({ nutrition, name: macro.key })}
-          />
-        ))}
-      </View>
-
-      <DailyEnergyProgress
-        displayMode={displayMode}
-        target={targetEnergyKcal}
-        value={nutrients.energyKcal}
-        quality={_nutrientQuality({ nutrition, name: "energyKcal" })}
-      />
-
-      <View style={styles.dailyNutrientGrid}>
-        <DailyNutrientMetric
-          colorValue={color.nutritionCarbs}
-          displayMode={displayMode}
-          label="Fiber"
-          target={plan.fiberTargetGrams}
-          trackColor="#4a2031"
-          value={nutrients.fiberGrams}
-          quality={_nutrientQuality({ nutrition, name: "fiberGrams" })}
-        />
-        <DailyNutrientMetric
-          colorValue={color.nutritionCarbs}
-          displayMode={displayMode}
-          label="Sugar"
-          target={plan.sugarTargetGrams}
-          trackColor="#4a2031"
-          value={nutrients.sugarGrams}
-          quality={_nutrientQuality({ nutrition, name: "sugarGrams" })}
-        />
-        <DailyNutrientMetric
-          colorValue={color.nutritionFat}
-          displayMode={displayMode}
-          label="Sat fat"
-          target={plan.saturatedFatTargetGrams}
-          trackColor="#443719"
-          value={nutrients.saturatedFatGrams}
-          quality={_nutrientQuality({ nutrition, name: "saturatedFatGrams" })}
-        />
-        <DailyNutrientMetric
-          colorValue={color.nutritionSalt}
-          displayMode={displayMode}
-          label="Salt"
-          target={plan.saltTargetGrams}
-          trackColor="#303034"
-          value={nutrients.saltGrams}
-          quality={_nutrientQuality({ nutrition, name: "saltGrams" })}
-        />
-      </View>
-    </Pressable>
-  );
-}
-
-function DailyProgressMetric({
-  quality,
-  colorValue,
-  displayMode,
-  label,
-  target,
-  trackColor,
-  unit,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly quality: NutrientQuality;
-  readonly displayMode: MacroDisplayMode;
-  readonly label: string;
-  readonly target: number;
-  readonly trackColor: string;
-  readonly unit: "g" | "kcal";
-  readonly value: number;
-}) {
-  const isAboveTarget = value > target;
-  const contentColor = isAboveTarget ? color.primary : colorValue;
-
-  return (
-    <View style={styles.dailyMetric}>
-      <Text
-        numberOfLines={1}
-        style={[styles.dailyMetricLabel, { color: contentColor }]}
-      >
-        {label}
-      </Text>
-      <View style={[styles.dailyMetricTrack, { backgroundColor: trackColor }]}>
-        <NutrientProgressFill
-          colorValue={contentColor}
-          total={value}
-          estimated={quality.estimatedAmount}
-          target={target}
-        />
-      </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.dailyMetricValue, { color: contentColor }]}
-      >
-        {_formatDisplayValue({ displayMode, target, unit, value, quality })}
-      </Text>
-    </View>
-  );
-}
-
-function DailyEnergyProgress({
-  quality,
-  displayMode,
-  target,
-  value,
-}: {
-  readonly quality: NutrientQuality;
-  readonly displayMode: MacroDisplayMode;
-  readonly target: number;
-  readonly value: number;
-}) {
-  const isAboveTarget = value > target;
-  const contentColor = isAboveTarget ? color.primary : color.nutritionEnergy;
-
-  return (
-    <View style={styles.energyProgress}>
-      <View style={styles.energyTrack}>
-        <NutrientProgressFill
-          colorValue={contentColor}
-          total={value}
-          estimated={quality.estimatedAmount}
-          target={target}
-        />
-      </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.energyProgressValue, { color: contentColor }]}
-      >
-        {_formatDisplayValue({
-          displayMode,
-          quality,
-          target,
-          unit: "kcal",
-          value,
-        })}
-      </Text>
-    </View>
-  );
-}
-
-function DailyNutrientMetric({
-  quality,
-  colorValue,
-  displayMode,
-  label,
-  target,
-  trackColor,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly quality: NutrientQuality;
-  readonly displayMode: MacroDisplayMode;
-  readonly label: string;
-  readonly target: number | undefined;
-  readonly trackColor: string;
-  readonly value: number;
-}) {
-  const isAboveTarget = target !== undefined && value > target;
-  const contentColor = isAboveTarget ? color.primary : colorValue;
-
-  return (
-    <View style={styles.dailyNutrient}>
-      <Text
-        numberOfLines={1}
-        style={[styles.dailyNutrientLabel, { color: contentColor }]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[styles.dailyNutrientTrack, { backgroundColor: trackColor }]}
-      >
-        <NutrientProgressFill
-          colorValue={contentColor}
-          total={value}
-          estimated={quality.estimatedAmount}
-          target={target}
-        />
-      </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.dailyNutrientValue, { color: contentColor }]}
-      >
-        {_formatDisplayValue({
-          displayMode,
-          target,
-          unit: "g",
-          value,
-          quality,
-        })}
-      </Text>
-    </View>
-  );
-}
-
-function MealSection({
-  dateKey,
-  foods,
-  meal,
-  mealEntries,
-  mealLabel,
-}: {
-  readonly dateKey: Domain.DateKey;
-  readonly foods: readonly Domain.Food[];
-  readonly meal: Domain.MealId;
-  readonly mealEntries: readonly Domain.MealEntry[];
-  readonly mealLabel: string;
-}) {
-  const nutrition = Reporting.calculateMealEntriesNutrientTotals({
-    foods,
-    mealEntries,
-  });
-  const nutrients = nutrition.totals;
-  const weightTotals = Reporting.calculateMealEntriesWeightTotals({
-    foods,
-    mealEntries,
-  });
-  const costTotals = Reporting.calculateMealEntriesCostTotals({
-    foods,
-    mealEntries,
-  });
-
-  return (
-    <View style={styles.mealCard}>
-      <View style={styles.mealHeader}>
-        <Text style={styles.mealTitle}>{mealLabel}</Text>
-        <Pressable
-          accessibilityLabel={`${mealLabel} details`}
-          accessibilityRole="button"
-          onPress={() => {
-            router.push({
-              pathname: "/days/[dateKey]/meals/[meal]/details",
-              params: {
-                dateKey,
-                meal,
-              },
-            });
-          }}
-          style={({ pressed }) => [
-            styles.mealDetailsButton,
-            pressed ? styles.pressed : null,
-          ]}
-        >
-          <Text style={styles.detailsText}>Details</Text>
-          <ChevronRight color={color.text} size={16} strokeWidth={3} />
-        </Pressable>
-      </View>
-
-      <MealMacroStripe nutrients={nutrients} />
-
-      {Array.isReadonlyArrayNonEmpty(mealEntries) ? (
-        <View style={styles.mealEntries}>
-          {mealEntries.map((mealEntry) => {
-            const food = foods.find(
-              (candidate) =>
-                mealEntry.kind === "catalog" &&
-                candidate.id === mealEntry.foodId
-            );
-
-            return (
-              <MealEntryRow
-                food={food}
-                key={mealEntry.id}
-                mealEntry={mealEntry}
-                onPress={() => {
-                  if (mealEntry.kind === "one-off") {
-                    router.push({
-                      pathname: "/days/[dateKey]/meals/[meal]/one-off",
-                      params: { dateKey, meal, mealEntryId: mealEntry.id },
-                    });
-                    return;
-                  }
-                  router.push({
-                    pathname:
-                      "/days/[dateKey]/meals/[meal]/entries/[mealEntryId]/edit",
-                    params: {
-                      dateKey,
-                      meal,
-                      mealEntryId: mealEntry.id,
-                    },
-                  });
-                }}
-              />
-            );
-          })}
-        </View>
-      ) : null}
-
-      <MealTotalColumns nutrition={nutrition} />
-      <MealNutrientColumns nutrition={nutrition} />
-      <MealCalorieWeightRatio
-        costIsComplete={
-          costTotals.resolvedEntriesCount === costTotals.entriesCount
-        }
-        costMinor={costTotals.costMinorByCurrency.EUR}
-        energyKcal={nutrients.energyKcal}
-        weightIsComplete={
-          weightTotals.resolvedEntriesCount === weightTotals.entriesCount
-        }
-        quantityGrams={weightTotals.quantityGrams}
-      />
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          router.push({
-            pathname: "/days/[dateKey]/meals/[meal]/add",
-            params: {
-              dateKey,
-              meal,
-            },
-          });
-        }}
-        style={styles.addFoodButton}
-      >
-        <Plus
-          color={color.primary}
-          size={16}
-          strokeWidth={3}
-          style={styles.addFoodIcon}
-        />
-        <Text style={styles.addFoodText}>Add food</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function MealCalorieWeightRatio({
-  costIsComplete,
-  costMinor,
-  energyKcal,
-  quantityGrams,
-  weightIsComplete,
-}: {
-  readonly costIsComplete: boolean;
-  readonly costMinor: number;
-  readonly energyKcal: number;
-  readonly quantityGrams: number;
-  readonly weightIsComplete: boolean;
-}) {
-  const gramsPerCalorie = Reporting.calculateGramsPerCalorie({
-    energyKcal,
-    quantityGrams,
-  });
-  const ratioLabel =
-    !weightIsComplete || gramsPerCalorie === null
-      ? "- g/kcal"
-      : `${formatNumber({
-          maximumFractionDigits: gramsPerCalorie < 1 ? 2 : 1,
-          value: gramsPerCalorie,
-        })} g/kcal`;
-  const weightLabel = `${_formatMacroValue({ value: quantityGrams })}g`;
-
-  return (
-    <View style={styles.mealWeightRatioColumns}>
-      <MealNutrientColumn
-        colorValue={color.secondaryMetric}
-        label={weightIsComplete ? "Food weight" : "Resolved weight"}
-        value={weightLabel}
-      />
-      <MealNutrientColumn
-        colorValue={color.secondaryMetric}
-        label="Weight / calorie"
-        value={ratioLabel}
-      />
-      <MealNutrientColumn
-        colorValue={color.safeText}
-        label="Cost"
-        value={`${formatCurrencyMinor({ currency: "EUR", minorValue: costMinor })}${costIsComplete ? "" : "+"}`}
-      />
-    </View>
-  );
-}
-
-function MealTotalColumns({
-  nutrition,
-}: {
-  readonly nutrition: Reporting.MealEntriesNutrientTotals;
-}) {
-  const nutrients = nutrition.totals;
-  return (
-    <View style={styles.mealTotalColumns}>
-      <MealTotalColumn
-        colorValue={color.nutritionCarbs}
-        label="Carbs"
-        value={_formatNutrientAmount({
-          value: nutrients.carbsGrams,
-          quality: _nutrientQuality({ nutrition, name: "carbsGrams" }),
-        })}
-      />
-      <MealTotalColumn
-        colorValue={color.nutritionProtein}
-        label="Protein"
-        value={_formatNutrientAmount({
-          value: nutrients.proteinGrams,
-          quality: _nutrientQuality({ nutrition, name: "proteinGrams" }),
-        })}
-      />
-      <MealTotalColumn
-        colorValue={color.nutritionFat}
-        label="Fat"
-        value={_formatNutrientAmount({
-          value: nutrients.fatGrams,
-          quality: _nutrientQuality({ nutrition, name: "fatGrams" }),
-        })}
-      />
-      <MealTotalColumn
-        colorValue={color.nutritionEnergy}
-        label="Calories"
-        value={_formatNutrientAmount({
-          value: nutrients.energyKcal,
-          quality: _nutrientQuality({ nutrition, name: "energyKcal" }),
-        })}
-      />
-    </View>
-  );
-}
-
-function MealTotalColumn({
-  colorValue,
-  label,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <View style={styles.mealTotalColumn}>
-      <Text
-        numberOfLines={1}
-        style={[styles.mealTotalValue, { color: colorValue }]}
-      >
-        {value}
-      </Text>
-      <Text
-        numberOfLines={1}
-        style={[styles.mealTotalLabel, { color: colorValue }]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function MealNutrientColumns({
-  nutrition,
-}: {
-  readonly nutrition: Reporting.MealEntriesNutrientTotals;
-}) {
-  const nutrients = nutrition.totals;
-  return (
-    <View style={styles.mealNutrientColumns}>
-      <MealNutrientColumn
-        colorValue={color.nutritionCarbs}
-        label="Fiber"
-        value={_formatDisplayValue({
-          value: nutrients.fiberGrams,
-          quality: _nutrientQuality({ nutrition, name: "fiberGrams" }),
-          unit: "g",
-          displayMode: "consumed",
-        })}
-      />
-      <MealNutrientColumn
-        colorValue={color.nutritionSalt}
-        label="Salt"
-        value={_formatDisplayValue({
-          value: nutrients.saltGrams,
-          quality: _nutrientQuality({ nutrition, name: "saltGrams" }),
-          unit: "g",
-          displayMode: "consumed",
-        })}
-      />
-      <MealNutrientColumn
-        colorValue={color.nutritionFat}
-        label="Sat fat"
-        value={_formatDisplayValue({
-          value: nutrients.saturatedFatGrams,
-          quality: _nutrientQuality({ nutrition, name: "saturatedFatGrams" }),
-          unit: "g",
-          displayMode: "consumed",
-        })}
-      />
-    </View>
-  );
-}
-
-function MealNutrientColumn({
-  colorValue,
-  label,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <View style={styles.mealNutrientColumn}>
-      <Text
-        numberOfLines={1}
-        style={[styles.mealNutrientValue, { color: colorValue }]}
-      >
-        {value}
-      </Text>
-      <Text
-        numberOfLines={1}
-        style={[styles.mealNutrientLabel, { color: colorValue }]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function MealMacroStripe({
-  nutrients,
-}: {
-  readonly nutrients: Reporting.NutrientTotals;
-}) {
-  const total =
-    nutrients.carbsGrams + nutrients.proteinGrams + nutrients.fatGrams;
-
-  if (total <= 0) {
-    return <View style={styles.emptyStripe} />;
-  }
-
-  return (
-    <View style={styles.macroStripe}>
-      <View
-        style={[
-          styles.macroStripeSegment,
-          {
-            backgroundColor: color.nutritionCarbs,
-            flex: nutrients.carbsGrams,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.macroStripeSegment,
-          {
-            backgroundColor: color.nutritionProtein,
-            flex: nutrients.proteinGrams,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.macroStripeSegment,
-          {
-            backgroundColor: color.nutritionFat,
-            flex: nutrients.fatGrams,
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
-function MealEntryRow({
-  food,
-  mealEntry,
-  onPress,
-}: {
-  readonly food: Domain.Food | undefined;
-  readonly mealEntry: Domain.MealEntry;
-  readonly onPress: () => void;
-}) {
-  const quality = Reporting.resolveMealEntryNutrients({ food, mealEntry });
-  const quantityLabel =
-    mealEntry.kind === "one-off"
-      ? mealEntry.amountDescription
-      : `${mealEntry.quantityAccuracy === "estimated" ? "≈ " : ""}${formatLoggedFoodQuantity({ quantity: mealEntry.quantity })}`;
-  const dominantMacronutrientColorsForFood =
-    food === undefined
-      ? []
-      : Utils.findDominantMacronutrients({ food }).map(
-          (macronutrient) => dominantMacronutrientColors[macronutrient]
-        );
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.mealEntryRow,
-        pressed ? styles.pressed : null,
-      ]}
-    >
-      <View style={styles.entryCopy}>
-        <Text numberOfLines={1} style={styles.entryName}>
-          {mealEntry.kind === "one-off"
-            ? mealEntry.name
-            : (food?.name ?? "Unknown food")}
-        </Text>
-        <View style={styles.entryDetailRow}>
-          {mealEntry.kind === "one-off" ? (
-            <OneOffIndicator />
-          ) : (
-            <FoodCurrentPriceIndicator food={food} />
-          )}
-          {!Array.isReadonlyArrayNonEmpty(
-            dominantMacronutrientColorsForFood
-          ) ? null : (
-            <View accessible={false} style={styles.entryMacronutrientDots}>
-              {dominantMacronutrientColorsForFood.map(
-                (dominantMacronutrientColor) => (
-                  <View
-                    key={dominantMacronutrientColor}
-                    style={[
-                      styles.entryMacronutrientDot,
-                      { backgroundColor: dominantMacronutrientColor },
-                    ]}
-                  />
-                )
-              )}
-            </View>
-          )}
-          <Text numberOfLines={1} style={styles.entryDetail}>
-            {food?.brand === undefined
-              ? quantityLabel
-              : `${food.brand}, ${quantityLabel}`}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.entryNumbers}>
-        <Text style={styles.entryKcal}>
-          {formatNutrientValue(quality.energyKcal)}
-        </Text>
-        {quality.carbsGrams._tag === "Unknown" &&
-        quality.proteinGrams._tag === "Unknown" &&
-        quality.fatGrams._tag === "Unknown" ? null : (
-          <Text numberOfLines={1} style={styles.entryMacros}>
-            {[
-              {
-                label: "C",
-                nutrient: quality.carbsGrams,
-                style: styles.entryCarbs,
-              },
-              {
-                label: "P",
-                nutrient: quality.proteinGrams,
-                style: styles.entryProtein,
-              },
-              {
-                label: "F",
-                nutrient: quality.fatGrams,
-                style: styles.entryFat,
-              },
-            ]
-              .filter(({ nutrient }) => nutrient._tag !== "Unknown")
-              .map(({ label, nutrient, style }, index) => (
-                <Text key={label}>
-                  <Text
-                    style={styles.entryMacroLabel}
-                  >{`${index === 0 ? "" : " "}${label}: `}</Text>
-                  <Text style={style}>{formatNutrientValue(nutrient)}</Text>
-                </Text>
-              ))}
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-}
-
 function HeaderIconButton({
   accessibilityLabel,
   icon: Icon,
@@ -2222,72 +1461,6 @@ function BottomAction({
   );
 }
 
-function _formatMacroValue({ value }: { readonly value: number }) {
-  return formatNumber({
-    maximumFractionDigits: value < 10 ? 1 : 0,
-    value,
-  });
-}
-
-type NutrientQuality = {
-  readonly estimatedAmount: number;
-  readonly estimated: boolean;
-  readonly incomplete: boolean;
-  readonly unknown: boolean;
-};
-
-function _nutrientQuality({
-  nutrition,
-  name,
-}: {
-  readonly nutrition: Reporting.MealEntriesNutrientTotals;
-  readonly name: Reporting.NutrientName;
-}): NutrientQuality {
-  return {
-    estimatedAmount: nutrition.estimated[name],
-    estimated: nutrition.estimatedCoverage[name] > 0,
-    incomplete: nutrition.missing[name] > 0,
-    unknown: nutrition.entriesCount > 0 && nutrition.coverage[name] === 0,
-  };
-}
-
-function _formatNutrientAmount({
-  value,
-  quality,
-}: {
-  readonly value: number;
-  readonly quality: NutrientQuality;
-}): string {
-  if (quality.unknown) return "—";
-  return `${quality.estimated ? "≈ " : ""}${_formatMacroValue({ value })}${quality.incomplete ? "+" : ""}`;
-}
-
-function _formatDisplayValue({
-  displayMode,
-  target,
-  unit,
-  value,
-  quality,
-}: {
-  readonly displayMode: MacroDisplayMode;
-  readonly target?: number;
-  readonly unit: "g" | "kcal";
-  readonly value: number;
-  readonly quality: NutrientQuality;
-}) {
-  if (quality.unknown) return "—";
-  if (target === undefined)
-    return `${_formatNutrientAmount({ value, quality })}${unit}`;
-  if (displayMode === "consumed" || quality.incomplete)
-    return `${_formatNutrientAmount({ value, quality })} / ${_formatMacroValue({ value: target })} ${unit}`;
-  const remainingValue = target - value;
-  const formattedValue = _formatMacroValue({ value: Math.abs(remainingValue) });
-  const prefix = quality.estimated ? "≈ " : "";
-  return remainingValue < 0
-    ? `${prefix}-${formattedValue} ${unit}`
-    : `${prefix}${formattedValue} ${unit} left`;
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -2304,19 +1477,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.bg,
   },
   headerSafeArea: {
-    backgroundColor: color.primary,
-  },
-  fastingHeaderSafeArea: {
-    backgroundColor: color.safeBorder,
-  },
-  fastingHeader: {
-    backgroundColor: color.safeBorder,
-  },
-  notRecordedHeaderSafeArea: {
-    backgroundColor: color.notRecordedBorder,
-  },
-  notRecordedHeader: {
-    backgroundColor: color.notRecordedBorder,
+    backgroundColor: color.header,
   },
   unrecordedBody: {
     gap: spacing.lg,
@@ -2339,7 +1500,7 @@ const styles = StyleSheet.create({
   emptyDayActions: {
     marginHorizontal: -spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: "#222226",
+    borderBottomColor: color.hairline,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: color.sheet,
@@ -2374,7 +1535,7 @@ const styles = StyleSheet.create({
   waterTrackerTitle: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   waterTrackerDescription: {
@@ -2394,7 +1555,7 @@ const styles = StyleSheet.create({
   },
   waterTrackerToggleLabel: {
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   waterTrackerToggleDisabled: {
@@ -2417,7 +1578,7 @@ const styles = StyleSheet.create({
   },
   waterDropButton: {
     width: "12%",
-    height: 40,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2431,7 +1592,7 @@ const styles = StyleSheet.create({
   dayModeTitle: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   dayModeOptions: {
@@ -2472,7 +1633,7 @@ const styles = StyleSheet.create({
   dayModeOptionLabel: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   dayModeOptionDescription: {
@@ -2507,16 +1668,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   dateEyebrow: {
-    color: "rgba(255,255,255,0.72)",
+    color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   date: {
-    color: color.white,
+    color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xl,
   },
   headerIconButton: {
@@ -2533,317 +1694,33 @@ const styles = StyleSheet.create({
   dayHeader: {
     marginBottom: 0,
   },
-  dailyProgress: {
-    gap: spacing.lg,
-    marginHorizontal: -spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222226",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-    backgroundColor: color.sheet,
-  },
   dayPrimaryActions: {
-    marginHorizontal: -spacing.lg,
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#222226",
-    backgroundColor: color.sheet,
+    gap: spacing.md,
   },
   dayPrimaryAction: {
-    minHeight: 40,
+    backgroundColor: color.surface,
+    borderRadius: radius.md,
+    minHeight: 44,
     minWidth: 0,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
-  },
-  dayPrimaryActionDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: "#222226",
   },
   detailsText: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
-  },
-  macroGrid: {
-    flexDirection: "row",
-    gap: spacing.xl,
-  },
-  dailyMetric: {
-    minWidth: 0,
-    flex: 1,
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  dailyMetricLabel: {
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  dailyMetricTrack: {
-    width: "100%",
-    height: 6,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-  },
-  dailyMetricValue: {
-    fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.lg,
-  },
-  energyProgress: {
-    gap: spacing.xs,
-    alignItems: "center",
-  },
-  energyTrack: {
-    width: "100%",
-    height: 7,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-    backgroundColor: "#233059",
-  },
-  energyProgressValue: {
-    fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.md,
-  },
-  dailyNutrientGrid: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  dailyNutrient: {
-    minWidth: 0,
-    flex: 1,
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  dailyNutrientLabel: {
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xs,
-  },
-  dailyNutrientTrack: {
-    width: "100%",
-    height: 5,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-  },
-  dailyNutrientValue: {
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xs,
   },
   meals: {
-    gap: spacing.xxl,
-    paddingTop: spacing.xl,
-  },
-  mealCard: {
-    overflow: "hidden",
-    borderRadius: radius.lg,
-    backgroundColor: color.surface,
-    ...shadow.card,
-  },
-  mealHeader: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-  },
-  mealTitle: {
-    minWidth: 0,
-    flex: 1,
-    color: color.text,
-    fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.lg,
-  },
-  mealDetailsButton: {
-    minHeight: 32,
-    flexShrink: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: color.divider,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: color.surfaceRaised,
-  },
-  macroStripe: {
-    height: 4,
-    flexDirection: "row",
-    backgroundColor: color.progressTrack,
-  },
-  macroStripeSegment: {
-    height: "100%",
-  },
-  emptyStripe: {
-    height: 4,
-    backgroundColor: color.progressTrack,
-  },
-  mealEntries: {
-    borderTopWidth: 1,
-    borderTopColor: color.sheetBorder,
-  },
-  mealEntryRow: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: color.sheetBorder,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    gap: spacing.xxxl,
+    paddingTop: spacing.xxl,
   },
   pressed: {
     opacity: 0.82,
-  },
-  entryCopy: {
-    minWidth: 0,
-    flex: 1,
-    gap: spacing.xs,
-  },
-  entryName: {
-    color: color.text,
-    fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.semibold,
-    lineHeight: tokens.type.lineHeight.md,
-  },
-  entryDetailRow: {
-    minHeight: tokens.type.lineHeight.sm,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  entryMacronutrientDot: {
-    width: 6,
-    height: 6,
-    flexShrink: 0,
-    borderRadius: 3,
-  },
-  entryMacronutrientDots: {
-    flexShrink: 0,
-    flexDirection: "row",
-    gap: spacing.xxs,
-  },
-  entryDetail: {
-    minWidth: 0,
-    flexShrink: 1,
-    color: color.textMuted,
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.medium,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  entryNumbers: {
-    maxWidth: 188,
-    alignItems: "flex-end",
-    gap: spacing.xs,
-  },
-  entryKcal: {
-    color: color.nutritionEnergy,
-    fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.lg,
-  },
-  entryMacros: {
-    color: color.textMuted,
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xs,
-  },
-  entryMacroLabel: {
-    color: color.textMuted,
-  },
-  entryCarbs: {
-    color: color.nutritionCarbs,
-  },
-  entryProtein: {
-    color: color.nutritionEnergy,
-  },
-  entryFat: {
-    color: color.nutritionFat,
-  },
-  mealTotalColumns: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: color.sheetBorder,
-  },
-  mealTotalColumn: {
-    minWidth: 0,
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
-  },
-  mealTotalValue: {
-    fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.lg,
-  },
-  mealTotalLabel: {
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.xs,
-  },
-  mealNutrientColumns: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: color.sheetBorder,
-    backgroundColor: "#18181b",
-  },
-  mealNutrientColumn: {
-    minWidth: 0,
-    flex: 1,
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
-  },
-  mealNutrientValue: {
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.sm,
-  },
-  mealNutrientLabel: {
-    fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.semibold,
-    lineHeight: tokens.type.lineHeight.xs,
-  },
-  mealWeightRatioColumns: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: color.sheetBorder,
-    backgroundColor: "#18181b",
-  },
-  addFoodButton: {
-    minHeight: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: color.sheetBorder,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  addFoodIcon: {
-    marginTop: 1,
-  },
-  addFoodText: {
-    color: color.primary,
-    fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.md,
   },
   bottomAction: {
     minHeight: 52,
@@ -2859,7 +1736,7 @@ const styles = StyleSheet.create({
   bottomLabel: {
     color: color.actionSheetText,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
 });

@@ -1,7 +1,4 @@
 import { NutrientProgressFill } from "@/components/nutrition/nutrient-progress-fill";
-import { NutrientBreakdown } from "./nutrient-breakdown";
-import { OneOffEntryList } from "./one-off-entry-list";
-import { hasNutrientUncertainty } from "@/lib/nutrient-quality";
 import { AppScreen } from "@/components/ui/app-screen";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -32,7 +29,7 @@ import {
   ChevronRight,
   RotateCcw,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { createAsyncLogic, setup } from "xstate";
 
 const OpenedDay = Schema.TaggedStruct("OpenedDay", {
@@ -114,35 +111,35 @@ const nutrientDetails = [
     colorValue: color.nutritionEnergy,
     label: "Calories",
     nutrientName: "energyKcal",
-    trackColor: "#233059",
+    trackColor: color.progressTrack,
     unit: "kcal",
   },
   {
     colorValue: color.nutritionFat,
     label: "Fat",
     nutrientName: "fatGrams",
-    trackColor: "#443719",
+    trackColor: color.progressTrack,
     unit: "g",
   },
   {
     colorValue: color.nutritionFat,
     label: "Sat fat",
     nutrientName: "saturatedFatGrams",
-    trackColor: "#443719",
+    trackColor: color.progressTrack,
     unit: "g",
   },
   {
     colorValue: color.nutritionCarbs,
     label: "Carbs",
     nutrientName: "carbsGrams",
-    trackColor: "#4a2031",
+    trackColor: color.progressTrack,
     unit: "g",
   },
   {
     colorValue: color.nutritionSugar,
     label: "Sugar",
     nutrientName: "sugarGrams",
-    trackColor: "#4a2031",
+    trackColor: color.progressTrack,
     unit: "g",
   },
   {
@@ -156,14 +153,14 @@ const nutrientDetails = [
     colorValue: color.nutritionProtein,
     label: "Protein",
     nutrientName: "proteinGrams",
-    trackColor: "#233059",
+    trackColor: color.progressTrack,
     unit: "g",
   },
   {
     colorValue: color.nutritionSalt,
     label: "Salt",
     nutrientName: "saltGrams",
-    trackColor: "#303034",
+    trackColor: color.progressTrack,
     unit: "g",
   },
 ] as const satisfies readonly NutrientDetail[];
@@ -360,10 +357,12 @@ const macroDetailsSelectionMachine = setup({
     context: Schema.toStandardSchemaV1(
       Schema.Struct({
         selectedMetricName: Schema.NullOr(DetailMetricName),
+        includeEstimates: Schema.Boolean,
       })
     ),
     events: {
       clearSelection: Schema.toStandardSchemaV1(EmptyEvent),
+      toggleEstimates: Schema.toStandardSchemaV1(EmptyEvent),
       selectMetric: Schema.toStandardSchemaV1(
         Schema.Struct({
           metricName: DetailMetricName,
@@ -376,6 +375,7 @@ const macroDetailsSelectionMachine = setup({
   },
 }).createMachine({
   context: {
+    includeEstimates: true,
     selectedMetricName: null,
   },
   initial: "Selected",
@@ -383,6 +383,9 @@ const macroDetailsSelectionMachine = setup({
     Selected: {},
   },
   on: {
+    toggleEstimates: ({ context }) => ({
+      context: { includeEstimates: !context.includeEstimates },
+    }),
     clearSelection: {
       context: {
         selectedMetricName: null,
@@ -452,7 +455,8 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
     foods: data.foods,
     mealEntries,
   });
-  const totals = nutrition.totals;
+  const includeEstimates = snapshot.context.includeEstimates;
+  const totals = includeEstimates ? nutrition.totals : nutrition.recorded;
   const entries = mealEntries
     .filter(Domain.isCatalogMealEntry)
     .flatMap((mealEntry) => {
@@ -523,13 +527,17 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
       />
 
       <View style={styles.nutrientList}>
-        <NutrientBreakdown
-          nutrition={nutrition}
-          plan={data.scope._tag === "Day" ? data.day.selectedPlan : undefined}
-        />
-        <OneOffEntryList
-          entries={mealEntries.filter(Domain.isOneOffMealEntry)}
-        />
+        <View style={styles.estimateControl}>
+          <View style={styles.nutrientCopy}>
+            <Text style={styles.controlTitle}>Include estimates</Text>
+          </View>
+          <Switch
+            accessibilityLabel="Include estimates"
+            value={includeEstimates}
+            onValueChange={actor.trigger.toggleEstimates}
+            trackColor={{ true: color.primary }}
+          />
+        </View>
         {nutrientDetails.map((nutrient) => {
           const selected =
             snapshot.context.selectedMetricName === nutrient.nutrientName;
@@ -541,8 +549,13 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
           return (
             <View key={nutrient.nutrientName} style={styles.nutrientGroup}>
               <NutrientRow
-                estimatedAmount={nutrition.estimated[nutrient.nutrientName]}
+                estimatedAmount={
+                  includeEstimates
+                    ? nutrition.estimated[nutrient.nutrientName]
+                    : 0
+                }
                 estimated={
+                  includeEstimates &&
                   nutrition.estimatedCoverage[nutrient.nutrientName] > 0
                 }
                 missing={nutrition.missing[nutrient.nutrientName] > 0}
@@ -562,14 +575,17 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
                   plan: data.day.selectedPlan,
                 })}
                 total={total}
-                withTarget={
-                  data.scope._tag === "Day" &&
-                  !hasNutrientUncertainty(nutrition)
-                }
+                withTarget={data.scope._tag === "Day"}
               />
               {selected ? (
                 <NutrientContributors
-                  entries={entries}
+                  entries={entries.filter(
+                    ({ food, mealEntry }) =>
+                      includeEstimates ||
+                      Reporting.resolveMealEntryNutrients({ food, mealEntry })[
+                        nutrient.nutrientName
+                      ]._tag === "Recorded"
+                  )}
                   nutrient={nutrient}
                   total={total}
                 />
@@ -858,18 +874,10 @@ function NutrientRow({
   readonly withTarget: boolean;
 }) {
   const hasTarget = withTarget && target !== undefined;
-  const valueLabel = hasTarget
-    ? `${_formatNutrientValue({
-        unit: nutrient.unit,
-        value: total,
-      })} / ${_formatNutrientValue({
-        unit: nutrient.unit,
-        value: target,
-      })}`
-    : _formatNutrientValue({
-        unit: nutrient.unit,
-        value: total,
-      });
+  const valueLabel = _formatNutrientValue({
+    unit: nutrient.unit,
+    value: total,
+  });
 
   return (
     <Pressable
@@ -890,10 +898,7 @@ function NutrientRow({
           <ChevronRight color={color.textMuted} size={18} strokeWidth={2.8} />
         )}
         <View style={styles.nutrientCopy}>
-          <Text
-            numberOfLines={1}
-            style={[styles.nutrientLabel, { color: nutrient.colorValue }]}
-          >
+          <Text numberOfLines={1} style={styles.nutrientLabel}>
             {nutrient.label}
           </Text>
         </View>
@@ -906,11 +911,16 @@ function NutrientRow({
           {missing && !unknown ? "+" : ""}
         </Text>
       </View>
+      {hasTarget ? (
+        <Text style={styles.caption}>
+          Target {_formatNutrientValue({ unit: nutrient.unit, value: target })}
+        </Text>
+      ) : null}
       <View
         style={[
           styles.nutrientTrack,
           {
-            backgroundColor: nutrient.trackColor,
+            backgroundColor: color.progressTrack,
           },
         ]}
       >
@@ -1219,7 +1229,7 @@ function _formatNutrientValue({
   return `${formatNumber({
     maximumFractionDigits: value < 10 ? 1 : 0,
     value,
-  })}${unit}`;
+  })} ${unit}`;
 }
 
 function _formatWeightValue({ value }: { readonly value: number }) {
@@ -1292,8 +1302,27 @@ function _calculateFoodNutrientContributions({
 }
 
 const styles = StyleSheet.create({
+  estimateControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: color.hairline,
+  },
+  controlTitle: {
+    color: color.text,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.medium,
+  },
+  caption: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.xs,
+    lineHeight: tokens.type.lineHeight.sm,
+    marginTop: spacing.xs,
+  },
   headerSafeArea: {
-    backgroundColor: color.primary,
+    backgroundColor: color.header,
   },
   centered: {
     flex: 1,
@@ -1308,11 +1337,11 @@ const styles = StyleSheet.create({
     backgroundColor: color.bg,
   },
   detailsHeader: {
-    marginBottom: 0,
+    marginBottom: spacing.xl,
   },
   nutrientList: {
     overflow: "hidden",
-    marginHorizontal: -spacing.lg,
+    borderRadius: radius.lg,
     backgroundColor: color.surface,
   },
   nutrientGroup: {
@@ -1335,15 +1364,15 @@ const styles = StyleSheet.create({
   secondaryMetricDividerLabel: {
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   nutrientRow: {
     minHeight: 76,
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
     backgroundColor: color.surface,
   },
   nutrientRowSelected: {
@@ -1363,14 +1392,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   nutrientLabel: {
+    color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   nutrientValue: {
-    maxWidth: 176,
+    maxWidth: 160,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   nutrientTrack: {
@@ -1405,7 +1435,7 @@ const styles = StyleSheet.create({
   contributionName: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   contributionDetail: {
@@ -1427,7 +1457,7 @@ const styles = StyleSheet.create({
   },
   contributionValue: {
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   contributionTrack: {

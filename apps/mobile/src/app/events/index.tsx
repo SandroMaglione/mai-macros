@@ -2639,13 +2639,13 @@ const styles = StyleSheet.create({
     color: color.textSubtle,
     textTransform: "uppercase",
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   timelineDateLabel: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   timelineDayCount: {
@@ -2695,7 +2695,7 @@ const styles = StyleSheet.create({
   timelineEventCountText: {
     color: color.white,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   timelineFooter: {
@@ -2749,7 +2749,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   dialogSubtitle: {
@@ -2820,14 +2820,14 @@ const styles = StyleSheet.create({
     color: color.text,
     textAlign: "center",
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   eventPickerCount: {
     color: color.white,
     textAlign: "center",
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   dialogActions: {
@@ -2873,7 +2873,7 @@ const styles = StyleSheet.create({
   eventOccurrenceLabel: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   eventOccurrenceTime: {
@@ -2914,7 +2914,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   sectionSubtitle: {
@@ -2951,7 +2951,7 @@ const styles = StyleSheet.create({
     color: color.text,
     textAlign: "center",
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   backdateStack: {
@@ -3020,7 +3020,7 @@ const styles = StyleSheet.create({
   historyName: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   historyTime: {
@@ -3087,7 +3087,7 @@ const styles = StyleSheet.create({
   definitionName: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   definitionPosition: {

@@ -45,7 +45,7 @@ export function SectionCard({
 
 const styles = StyleSheet.create({
   root: {
-    borderWidth: 1,
+    borderWidth: 0,
     borderColor: color.sheetBorder,
     borderRadius: radius.md,
     backgroundColor: color.surface,
@@ -59,13 +59,13 @@ const styles = StyleSheet.create({
   title: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   subtitle: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.semibold,
+    fontWeight: tokens.type.weight.regular,
     lineHeight: tokens.type.lineHeight.sm,
   },
   body: {

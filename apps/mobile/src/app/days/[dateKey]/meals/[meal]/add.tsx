@@ -724,18 +724,23 @@ function ReadyAddMealFoodRoute({
 
         {selectedFood === null ? (
           <View style={styles.searchBody}>
-            <Button
-              variant="secondary"
-              onPress={() =>
-                router.push({
-                  pathname: "/days/[dateKey]/meals/[meal]/one-off",
-                  params: { dateKey, meal },
-                })
-              }
-            >
-              One-off entry
-            </Button>
             <FoodSearchResults
+              header={
+                <View style={styles.entryOptions}>
+                  <Button
+                    icon={Plus}
+                    variant="secondary"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/days/[dateKey]/meals/[meal]/one-off",
+                        params: { dateKey, meal },
+                      })
+                    }
+                  >
+                    Add one-off entry
+                  </Button>
+                </View>
+              }
               actor={foodSearchActor}
               disabled={disabled}
               emptyFoodsText="Create a food before logging this meal."
@@ -757,7 +762,7 @@ function ReadyAddMealFoodRoute({
                       });
 
                 return nutrients === undefined
-                  ? "New"
+                  ? undefined
                   : `${formatNumber({
                       maximumFractionDigits: 0,
                       value: nutrients.energyKcal,
@@ -956,6 +961,10 @@ function _replacePath(path: Parameters<typeof router.replace>[0]) {
 }
 
 const styles = StyleSheet.create({
+  entryOptions: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
   screen: {
     flex: 1,
     backgroundColor: color.bg,
@@ -989,9 +998,9 @@ const styles = StyleSheet.create({
   },
   quantityBody: {
     flex: 1,
-    gap: spacing.lg,
+    gap: spacing.xl,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xl,
   },
   footerButton: {
     flex: 1,

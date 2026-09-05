@@ -43,7 +43,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
         scroll
         contentStyle={styles.content}
         safeAreaEdges={["top", "bottom"]}
-        topSafeAreaColor={color.primary}
+        topSafeAreaColor={color.header}
       >
         <AppHeader
           embedded
@@ -112,9 +112,6 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                     title={`${nutrientLabels[field]} source`}
                     disabled={disabled}
                     selectedValue={values.nutrients[field].source}
-                    triggerLabel={
-                      values.nutrients[field].source === "Estimated" ? "≈" : "="
-                    }
                     options={[
                       { label: "Estimated", value: "Estimated" },
                       { label: "Recorded", value: "Recorded" },

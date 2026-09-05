@@ -49,7 +49,7 @@ export function Button({
           <ActivityIndicator color={textColor[variant]} size="small" />
         ) : null}
         {Icon === undefined || loading ? null : (
-          <Icon color={textColor[variant]} size={17} strokeWidth={3} />
+          <Icon color={textColor[variant]} size={17} strokeWidth={2} />
         )}
         <Text
           numberOfLines={1}
@@ -66,14 +66,14 @@ export function Button({
 const textColor: Record<ButtonVariant, string> = {
   danger: color.dangerText,
   ghost: color.textMuted,
-  primary: color.white,
+  primary: color.primaryForeground,
   safe: color.safeText,
   secondary: color.text,
 };
 
 const styles = StyleSheet.create({
   root: {
-    minHeight: 44,
+    minHeight: 48,
     minWidth: 44,
     alignItems: "center",
     justifyContent: "center",
@@ -90,9 +90,9 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
-    lineHeight: tokens.type.lineHeight.sm,
+    fontSize: tokens.type.size.md,
+    fontWeight: tokens.type.weight.semibold,
+    lineHeight: tokens.type.lineHeight.md,
   },
   pressed: {
     opacity: 0.86,

@@ -583,7 +583,7 @@ function PricePage({
       contentStyle={styles.pageContent}
       safeAreaEdges={["top"]}
       scroll
-      topSafeAreaColor={color.primary}
+      topSafeAreaColor={color.header}
     >
       <AppHeader
         embedded
@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
   current: {
     color: color.safeText,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   currentPriceCard: {
     borderWidth: 2,
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   foodName: {
     color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   helpText: {
     color: color.textMuted,

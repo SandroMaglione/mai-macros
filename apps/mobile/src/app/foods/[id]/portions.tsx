@@ -757,7 +757,7 @@ function PortionPage({
       contentStyle={styles.pageContent}
       safeAreaEdges={["top"]}
       scroll
-      topSafeAreaColor={color.primary}
+      topSafeAreaColor={color.header}
     >
       <AppHeader
         embedded
@@ -1028,7 +1028,7 @@ const styles = StyleSheet.create({
   foodName: {
     color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xl,
   },
   foodBrand: {
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   dialogTitle: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   dialogMessage: {

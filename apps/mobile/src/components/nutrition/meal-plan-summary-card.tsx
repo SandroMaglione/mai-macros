@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   divider: {
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     maxWidth: 150,
     textAlign: "right",
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
 });

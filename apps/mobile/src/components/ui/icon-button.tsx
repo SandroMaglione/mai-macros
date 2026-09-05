@@ -16,7 +16,7 @@ export function IconButton({
   iconColor,
   iconSize = 22,
   style,
-  strokeWidth = 2.8,
+  strokeWidth = 2,
   variant = "secondary",
   ...pressableProps
 }: Omit<PressableProps, "children" | "style"> & {
@@ -51,8 +51,8 @@ export function IconButton({
 }
 
 const textColor: Record<IconButtonVariant, string> = {
-  ghost: color.white,
-  primary: color.white,
+  ghost: color.text,
+  primary: color.primaryForeground,
   secondary: color.text,
 };
 

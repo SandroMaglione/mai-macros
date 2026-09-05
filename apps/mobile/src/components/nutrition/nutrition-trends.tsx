@@ -623,7 +623,7 @@ function NutritionTrendChart({
                 styles.metricSelectorButton,
                 selected
                   ? {
-                      backgroundColor: metricColor,
+                      backgroundColor: color.surfaceRaised,
                       borderColor: metricColor,
                     }
                   : null,
@@ -634,7 +634,7 @@ function NutritionTrendChart({
                 style={[
                   styles.metricSelectorDot,
                   {
-                    backgroundColor: selected ? color.bg : metricColor,
+                    backgroundColor: metricColor,
                   },
                 ]}
               />
@@ -1346,6 +1346,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   metricSelectorButton: {
+    minHeight: 44,
     minWidth: "22%",
     flexGrow: 1,
     flexBasis: 0,
@@ -1355,7 +1356,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     borderWidth: 1,
     borderColor: color.sheetBorder,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
     backgroundColor: color.surface,
@@ -1368,11 +1369,11 @@ const styles = StyleSheet.create({
   metricSelectorLabel: {
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   metricSelectorLabelSelected: {
-    color: color.bg,
+    color: color.text,
   },
   chartShell: {
     overflow: "hidden",
@@ -1407,7 +1408,7 @@ const styles = StyleSheet.create({
   chartTargetReferenceSummary: {
     color: color.text,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   chartPlotOverlay: {
@@ -1424,7 +1425,7 @@ const styles = StyleSheet.create({
     width: 32,
     color: color.textMuted,
     fontSize: 10,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: 12,
     textAlign: "right",
   },
@@ -1499,7 +1500,7 @@ const styles = StyleSheet.create({
   monthLabel: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   monthControls: {
@@ -1532,7 +1533,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textAlign: "center",
   },
@@ -1557,7 +1558,7 @@ const styles = StyleSheet.create({
   calendarDay: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   calendarDayOutside: {

@@ -1,5 +1,8 @@
 import { CompactToggle } from "@/components/ui/compact-toggle";
-import { BodyWeightPanel } from "@/components/body-weight/body-weight-panel";
+import {
+  BodyWeightPanel,
+  BodyWeightChartKind,
+} from "@/components/body-weight/body-weight-panel";
 import {
   NutritionTrends,
   NutritionChartKind,
@@ -53,6 +56,7 @@ const InsightsViewInput = Schema.Struct({
 
 const InsightsViewContext = Schema.Struct({
   chartKind: NutritionChartKind,
+  weightChartKind: BodyWeightChartKind,
   includeEstimates: Schema.Boolean,
   activeTab: InsightTab,
   dateRange: Schema.NullOr(InsightDateRange),
@@ -65,6 +69,9 @@ const insightsViewMachine = setup({
     events: {
       selectChartKind: Schema.toStandardSchemaV1(
         Schema.Struct({ chartKind: NutritionChartKind })
+      ),
+      selectWeightChartKind: Schema.toStandardSchemaV1(
+        Schema.Struct({ chartKind: BodyWeightChartKind })
       ),
       toggleEstimates: Schema.toStandardSchemaV1(EmptyEvent),
       selectRange: Schema.toStandardSchemaV1(
@@ -84,6 +91,7 @@ const insightsViewMachine = setup({
 }).createMachine({
   context: ({ input }) => ({
     chartKind: "trend",
+    weightChartKind: "trend",
     activeTab: input.initialTab,
     rangeDayCount: 30,
     dateRange: null,
@@ -92,6 +100,9 @@ const insightsViewMachine = setup({
   on: {
     selectChartKind: ({ event }) => ({
       context: { chartKind: event.chartKind },
+    }),
+    selectWeightChartKind: ({ event }) => ({
+      context: { weightChartKind: event.chartKind },
     }),
     toggleEstimates: ({ context }) => ({
       context: { includeEstimates: !context.includeEstimates },
@@ -417,7 +428,7 @@ export default function InsightsScreen() {
         scrollProps={{
           showsVerticalScrollIndicator: false,
         }}
-        topSafeAreaColor={color.primary}
+        topSafeAreaColor={color.header}
       >
         <InsightsHeader
           onBackToToday={() => {
@@ -472,7 +483,26 @@ export default function InsightsScreen() {
                 ]}
               />
             </View>
-          ) : null}
+          ) : (
+            <CompactToggle
+              value={snapshot.context.weightChartKind}
+              onSelect={(chartKind) =>
+                actor.trigger.selectWeightChartKind({ chartKind })
+              }
+              options={[
+                {
+                  value: "trend",
+                  label: "Show weight trend chart",
+                  icon: TrendingUp,
+                },
+                {
+                  value: "change",
+                  label: "Show weights compared with the average",
+                  icon: ChartColumn,
+                },
+              ]}
+            />
+          )}
         </View>
         {snapshot.context.activeTab === "nutrition" ? (
           <NutritionInsightsPanel
@@ -484,6 +514,7 @@ export default function InsightsScreen() {
           />
         ) : (
           <BodyWeightPanel
+            chartKind={snapshot.context.weightChartKind}
             calendarPosition="bottom"
             key={`weight-${snapshot.context.rangeDayCount}-${snapshot.context.dateRange?.startDateKey}-${snapshot.context.dateRange?.endDateKey}`}
             reportDateRange={snapshot.context.dateRange}
@@ -728,7 +759,7 @@ const styles = StyleSheet.create({
   bottomTabLabel: {
     color: color.actionSheetText,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   bottomTabLabelActive: {

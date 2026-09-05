@@ -44,7 +44,7 @@ export function CompactToggle<Value extends string>({
               </Text>
             ) : (
               <Icon
-                color={selected ? color.white : color.textMuted}
+                color={selected ? color.primary : color.textMuted}
                 size={17}
                 strokeWidth={2.4}
               />
@@ -67,15 +67,15 @@ const styles = StyleSheet.create({
     borderColor: color.hairline,
   },
   option: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.sm,
     paddingHorizontal: spacing.xxs,
   },
-  selected: { backgroundColor: color.primary },
+  selected: { backgroundColor: color.primarySoft },
   symbol: { color: color.textMuted, fontSize: 19, fontWeight: "600" },
-  selectedSymbol: { color: color.white },
+  selectedSymbol: { color: color.primary },
   pressed: { opacity: 0.7 },
 });

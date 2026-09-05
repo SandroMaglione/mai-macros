@@ -19,9 +19,6 @@ export function QuantityAccuracySelect({
         title="Amount accuracy"
         disabled={disabled}
         selectedValue={accuracy}
-        triggerLabel={
-          accuracy === "estimated" ? "≈" : accuracy === "measured" ? "=" : "—"
-        }
         options={[
           { value: "unspecified", label: "Not specified" },
           { value: "measured", label: "Measured" },

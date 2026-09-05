@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   icons: {

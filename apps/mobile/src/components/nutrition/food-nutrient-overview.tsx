@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   subtitle: {
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   primaryLabel: {
     color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xl,
   },
   secondary: {
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   rowTextSecondary: {
@@ -300,12 +300,12 @@ const styles = StyleSheet.create({
     maxWidth: 140,
     textAlign: "right",
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   rowValueSecondary: {
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
 });

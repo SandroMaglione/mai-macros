@@ -43,7 +43,7 @@ export default function FoodsScreen() {
       <AppScreen
         contentStyle={styles.content}
         safeAreaEdges={["top", "bottom"]}
-        topSafeAreaColor={color.primary}
+        topSafeAreaColor={color.header}
       >
         <AppHeader
           embedded

@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
   settingsSectionTitle: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   sectionBody: {
@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
   catalogMetricText: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   catalogCandidateList: {
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
   catalogCandidateName: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   catalogCandidateBrand: {
@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   },
   catalogBadgeText: {
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   inlineActions: {
@@ -1277,7 +1277,7 @@ const styles = StyleSheet.create({
   },
   confirmationPhrase: {
     color: color.dangerText,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   resetErrorText: {
     color: color.dangerText,

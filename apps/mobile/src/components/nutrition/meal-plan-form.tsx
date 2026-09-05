@@ -425,13 +425,13 @@ const styles = StyleSheet.create({
   },
   targetLabel: {
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   unit: {
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   energyPanel: {
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   energyLabel: {
     color: color.nutritionEnergy,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
     textTransform: "uppercase",
   },
@@ -463,13 +463,13 @@ const styles = StyleSheet.create({
     maxWidth: 190,
     color: color.nutritionEnergy,
     fontSize: tokens.type.size.xxl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xxl,
   },
   energyUnit: {
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },

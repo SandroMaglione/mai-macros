@@ -1,9 +1,10 @@
 import { color, spacing } from "@/theme/tokens";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewProps,
+  type KeyboardAwareScrollViewRef,
 } from "react-native-keyboard-controller";
 import {
   SafeAreaView,
@@ -17,6 +18,7 @@ export function AppScreen({
   safeAreaEdges = ["top", "bottom"],
   scroll = false,
   scrollProps,
+  scrollRef,
   style,
   topSafeAreaColor,
 }: {
@@ -28,6 +30,7 @@ export function AppScreen({
     KeyboardAwareScrollViewProps,
     "children" | "style"
   >;
+  readonly scrollRef?: Ref<KeyboardAwareScrollViewRef>;
   readonly style?: StyleProp<ViewStyle>;
   readonly topSafeAreaColor?: string;
 }) {
@@ -49,6 +52,7 @@ export function AppScreen({
       )}
       {scroll ? (
         <KeyboardAwareScrollView
+          ref={scrollRef}
           alwaysBounceVertical={false}
           bottomOffset={spacing.lg}
           keyboardShouldPersistTaps="handled"

@@ -95,16 +95,16 @@ export function SearchField(props: FieldProps) {
 
 const styles = StyleSheet.create({
   root: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   label: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.sm,
   },
   inputShell: {
-    minHeight: 44,
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.semibold,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.md,
   },
   inputMultiline: {
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   supportingText: {
     color: color.textSubtle,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.semibold,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.xs,
   },
   errorText: {

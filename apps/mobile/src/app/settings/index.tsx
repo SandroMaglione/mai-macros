@@ -1,8 +1,7 @@
 import { AppScreen } from "@/components/ui/app-screen";
-import { Button } from "@/components/ui/button";
+import { NavigationRow } from "@/components/ui/navigation-row";
 import { IconButton } from "@/components/ui/icon-button";
 import { AppHeader } from "@/components/ui/mai-header";
-import { SectionCard } from "@/components/ui/section-card";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { color, spacing } from "@/theme/tokens";
 import { Domain } from "@mai/nutrition";
@@ -30,7 +29,7 @@ export default function SettingsScreen() {
         contentStyle={styles.content}
         safeAreaEdges={["top", "bottom"]}
         scroll
-        topSafeAreaColor={color.primary}
+        topSafeAreaColor={color.header}
       >
         <AppHeader
           embedded
@@ -63,46 +62,34 @@ export default function SettingsScreen() {
         />
 
         <View style={styles.sections}>
-          <SectionCard
-            subtitle="Select the plan for this day, or create and edit meal plans."
+          <NavigationRow
             title="Meal plans"
-          >
-            <Button
-              icon={ClipboardList}
-              onPress={() => {
-                if (dateKey === undefined) {
-                  router.push({
-                    pathname: "/plans",
-                    params: { source: "settings" },
-                  });
-                  return;
-                }
-
+            description="Daily targets and meal structure"
+            icon={ClipboardList}
+            onPress={() => {
+              if (dateKey === undefined) {
                 router.push({
                   pathname: "/plans",
-                  params: { dateKey, source: "settings" },
+                  params: { source: "settings" },
                 });
-              }}
-              variant="secondary"
-            >
-              Open meal plans
-            </Button>
-          </SectionCard>
+                return;
+              }
 
-          <SectionCard
-            subtitle="Import or export backups and food catalogs, or reset local data."
+              router.push({
+                pathname: "/plans",
+                params: { dateKey, source: "settings" },
+              });
+            }}
+          />
+
+          <NavigationRow
             title="Data & backup"
-          >
-            <Button
-              icon={Database}
-              onPress={() => {
-                router.push("/backup");
-              }}
-              variant="secondary"
-            >
-              Open data & backup
-            </Button>
-          </SectionCard>
+            description="Import, export and manage local data"
+            icon={Database}
+            onPress={() => {
+              router.push("/backup");
+            }}
+          />
         </View>
       </AppScreen>
     </View>

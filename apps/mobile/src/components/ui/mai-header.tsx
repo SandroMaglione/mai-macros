@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   root: {
     paddingHorizontal: spacing.lg,
     paddingBottom: Math.round(spacing.sm * 0.9),
-    backgroundColor: color.primary,
+    backgroundColor: color.header,
   },
   embedded: {
     marginHorizontal: -spacing.lg,
@@ -156,26 +156,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   eyebrow: {
-    color: "rgba(255,255,255,0.75)",
+    color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
   title: {
     maxWidth: 220,
-    color: color.white,
+    color: color.text,
     textAlign: "center",
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xl,
   },
   subtitle: {
     maxWidth: 220,
-    color: "rgba(255,255,255,0.82)",
+    color: color.textMuted,
     textAlign: "center",
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   children: {

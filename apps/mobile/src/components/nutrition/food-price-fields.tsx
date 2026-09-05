@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   currency: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   fields: { gap: spacing.md },
 });

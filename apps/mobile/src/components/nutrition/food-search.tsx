@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { setup } from "xstate";
+import type { ReactElement } from "react";
 
 import { FoodCurrentPriceIndicator } from "./food-current-price-indicator";
 
@@ -197,7 +198,7 @@ export function FoodSearch({
   readonly disabled?: boolean;
   readonly emptyFoodsText?: string;
   readonly emptySearchText?: string;
-  readonly getPrimaryLabel?: (food: Domain.Food) => string;
+  readonly getPrimaryLabel?: (food: Domain.Food) => string | undefined;
   readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
   readonly placeholder?: string;
 }) {
@@ -431,12 +432,14 @@ export function FoodSearchResults({
   emptySearchText,
   getPrimaryLabel,
   getSecondaryLabel,
+  header,
 }: {
+  readonly header?: ReactElement;
   readonly actor: FoodSearchMachine.FoodSearchActorRef;
   readonly disabled: boolean;
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
-  readonly getPrimaryLabel?: (food: Domain.Food) => string;
+  readonly getPrimaryLabel?: (food: Domain.Food) => string | undefined;
   readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
 }) {
   const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
@@ -460,6 +463,7 @@ export function FoodSearchResults({
       ItemSeparatorComponent={FoodSearchSeparator}
       keyboardShouldPersistTaps="handled"
       keyExtractor={(food) => food.id}
+      ListHeaderComponent={header}
       ListEmptyComponent={<FoodSearchEmpty text={emptyText} />}
       renderItem={({ item }) => (
         <FoodSearchResult
@@ -601,25 +605,27 @@ function FoodSearchResult({
               ))}
             </View>
           )}
-          {brandLabel === null ? null : (
-            <Text numberOfLines={1} style={styles.resultSummary}>
-              {brandLabel}
-            </Text>
-          )}
+          <Text numberOfLines={2} style={styles.resultSummary}>
+            {brandLabel === null
+              ? perReferenceLabel
+              : `${brandLabel} · ${perReferenceLabel}`}
+          </Text>
         </View>
       </View>
-      <View style={styles.resultMetrics}>
-        <Text numberOfLines={1} style={styles.primaryMetric}>
-          {primaryLabel ?? perReferenceLabel}
-        </Text>
-        <Text
-          accessible={secondaryLabel !== undefined}
-          numberOfLines={1}
-          style={styles.secondaryMetric}
-        >
-          {secondaryLabel}
-        </Text>
-      </View>
+      {primaryLabel === undefined && secondaryLabel === undefined ? null : (
+        <View style={styles.resultMetrics}>
+          <Text numberOfLines={1} style={styles.primaryMetric}>
+            {primaryLabel ?? ""}
+          </Text>
+          <Text
+            accessible={secondaryLabel !== undefined}
+            numberOfLines={1}
+            style={styles.secondaryMetric}
+          >
+            {secondaryLabel}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -655,7 +661,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.md,
   },
   orderSelector: {
@@ -702,7 +708,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   orderDialogOption: {
@@ -730,7 +736,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.md,
   },
   list: {
@@ -756,18 +762,18 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.sm,
   },
   result: {
-    minHeight: 72,
+    minHeight: 88,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
   },
   resultUser: {
     backgroundColor: color.surface,
   },
   resultSelected: {
-    backgroundColor: color.dangerBg,
+    backgroundColor: color.primarySoft,
   },
   resultPressed: {
     opacity: 0.86,
@@ -777,7 +783,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#4a4a50",
+    backgroundColor: color.hairline,
   },
   resultCopy: {
     minWidth: 0,
@@ -795,7 +801,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.md,
   },
   nameGroupBadge: {
@@ -815,7 +821,7 @@ const styles = StyleSheet.create({
   },
   nameGroupBadgeText: {
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   nameGroupBadgeTextNewest: {
@@ -828,9 +834,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexShrink: 1,
     color: color.textMuted,
-    fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.semibold,
-    lineHeight: tokens.type.lineHeight.md,
+    fontSize: tokens.type.size.sm,
+    fontWeight: tokens.type.weight.regular,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   summaryRow: {
     minHeight: tokens.type.lineHeight.md,
@@ -861,7 +867,7 @@ const styles = StyleSheet.create({
     color: color.text,
     textAlign: "right",
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   secondaryMetric: {
@@ -870,7 +876,7 @@ const styles = StyleSheet.create({
     color: color.textMuted,
     textAlign: "right",
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.semibold,
+    fontWeight: tokens.type.weight.medium,
     lineHeight: tokens.type.lineHeight.md,
   },
 });

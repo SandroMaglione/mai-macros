@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   selectorLabel: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   selectorLabelHeader: {
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   dialogOptions: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
 });

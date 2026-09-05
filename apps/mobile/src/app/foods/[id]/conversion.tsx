@@ -442,7 +442,7 @@ function ConversionPage({
       contentStyle={styles.pageContent}
       safeAreaEdges={["top"]}
       scroll
-      topSafeAreaColor={color.primary}
+      topSafeAreaColor={color.header}
     >
       <AppHeader
         embedded
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
   dialogChange: {
     color: color.text,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   dialogHeader: {
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   foodBrand: {
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   foodName: {
     color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   helpText: {
     color: color.textMuted,

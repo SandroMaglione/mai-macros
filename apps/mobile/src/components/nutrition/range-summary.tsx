@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   sectionHeading: {
     color: color.text,
     fontSize: tokens.type.size.xl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xl,
   },
   sectionSubtitle: {
@@ -1017,11 +1017,11 @@ const styles = StyleSheet.create({
   },
   insightFoodText: {
     color: color.warningText,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   insightMealText: {
     color: color.nutritionProtein,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   summaryToggle: {
     minHeight: 32,
@@ -1066,7 +1066,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   targetTrendIcon: {
@@ -1079,13 +1079,13 @@ const styles = StyleSheet.create({
   nutrientDelta: {
     color: color.textMuted,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   nutrientValue: {
     color: color.text,
     fontSize: tokens.type.size.xxl,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xxl,
   },
   foodGroups: {
@@ -1123,7 +1123,7 @@ const styles = StyleSheet.create({
   dialogTitle: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   dialogSubtitle: {
@@ -1171,7 +1171,7 @@ const styles = StyleSheet.create({
     color: color.text,
     textAlign: "right",
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   foodGroup: {
@@ -1179,7 +1179,7 @@ const styles = StyleSheet.create({
   },
   foodGroupTitle: {
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   foodRows: {
@@ -1215,7 +1215,7 @@ const styles = StyleSheet.create({
   },
   foodAmount: {
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   foodPercentage: {
@@ -1241,7 +1241,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
 });

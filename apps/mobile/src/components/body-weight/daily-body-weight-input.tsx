@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   unit: {
     color: color.textMuted,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
   weightField: {
     minWidth: 0,

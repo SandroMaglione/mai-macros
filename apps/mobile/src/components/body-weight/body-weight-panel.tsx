@@ -46,7 +46,6 @@ import { NumberField, TextArea } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
-import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
 import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
@@ -96,35 +95,9 @@ const BodyWeightReportDayCount = InsightRangeDayCount;
 
 export type BodyWeightReportDayCount = typeof BodyWeightReportDayCount.Type;
 
-const BodyWeightChartKind = Schema.Literals(["trend", "change"]);
+export const BodyWeightChartKind = Schema.Literals(["trend", "change"]);
 
-const BodyWeightChartContext = Schema.Struct({
-  chartKind: BodyWeightChartKind,
-});
-
-const bodyWeightChartMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(BodyWeightChartContext),
-    events: {
-      selectChartKind: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          chartKind: BodyWeightChartKind,
-        })
-      ),
-    },
-  },
-}).createMachine({
-  context: {
-    chartKind: "trend",
-  },
-  on: {
-    selectChartKind: ({ event }) => ({
-      context: {
-        chartKind: event.chartKind,
-      },
-    }),
-  },
-});
+type BodyWeightChartKind = typeof BodyWeightChartKind.Type;
 
 const BodyWeightRouteInput = Schema.Struct({
   dateKey: Domain.DateKey,
@@ -800,6 +773,7 @@ const bodyWeightRouteMachine = setup({
 });
 
 export function BodyWeightPanel({
+  chartKind,
   calendarPosition = "top",
   initialDateKey,
   onSelectDate,
@@ -807,6 +781,7 @@ export function BodyWeightPanel({
   reportDayCount = 90,
   showImport = true,
 }: {
+  readonly chartKind: BodyWeightChartKind;
   readonly calendarPosition?: "bottom" | "top";
   readonly initialDateKey?: Domain.DateKey;
   readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
@@ -829,6 +804,7 @@ export function BodyWeightPanel({
       ),
       onSome: (dateKey) => (
         <BodyWeightRoute
+          chartKind={chartKind}
           calendarPosition={calendarPosition}
           dateKey={dateKey}
           onSelectDate={onSelectDate}
@@ -842,6 +818,7 @@ export function BodyWeightPanel({
 }
 
 function BodyWeightRoute({
+  chartKind,
   calendarPosition,
   dateKey,
   onSelectDate,
@@ -849,6 +826,7 @@ function BodyWeightRoute({
   reportDayCount,
   showImport,
 }: {
+  readonly chartKind: BodyWeightChartKind;
   readonly calendarPosition: "bottom" | "top";
   readonly dateKey: Domain.DateKey;
   readonly onSelectDate?: (dateKey: Domain.DateKey) => void;
@@ -962,7 +940,7 @@ function BodyWeightRoute({
       )}
 
       <BodyWeightSummary report={snapshot.context.report} />
-      <BodyWeightTrend report={snapshot.context.report} />
+      <BodyWeightTrend chartKind={chartKind} report={snapshot.context.report} />
       {calendarPosition === "bottom" ? calendar : null}
     </View>
   );
@@ -1444,39 +1422,28 @@ function BodyWeightMetric({
   );
 }
 
-const bodyWeightChartTabs = [
-  {
-    accessibilityLabel: "Show weight trend chart",
-    key: "trend",
-    label: "Trend",
-  },
-  {
-    accessibilityLabel: "Show weights compared with the average",
-    key: "change",
-    label: "Vs average",
-  },
-];
-
 function BodyWeightTrend({
+  chartKind,
   report,
 }: {
+  readonly chartKind: BodyWeightChartKind;
   readonly report: BodyWeightReportRange;
 }) {
   return (
     <View style={styles.trendBlock}>
-      <BodyWeightChart report={report} />
+      <BodyWeightChart chartKind={chartKind} report={report} />
       <BodyWeightInsights report={report} />
     </View>
   );
 }
 
 function BodyWeightChart({
+  chartKind,
   report,
 }: {
+  readonly chartKind: BodyWeightChartKind;
   readonly report: BodyWeightReportRange;
 }) {
-  const [snapshot, , actor] = useMachine(bodyWeightChartMachine);
-  const chartKind = snapshot.context.chartKind;
   const chart = BodyWeightChartDataModel.make({ report });
   const { state: pressState, isActive: isPressActive } = useChartPressState({
     x: 0,
@@ -1526,15 +1493,6 @@ function BodyWeightChart({
 
   return (
     <View style={styles.chartSection}>
-      <PagerTabBar
-        activeIndex={chartKind === "trend" ? 0 : 1}
-        onActiveIndexChange={(index) => {
-          actor.trigger.selectChartKind({
-            chartKind: index === 0 ? "trend" : "change",
-          });
-        }}
-        tabs={bodyWeightChartTabs}
-      />
       <View
         accessibilityLabel={`Weight ${chartKind === "trend" ? "trend" : "values compared with the weighted average"} from ${_formatChartDateLabel({ dateKey: chart.startDateKey })} to ${_formatChartDateLabel({ dateKey: chart.endDateKey })}. Touch and drag across the chart for daily values.`}
         accessible
@@ -2205,7 +2163,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   monthControls: {
@@ -2229,7 +2187,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: color.textSubtle,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textAlign: "center",
     textTransform: "uppercase",
@@ -2281,7 +2239,7 @@ const styles = StyleSheet.create({
   calendarWeightText: {
     color: color.text,
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
     textAlign: "center",
   },
@@ -2329,7 +2287,7 @@ const styles = StyleSheet.create({
   editorTitle: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   editorCloseButton: {
@@ -2360,7 +2318,7 @@ const styles = StyleSheet.create({
   unitText: {
     color: color.textMuted,
     fontSize: tokens.type.size.md,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.md,
   },
   metricGrid: {
@@ -2382,13 +2340,13 @@ const styles = StyleSheet.create({
   metricValue: {
     color: color.text,
     fontSize: tokens.type.size.lg,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.lg,
   },
   metricLabel: {
     color: color.textSubtle,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
     textTransform: "uppercase",
   },
@@ -2420,7 +2378,7 @@ const styles = StyleSheet.create({
     width: 42,
     color: color.textMuted,
     fontSize: 10,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: 12,
     textAlign: "right",
   },
@@ -2431,7 +2389,7 @@ const styles = StyleSheet.create({
     width: 42,
     color: color.textMuted,
     fontSize: 10,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: 12,
     textAlign: "right",
   },
@@ -2514,6 +2472,6 @@ const styles = StyleSheet.create({
   },
   insightHighlightText: {
     color: color.warningText,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
   },
 });

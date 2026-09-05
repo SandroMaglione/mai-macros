@@ -171,21 +171,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   tabActive: {
-    backgroundColor: color.primary,
+    backgroundColor: color.primarySoft,
   },
   headerTabActive: {
-    backgroundColor: color.white,
+    backgroundColor: color.surfaceRaised,
   },
   pressed: {
     opacity: 0.86,
   },
   tabText: {
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   tabTextActive: {
-    color: color.white,
+    color: color.text,
   },
   tabTextInactive: {
     color: color.textMuted,
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     color: color.primary,
   },
   headerTabTextInactive: {
-    color: color.white,
+    color: color.text,
   },
   pager: {
     flex: 1,

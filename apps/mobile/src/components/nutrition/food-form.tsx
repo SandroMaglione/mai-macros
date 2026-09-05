@@ -248,7 +248,7 @@ export function FoodForm({
         safeAreaEdges={["top"]}
         scroll
         contentStyle={styles.content}
-        topSafeAreaColor={color.primary}
+        topSafeAreaColor={color.header}
         scrollProps={{
           keyboardShouldPersistTaps: "handled",
         }}
@@ -264,7 +264,7 @@ export function FoodForm({
             />
           }
           shadow
-          title={isCreating ? undefined : title}
+          title={title}
         />
 
         {form}
@@ -813,13 +813,13 @@ const styles = StyleSheet.create({
   },
   nutrientLabel: {
     fontSize: tokens.type.size.sm,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.sm,
   },
   unit: {
     color: color.textMuted,
     fontSize: tokens.type.size.xs,
-    fontWeight: tokens.type.weight.black,
+    fontWeight: tokens.type.weight.semibold,
     lineHeight: tokens.type.lineHeight.xs,
   },
   noticeStack: {
