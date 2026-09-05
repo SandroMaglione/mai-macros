@@ -90,7 +90,7 @@ const insightsViewMachine = setup({
   },
 }).createMachine({
   context: ({ input }) => ({
-    chartKind: "trend",
+    chartKind: "daily",
     weightChartKind: "trend",
     activeTab: input.initialTab,
     rangeDayCount: 30,
@@ -454,8 +454,8 @@ export default function InsightsScreen() {
                   actor.trigger.selectChartKind({ chartKind })
                 }
                 options={[
-                  { value: "trend", label: "Trend chart", icon: TrendingUp },
                   { value: "daily", label: "Daily bars", icon: ChartColumn },
+                  { value: "trend", label: "Trend chart", icon: TrendingUp },
                 ]}
               />
               <CompactToggle

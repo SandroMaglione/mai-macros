@@ -7,7 +7,7 @@ export const nutrientFieldColors = {
   carbsGrams: color.nutritionCarbs,
   fatGrams: color.nutritionFat,
   fiberGrams: color.nutritionFiber,
-  sugarGrams: color.nutritionCarbs,
+  sugarGrams: color.nutritionSugar,
   saturatedFatGrams: color.nutritionFat,
   saltGrams: color.nutritionSalt,
 } satisfies Record<Reporting.NutrientName, string>;

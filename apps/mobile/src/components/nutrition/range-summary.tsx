@@ -689,7 +689,7 @@ function NutrientBalanceCard({
       <Text adjustsFontSizeToFit numberOfLines={1} style={styles.nutrientValue}>
         {unknown
           ? "—"
-          : `${estimated ? "≈ " : ""}${_formatNutrient({ nutrientName, value: actual })}${incomplete ? "+" : ""}`}
+          : `${estimated || incomplete ? "≈ " : ""}${_formatNutrient({ nutrientName, value: actual })}`}
       </Text>
       <Text numberOfLines={1} style={styles.nutrientDelta}>
         {signedValue === null || formattedSignedValue === null
@@ -968,7 +968,7 @@ function _formatNutrient({
     })} kcal`;
   }
 
-  return `${formatNumber({ value })}g`;
+  return `${formatNumber({ value, maximumFractionDigits: 1 })} g`;
 }
 
 const styles = StyleSheet.create({

@@ -1,3 +1,4 @@
+import { ChartDateLabel } from "@/components/ui/chart-date-label";
 import * as Reporting from "@mai/nutrition/reporting";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -53,7 +54,7 @@ const NutritionTrendMetric = Schema.Literals([
 
 type NutritionTrendMetric = typeof NutritionTrendMetric.Type;
 
-export const NutritionChartKind = Schema.Literals(["trend", "daily"]);
+export const NutritionChartKind = Schema.Literals(["daily", "trend"]);
 export type NutritionChartKind = typeof NutritionChartKind.Type;
 
 const NutritionTrendMetricContext = Schema.Struct({
@@ -572,11 +573,11 @@ function NutritionTrendChart({
             </View>
           </View>
           <View style={styles.chartFooter}>
-            <Text style={styles.chartDateRange}>
-              {_formatShortDate({ dateKey: report.startDateKey })}
-              {" – "}
-              {_formatShortDate({ dateKey: report.endDateKey })}
-            </Text>
+            <ChartDateLabel
+              pressState={pressState}
+              style={styles.chartDateRange}
+              rangeLabel={`${_formatShortDate({ dateKey: report.startDateKey })} – ${_formatShortDate({ dateKey: report.endDateKey })}`}
+            />
             <View style={styles.chartLegend}>
               {chartKind === "trend" ? (
                 <ChartLegendItem

@@ -1,5 +1,12 @@
+import { useDailyNutritionSummary } from "@/hooks/use-daily-nutrition-summary";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated from "react-native-reanimated";
+import { enterPinnedSummary, exitPinnedSummary } from "./pinned-summary-motion";
 import { useDailyLogScroll } from "@/hooks/use-daily-log-scroll";
-import { DailyNutritionSummary } from "./daily-nutrition-summary";
+import {
+  DailyNutritionSummary,
+  PinnedNutritionSummary,
+} from "./daily-nutrition-summary";
 import { MealSection } from "./meal-section";
 import { MealPlanSummaryCard } from "@/components/nutrition/meal-plan-summary-card";
 import { AppScreen } from "@/components/ui/app-screen";
@@ -785,6 +792,10 @@ function RecordedDailyLogView({
   const dateKey = data.day.dailyLog.dateKey;
   const dayMode = data.day.dailyLog.mode;
   const scrollPosition = useDailyLogScroll(dateKey);
+  const summary = useDailyNutritionSummary(
+    scrollPosition.scrollProps.contentOffset.y
+  );
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.screen}>
@@ -795,17 +806,31 @@ function RecordedDailyLogView({
         scrollRef={scrollPosition.scrollRef}
         scrollProps={{
           ...scrollPosition.scrollProps,
+          onScroll: (event) => {
+            scrollPosition.scrollProps.onScroll(event);
+            summary.onScroll(event);
+          },
           contentInsetAdjustmentBehavior: "never",
         }}
         style={styles.headerSafeArea}
       >
         <DayNavigationHeader dateKey={dateKey} mode={dayMode} />
 
-        <DailyNutritionSummary
-          dayMode={dayMode}
-          plan={data.day.selectedPlan}
-          nutrition={nutrition}
-        />
+        <View
+          onLayout={summary.onSummaryLayout}
+          accessibilityElementsHidden={summary.pinned}
+          importantForAccessibility={
+            summary.pinned ? "no-hide-descendants" : "auto"
+          }
+        >
+          <DailyNutritionSummary
+            dayMode={dayMode}
+            mode={summary.mode}
+            onToggle={summary.toggle}
+            plan={data.day.selectedPlan}
+            nutrition={nutrition}
+          />
+        </View>
 
         <View style={styles.dayPrimaryActions}>
           <Pressable
@@ -878,6 +903,22 @@ function RecordedDailyLogView({
         />
       </AppScreen>
 
+      {summary.pinned ? (
+        <Animated.View
+          entering={enterPinnedSummary}
+          exiting={exitPinnedSummary}
+          style={[styles.pinnedSummary, { paddingTop: insets.top }]}
+        >
+          <PinnedNutritionSummary
+            selectedNutrient={summary.nutrient}
+            onSelectNutrient={summary.selectNutrient}
+            mode={summary.mode}
+            onToggle={summary.toggle}
+            plan={data.day.selectedPlan}
+            nutrition={nutrition}
+          />
+        </Animated.View>
+      ) : null}
       <DayBottomActionBar dateKey={dateKey} />
     </View>
   );
@@ -1462,6 +1503,16 @@ function BottomAction({
 }
 
 const styles = StyleSheet.create({
+  pinnedSummary: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: color.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: color.hairline,
+  },
   screen: {
     flex: 1,
     backgroundColor: color.bg,

@@ -24,7 +24,7 @@ import { useMachine } from "@xstate/react";
 import { Effect, Match, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, Save, Trash2 } from "lucide-react-native";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { createAsyncLogic, setup } from "xstate";
 
@@ -588,7 +588,12 @@ function ReadyEditMealEntryScreen({
           />
         )}
 
-        <View style={styles.body}>
+        <ScrollView
+          style={styles.bodyScroll}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <NumberField
             accessibilityLabel={`${mealLabel} quantity in ${selectedMeasureLabel}`}
             autoFocus
@@ -629,11 +634,6 @@ function ReadyEditMealEntryScreen({
             value={snapshot.context.quantityAmount}
           />
 
-          <QuantityAccuracySelect
-            accuracy={snapshot.context.quantityAccuracy}
-            disabled={disabled}
-            change={(accuracy) => actor.trigger.changeAccuracy({ accuracy })}
-          />
           {data.food === undefined ? (
             <Notice
               message="This entry points to a food that is no longer available."
@@ -649,7 +649,12 @@ function ReadyEditMealEntryScreen({
               })} logged`}
             />
           )}
-        </View>
+          <QuantityAccuracySelect
+            accuracy={snapshot.context.quantityAccuracy}
+            disabled={disabled}
+            change={(accuracy) => actor.trigger.changeAccuracy({ accuracy })}
+          />
+        </ScrollView>
       </AppScreen>
 
       <BottomActionBar>
@@ -731,11 +736,15 @@ const styles = StyleSheet.create({
   notice: {
     marginBottom: spacing.md,
   },
+  bodyScroll: {
+    flex: 1,
+    marginHorizontal: -spacing.lg,
+  },
   body: {
     gap: spacing.lg,
-    marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
   unitLabel: {
     color: color.textMuted,

@@ -12,7 +12,7 @@ import {
 } from "@/lib/format";
 import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { Reporting, type Domain } from "@mai/nutrition";
+import { Reporting, Utils, type Domain } from "@mai/nutrition";
 import { Array } from "effect";
 import { router } from "expo-router";
 import { ChevronRight, Plus } from "lucide-react-native";
@@ -149,7 +149,7 @@ export function MealSection({
                 {weightComplete ? "Food weight" : "Resolved weight"}
               </Text>
               <Text style={styles.costValue}>
-                {formatNutrientAmount(weight.quantityGrams)} g
+                {formatNutrientAmount({ value: weight.quantityGrams })} g
               </Text>
             </View>
             <View style={styles.costRow}>
@@ -228,6 +228,13 @@ function MealEntryRow({
   readonly onPress: () => void;
 }) {
   const quality = Reporting.resolveMealEntryNutrients({ food, mealEntry });
+  const dominantMacros =
+    food === undefined ? [] : Utils.findDominantMacronutrients({ food });
+  const macroColors = {
+    carbs: color.nutritionCarbs,
+    protein: color.nutritionProtein,
+    fat: color.nutritionFat,
+  };
   const quantityLabel =
     mealEntry.kind === "one-off"
       ? mealEntry.amountDescription
@@ -248,6 +255,14 @@ function MealEntryRow({
             : (food?.name ?? "Unknown food")}
         </Text>
         <View style={styles.entryDetailRow}>
+          {dominantMacros.map((macro) => (
+            <View
+              key={macro}
+              accessible
+              accessibilityLabel={`Mostly ${macro}`}
+              style={[styles.macroDot, { backgroundColor: macroColors[macro] }]}
+            />
+          ))}
           {mealEntry.kind === "one-off" ? (
             <OneOffIndicator />
           ) : (
@@ -289,7 +304,7 @@ function MealEntryRow({
               .map(({ label, nutrient, style }, index) => (
                 <Text key={label}>
                   <Text
-                    style={styles.entryMacroLabel}
+                    style={style}
                   >{`${index === 0 ? "" : " "}${label}: `}</Text>
                   <Text style={style}>{formatNutrientValue(nutrient)}</Text>
                 </Text>
@@ -421,10 +436,10 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.xs,
     fontVariant: ["tabular-nums"],
   },
-  entryMacroLabel: { color: color.textMuted },
-  entryCarbs: { color: color.textMuted },
-  entryProtein: { color: color.textMuted },
-  entryFat: { color: color.textMuted },
+  macroDot: { width: 6, height: 6, borderRadius: radius.pill },
+  entryCarbs: { color: color.nutritionCarbs },
+  entryProtein: { color: color.nutritionProtein },
+  entryFat: { color: color.nutritionFat },
   nutrientGrid: {
     flexDirection: "row",
     gap: spacing.md,

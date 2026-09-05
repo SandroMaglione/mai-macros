@@ -555,10 +555,10 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
                     : 0
                 }
                 estimated={
-                  includeEstimates &&
-                  nutrition.estimatedCoverage[nutrient.nutrientName] > 0
+                  nutrition.missing[nutrient.nutrientName] > 0 ||
+                  (includeEstimates &&
+                    nutrition.estimatedCoverage[nutrient.nutrientName] > 0)
                 }
-                missing={nutrition.missing[nutrient.nutrientName] > 0}
                 unknown={
                   nutrition.coverage[nutrient.nutrientName] === 0 &&
                   nutrition.entriesCount > 0
@@ -854,7 +854,6 @@ function NutrientRow({
   estimatedAmount,
   unknown,
   estimated,
-  missing,
   nutrient,
   onPress,
   selected,
@@ -865,7 +864,6 @@ function NutrientRow({
   readonly estimatedAmount: number;
   readonly unknown: boolean;
   readonly estimated: boolean;
-  readonly missing: boolean;
   readonly nutrient: NutrientDetail;
   readonly onPress: () => void;
   readonly selected: boolean;
@@ -908,7 +906,6 @@ function NutrientRow({
         >
           {estimated ? "≈ " : ""}
           {unknown ? "—" : valueLabel}
-          {missing && !unknown ? "+" : ""}
         </Text>
       </View>
       {hasTarget ? (
@@ -1227,7 +1224,7 @@ function _formatNutrientValue({
   readonly value: number;
 }) {
   return `${formatNumber({
-    maximumFractionDigits: value < 10 ? 1 : 0,
+    maximumFractionDigits: unit === "kcal" ? 0 : 1,
     value,
   })} ${unit}`;
 }

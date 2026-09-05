@@ -25,7 +25,7 @@ import { useMachine } from "@xstate/react";
 import { Array, Effect, Match, Option, Order, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { Check, ChevronLeft, Plus } from "lucide-react-native";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Actor, createAsyncLogic, setup } from "xstate";
 
@@ -884,7 +884,12 @@ function QuantityEntry({
 
   return (
     <View style={styles.quantityLayout}>
-      <View style={styles.quantityBody}>
+      <ScrollView
+        style={styles.quantityScroll}
+        contentContainerStyle={styles.quantityBody}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <NumberField
           accessibilityLabel={`${mealLabel} quantity in ${selectedMeasureLabel}`}
           autoFocus
@@ -916,18 +921,18 @@ function QuantityEntry({
           selectTextOnFocus
           value={quantityAmount}
         />
-        <QuantityAccuracySelect
-          accuracy={quantityAccuracy}
-          disabled={disabled}
-          change={changeAccuracy}
-        />
         <FoodNutrientOverview
           brand={selectedFood.brand}
           name={selectedFood.name}
           nutrients={selectedFoodNutrients}
           secondaryLabel={selectedFoodQuantityLabel}
         />
-      </View>
+        <QuantityAccuracySelect
+          accuracy={quantityAccuracy}
+          disabled={disabled}
+          change={changeAccuracy}
+        />
+      </ScrollView>
       <BottomActionBar>
         <Button
           accessibilityLabel={`Add food to ${mealLabel}`}
@@ -996,11 +1001,14 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: -spacing.lg,
   },
-  quantityBody: {
+  quantityScroll: {
     flex: 1,
+  },
+  quantityBody: {
     gap: spacing.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   footerButton: {
     flex: 1,

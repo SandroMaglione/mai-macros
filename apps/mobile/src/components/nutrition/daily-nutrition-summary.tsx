@@ -6,55 +6,156 @@ import {
 } from "@/lib/nutrient-total-display";
 import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
 import { Reporting, type Domain } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import PagerView from "react-native-pager-view";
+import {
+  dailySummaryNutrients,
+  summaryPagerSelection,
+} from "@/lib/daily-summary-nutrients";
 import { Ban, Moon } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { setup } from "xstate";
 
-const displayMachine = setup({
-  schemas: { events: { toggle: Schema.toStandardSchemaV1(EmptyEvent) } },
-  states: { consumed: {}, remaining: {} },
-}).createMachine({
-  initial: "consumed",
-  states: {
-    consumed: { on: { toggle: { target: "remaining" } } },
-    remaining: { on: { toggle: { target: "consumed" } } },
-  },
-});
+const mainNutrients = dailySummaryNutrients.slice(1, 4);
+const secondaryNutrients = dailySummaryNutrients.slice(4);
+const nutrientPages = [
+  dailySummaryNutrients[7],
+  ...dailySummaryNutrients,
+  dailySummaryNutrients[0],
+];
 
-const mainNutrients = [
-  { name: "carbsGrams", label: "Carbs" },
-  { name: "proteinGrams", label: "Protein" },
-  { name: "fatGrams", label: "Fat" },
-] as const;
-const secondaryNutrients = [
-  { name: "fiberGrams", label: "Fiber" },
-  { name: "sugarGrams", label: "Sugar" },
-  { name: "saturatedFatGrams", label: "Sat fat" },
-  { name: "saltGrams", label: "Salt" },
-] as const;
+export function PinnedNutritionSummary({
+  mode,
+  onToggle,
+  nutrition,
+  plan,
+  selectedNutrient,
+  onSelectNutrient,
+}: {
+  readonly mode: NutrientDisplayMode;
+  readonly onToggle: () => void;
+  readonly nutrition: Reporting.MealEntriesNutrientTotals;
+  readonly plan: Domain.Plan;
+  readonly selectedNutrient: Reporting.NutrientName;
+  readonly onSelectNutrient: (event: {
+    nutrient: Reporting.NutrientName;
+  }) => void;
+}) {
+  const pager = useRef<PagerView>(null);
+  const page = useRef(
+    dailySummaryNutrients.findIndex(({ name }) => name === selectedNutrient) + 1
+  );
+  const normalizePage = () => {
+    const selection = summaryPagerSelection(page.current);
+    if (selection.page !== page.current) {
+      page.current = selection.page;
+      pager.current?.setPageWithoutAnimation(selection.page);
+    }
+  };
+  return (
+    <PagerView
+      ref={pager}
+      style={styles.compactPager}
+      initialPage={page.current}
+      onPageSelected={({ nativeEvent }) => {
+        page.current = nativeEvent.position;
+        onSelectNutrient({
+          nutrient: summaryPagerSelection(nativeEvent.position).nutrient.name,
+        });
+      }}
+      onPageScrollStateChanged={({ nativeEvent }) => {
+        if (nativeEvent.pageScrollState === "idle") normalizePage();
+      }}
+    >
+      {nutrientPages.map(({ name, label }, index) => {
+        const target = Reporting.getPlanNutrientTargetAmount({
+          nutrientName: name,
+          plan,
+        });
+        const display = nutrientTotalDisplay({ name, nutrition, target, mode });
+        const unit = name === "energyKcal" ? "kcal" : "g";
+        return (
+          <View key={`${index}-${name}`} collapsable={false}>
+            <Pressable
+              accessibilityRole="adjustable"
+              accessibilityLabel={`${label}, ${display.amount} ${unit}${target === undefined ? "" : `, target ${target} ${unit}`}`}
+              accessibilityHint={`Showing ${mode}. Tap to show ${mode === "consumed" ? "remaining" : "consumed"}. Swipe horizontally to change nutrient.`}
+              accessibilityActions={[
+                { name: "increment", label: "Next nutrient" },
+                { name: "decrement", label: "Previous nutrient" },
+                { name: "activate", label: "Toggle consumed and remaining" },
+              ]}
+              onAccessibilityAction={({ nativeEvent }) => {
+                if (nativeEvent.actionName === "activate") onToggle();
+                else if (
+                  nativeEvent.actionName === "increment" ||
+                  nativeEvent.actionName === "decrement"
+                ) {
+                  normalizePage();
+                  pager.current?.setPage(
+                    page.current +
+                      (nativeEvent.actionName === "increment" ? 1 : -1)
+                  );
+                }
+              }}
+              onPress={onToggle}
+              style={({ pressed }) => [
+                styles.compactRoot,
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <DailyMetric
+                name={name}
+                label={label}
+                nutrition={nutrition}
+                plan={plan}
+                mode={mode}
+                emphasis="compact"
+                footerAccessory={
+                  <View style={styles.pageDots}>
+                    {dailySummaryNutrients.map((nutrient) => (
+                      <View
+                        key={nutrient.name}
+                        style={[
+                          styles.pageDot,
+                          {
+                            backgroundColor: nutrientFieldColors[nutrient.name],
+                            opacity: nutrient.name === name ? 1 : 0.25,
+                            width: nutrient.name === name ? 14 : 4,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                }
+              />
+            </Pressable>
+          </View>
+        );
+      })}
+    </PagerView>
+  );
+}
 
 export function DailyNutritionSummary({
   dayMode,
+  mode,
+  onToggle,
   nutrition,
   plan,
 }: {
+  readonly mode: NutrientDisplayMode;
+  readonly onToggle: () => void;
   readonly dayMode: Domain.DailyLogMode;
   readonly nutrition: Reporting.MealEntriesNutrientTotals;
   readonly plan: Domain.Plan;
 }) {
-  const [snapshot, , actor] = useMachine(displayMachine);
-  const mode = snapshot.value;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityHint={`Showing ${mode}. Show ${mode === "consumed" ? "remaining" : "consumed"} nutrients`}
       accessibilityState={{ selected: mode === "remaining" }}
-      onPress={actor.trigger.toggle}
+      onPress={onToggle}
       style={({ pressed }) => [styles.root, pressed ? styles.pressed : null]}
     >
       <DailyMetric
@@ -118,6 +219,7 @@ function DayModeChip({ mode }: { readonly mode: Domain.DailyLogMode }) {
 }
 
 function DailyMetric({
+  footerAccessory,
   headingAccessory,
   name,
   label,
@@ -126,13 +228,14 @@ function DailyMetric({
   mode,
   emphasis,
 }: {
+  readonly footerAccessory?: ReactNode;
   readonly headingAccessory?: ReactNode;
   readonly name: Reporting.NutrientName;
   readonly label: string;
   readonly nutrition: Reporting.MealEntriesNutrientTotals;
   readonly plan: Domain.Plan;
   readonly mode: NutrientDisplayMode;
-  readonly emphasis: "energy" | "macro" | "secondary";
+  readonly emphasis: "energy" | "macro" | "secondary" | "compact";
 }) {
   const target = Reporting.getPlanNutrientTargetAmount({
     nutrientName: name,
@@ -140,12 +243,19 @@ function DailyMetric({
   });
   const display = nutrientTotalDisplay({ name, nutrition, target, mode });
   const unit = name === "energyKcal" ? "kcal" : "g";
-  const accent = nutrientFieldColors[name];
+  const accent =
+    display.targetState === "over"
+      ? color.targetExceeded
+      : display.targetState === "reached"
+        ? color.targetReached
+        : nutrientFieldColors[name];
+  const compact = emphasis === "compact";
   const hero = emphasis === "energy";
   return (
     <View
       style={[
         styles.metric,
+        compact ? styles.compactMetric : null,
         emphasis === "macro"
           ? styles.macro
           : emphasis === "secondary"
@@ -153,15 +263,28 @@ function DailyMetric({
             : null,
       ]}
     >
-      <View style={[styles.labelRow, hero ? styles.energyLabelRow : null]}>
-        <Text style={styles.label}>{label}</Text>
-        {headingAccessory}
-      </View>
+      {compact ? null : (
+        <View style={[styles.labelRow, hero ? styles.energyLabelRow : null]}>
+          <Text style={styles.label}>{label}</Text>
+          {headingAccessory}
+        </View>
+      )}
       <View style={styles.valueRow}>
         <Text
+          numberOfLines={compact ? 1 : undefined}
+          adjustsFontSizeToFit={compact}
+          minimumFontScale={0.75}
           style={[
             styles.value,
-            { color: hero ? color.text : accent },
+            compact ? styles.compactValue : null,
+            {
+              color:
+                hero &&
+                display.targetState !== "over" &&
+                display.targetState !== "reached"
+                  ? color.text
+                  : accent,
+            },
             hero
               ? styles.energyValue
               : emphasis === "macro"
@@ -171,31 +294,37 @@ function DailyMetric({
         >
           {display.amount}
         </Text>
-        {!display.unknown ? (
-          <Text style={styles.unit}>
-            {unit}
-            {mode === "remaining" &&
-            target !== undefined &&
-            !display.incomplete &&
-            display.value <= target
-              ? " left"
-              : ""}
-          </Text>
+        {!compact && !display.unknown ? (
+          <Text style={styles.unit}>{unit}</Text>
         ) : null}
       </View>
-      <View style={styles.track}>
-        <NutrientProgressFill
-          colorValue={accent}
-          total={display.value}
-          estimated={display.estimatedAmount}
-          target={target}
-        />
+      <View style={styles.progressGroup}>
+        <View style={[styles.track, compact ? styles.compactTrack : null]}>
+          <NutrientProgressFill
+            colorValue={accent}
+            total={display.value}
+            estimated={display.estimatedAmount}
+            target={target}
+          />
+        </View>
+        <View style={styles.metricFooter}>
+          {target === undefined ? null : (
+            <Text
+              numberOfLines={compact ? 1 : undefined}
+              adjustsFontSizeToFit={compact}
+              style={[styles.target, compact ? styles.compactTarget : null]}
+            >
+              Target{" "}
+              {formatNutrientAmount({
+                value: target,
+                maximumFractionDigits: name === "energyKcal" ? 0 : 1,
+              })}{" "}
+              {unit}
+            </Text>
+          )}
+          {footerAccessory}
+        </View>
       </View>
-      <Text style={styles.target}>
-        {target === undefined
-          ? "No target"
-          : `Target ${formatNutrientAmount(target)} ${unit}`}
-      </Text>
     </View>
   );
 }
@@ -206,6 +335,26 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.xxxl,
   },
+  compactPager: { height: 88 },
+  compactRoot: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  compactMetric: { gap: spacing.xs },
+  compactValue: { fontSize: 24, lineHeight: 30, flex: 1 },
+  compactTrack: { height: 4 },
+  compactTarget: { fontSize: 11, lineHeight: 14 },
+  metricFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  pageDots: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  pageDot: { height: 4, borderRadius: radius.pill },
+  progressGroup: { gap: spacing.xs },
   pressed: { opacity: 0.75 },
   metric: { minWidth: 0, gap: spacing.md },
   macros: { flexDirection: "row", gap: spacing.lg },
@@ -268,9 +417,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   target: {
-    color: color.textMuted,
-    fontSize: tokens.type.size.sm,
-    lineHeight: tokens.type.lineHeight.sm,
+    color: color.textSubtle,
+    fontSize: 11,
+    lineHeight: 14,
     fontVariant: ["tabular-nums"],
   },
 });

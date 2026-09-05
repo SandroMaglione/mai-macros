@@ -1,3 +1,4 @@
+import { ChartDateLabel } from "@/components/ui/chart-date-label";
 import {
   InsightDateRange,
   InsightRangeDayCount,
@@ -1564,7 +1565,7 @@ function BodyWeightChart({
                 {chartKind === "trend" ? (
                   <>
                     <Line
-                      color={color.primary}
+                      color={color.weightTrend}
                       connectMissingData={false}
                       curveType="linear"
                       points={points.trend}
@@ -1573,14 +1574,16 @@ function BodyWeightChart({
                       strokeWidth={3}
                     />
                     <Line
-                      color={color.nutritionEnergy}
+                      color={color.weightAverage}
                       connectMissingData={false}
                       curveType="linear"
                       points={points.stable}
                       strokeCap="round"
                       strokeJoin="round"
                       strokeWidth={2.4}
-                    />
+                    >
+                      <DashPathEffect intervals={[8, 5]} />
+                    </Line>
                     <Scatter
                       color={color.textMuted}
                       opacity={0.56}
@@ -1594,7 +1597,7 @@ function BodyWeightChart({
                       radius={3.8}
                     />
                     <Line
-                      color={color.nutritionEnergy}
+                      color={color.weightAverage}
                       connectMissingData={false}
                       opacity={0.62}
                       points={points.estimate}
@@ -1616,7 +1619,7 @@ function BodyWeightChart({
                     />
                     <Bar
                       chartBounds={chartBounds}
-                      color={color.primary}
+                      color={color.weightTrend}
                       innerPadding={0.32}
                       points={points.changeDown}
                       roundedCorners={{
@@ -1626,7 +1629,7 @@ function BodyWeightChart({
                     />
                     <Bar
                       chartBounds={chartBounds}
-                      color={color.nutritionEnergy}
+                      color={color.weightAverage}
                       innerPadding={0.32}
                       points={points.changeUp}
                       roundedCorners={{
@@ -1647,7 +1650,9 @@ function BodyWeightChart({
                       y={chartBounds.top}
                     />
                     <SkiaCircle
-                      color={chartKind === "trend" ? color.primary : color.text}
+                      color={
+                        chartKind === "trend" ? color.weightTrend : color.text
+                      }
                       cx={pressState.x.position}
                       cy={
                         chartKind === "trend"
@@ -1683,31 +1688,32 @@ function BodyWeightChart({
           </View>
         </View>
         <View style={styles.chartFooter}>
-          <Text style={styles.chartDateRange}>
-            {_formatChartDateLabel({ dateKey: chart.startDateKey })}
-            {" – "}
-            {_formatChartDateLabel({ dateKey: chart.endDateKey })}
-          </Text>
+          <ChartDateLabel
+            pressState={pressState}
+            style={styles.chartDateRange}
+            rangeLabel={`${_formatChartDateLabel({ dateKey: chart.startDateKey })} – ${_formatChartDateLabel({ dateKey: chart.endDateKey })}`}
+          />
           <View style={styles.chartLegend}>
             {chartKind === "trend" ? (
               <>
                 <BodyWeightChartLegendItem
-                  color={color.primary}
+                  color={color.weightTrend}
                   label={`Trend (${progressDayCount}d)`}
                 />
                 <BodyWeightChartLegendItem
-                  color={color.nutritionEnergy}
+                  color={color.weightAverage}
                   label="Average"
+                  dashed
                 />
               </>
             ) : (
               <>
                 <BodyWeightChartLegendItem
-                  color={color.primary}
+                  color={color.weightTrend}
                   label="Lower"
                 />
                 <BodyWeightChartLegendItem
-                  color={color.nutritionEnergy}
+                  color={color.weightAverage}
                   label="Higher"
                 />
               </>
@@ -1722,15 +1728,30 @@ function BodyWeightChart({
 function BodyWeightChartLegendItem({
   color: legendColor,
   label,
+  dashed = false,
 }: {
   readonly color: string;
   readonly label: string;
+  readonly dashed?: boolean;
 }) {
   return (
     <View style={styles.chartLegendItem}>
-      <View
-        style={[styles.chartLegendMark, { backgroundColor: legendColor }]}
-      />
+      <View style={styles.chartLegendMark}>
+        {dashed ? (
+          <>
+            <View
+              style={[styles.chartLegendDash, { backgroundColor: legendColor }]}
+            />
+            <View
+              style={[styles.chartLegendDash, { backgroundColor: legendColor }]}
+            />
+          </>
+        ) : (
+          <View
+            style={[styles.chartLegendSolid, { backgroundColor: legendColor }]}
+          />
+        )}
+      </View>
       <Text numberOfLines={1} style={styles.chartLegendLabel}>
         {label}
       </Text>
@@ -2434,7 +2455,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
+  chartLegendDash: { width: 5, height: 3, borderRadius: radius.pill },
+  chartLegendSolid: { flex: 1, height: 3, borderRadius: radius.pill },
   chartLegendMark: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     width: 14,
     height: 3,
     flexShrink: 0,
