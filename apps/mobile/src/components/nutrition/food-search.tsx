@@ -605,10 +605,8 @@ function FoodSearchResult({
               ))}
             </View>
           )}
-          <Text numberOfLines={2} style={styles.resultSummary}>
-            {brandLabel === null
-              ? perReferenceLabel
-              : `${brandLabel} · ${perReferenceLabel}`}
+          <Text numberOfLines={1} style={styles.resultSummary}>
+            {brandLabel ?? perReferenceLabel}
           </Text>
         </View>
       </View>

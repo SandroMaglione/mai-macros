@@ -13,7 +13,13 @@ import {
   dailySummaryNutrients,
   summaryPagerSelection,
 } from "@/lib/daily-summary-nutrients";
-import { Ban, Moon } from "lucide-react-native";
+import {
+  Ban,
+  Moon,
+  CircleDashed,
+  Check,
+  TriangleAlert,
+} from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const mainNutrients = dailySummaryNutrients.slice(1, 4);
@@ -249,6 +255,12 @@ function DailyMetric({
       : display.targetState === "reached"
         ? color.targetReached
         : nutrientFieldColors[name];
+  const TargetIcon =
+    display.targetState === "over"
+      ? TriangleAlert
+      : display.targetState === "reached"
+        ? Check
+        : CircleDashed;
   const compact = emphasis === "compact";
   const hero = emphasis === "energy";
   return (
@@ -309,18 +321,23 @@ function DailyMetric({
         </View>
         <View style={styles.metricFooter}>
           {target === undefined ? null : (
-            <Text
-              numberOfLines={compact ? 1 : undefined}
-              adjustsFontSizeToFit={compact}
-              style={[styles.target, compact ? styles.compactTarget : null]}
+            <View
+              accessibilityLabel={`${display.targetState === "over" ? "Over target tolerance" : display.targetState === "reached" ? "Target reached" : display.targetState === "unavailable" ? "Target" : "Below target"}, ${target} ${unit}`}
+              style={styles.targetRow}
             >
-              Target{" "}
-              {formatNutrientAmount({
-                value: target,
-                maximumFractionDigits: name === "energyKcal" ? 0 : 1,
-              })}{" "}
-              {unit}
-            </Text>
+              <TargetIcon size={12} color={accent} strokeWidth={2} />
+              <Text
+                numberOfLines={compact ? 1 : undefined}
+                adjustsFontSizeToFit={compact}
+                style={[styles.target, compact ? styles.compactTarget : null]}
+              >
+                {formatNutrientAmount({
+                  value: target,
+                  maximumFractionDigits: name === "energyKcal" ? 0 : 1,
+                })}{" "}
+                {unit}
+              </Text>
+            </View>
           )}
           {footerAccessory}
         </View>
@@ -346,6 +363,7 @@ const styles = StyleSheet.create({
   compactValue: { fontSize: 24, lineHeight: 30, flex: 1 },
   compactTrack: { height: 4 },
   compactTarget: { fontSize: 11, lineHeight: 14 },
+  targetRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   metricFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -354,7 +372,7 @@ const styles = StyleSheet.create({
   },
   pageDots: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   pageDot: { height: 4, borderRadius: radius.pill },
-  progressGroup: { gap: spacing.xs },
+  progressGroup: { gap: spacing.sm },
   pressed: { opacity: 0.75 },
   metric: { minWidth: 0, gap: spacing.md },
   macros: { flexDirection: "row", gap: spacing.lg },

@@ -1,5 +1,5 @@
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   StyleSheet,
   Text,
@@ -29,10 +29,16 @@ export function Field({
   labelStyle,
   placeholderTextColor = color.textSubtle,
   rightElement,
+  selectTextOnFocus,
+  onFocus,
+  onBlur,
+  onChangeText,
   style,
   ...inputProps
 }: FieldProps) {
   const supportingText = error ?? helperText;
+  const input = useRef<TextInput>(null);
+  const selectionHandled = useRef(false);
 
   return (
     <View style={[styles.root, style]}>
@@ -47,6 +53,25 @@ export function Field({
       >
         <TextInput
           {...inputProps}
+          ref={input}
+          onFocus={(event) => {
+            if (selectTextOnFocus && !selectionHandled.current) {
+              selectionHandled.current = true;
+              input.current?.setSelection(
+                0,
+                (inputProps.value ?? inputProps.defaultValue ?? "").length
+              );
+            }
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            selectionHandled.current = false;
+            onBlur?.(event);
+          }}
+          onChangeText={(value) => {
+            selectionHandled.current = true;
+            onChangeText?.(value);
+          }}
           placeholderTextColor={placeholderTextColor}
           selectionColor={color.primary}
           style={[

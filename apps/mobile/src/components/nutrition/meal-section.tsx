@@ -1,4 +1,5 @@
 import { OneOffIndicator } from "./one-off-indicator";
+import { MealComparison } from "./meal-comparison";
 import { FoodCurrentPriceIndicator } from "./food-current-price-indicator";
 import { formatNutrientValue } from "@/lib/nutrient-quality";
 import {
@@ -12,7 +13,12 @@ import {
 } from "@/lib/format";
 import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { Reporting, Utils, type Domain } from "@mai/nutrition";
+import {
+  Reporting,
+  Utils,
+  type Domain,
+  type MealComparisons,
+} from "@mai/nutrition";
 import { Array } from "effect";
 import { router } from "expo-router";
 import { ChevronRight, Plus } from "lucide-react-native";
@@ -30,12 +36,14 @@ const nutrients = [
 ] as const;
 
 export function MealSection({
+  comparison,
   dateKey,
   foods,
   meal,
   mealEntries,
   mealLabel,
 }: {
+  readonly comparison: MealComparisons.Baseline | undefined;
   readonly dateKey: Domain.DateKey;
   readonly foods: readonly Domain.Food[];
   readonly meal: Domain.MealId;
@@ -167,6 +175,12 @@ export function MealSection({
               </Text>
             </View>
           </View>
+          <MealComparison
+            baseline={comparison}
+            foods={foods}
+            mealEntries={mealEntries}
+            mealLabel={mealLabel}
+          />
         </>
       ) : null}
       <Pressable
@@ -206,6 +220,9 @@ function MealMetric({
     <View style={[styles.metric, prominent ? styles.prominentMetric : null]}>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
         style={[
           styles.metricValue,
           prominent ? styles.prominentValue : null,
@@ -383,7 +400,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   prominentValue: {
-    fontSize: 24,
+    fontSize: 22,
     lineHeight: 32,
     fontWeight: tokens.type.weight.semibold,
   },

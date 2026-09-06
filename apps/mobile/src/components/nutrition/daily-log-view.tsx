@@ -1,3 +1,6 @@
+import { MealComparisons } from "@mai/nutrition";
+import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
+import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
 import { useDailyNutritionSummary } from "@/hooks/use-daily-nutrition-summary";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
@@ -64,6 +67,7 @@ const RecordedDailyLogViewData = Schema.TaggedStruct("RecordedDay", {
   day: OpenedDay,
   foods: Schema.Array(Domain.Food),
   mealEntries: Schema.Array(Domain.MealEntry),
+  comparisons: Schema.Array(MealComparisons.Baseline),
 });
 
 export type RecordedDailyLogViewData = typeof RecordedDailyLogViewData.Type;
@@ -231,6 +235,7 @@ const dailyLogRouteMachine = setup({
               day,
               foods: [],
               mealEntries: [],
+              comparisons: [],
             };
           })
         ),
@@ -261,7 +266,7 @@ const dailyLogRouteMachine = setup({
         output: Schema.toStandardSchemaV1(LoadDailyLogResult),
       },
       run: ({ input }) =>
-        RuntimeClient.runPromise(
+        InsightsRuntimeClient.runPromise(
           Effect.gen(function* () {
             const dailyLogs = yield* DailyLogs.DailyLogs;
             const foodsService = yield* Foods.Foods;
@@ -299,6 +304,22 @@ const dailyLogRouteMachine = setup({
               },
             });
 
+            const reports = yield* NutritionReports.NutritionReports;
+            const report = yield* reports.getRange({
+              input: {
+                startDateKey: shiftDateKey({
+                  dateKey: input.dateKey,
+                  days: -MealComparisons.LOOKBACK_DAYS,
+                }),
+                endDateKey: shiftDateKey({ dateKey: input.dateKey, days: -1 }),
+              },
+            });
+            const comparisons = MealComparisons.buildBaselines({
+              report,
+              dateKey: input.dateKey,
+              planId: day.selectedPlan.id,
+            });
+
             return {
               _tag: "Ready" as const,
               data: {
@@ -306,6 +327,7 @@ const dailyLogRouteMachine = setup({
                 day,
                 foods,
                 mealEntries,
+                comparisons,
               },
             };
           }).pipe(
@@ -878,6 +900,9 @@ function RecordedDailyLogView({
         <View style={styles.meals}>
           {mealOptions.map((mealOption) => (
             <MealSection
+              comparison={data.comparisons.find(
+                (comparison) => comparison.mealId === mealOption.id
+              )}
               dateKey={dateKey}
               foods={data.foods}
               key={mealOption.id}
@@ -1218,27 +1243,6 @@ function UnrecordedDailyLogView({
         style={styles.headerSafeArea}
       >
         <DayNavigationHeader dateKey={dateKey} mode="eating" />
-
-        <View style={styles.dayPrimaryActions}>
-          <Pressable
-            accessibilityLabel="Open weight insights"
-            accessibilityRole="button"
-            onPress={() => {
-              router.push({
-                pathname: "/insights",
-                params: {
-                  tab: "weight",
-                },
-              });
-            }}
-            style={({ pressed }) => [
-              styles.dayPrimaryAction,
-              pressed ? styles.pressed : null,
-            ]}
-          >
-            <Text style={styles.detailsText}>Weight</Text>
-          </Pressable>
-        </View>
 
         <View style={styles.unrecordedBody}>
           <Notice

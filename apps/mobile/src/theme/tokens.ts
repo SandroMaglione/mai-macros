@@ -21,7 +21,7 @@ export const color = {
   weightAverage: "#e69f00",
   nutritionEnergy: "#e7b986",
   nutritionProtein: "#80b9ed",
-  nutritionCarbs: "#e79b85",
+  nutritionCarbs: "#b3cc83",
   nutritionFat: "#dec581",
   nutritionFiber: "#95c8ac",
   nutritionSugar: "#c1abe4",

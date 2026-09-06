@@ -2,6 +2,7 @@ import type { Reporting } from "@mai/nutrition";
 import { formatNumber } from "./format";
 
 export type NutrientDisplayMode = "consumed" | "remaining";
+export const TARGET_OVERAGE_TOLERANCE = 0.1;
 
 export function nutrientTotalDisplay({
   nutrition,
@@ -27,9 +28,9 @@ export function nutrientTotalDisplay({
     targetState:
       unknown || target === undefined
         ? ("unavailable" as const)
-        : value > target
+        : value > target * (1 + TARGET_OVERAGE_TOLERANCE)
           ? ("over" as const)
-          : value === target
+          : value >= target
             ? ("reached" as const)
             : ("below" as const),
     estimatedAmount: nutrition.estimated[name],
