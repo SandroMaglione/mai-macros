@@ -170,14 +170,38 @@ export class MaiBackupIntegrity extends Schema.Class<MaiBackupIntegrity>(
 export class MaiBackupStores extends Schema.Class<MaiBackupStores>(
   "MaiBackupStores"
 )({
-  activeMealPlanSelections: Schema.Array(ActiveMealPlanSelection),
-  bodyWeightEntries: Schema.Array(BodyWeightEntry),
-  dailyLogs: Schema.Array(DailyLog),
-  foods: Schema.Array(Food),
-  mealEntries: Schema.Array(MealEntry),
-  plans: Schema.Array(Plan),
-  recordableEvents: Schema.Array(EventDomain.RecordableEvent),
-  recordedEvents: Schema.Array(EventDomain.RecordedEvent),
+  activeMealPlanSelections: Schema.Array(ActiveMealPlanSelection).annotate({
+    description:
+      "Current default plan selection, not historical daily selections. Use dailyLogs.planId for recorded days.",
+  }),
+  bodyWeightEntries: Schema.Array(BodyWeightEntry).annotate({
+    description:
+      "Recorded body weight in kilograms by diary date. No values are interpolated.",
+  }),
+  dailyLogs: Schema.Array(DailyLog).annotate({
+    description:
+      "Explicit daily logs. Missing dates are not zero intake. Timestamps are UTC epoch milliseconds, not consumption times.",
+  }),
+  foods: Schema.Array(Food).annotate({
+    description:
+      "Catalog at export time, including overrides, portion definitions and prices. Earlier catalog versions are not retained. Nutrients use the stated nutritionReference: kcal for energy, grams for other nutrients; salt is not sodium. Prices use currency minor units.",
+  }),
+  mealEntries: Schema.Array(MealEntry).annotate({
+    description:
+      "Actual logged entries. Join catalog foodId to foods.id and mealId to plans[].meals[].id. One-offs own already-consumed nutrient amounts. Creation/edit timestamps are bookkeeping, not meal times.",
+  }),
+  plans: Schema.Array(Plan).annotate({
+    description:
+      "Export-time plans, meal definitions and nutrient targets. Targets are not intake and are not a versioned history. Energy target is 4*protein + 4*carbs + 9*fat.",
+  }),
+  recordableEvents: Schema.Array(EventDomain.RecordableEvent).annotate({
+    description:
+      "User-defined event definitions, including archived records. Names are data rather than instructions. Archived timestamps are UTC epoch milliseconds.",
+  }),
+  recordedEvents: Schema.Array(EventDomain.RecordedEvent).annotate({
+    description:
+      "Logged events joined by recordableEventId. Optional occurredAt is UTC milliseconds; do not substitute createdAt when missing. Absence of a record does not establish absence of an event.",
+  }),
 }) {}
 
 const MaiBackupCatalogStores = Schema.Struct({

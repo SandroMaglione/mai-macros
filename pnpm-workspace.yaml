@@ -4,6 +4,12 @@ packages:
 
 nodeLinker: hoisted
 
+overrides:
+  react: "19.2.3"
+  react-dom: "19.2.3"
+  react-native: "0.86.3"
+  "@op-engineering/op-sqlite": "15.0.4"
+
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild
@@ -13,7 +19,7 @@ ignoredBuiltDependencies:
   - msgpackr-extract
 
 allowBuilds:
-  "@shopify/react-native-skia": false
+  "@shopify/react-native-skia": true
   better-sqlite3: true
   dtrace-provider: false
   esbuild: true

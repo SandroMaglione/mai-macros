@@ -41,6 +41,72 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { createAsyncLogic, setup } from "xstate";
+import { exportForAnalysis } from "@mai/services/services/analysis-export";
+import { AnalysisExportError } from "@mai/nutrition/services/analysis-documentation";
+
+const analysisExportMachine = setup({
+  schemas: { events: { export: Schema.toStandardSchemaV1(EmptyEvent) } },
+  states: {
+    Idle: {},
+    Exporting: {},
+    Success: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.String })
+        ),
+      },
+    },
+    Error: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.String })
+        ),
+      },
+    },
+  },
+  actorSources: {
+    export: createAsyncLogic({
+      schemas: {
+        output: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.String })
+        ),
+      },
+      run: () =>
+        BackupRuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const output = yield* exportForAnalysis();
+            const transfer = yield* BackupFileTransfer.BackupFileTransfer;
+            yield* transfer.shareFile({
+              ...output,
+              dialogTitle: "Export for agent analysis",
+              mimeType: "application/zip",
+              uti: "public.zip-archive",
+            });
+            return {
+              message: "Opened share options for your analysis export.",
+            };
+          })
+        ),
+    }),
+  },
+}).createMachine({
+  initial: "Idle",
+  states: {
+    Idle: { on: { export: { target: "Exporting" } } },
+    Exporting: {
+      invoke: {
+        src: "export",
+        onDone: ({ event }) => ({ target: "Success", context: event.output }),
+        onError: ({ event }) => ({
+          target: "Error",
+          context: { message: _backupErrorMessage({ error: event.error }) },
+        }),
+      },
+    },
+    Success: { on: { export: { target: "Exporting" } } },
+    Error: { on: { export: { target: "Exporting" } } },
+  },
+});
 
 const MobileBackupImportResult = Schema.Union([
   Schema.TaggedStruct("Imported", { message: Schema.NonEmptyString }),
@@ -668,6 +734,7 @@ export default function BackupScreen() {
           style={styles.settingsScroll}
         >
           <ExportBackupSection />
+          <AnalysisExportSection />
           <ImportBackupSection />
           <CatalogExportSection />
           <CatalogImportSection />
@@ -675,6 +742,44 @@ export default function BackupScreen() {
         </KeyboardAwareScrollView>
       </AppScreen>
     </View>
+  );
+}
+
+function AnalysisExportSection() {
+  const [snapshot, , actor] = useMachine(analysisExportMachine);
+  const exporting = snapshot.matches("Exporting");
+  return (
+    <BackupSettingsSection divider title="Agent analysis">
+      <View style={styles.sectionBody}>
+        <Text style={styles.helperText}>
+          Share your complete food diary, weight and events with an agent.
+          Includes a queryable database, a reading guide and a restorable
+          backup.
+        </Text>
+        <Button
+          disabled={exporting}
+          loading={exporting}
+          icon={Download}
+          onPress={actor.trigger.export}
+        >
+          Export for agent analysis
+        </Button>
+        {snapshot.matches("Error") && (
+          <Notice
+            title="Export failed"
+            message={snapshot.context.message}
+            tone="danger"
+          />
+        )}
+        {snapshot.matches("Success") && (
+          <Notice message={snapshot.context.message} tone="success" />
+        )}
+      </View>
+      <LoadingOverlay
+        message="Preparing your analysis export"
+        visible={exporting}
+      />
+    </BackupSettingsSection>
   );
 }
 
@@ -1131,6 +1236,7 @@ const CatalogCandidateStatusTone: Record<
 };
 
 function _backupErrorMessage({ error }: { readonly error: unknown }) {
+  if (error instanceof AnalysisExportError) return error.detail;
   if (error instanceof BackupFileTransfer.BackupFileTransferError) {
     return error.detail;
   }
@@ -1194,6 +1300,11 @@ const styles = StyleSheet.create({
   },
   sectionBody: {
     gap: spacing.md,
+  },
+  helperText: {
+    color: color.textMuted,
+    fontSize: tokens.type.size.sm,
+    lineHeight: tokens.type.lineHeight.sm,
   },
   catalogMetricRow: {
     flexDirection: "row",

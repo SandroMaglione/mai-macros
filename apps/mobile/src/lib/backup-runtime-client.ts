@@ -8,13 +8,16 @@ import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime
 
 import { ExpoBackupFileTransferLayer } from "./expo-backup-file-transfer.ts";
 import { RuntimeClient } from "./runtime-client.ts";
+import { ExpoAnalysisDatabaseLayer } from "./expo-analysis-database.ts";
+import { AnalysisDatabase } from "@mai/nutrition/services/analysis-database";
 
 const BackupServicesLayer = Layer.mergeAll(
   Backup.Backups.layer,
   FoodCatalogTransfer.FoodCatalogTransfers.layer,
   ExpoBackupFileTransferLayer,
   Gzip.Gzip.Default,
-  QrCode.QrCode.Default
+  QrCode.QrCode.Default,
+  ExpoAnalysisDatabaseLayer
 );
 
 export const BackupRuntimeClient = {
@@ -27,6 +30,7 @@ export const BackupRuntimeClient = {
       | FoodCatalogTransfer.FoodCatalogTransfers
       | Gzip.Gzip
       | QrCode.QrCode
+      | AnalysisDatabase
       | ManagedRuntimeType.Services<typeof RuntimeClient>
     >
   ) =>

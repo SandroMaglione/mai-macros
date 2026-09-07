@@ -32,7 +32,12 @@ export type MealEntryId = typeof MealEntryId.Type;
 
 export const DateKey = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)
-).pipe(Schema.brand("DateKey"));
+)
+  .annotate({
+    description:
+      "Diary calendar date in YYYY-MM-DD. Preserve this label; creation/edit timestamps do not determine consumption date.",
+  })
+  .pipe(Schema.brand("DateKey"));
 
 export type DateKey = typeof DateKey.Type;
 
@@ -234,10 +239,14 @@ export class Food extends Schema.Class<Food>("Food")({
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
   origin: FoodOrigin,
-  nutritionCorrections: FoodNutritionCorrections.pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed({}))
-  ),
-  nutritionReference: MeasuredQuantity.pipe(
+  nutritionCorrections: FoodNutritionCorrections.annotate({
+    description:
+      "Per-nutrient overrides, including explicit zero. Overrides take precedence over the base nutrition values for calculations, including linked historical entries.",
+  }).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+  nutritionReference: MeasuredQuantity.annotate({
+    description:
+      "Quantity to which base nutrition and corrections refer. Never assume 100 g; the reference can use mass or volume.",
+  }).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed({ amount: 100, unit: "g" }))
   ),
   energyKcal: NonNegativeNumber,
@@ -311,7 +320,10 @@ export const DailyLogMode = Schema.Literals([
   "eating",
   "fasting",
   "not-recorded",
-]);
+]).annotate({
+  description:
+    "Eating does not establish complete logging. Fasting is explicit. Not-recorded is unknown intake, not zero.",
+});
 
 export type DailyLogMode = typeof DailyLogMode.Type;
 
@@ -327,9 +339,12 @@ export class DailyLog extends Schema.Class<DailyLog>("DailyLog")({
     Schema.withDecodingDefaultKey(Effect.succeed("eating"))
   ),
   planId: PlanId,
-  waterServings: Schema.NullOr(WaterServingCount).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(null))
-  ),
+  waterServings: Schema.NullOr(WaterServingCount)
+    .annotate({
+      description:
+        "Recorded 250 ml water servings. Null is not recorded; zero is explicitly zero. Not total fluid intake.",
+    })
+    .pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   createdAt: Schema.DateTimeUtcFromMillis,
   updatedAt: Schema.DateTimeUtcFromMillis,
 }) {}
@@ -346,13 +361,24 @@ export const QuantityAccuracy = Schema.Literals([
   "unspecified",
   "measured",
   "estimated",
-]);
+]).annotate({
+  description:
+    "Measured, estimated, or unspecified quantity accuracy. Unspecified does not establish measured accuracy.",
+});
 export type QuantityAccuracy = typeof QuantityAccuracy.Type;
 
 export const NutrientValue = Schema.Union([
-  Schema.TaggedStruct("Unknown", {}),
-  Schema.TaggedStruct("Recorded", { value: NonNegativeNumber }),
-  Schema.TaggedStruct("Estimated", { value: NonNegativeNumber }),
+  Schema.TaggedStruct("Unknown", {}).annotate({
+    description: "Unknown nutrient amount; never replace with zero.",
+  }),
+  Schema.TaggedStruct("Recorded", { value: NonNegativeNumber }).annotate({
+    description:
+      "Logged nutrient amount, not a claim of exact laboratory measurement.",
+  }),
+  Schema.TaggedStruct("Estimated", { value: NonNegativeNumber }).annotate({
+    description:
+      "Approximate logged nutrient amount; preserve its estimated status in aggregates.",
+  }),
 ]);
 export type NutrientValue = typeof NutrientValue.Type;
 
@@ -385,7 +411,10 @@ export class CatalogMealEntry extends Schema.Class<CatalogMealEntry>(
   ),
   foodId: FoodId,
   quantity: LoggedFoodQuantity,
-  nutritionMultiplier: NutritionMultiplier,
+  nutritionMultiplier: NutritionMultiplier.annotate({
+    description:
+      "Stored multiplier applied once to the effective catalog nutrient reference values. MAI uses this for consumed nutrition, including logged portion snapshots.",
+  }),
   quantityAccuracy: QuantityAccuracy.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed("unspecified"))
   ),
