@@ -339,7 +339,7 @@ describe("one-off entries and local backups", () => {
         yield* backups.importFromJson({ input: { json: before.json } });
         const after = yield* backups.exportToJson();
         assert.deepEqual(after.backup.stores, before.backup.stores);
-        assert.equal(after.backup.source.databaseVersion, 12);
+        assert.equal(after.backup.source.databaseVersion, 13);
         const restored = after.backup.stores.mealEntries.find(
           Domain.isOneOffMealEntry
         );
@@ -422,7 +422,7 @@ describe("one-off entries and local backups", () => {
               ),
             },
           },
-          { ...encoded, source: { ...encoded.source, databaseVersion: 13 } },
+          { ...encoded, source: { ...encoded.source, databaseVersion: 14 } },
           {
             ...encoded,
             integrity: {

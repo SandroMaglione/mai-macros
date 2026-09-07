@@ -33,9 +33,5 @@ export function isInsideNutritionTargetMargin({
 }): boolean {
   const trend = getNutritionTargetTrend({ actual, target });
 
-  return semantics === "minimum"
-    ? trend !== "below"
-    : semantics === "maximum"
-      ? trend !== "above"
-      : trend === "inside";
+  return semantics === "minimum" ? trend !== "below" : trend !== "above";
 }

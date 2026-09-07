@@ -1,8 +1,7 @@
-import type { Reporting } from "@mai/nutrition";
+import { Reporting } from "@mai/nutrition";
 import { formatNumber } from "./format";
 
 export type NutrientDisplayMode = "consumed" | "remaining";
-export const TARGET_OVERAGE_TOLERANCE = 0.1;
 
 export function nutrientTotalDisplay({
   nutrition,
@@ -12,7 +11,7 @@ export function nutrientTotalDisplay({
 }: {
   readonly nutrition: Reporting.MealEntriesNutrientTotals;
   readonly name: Reporting.NutrientName;
-  readonly target?: number;
+  readonly target?: Reporting.NutrientTarget;
   readonly mode?: NutrientDisplayMode;
 }) {
   const value = nutrition.totals[name];
@@ -20,17 +19,25 @@ export function nutrientTotalDisplay({
   const incomplete = nutrition.missing[name] > 0;
   const estimated = nutrition.estimatedCoverage[name] > 0;
   const remaining = mode === "remaining" && target !== undefined;
-  const amount = remaining ? Math.abs(target - value) : value;
+  const signedAmount = remaining
+    ? Reporting.remainingNutrientTargetAmount({ target, value })
+    : value;
+  const amount = Math.abs(signedAmount);
+  const status =
+    target === undefined
+      ? undefined
+      : Reporting.evaluateNutrientTarget({ target, value }).status;
+  const uncertainStatus = incomplete && status !== "above";
   return {
     amount: unknown
       ? "—"
-      : `${estimated || incomplete ? "≈ " : ""}${remaining && value > target ? "-" : ""}${formatNutrientAmount({ value: amount, maximumFractionDigits: name === "energyKcal" ? 0 : 1 })}`,
+      : `${estimated || incomplete ? "≈ " : ""}${remaining && signedAmount < 0 ? "-" : ""}${formatNutrientAmount({ value: amount, maximumFractionDigits: name === "energyKcal" ? 0 : 1 })}`,
     targetState:
-      unknown || target === undefined
+      unknown || target === undefined || uncertainStatus
         ? ("unavailable" as const)
-        : value > target * (1 + TARGET_OVERAGE_TOLERANCE)
+        : status === "above"
           ? ("over" as const)
-          : value >= target
+          : status === "inside"
             ? ("reached" as const)
             : ("below" as const),
     estimatedAmount: nutrition.estimated[name],

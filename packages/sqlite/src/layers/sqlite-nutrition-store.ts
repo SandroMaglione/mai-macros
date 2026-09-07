@@ -68,6 +68,15 @@ const FoodPriceRow = Schema.Struct({
 });
 
 const PlanRow = Schema.Struct({
+  energyKcalRule: Domain.NutrientTargetSemantics,
+  proteinGramsRule: Domain.NutrientTargetSemantics,
+  carbsGramsRule: Domain.NutrientTargetSemantics,
+  fatGramsRule: Domain.NutrientTargetSemantics,
+  fiberGramsRule: Domain.NutrientTargetSemantics,
+  sugarGramsRule: Domain.NutrientTargetSemantics,
+  saturatedFatGramsRule: Domain.NutrientTargetSemantics,
+  saltGramsRule: Domain.NutrientTargetSemantics,
+
   carbsTargetGrams: Domain.NonNegativeNumber,
   createdAt: Schema.Number,
   fatTargetGrams: Domain.NonNegativeNumber,
@@ -176,6 +185,14 @@ const selectFoodPriceColumns = `
 `;
 
 const selectPlanColumns = `
+  energy_target_rule AS energyKcalRule,
+  protein_target_rule AS proteinGramsRule,
+  carbs_target_rule AS carbsGramsRule,
+  fat_target_rule AS fatGramsRule,
+  fiber_target_rule AS fiberGramsRule,
+  sugar_target_rule AS sugarGramsRule,
+  saturated_fat_target_rule AS saturatedFatGramsRule,
+  salt_target_rule AS saltGramsRule,
   id,
   name,
   protein_target_grams AS proteinTargetGrams,
@@ -345,6 +362,16 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   }) =>
     Schema.decodeEffect(Domain.Plan)({
       ...row,
+      targetRules: {
+        energyKcal: row.energyKcalRule,
+        proteinGrams: row.proteinGramsRule,
+        carbsGrams: row.carbsGramsRule,
+        fatGrams: row.fatGramsRule,
+        fiberGrams: row.fiberGramsRule,
+        sugarGrams: row.sugarGramsRule,
+        saturatedFatGrams: row.saturatedFatGramsRule,
+        saltGrams: row.saltGramsRule,
+      },
       meals,
       ...(fiberTargetGrams === null ? {} : { fiberTargetGrams }),
       ...(saltTargetGrams === null ? {} : { saltTargetGrams }),
@@ -1065,6 +1092,24 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   });
 
   const planRowValues = (plan: typeof Domain.Plan.Encoded) => ({
+    energy_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .energyKcal,
+    protein_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .proteinGrams,
+    carbs_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .carbsGrams,
+    fat_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .fatGrams,
+    fiber_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .fiberGrams,
+    sugar_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .sugarGrams,
+    saturated_fat_target_rule: (
+      plan.targetRules ?? Domain.DefaultPlanTargetRules
+    ).saturatedFatGrams,
+    salt_target_rule: (plan.targetRules ?? Domain.DefaultPlanTargetRules)
+      .saltGrams,
+
     carbs_target_grams: plan.carbsTargetGrams,
     created_at: plan.createdAt,
     fat_target_grams: plan.fatTargetGrams,

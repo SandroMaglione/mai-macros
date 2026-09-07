@@ -140,7 +140,7 @@ const NutrientTargetStatus = Schema.Struct({
   lowerBound: Schema.UndefinedOr(Schema.Number),
   nutrientName: NutrientName,
   percentOfTarget: Schema.NullOr(Schema.Number),
-  semantics: Schema.Literals(["maximum", "minimum", "range"]),
+  semantics: Domain.NutrientTargetSemantics,
   status: Schema.Literals(["above", "below", "inside"]),
   upperBound: Schema.UndefinedOr(Schema.Number),
   value: Schema.Number,

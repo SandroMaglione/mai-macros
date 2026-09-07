@@ -1,7 +1,10 @@
 import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import type * as Domain from "@mai/nutrition/domain";
-import * as Utils from "@mai/nutrition/utils";
+import { Reporting } from "@mai/nutrition";
+import { dailySummaryNutrients } from "@/lib/daily-summary-nutrients";
+import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
+import { nutrientTargetLabels } from "@/lib/nutrient-target-label";
 import { Circle, CircleCheck } from "lucide-react-native";
 import {
   Pressable,
@@ -11,12 +14,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-
-type MealPlanSummaryRow = {
-  readonly colorValue: string;
-  readonly label: string;
-  readonly value: string;
-};
 
 export function MealPlanSummaryCard({
   disabled,
@@ -32,50 +29,21 @@ export function MealPlanSummaryCard({
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const StatusIcon = isActive ? CircleCheck : Circle;
-  const rows: readonly MealPlanSummaryRow[] = [
-    {
-      colorValue: color.nutritionEnergy,
-      label: "Calories",
-      value: `${_formatPlanNumber({
-        value: Utils.calculatePlanEnergyKcal({ plan }),
-      })} kcal`,
-    },
-    {
-      colorValue: color.nutritionCarbs,
-      label: "Carbs",
-      value: `${_formatPlanNumber({ value: plan.carbsTargetGrams })} g`,
-    },
-    {
-      colorValue: color.nutritionProtein,
-      label: "Protein",
-      value: `${_formatPlanNumber({ value: plan.proteinTargetGrams })} g`,
-    },
-    {
-      colorValue: color.nutritionFat,
-      label: "Fat",
-      value: `${_formatPlanNumber({ value: plan.fatTargetGrams })} g`,
-    },
-    ..._optionalSummaryRow({
-      colorValue: color.nutritionFiber,
-      label: "Fiber",
-      value: plan.fiberTargetGrams,
-    }),
-    ..._optionalSummaryRow({
-      colorValue: color.nutritionSugar,
-      label: "Sugar",
-      value: plan.sugarTargetGrams,
-    }),
-    ..._optionalSummaryRow({
-      colorValue: color.warningText,
-      label: "Sat fat",
-      value: plan.saturatedFatTargetGrams,
-    }),
-    ..._optionalSummaryRow({
-      colorValue: color.nutritionSalt,
-      label: "Salt",
-      value: plan.saltTargetGrams,
-    }),
-  ];
+  const rows = dailySummaryNutrients.flatMap(({ name, label }) => {
+    const target = Reporting.getPlanNutrientTarget({
+      nutrientName: name,
+      plan,
+    });
+    return target === undefined
+      ? []
+      : [
+          {
+            colorValue: nutrientFieldColors[name],
+            label,
+            value: `${nutrientTargetLabels[target.semantics].symbol} ${formatNumber({ value: target.amount, maximumFractionDigits: target.amount > 0 && target.amount < 10 ? 1 : 0 })} ${name === "energyKcal" ? "kcal" : "g"}`,
+          },
+        ];
+  });
 
   return (
     <Pressable
@@ -121,33 +89,6 @@ export function MealPlanSummaryCard({
       </View>
     </Pressable>
   );
-}
-
-function _optionalSummaryRow({
-  colorValue,
-  label,
-  value,
-}: {
-  readonly colorValue: string;
-  readonly label: string;
-  readonly value: number | undefined;
-}): readonly MealPlanSummaryRow[] {
-  return value === undefined
-    ? []
-    : [
-        {
-          colorValue,
-          label,
-          value: `${_formatPlanNumber({ value })} g`,
-        },
-      ];
-}
-
-function _formatPlanNumber({ value }: { readonly value: number }) {
-  return formatNumber({
-    maximumFractionDigits: value > 0 && value < 10 ? 1 : 0,
-    value,
-  });
 }
 
 const styles = StyleSheet.create({

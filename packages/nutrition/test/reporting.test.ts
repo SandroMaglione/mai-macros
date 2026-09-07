@@ -66,12 +66,12 @@ describe("nutrition reporting", () => {
       Reporting.NutrientTargetSemanticsByName.saturatedFatGrams,
       "maximum"
     );
-    assert.equal(Reporting.NutrientTargetSemanticsByName.energyKcal, "range");
-    assert.equal(Reporting.NutrientTargetSemanticsByName.carbsGrams, "range");
-    assert.equal(Reporting.NutrientTargetSemanticsByName.fatGrams, "range");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.energyKcal, "minimum");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.carbsGrams, "minimum");
+    assert.equal(Reporting.NutrientTargetSemanticsByName.fatGrams, "minimum");
   });
 
-  it("evaluates range targets with the default tolerance", () => {
+  it("evaluates minimum targets with the default overage tolerance", () => {
     const target = Reporting.makeNutrientTarget({
       amount: 2000,
       nutrientName: "energyKcal",
@@ -79,7 +79,7 @@ describe("nutrition reporting", () => {
 
     assert.equal(
       Reporting.evaluateNutrientTarget({ target, value: 1800 }).status,
-      "inside"
+      "below"
     );
     assert.equal(
       Reporting.evaluateNutrientTarget({ target, value: 2200 }).status,
@@ -146,11 +146,11 @@ describe("nutrition reporting", () => {
     const result = await Effect.runPromise(program);
 
     assert.equal(result.energyTarget?.amount, 2150);
-    assert.equal(result.energyTarget?.lowerBound, 1935);
+    assert.equal(result.energyTarget?.lowerBound, 2150);
     assert.equal(result.energyTarget?.upperBound, 2365);
     assert.equal(result.fiberTarget?.semantics, "minimum");
     assert.equal(result.fiberTarget?.lowerBound, 30);
-    assert.equal(result.fiberTarget?.upperBound, undefined);
+    assert.equal(result.fiberTarget?.upperBound, 33);
   });
 
   it("detects whether a daily plan is inside all expected nutrient ranges", async () => {

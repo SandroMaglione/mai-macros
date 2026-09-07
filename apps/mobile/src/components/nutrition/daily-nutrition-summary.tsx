@@ -1,3 +1,4 @@
+import { nutrientTargetLabels } from "@/lib/nutrient-target-label";
 import { NutrientProgressFill } from "./nutrient-progress-fill";
 import {
   formatNutrientAmount,
@@ -74,7 +75,7 @@ export function PinnedNutritionSummary({
       }}
     >
       {nutrientPages.map(({ name, label }, index) => {
-        const target = Reporting.getPlanNutrientTargetAmount({
+        const target = Reporting.getPlanNutrientTarget({
           nutrientName: name,
           plan,
         });
@@ -84,7 +85,7 @@ export function PinnedNutritionSummary({
           <View key={`${index}-${name}`} collapsable={false}>
             <Pressable
               accessibilityRole="adjustable"
-              accessibilityLabel={`${label}, ${display.amount} ${unit}${target === undefined ? "" : `, target ${target} ${unit}`}`}
+              accessibilityLabel={`${label}, ${display.amount} ${unit}${target === undefined ? "" : `, ${nutrientTargetLabels[target.semantics].label} ${target.amount} ${unit}`}`}
               accessibilityHint={`Showing ${mode}. Tap to show ${mode === "consumed" ? "remaining" : "consumed"}. Swipe horizontally to change nutrient.`}
               accessibilityActions={[
                 { name: "increment", label: "Next nutrient" },
@@ -243,7 +244,7 @@ function DailyMetric({
   readonly mode: NutrientDisplayMode;
   readonly emphasis: "energy" | "macro" | "secondary" | "compact";
 }) {
-  const target = Reporting.getPlanNutrientTargetAmount({
+  const target = Reporting.getPlanNutrientTarget({
     nutrientName: name,
     plan,
   });
@@ -316,13 +317,13 @@ function DailyMetric({
             colorValue={accent}
             total={display.value}
             estimated={display.estimatedAmount}
-            target={target}
+            target={target?.amount}
           />
         </View>
         <View style={styles.metricFooter}>
           {target === undefined ? null : (
             <View
-              accessibilityLabel={`${display.targetState === "over" ? "Over target tolerance" : display.targetState === "reached" ? "Target reached" : display.targetState === "unavailable" ? "Target" : "Below target"}, ${target} ${unit}`}
+              accessibilityLabel={`${display.targetState === "over" ? "Over target" : display.targetState === "reached" ? "Target reached" : display.targetState === "unavailable" ? "Target" : "Below target"}, ${nutrientTargetLabels[target.semantics].label} ${target.amount} ${unit}`}
               style={styles.targetRow}
             >
               <TargetIcon size={12} color={accent} strokeWidth={2} />
@@ -331,8 +332,9 @@ function DailyMetric({
                 adjustsFontSizeToFit={compact}
                 style={[styles.target, compact ? styles.compactTarget : null]}
               >
+                {nutrientTargetLabels[target.semantics].symbol}{" "}
                 {formatNutrientAmount({
-                  value: target,
+                  value: target.amount,
                   maximumFractionDigits: name === "energyKcal" ? 0 : 1,
                 })}{" "}
                 {unit}

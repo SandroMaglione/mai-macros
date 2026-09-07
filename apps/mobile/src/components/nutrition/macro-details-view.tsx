@@ -1,3 +1,4 @@
+import { nutrientTargetLabels } from "@/lib/nutrient-target-label";
 import { NutrientProgressFill } from "@/components/nutrition/nutrient-progress-fill";
 import { AppScreen } from "@/components/ui/app-screen";
 import { Button } from "@/components/ui/button";
@@ -570,7 +571,7 @@ function MacroDetailsView({ data }: { readonly data: MacroDetailsRouteData }) {
                   });
                 }}
                 selected={selected}
-                target={Reporting.getPlanNutrientTargetAmount({
+                target={Reporting.getPlanNutrientTarget({
                   nutrientName: nutrient.nutrientName,
                   plan: data.day.selectedPlan,
                 })}
@@ -867,7 +868,7 @@ function NutrientRow({
   readonly nutrient: NutrientDetail;
   readonly onPress: () => void;
   readonly selected: boolean;
-  readonly target: number | undefined;
+  readonly target: Reporting.NutrientTarget | undefined;
   readonly total: number;
   readonly withTarget: boolean;
 }) {
@@ -910,7 +911,8 @@ function NutrientRow({
       </View>
       {hasTarget ? (
         <Text style={styles.caption}>
-          Target {_formatNutrientValue({ unit: nutrient.unit, value: target })}
+          {nutrientTargetLabels[target.semantics].symbol}{" "}
+          {_formatNutrientValue({ unit: nutrient.unit, value: target.amount })}
         </Text>
       ) : null}
       <View
@@ -925,7 +927,7 @@ function NutrientRow({
           colorValue={nutrient.colorValue}
           total={total}
           estimated={estimatedAmount}
-          target={target}
+          target={target?.amount}
         />
       </View>
     </Pressable>

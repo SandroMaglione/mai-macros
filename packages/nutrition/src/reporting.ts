@@ -9,8 +9,9 @@ import type {
   OneOffNutrients,
   NutrientValue,
   Plan,
+  NutrientTargetSemantics as DomainNutrientTargetSemantics,
 } from "./domain.ts";
-import { isCatalogMealEntry } from "./domain.ts";
+import { DefaultPlanTargetRules, isCatalogMealEntry } from "./domain.ts";
 import { calculateEntryNutrients, calculatePlanEnergyKcal } from "./utils.ts";
 import { massGramsFromQuantity } from "./measurements.ts";
 import {
@@ -31,7 +32,7 @@ export const NutrientNames = [
 
 export type NutrientName = (typeof NutrientNames)[number];
 
-export type NutrientTargetSemantics = "maximum" | "minimum" | "range";
+export type NutrientTargetSemantics = DomainNutrientTargetSemantics;
 
 export type NutrientTargetStatusKind = "above" | "below" | "inside";
 
@@ -169,18 +170,9 @@ export const calculateMealEntriesCostTotals = ({
   entriesCount: mealEntries.length,
 });
 
-export const NutrientTargetSemanticsByName = {
-  carbsGrams: "range",
-  energyKcal: "range",
-  fatGrams: "range",
-  fiberGrams: "minimum",
-  proteinGrams: "minimum",
-  saltGrams: "maximum",
-  saturatedFatGrams: "maximum",
-  sugarGrams: "maximum",
-} satisfies Record<NutrientName, NutrientTargetSemantics>;
+export const NutrientTargetSemanticsByName = DefaultPlanTargetRules;
 
-export const TargetRangeToleranceFraction = 0.1;
+export const TargetOverageToleranceFraction = 0.1;
 
 const zeroNutrientTotals = {
   carbsGrams: 0,
@@ -477,13 +469,14 @@ export const calculateGramsPerCalorie = ({
 export const makeNutrientTarget = ({
   amount,
   nutrientName,
-  toleranceFraction = TargetRangeToleranceFraction,
+  toleranceFraction = TargetOverageToleranceFraction,
+  semantics = NutrientTargetSemanticsByName[nutrientName],
 }: {
   readonly amount: number;
   readonly nutrientName: NutrientName;
   readonly toleranceFraction?: number;
+  readonly semantics?: NutrientTargetSemantics;
 }): NutrientTarget => {
-  const semantics = NutrientTargetSemanticsByName[nutrientName];
   const safeToleranceFraction = Math.max(0, toleranceFraction);
   const targetBySemantics = {
     maximum: {
@@ -496,13 +489,6 @@ export const makeNutrientTarget = ({
     minimum: {
       amount,
       lowerBound: amount,
-      nutrientName,
-      semantics,
-      upperBound: undefined,
-    },
-    range: {
-      amount,
-      lowerBound: Math.max(0, amount * (1 - safeToleranceFraction)),
       nutrientName,
       semantics,
       upperBound: amount * (1 + safeToleranceFraction),
@@ -544,7 +530,11 @@ export const getPlanNutrientTarget = ({
 
   return amount === undefined
     ? undefined
-    : makeNutrientTarget({ amount, nutrientName });
+    : makeNutrientTarget({
+        amount,
+        nutrientName,
+        semantics: plan.targetRules[nutrientName],
+      });
 };
 
 export const getPlanNutrientTargets = ({
@@ -585,6 +575,17 @@ export const evaluateNutrientTarget = ({
     value,
   };
 };
+
+export function remainingNutrientTargetAmount({
+  target,
+  value,
+}: {
+  readonly target: NutrientTarget;
+  readonly value: number;
+}): number {
+  const remaining = target.amount - value;
+  return remaining;
+}
 
 export const evaluatePlanNutrientTargets = ({
   plan,

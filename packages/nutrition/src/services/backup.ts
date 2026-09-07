@@ -442,6 +442,20 @@ class MaiBackupV1DatabaseVersion11 extends Schema.Class<MaiBackupV1DatabaseVersi
   stores: MaiBackupCatalogStores,
 }) {}
 
+class MaiBackupV1DatabaseVersion12 extends Schema.Class<MaiBackupV1DatabaseVersion12>(
+  "MaiBackupV1DatabaseVersion12"
+)({
+  format: MaiBackupFormat,
+  formatVersion: MaiBackupFormatVersion,
+  integrity: MaiBackupIntegrity,
+  source: Schema.Struct({
+    databaseName: Schema.Literal(DatabaseName),
+    databaseVersion: Schema.Literal(12),
+    exportedAt: Schema.DateTimeUtcFromMillis,
+  }),
+  stores: MaiBackupStores,
+}) {}
+
 export type MaiBackup = typeof MaiBackupV1.Type;
 
 export type MaiBackupEncoded = typeof MaiBackupV1.Encoded;
@@ -460,6 +474,7 @@ export const MaiBackupImportV1 = Schema.Union([
   MaiBackupV1DatabaseVersion9,
   MaiBackupV1DatabaseVersion10,
   MaiBackupV1DatabaseVersion11,
+  MaiBackupV1DatabaseVersion12,
   MaiBackupV1,
 ]);
 
@@ -471,7 +486,9 @@ const MaiBackupUnknownJson = Schema.fromJsonString(Schema.Unknown);
 
 const MaiBackupImportVersionProbe = Schema.Struct({
   source: Schema.Struct({
-    databaseVersion: Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+    databaseVersion: Schema.Literals([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]),
   }),
 });
 
@@ -480,7 +497,8 @@ const isMaiBackupImportV8 = Schema.is(MaiBackupV1DatabaseVersion8);
 const isMaiBackupImportV9 = Schema.is(MaiBackupV1DatabaseVersion9);
 const isMaiBackupImportV10 = Schema.is(MaiBackupV1DatabaseVersion10);
 const isMaiBackupImportV11 = Schema.is(MaiBackupV1DatabaseVersion11);
-const isMaiBackupImportV12 = Schema.is(MaiBackupV1);
+const isMaiBackupImportV12 = Schema.is(MaiBackupV1DatabaseVersion12);
+const isMaiBackupImportV13 = Schema.is(MaiBackupV1);
 
 const isLegacyMaiBackupImportV1 = Schema.is(LegacyMaiBackupV1DatabaseVersion1);
 const isLegacyMaiBackupImportV2 = Schema.is(LegacyMaiBackupV1DatabaseVersion2);
@@ -733,7 +751,22 @@ export const migrateBackupToCurrent = Effect.fn("migrateBackupToCurrent")(
           });
         })
       ),
-      Match.when(isMaiBackupImportV12, (backup) => Effect.succeed(backup)),
+      Match.when(isMaiBackupImportV12, (backup) =>
+        Effect.gen(function* () {
+          return yield* Schema.decodeEffect(MaiBackupV1)({
+            format: backup.format,
+            formatVersion: backup.formatVersion,
+            integrity: backup.integrity,
+            source: {
+              databaseName: backup.source.databaseName,
+              databaseVersion: CurrentDatabaseVersion,
+              exportedAt: DateTime.toEpochMillis(backup.source.exportedAt),
+            },
+            stores: yield* Schema.encodeEffect(MaiBackupStores)(backup.stores),
+          });
+        })
+      ),
+      Match.when(isMaiBackupImportV13, (backup) => Effect.succeed(backup)),
       Match.exhaustive
     );
   }
@@ -1439,6 +1472,9 @@ export class Backups extends Context.Service<Backups>()("Backups", {
             Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion11)(rawBackup)
           ),
           Match.when(12, () =>
+            Schema.decodeUnknownEffect(MaiBackupV1DatabaseVersion12)(rawBackup)
+          ),
+          Match.when(13, () =>
             Schema.decodeUnknownEffect(MaiBackupV1)(rawBackup)
           ),
           Match.exhaustive

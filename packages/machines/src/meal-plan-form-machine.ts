@@ -14,6 +14,7 @@ export type MealPlanTargetFieldName =
 
 export type MealPlanFormValues = {
   readonly name: string;
+  readonly targetRules: Domain.PlanTargetRules;
 } & Record<MealPlanTargetFieldName, string>;
 
 export type MealPlanFormMealValue = {
@@ -21,9 +22,10 @@ export type MealPlanFormMealValue = {
   readonly name: string;
 };
 
-export type MealPlanFormTextFieldName = keyof MealPlanFormValues;
+export type MealPlanFormTextFieldName = "name" | MealPlanTargetFieldName;
 
 const MealPlanFormValuesSchema = Schema.Struct({
+  targetRules: Domain.PlanTargetRules,
   name: Schema.String,
   proteinTargetGrams: Schema.String,
   carbsTargetGrams: Schema.String,
@@ -142,6 +144,21 @@ export const mealPlanFormMachine = setup({
       })
     ),
     events: {
+      changeTargetRule: Schema.toStandardSchemaV1(
+        Schema.Struct({
+          nutrient: Schema.Literals([
+            "energyKcal",
+            "proteinGrams",
+            "carbsGrams",
+            "fatGrams",
+            "fiberGrams",
+            "sugarGrams",
+            "saturatedFatGrams",
+            "saltGrams",
+          ]),
+          rule: Domain.NutrientTargetSemantics,
+        })
+      ),
       changeField: Schema.toStandardSchemaV1(
         Schema.Struct({
           name: MealPlanFormTextFieldNameSchema,
@@ -170,6 +187,8 @@ export const mealPlanFormMachine = setup({
       },
     }),
     values: {
+      targetRules:
+        input.initialPlan?.targetRules ?? Domain.DefaultPlanTargetRules,
       name: input.initialPlan?.name ?? "",
       proteinTargetGrams: _stringFromOptionalNumber(
         input.initialPlan?.proteinTargetGrams
@@ -198,6 +217,17 @@ export const mealPlanFormMachine = setup({
   states: {
     Ready: {
       on: {
+        changeTargetRule: ({ context, event }) => ({
+          context: {
+            values: {
+              ...context.values,
+              targetRules: {
+                ...context.values.targetRules,
+                [event.nutrient]: event.rule,
+              },
+            },
+          },
+        }),
         changeField: ({ context, event }) => ({
           context: {
             values: {
@@ -232,6 +262,7 @@ export function createMealPlanInputFromValues({
 
   return {
     name: values.name.trim(),
+    targetRules: values.targetRules,
     meals: meals.map((meal) => ({
       ...(meal.id === undefined ? {} : { id: meal.id }),
       name: meal.name.trim(),

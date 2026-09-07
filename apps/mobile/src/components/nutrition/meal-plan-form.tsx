@@ -1,5 +1,10 @@
 import { MealPlanFormMachine } from "@mai/machines";
 import type { Domain, MealPlans } from "@mai/nutrition";
+import { InputSelect } from "@/components/ui/input-select";
+import {
+  nutrientTargetLabels,
+  nutrientTargetOptions,
+} from "@/lib/nutrient-target-label";
 import { formatNumber } from "@/lib/format";
 import { color, radius, shadow, spacing, tokens } from "@/theme/tokens";
 import { AppScreen } from "@/components/ui/app-screen";
@@ -19,6 +24,7 @@ type PlanTargetField = {
   readonly accentColor: string;
   readonly label: string;
   readonly name: MealPlanFormMachine.MealPlanTargetFieldName;
+  readonly nutrient: keyof Domain.PlanTargetRules;
   readonly placeholder: string;
   readonly required: boolean;
 };
@@ -28,6 +34,7 @@ const macroTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionProtein,
     label: "Protein",
     name: "proteinTargetGrams",
+    nutrient: "proteinGrams",
     placeholder: "160",
     required: true,
   },
@@ -35,6 +42,7 @@ const macroTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionCarbs,
     label: "Carbs",
     name: "carbsTargetGrams",
+    nutrient: "carbsGrams",
     placeholder: "220",
     required: true,
   },
@@ -42,6 +50,7 @@ const macroTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionFat,
     label: "Fat",
     name: "fatTargetGrams",
+    nutrient: "fatGrams",
     placeholder: "70",
     required: true,
   },
@@ -52,6 +61,7 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionFiber,
     label: "Fiber",
     name: "fiberTargetGrams",
+    nutrient: "fiberGrams",
     placeholder: "30",
     required: false,
   },
@@ -59,6 +69,7 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionSugar,
     label: "Sugar",
     name: "sugarTargetGrams",
+    nutrient: "sugarGrams",
     placeholder: "50",
     required: false,
   },
@@ -66,6 +77,7 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionFat,
     label: "Saturated fat",
     name: "saturatedFatTargetGrams",
+    nutrient: "saturatedFatGrams",
     placeholder: "20",
     required: false,
   },
@@ -73,6 +85,7 @@ const nutrientTargetFields: readonly PlanTargetField[] = [
     accentColor: color.nutritionSalt,
     label: "Salt",
     name: "saltTargetGrams",
+    nutrient: "saltGrams",
     placeholder: "6",
     required: false,
   },
@@ -136,6 +149,13 @@ export function MealPlanForm({
           {macroTargetFields.map((field) => (
             <PlanTargetInput
               field={field}
+              rule={values.targetRules[field.nutrient]}
+              onChangeRule={(rule) =>
+                actor.trigger.changeTargetRule({
+                  nutrient: field.nutrient,
+                  rule,
+                })
+              }
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
@@ -147,7 +167,17 @@ export function MealPlanForm({
         </View>
 
         <View style={styles.energyPanel}>
-          <Text style={styles.energyLabel}>Calories</Text>
+          <View>
+            <Text style={styles.energyLabel}>Calories</Text>
+            <TargetRuleSelect
+              label="Calories"
+              rule={values.targetRules.energyKcal}
+              disabled={isSubmitting}
+              onSelect={(rule) =>
+                actor.trigger.changeTargetRule({ nutrient: "energyKcal", rule })
+              }
+            />
+          </View>
           <View style={styles.energyValueGroup}>
             <Text
               adjustsFontSizeToFit
@@ -164,11 +194,18 @@ export function MealPlanForm({
         </View>
       </SectionCard>
 
-      <SectionCard style={styles.card} title="Nutrient limits">
+      <SectionCard style={styles.card} title="Nutrient targets">
         <View style={styles.nutrientGrid}>
           {nutrientTargetFields.map((field) => (
             <PlanTargetInput
               field={field}
+              rule={values.targetRules[field.nutrient]}
+              onChangeRule={(rule) =>
+                actor.trigger.changeTargetRule({
+                  nutrient: field.nutrient,
+                  rule,
+                })
+              }
               isSubmitting={isSubmitting}
               key={field.name}
               onChangeText={(value) =>
@@ -299,11 +336,15 @@ export function MealPlanForm({
 
 function PlanTargetInput({
   field,
+  rule,
+  onChangeRule,
   isSubmitting,
   onChangeText,
   value,
 }: {
   readonly field: PlanTargetField;
+  readonly rule: Domain.NutrientTargetSemantics;
+  readonly onChangeRule: (rule: Domain.NutrientTargetSemantics) => void;
   readonly isSubmitting: boolean;
   readonly onChangeText: (value: string) => void;
   readonly value: string;
@@ -320,7 +361,36 @@ function PlanTargetInput({
         rightElement={<Text style={styles.unit}>g</Text>}
         value={value}
       />
+      <TargetRuleSelect
+        label={field.label}
+        rule={rule}
+        disabled={isSubmitting}
+        onSelect={onChangeRule}
+      />
     </View>
+  );
+}
+
+function TargetRuleSelect({
+  label,
+  rule,
+  disabled,
+  onSelect,
+}: {
+  readonly label: string;
+  readonly rule: Domain.NutrientTargetSemantics;
+  readonly disabled: boolean;
+  readonly onSelect: (rule: Domain.NutrientTargetSemantics) => void;
+}) {
+  return (
+    <InputSelect
+      title={`${label} target`}
+      selectedValue={rule}
+      triggerLabel={nutrientTargetLabels[rule].label}
+      options={nutrientTargetOptions}
+      disabled={disabled}
+      onSelect={onSelect}
+    />
   );
 }
 

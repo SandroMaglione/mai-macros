@@ -248,7 +248,36 @@ export class PlanMeal extends Schema.Class<PlanMeal>("PlanMeal")({
   createdAt: Schema.DateTimeUtcFromMillis,
 }) {}
 
+export const NutrientTargetSemantics = Schema.Literals(["minimum", "maximum"]);
+export type NutrientTargetSemantics = typeof NutrientTargetSemantics.Type;
+
+export const PlanTargetRules = Schema.Struct({
+  energyKcal: NutrientTargetSemantics,
+  proteinGrams: NutrientTargetSemantics,
+  carbsGrams: NutrientTargetSemantics,
+  fatGrams: NutrientTargetSemantics,
+  fiberGrams: NutrientTargetSemantics,
+  sugarGrams: NutrientTargetSemantics,
+  saturatedFatGrams: NutrientTargetSemantics,
+  saltGrams: NutrientTargetSemantics,
+});
+export type PlanTargetRules = typeof PlanTargetRules.Type;
+
+export const DefaultPlanTargetRules: PlanTargetRules = {
+  energyKcal: "minimum",
+  proteinGrams: "minimum",
+  carbsGrams: "minimum",
+  fatGrams: "minimum",
+  fiberGrams: "minimum",
+  sugarGrams: "maximum",
+  saturatedFatGrams: "maximum",
+  saltGrams: "maximum",
+};
+
 export class Plan extends Schema.Class<Plan>("Plan")({
+  targetRules: PlanTargetRules.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(DefaultPlanTargetRules))
+  ),
   id: PlanId,
   name: NonEmptyString,
   meals: Schema.Array(PlanMeal).check(Schema.isNonEmpty()),

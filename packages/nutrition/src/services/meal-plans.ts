@@ -18,6 +18,8 @@ import {
   Plan,
   PlanId,
   PlanMeal,
+  PlanTargetRules,
+  DefaultPlanTargetRules,
 } from "../domain.ts";
 import { NutritionStore } from "./store.ts";
 
@@ -36,6 +38,7 @@ const _MealPlanMealInput = Schema.Struct({
 });
 
 const mealPlanInputFields = {
+  targetRules: Schema.optional(PlanTargetRules),
   name: _PlanName,
   meals: Schema.Array(_MealPlanMealInput).check(Schema.isNonEmpty()),
   proteinTargetGrams: _FormNonNegativeNumber,
@@ -211,6 +214,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
         const plan = yield* Schema.decodeEffect(Plan)({
           id: yield* crypto.randomUUIDv4,
           name: decodedInput.name,
+          targetRules: decodedInput.targetRules ?? DefaultPlanTargetRules,
           meals: encodedMeals,
           proteinTargetGrams: decodedInput.proteinTargetGrams,
           carbsTargetGrams: decodedInput.carbsTargetGrams,
@@ -305,6 +309,8 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                 const plan = yield* Schema.decodeEffect(Plan)({
                   id: planId,
                   name: decodedInput.name,
+                  targetRules:
+                    decodedInput.targetRules ?? previousPlan.targetRules,
                   meals: encodedMeals,
                   proteinTargetGrams: decodedInput.proteinTargetGrams,
                   carbsTargetGrams: decodedInput.carbsTargetGrams,

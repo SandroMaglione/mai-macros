@@ -55,6 +55,67 @@ const planInput: typeof Domain.Plan.Encoded = {
 };
 
 describe("nutrition revisions", () => {
+  it("persists target rules on creation and revisions without changing a used plan", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const plans = yield* MealPlans.MealPlans;
+        const store = yield* Store.NutritionStore;
+        const input = {
+          name: "Rules",
+          meals: [{ name: "Lunch" }],
+          proteinTargetGrams: "100",
+          carbsTargetGrams: "200",
+          fatTargetGrams: "60",
+          fiberTargetGrams: "30",
+        };
+        const rules = {
+          ...Domain.DefaultPlanTargetRules,
+          proteinGrams: "maximum",
+          fiberGrams: "maximum",
+        } as const;
+        const created = yield* plans.create({
+          input: { ...input, targetRules: rules },
+        });
+        assert.deepEqual(created.plan.targetRules, rules);
+        const retained = yield* plans.revise({
+          input: { ...input, planId: created.plan.id, dateKey: "2026-09-06" },
+        });
+        assert.deepEqual(retained.plan.targetRules, rules);
+        yield* store.upsertDailyLog(
+          yield* Schema.decodeEffect(Domain.DailyLog)({
+            dateKey: "2026-09-06",
+            planId: retained.plan.id,
+            createdAt: 0,
+            updatedAt: 0,
+          })
+        );
+        const revised = yield* plans.revise({
+          input: {
+            ...input,
+            name: "New rules",
+            planId: retained.plan.id,
+            dateKey: "2026-09-07",
+            targetRules: Domain.DefaultPlanTargetRules,
+          },
+        });
+        assert.notEqual(revised.plan.id, retained.plan.id);
+        assert.deepEqual(
+          revised.plan.targetRules,
+          Domain.DefaultPlanTargetRules
+        );
+        const stores = yield* store.readStores;
+        assert.deepEqual(
+          stores.plans.find((plan) => plan.id === created.plan.id)?.targetRules,
+          rules
+        );
+        assert.equal(
+          stores.dailyLogs.find((day) => day.dateKey === "2026-09-06")?.planId,
+          created.plan.id
+        );
+      }).pipe(Effect.provide(_revisionTestLayer({ stores: emptyStores })))
+    );
+  });
+
   it("logs fractional named portions with their physical-size snapshot", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {

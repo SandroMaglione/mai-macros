@@ -50,7 +50,7 @@ const _read = Effect.gen(function* () {
       yield* sql`SELECT rowid, id, date_key, meal_id, food_id, quantity_kind, quantity_amount, quantity_unit, portion_id, portion_name, portion_size_amount, portion_size_unit, nutrition_multiplier, created_at, updated_at FROM meal_entries ORDER BY rowid`,
     related: yield* Effect.all([
       sql`SELECT * FROM foods ORDER BY id`,
-      sql`SELECT * FROM plans`,
+      sql`SELECT id, name, protein_target_grams, carbs_target_grams, fat_target_grams, fiber_target_grams, sugar_target_grams, salt_target_grams, saturated_fat_target_grams, created_at FROM plans`,
       sql`SELECT * FROM plan_meals`,
       sql`SELECT * FROM daily_logs`,
       sql`SELECT * FROM active_meal_plan_selections`,
@@ -128,7 +128,7 @@ describe("one-off entry migration", () => {
     ]);
     assert.deepEqual(result.after.foreignKeys, []);
     assert.deepEqual(result.after.integrity, [{ quick_check: "ok" }]);
-    assert.equal(result.after.migrations.length, 10);
+    assert.equal(result.after.migrations.length, 11);
     assert.equal(result.after.schema.length, 7);
   });
 
@@ -149,7 +149,7 @@ describe("one-off entry migration", () => {
     assert.isTrue(Exit.isFailure(result.failed));
     assert.deepEqual(result.before, result.after);
     assert.deepEqual(result.before.entries, result.retry.entries);
-    assert.equal(result.retry.migrations.length, 10);
+    assert.equal(result.retry.migrations.length, 11);
   });
 
   it("retains the migrated data after closing and reopening the physical database", async () => {

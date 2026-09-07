@@ -65,6 +65,11 @@ const SqliteMigrationLoader: readonly {
     load: () => import("./010-one-off-meal-entries.ts"),
     name: "one-off-meal-entries",
   },
+  {
+    id: 11,
+    load: () => import("./011-plan-target-rules.ts"),
+    name: "plan-target-rules",
+  },
 ];
 
 export const runSqliteMigrations = Effect.gen(function* () {
