@@ -51,7 +51,13 @@ import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
 import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
 import { RuntimeClient } from "@/lib/runtime-client";
-import { color, radius, spacing, tokens } from "@/theme/tokens";
+import {
+  color,
+  radius,
+  spacing,
+  tokens,
+  weightCalendarColors,
+} from "@/theme/tokens";
 
 const BodyWeightReportPoint = Schema.Struct({
   dateKey: Domain.DateKey,
@@ -566,6 +572,23 @@ const bodyWeightRouteMachine = setup({
   actorSources: {
     bodyWeightEditor: bodyWeightEditorMachine,
     bodyWeightImporter: bodyWeightImporterMachine,
+    loadMonth: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({ dateKey: Domain.DateKey })
+        ),
+        output: Schema.toStandardSchemaV1(Schema.Array(Domain.BodyWeightEntry)),
+      },
+      run: ({ input }) =>
+        InsightsRuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const bodyWeights = yield* BodyWeights.BodyWeights;
+            return yield* bodyWeights.listRange({
+              input: CalendarMonthModel.range({ dateKey: input.dateKey }),
+            });
+          })
+        ),
+    }),
     loadBodyWeight: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(LoadBodyWeightInput),
@@ -677,14 +700,14 @@ const bodyWeightRouteMachine = setup({
       initial: "Closed",
       on: {
         nextMonth: ({ context }) => ({
-          target: "#bodyWeightRoute.Loading",
+          target: "#bodyWeightRoute.Ready.LoadingMonth",
           context: _monthNavigationContext({
             context,
             months: 1,
           }),
         }),
         previousMonth: ({ context }) => ({
-          target: "#bodyWeightRoute.Loading",
+          target: "#bodyWeightRoute.Ready.LoadingMonth",
           context: _monthNavigationContext({
             context,
             months: -1,
@@ -698,6 +721,22 @@ const bodyWeightRouteMachine = setup({
         },
       },
       states: {
+        LoadingMonth: {
+          invoke: {
+            src: "loadMonth",
+            input: ({ context }) => ({ dateKey: context.dateKey }),
+            onDone: ({ event }) => ({
+              target: "Closed",
+              context: { monthEntries: event.output, message: null },
+            }),
+            onError: {
+              target: "Closed",
+              context: {
+                message: "Could not load this month's weights. Try again.",
+              },
+            },
+          },
+        },
         Closed: {
           on: {
             openImport: {
@@ -850,9 +889,13 @@ function BodyWeightRoute({
   const importerActor = isImportingForm
     ? snapshot.children.bodyWeightImporter
     : undefined;
-  const disabled = isEditing || isImportingForm || snapshot.matches("Loading");
+  const disabled =
+    isEditing ||
+    isImportingForm ||
+    snapshot.matches("Loading") ||
+    snapshot.matches("Ready.LoadingMonth");
 
-  if (snapshot.matches("Loading")) {
+  if (snapshot.matches("Loading") && snapshot.context.report === null) {
     return (
       <View style={styles.centered}>
         <LoadingView message="Loading weight data..." />
@@ -860,7 +903,7 @@ function BodyWeightRoute({
     );
   }
 
-  if (snapshot.matches("Failed")) {
+  if (snapshot.matches("Failed") && snapshot.context.report === null) {
     return (
       <View style={styles.failureStack}>
         <BodyWeightMonthNavigator
@@ -904,6 +947,8 @@ function BodyWeightRoute({
       dateKey={snapshot.context.dateKey}
       disabled={disabled}
       entries={snapshot.context.monthEntries}
+      message={snapshot.context.message}
+      onRetry={actor.trigger.reload}
       onImport={
         showImport
           ? () => {
@@ -1005,6 +1050,8 @@ function BodyWeightCalendar({
   dateKey,
   disabled,
   entries,
+  message,
+  onRetry,
   onImport,
   onNextMonth,
   onPreviousMonth,
@@ -1013,6 +1060,8 @@ function BodyWeightCalendar({
   readonly dateKey: Domain.DateKey;
   readonly disabled: boolean;
   readonly entries: readonly Domain.BodyWeightEntry[];
+  readonly message: string | null;
+  readonly onRetry: () => void;
   readonly onImport?: () => void;
   readonly onNextMonth: () => void;
   readonly onPreviousMonth: () => void;
@@ -1022,6 +1071,14 @@ function BodyWeightCalendar({
     dateKey,
     entries,
   });
+
+  const weights = entries.map((entry) => entry.weightKilograms);
+  const low = Array.isReadonlyArrayNonEmpty(weights)
+    ? Math.min(...weights)
+    : null;
+  const high = Array.isReadonlyArrayNonEmpty(weights)
+    ? Math.max(...weights)
+    : null;
 
   return (
     <View style={styles.calendarStack}>
@@ -1043,59 +1100,109 @@ function BodyWeightCalendar({
         <View style={styles.calendarGrid}>
           {calendar.weeks.map((week, weekIndex) => (
             <View key={`week-${weekIndex}`} style={styles.calendarWeekRow}>
-              {week.map((cell) => (
-                <Pressable
-                  accessibilityLabel={cell.accessibilityLabel}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    disabled: disabled || !cell.isCurrentMonth,
-                    selected: cell.isSelected,
-                  }}
-                  disabled={disabled || !cell.isCurrentMonth}
-                  key={cell.dateKey}
-                  onPress={() => {
-                    onSelectDate(cell.dateKey);
-                  }}
-                  style={({ pressed }) => [
-                    styles.calendarCell,
-                    !cell.isCurrentMonth ? styles.calendarCellOutside : null,
-                    cell.isToday ? styles.calendarCellToday : null,
-                    cell.isSelected ? styles.calendarCellSelected : null,
-                    pressed ? styles.calendarCellPressed : null,
-                  ]}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.calendarDayText,
-                      !cell.isCurrentMonth
-                        ? styles.calendarDayTextOutside
-                        : null,
-                      cell.isSelected ? styles.calendarDayTextSelected : null,
+              {week.map((cell) => {
+                const tone =
+                  cell.weightKilograms === null || low === null || high === null
+                    ? undefined
+                    : weightCalendarColors[
+                        high === low
+                          ? Math.floor(weightCalendarColors.length / 2)
+                          : Math.min(
+                              weightCalendarColors.length - 1,
+                              Math.floor(
+                                ((cell.weightKilograms - low) / (high - low)) *
+                                  weightCalendarColors.length
+                              )
+                            )
+                      ];
+                return (
+                  <Pressable
+                    accessibilityLabel={cell.accessibilityLabel}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      disabled: disabled || !cell.isCurrentMonth,
+                      selected: cell.isSelected,
+                    }}
+                    disabled={disabled || !cell.isCurrentMonth}
+                    key={cell.dateKey}
+                    onPress={() => {
+                      onSelectDate(cell.dateKey);
+                    }}
+                    style={({ pressed }) => [
+                      styles.calendarCell,
+                      tone === undefined
+                        ? null
+                        : { backgroundColor: tone.backgroundColor },
+                      !cell.isCurrentMonth ? styles.calendarCellOutside : null,
+                      cell.isToday ? styles.calendarCellToday : null,
+                      cell.isSelected ? styles.calendarCellSelected : null,
+                      pressed ? styles.calendarCellPressed : null,
                     ]}
                   >
-                    {cell.dayLabel}
-                  </Text>
-                  {cell.weightLabel === null ? null : (
                     <Text
-                      adjustsFontSizeToFit
                       numberOfLines={1}
                       style={[
-                        styles.calendarWeightText,
-                        cell.isSelected
-                          ? styles.calendarWeightTextSelected
+                        styles.calendarDayText,
+                        !cell.isCurrentMonth
+                          ? styles.calendarDayTextOutside
                           : null,
+                        tone === undefined ? null : { color: tone.color },
                       ]}
                     >
-                      {cell.weightLabel}
+                      {cell.dayLabel}
                     </Text>
-                  )}
-                </Pressable>
-              ))}
+                    {cell.weightLabel === null ? null : (
+                      <Text
+                        adjustsFontSizeToFit
+                        numberOfLines={1}
+                        style={[
+                          styles.calendarWeightText,
+                          tone === undefined ? null : { color: tone.color },
+                        ]}
+                      >
+                        {cell.weightLabel}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
           ))}
         </View>
       </View>
+      <View style={styles.calendarLegend}>
+        {low === null || high === null ? (
+          <Text style={styles.calendarLegendText}>No weights this month</Text>
+        ) : (
+          <>
+            <Text style={styles.calendarLegendText}>
+              {formatNumber({ maximumFractionDigits: 2, value: low })} kg
+            </Text>
+            <View style={styles.calendarLegendSwatches}>
+              {weightCalendarColors.map((tone) => (
+                <View
+                  key={tone.backgroundColor}
+                  style={[
+                    styles.calendarSwatch,
+                    { backgroundColor: tone.backgroundColor },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={styles.calendarLegendText}>
+              {formatNumber({ maximumFractionDigits: 2, value: high })} kg
+            </Text>
+          </>
+        )}
+      </View>
+      {message === null ? null : (
+        <View style={styles.failureStack}>
+          <Notice message={message} tone="danger" />
+          <Button disabled={disabled} onPress={onRetry} variant="secondary">
+            Retry
+          </Button>
+        </View>
+      )}
     </View>
   );
 }
@@ -1131,6 +1238,7 @@ function BodyWeightEntryDialog({
       visible
     >
       <Pressable
+        accessible={false}
         accessibilityLabel="Close weight editor"
         accessibilityRole="button"
         disabled={disabled}
@@ -1250,6 +1358,7 @@ function BodyWeightImportDialog({
       visible
     >
       <Pressable
+        accessible={false}
         accessibilityLabel="Close weight importer"
         accessibilityRole="button"
         disabled={disabled}
@@ -1827,18 +1936,12 @@ const CalendarMonthModel = {
     const displayedDate = CalendarMonthModel.dateFromDateKey({ dateKey });
     const monthIndex = displayedDate.getMonth();
     const firstOfMonth = new Date(displayedDate.getFullYear(), monthIndex, 1);
-    const lastOfMonth = new Date(
-      displayedDate.getFullYear(),
-      monthIndex + 1,
-      0
-    );
     const gridStartDate = new Date(
       displayedDate.getFullYear(),
       monthIndex,
       1 - firstOfMonth.getDay()
     );
-    const totalCellCount =
-      firstOfMonth.getDay() + lastOfMonth.getDate() + 6 - lastOfMonth.getDay();
+    const totalCellCount = 42;
     const today = todayDateKey();
     const cells = globalThis.Array.from(
       { length: totalCellCount },
@@ -1886,6 +1989,7 @@ const CalendarMonthModel = {
           isSelected: cellDateKey === dateKey,
           isToday: cellDateKey === today,
           weightLabel,
+          weightKilograms: entry?.weightKilograms ?? null,
         };
       }
     );
@@ -2078,7 +2182,6 @@ function _monthNavigationContext({
     dateKey: nextDateKey,
     message: null,
     monthEntries: [],
-    report: null,
     reportDateRange: context.reportDateRange,
     reportDayCount: context.reportDayCount,
   };
@@ -2240,7 +2343,6 @@ const styles = StyleSheet.create({
   },
   calendarCellSelected: {
     borderColor: color.primary,
-    backgroundColor: color.primarySoft,
   },
   calendarCellPressed: {
     opacity: 0.82,
@@ -2254,9 +2356,6 @@ const styles = StyleSheet.create({
   calendarDayTextOutside: {
     color: color.textSubtle,
   },
-  calendarDayTextSelected: {
-    color: color.textMuted,
-  },
   calendarWeightText: {
     color: color.text,
     fontSize: tokens.type.size.sm,
@@ -2264,9 +2363,16 @@ const styles = StyleSheet.create({
     lineHeight: tokens.type.lineHeight.sm,
     textAlign: "center",
   },
-  calendarWeightTextSelected: {
-    color: color.primaryHover,
+  calendarLegend: {
+    minHeight: 20,
+    flexDirection: "row",
+    gap: spacing.sm,
+    alignItems: "center",
+    justifyContent: "flex-end",
   },
+  calendarLegendText: { color: color.textMuted, fontSize: tokens.type.size.xs },
+  calendarLegendSwatches: { flexDirection: "row", gap: 3 },
+  calendarSwatch: { width: 14, height: 14, borderRadius: 3 },
   editorBackdrop: {
     flex: 1,
     justifyContent: "center",

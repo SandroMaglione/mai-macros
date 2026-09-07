@@ -150,3 +150,11 @@ export const tokens = {
   spacing,
   type,
 } as const;
+
+export const weightCalendarColors = [
+  { backgroundColor: "#253d4d", color: "#f3f2ed" },
+  { backgroundColor: "#30576d", color: "#f3f2ed" },
+  { backgroundColor: "#417993", color: "#ffffff" },
+  { backgroundColor: "#72a9c3", color: "#14242d" },
+  { backgroundColor: "#b2d6e5", color: "#14242d" },
+] as const;

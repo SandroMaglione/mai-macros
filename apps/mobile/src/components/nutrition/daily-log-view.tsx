@@ -1201,18 +1201,23 @@ function EmptyDayDeleteAction({
   readonly onDeleteDay: () => void;
 }) {
   return (
-    <View style={styles.emptyDayActions}>
-      <Button
-        disabled={disabled}
-        icon={Trash2}
-        loading={disabled}
-        onPress={onDeleteDay}
-        style={styles.emptyDayDeleteButton}
-        variant="danger"
-      >
+    <Pressable
+      accessibilityLabel="Delete empty day"
+      accessibilityRole="button"
+      accessibilityState={{ disabled, busy: disabled }}
+      disabled={disabled}
+      onPress={onDeleteDay}
+      style={({ pressed }) => [
+        styles.dayPrimaryAction,
+        styles.emptyDayDeleteButton,
+        pressed || disabled ? styles.pressed : null,
+      ]}
+    >
+      <Trash2 color={color.dangerText} size={16} />
+      <Text style={[styles.detailsText, styles.emptyDayDeleteText]}>
         Delete empty day
-      </Button>
-    </View>
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1552,17 +1557,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  emptyDayActions: {
-    marginHorizontal: -spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: color.hairline,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: color.sheet,
-  },
   emptyDayDeleteButton: {
-    width: "100%",
+    flex: 0,
+    marginTop: spacing.md,
+    backgroundColor: color.dangerBg,
   },
+  emptyDayDeleteText: { color: color.dangerText },
   waterTracker: {
     overflow: "hidden",
     marginTop: spacing.xl,
