@@ -23,6 +23,14 @@ const _mapStoreError = <Value, Error, Requirements>(
   );
 
 const FoodRow = Schema.Struct({
+  energyKcalOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  proteinGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  carbsGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  fatGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  fiberGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  sugarGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  saturatedFatGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
+  saltGramsOverride: Schema.NullOr(Domain.NonNegativeNumber),
   brand: Schema.NullOr(Domain.NonEmptyString),
   carbsGrams: Domain.NonNegativeNumber,
   category: Schema.NullOr(Domain.FoodCategory),
@@ -145,6 +153,14 @@ const selectFoodColumns = `
   brand,
   category,
   origin,
+  energy_kcal_override AS energyKcalOverride,
+  protein_grams_override AS proteinGramsOverride,
+  carbs_grams_override AS carbsGramsOverride,
+  fat_grams_override AS fatGramsOverride,
+  fiber_grams_override AS fiberGramsOverride,
+  sugar_grams_override AS sugarGramsOverride,
+  saturated_fat_grams_override AS saturatedFatGramsOverride,
+  salt_grams_override AS saltGramsOverride,
   nutrition_reference_amount AS nutritionReferenceAmount,
   nutrition_reference_unit AS nutritionReferenceUnit,
   conversion_mass_amount AS conversionMassAmount,
@@ -292,6 +308,14 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
     prices,
     portions,
     row: {
+      energyKcalOverride,
+      proteinGramsOverride,
+      carbsGramsOverride,
+      fatGramsOverride,
+      fiberGramsOverride,
+      sugarGramsOverride,
+      saturatedFatGramsOverride,
+      saltGramsOverride,
       brand,
       category,
       conversionMassAmount,
@@ -313,6 +337,28 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   }) =>
     Schema.decodeEffect(Domain.Food)({
       ...row,
+      nutritionCorrections: {
+        ...(energyKcalOverride === null
+          ? {}
+          : { energyKcal: energyKcalOverride }),
+        ...(proteinGramsOverride === null
+          ? {}
+          : { proteinGrams: proteinGramsOverride }),
+        ...(carbsGramsOverride === null
+          ? {}
+          : { carbsGrams: carbsGramsOverride }),
+        ...(fatGramsOverride === null ? {} : { fatGrams: fatGramsOverride }),
+        ...(fiberGramsOverride === null
+          ? {}
+          : { fiberGrams: fiberGramsOverride }),
+        ...(sugarGramsOverride === null
+          ? {}
+          : { sugarGrams: sugarGramsOverride }),
+        ...(saturatedFatGramsOverride === null
+          ? {}
+          : { saturatedFatGrams: saturatedFatGramsOverride }),
+        ...(saltGramsOverride === null ? {} : { saltGrams: saltGramsOverride }),
+      },
       nutritionReference: {
         amount: nutritionReferenceAmount,
         unit: nutritionReferenceUnit,
@@ -1035,6 +1081,16 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
   );
 
   const foodRowValues = (food: typeof Domain.Food.Encoded) => ({
+    energy_kcal_override: food.nutritionCorrections?.energyKcal ?? null,
+    protein_grams_override: food.nutritionCorrections?.proteinGrams ?? null,
+    carbs_grams_override: food.nutritionCorrections?.carbsGrams ?? null,
+    fat_grams_override: food.nutritionCorrections?.fatGrams ?? null,
+    fiber_grams_override: food.nutritionCorrections?.fiberGrams ?? null,
+    sugar_grams_override: food.nutritionCorrections?.sugarGrams ?? null,
+    saturated_fat_grams_override:
+      food.nutritionCorrections?.saturatedFatGrams ?? null,
+    salt_grams_override: food.nutritionCorrections?.saltGrams ?? null,
+
     brand: food.brand ?? null,
     carbs_grams_per_100g: food.carbsGrams,
     category: food.category ?? null,

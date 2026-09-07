@@ -515,7 +515,7 @@ function FoodSearchResult({
     food.brand === undefined || food.brand.trim() === "" ? null : food.brand;
   const perReferenceLabel = `${formatNumber({
     maximumFractionDigits: 0,
-    value: food.energyKcal,
+    value: Utils.foodNutrition(food).energyKcal,
   })} kcal / ${formatNumber({
     maximumFractionDigits: 2,
     value: food.nutritionReference.amount,

@@ -15,7 +15,7 @@ import { EmptyEvent, FoodFormMachine } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Array, Effect, Option, Predicate, Schema } from "effect";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import {
   CircleCheck,
   ChevronLeft,
@@ -28,7 +28,7 @@ import {
   ShieldAlert,
 } from "lucide-react-native";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { Actor, createAsyncLogic, setup } from "xstate";
 
 const FoodFormInput = Schema.Struct({
@@ -110,6 +110,7 @@ const foodEditorMachine = setup({
       chooseCopy: Schema.toStandardSchemaV1(EmptyEvent),
       chooseEdit: Schema.toStandardSchemaV1(EmptyEvent),
       confirmEdit: Schema.toStandardSchemaV1(EmptyEvent),
+      refresh: Schema.toStandardSchemaV1(EmptyEvent),
       retry: Schema.toStandardSchemaV1(EmptyEvent),
       submit: Schema.toStandardSchemaV1(SubmitFoodInput),
     },
@@ -261,6 +262,7 @@ const foodEditorMachine = setup({
     },
     ChoosingAction: {
       on: {
+        refresh: { target: "Loading" },
         chooseCopy: ({ actions, context }, enq) => {
           if (context.food === null) {
             return;
@@ -409,6 +411,11 @@ function FoodEditorScreen({
   const [snapshot, , actor] = useMachine(foodEditorMachine, {
     input: { foodId },
   });
+  useFocusEffect(
+    useCallback(() => {
+      actor.send({ type: "refresh" });
+    }, [actor])
+  );
   const food = snapshot.context.food;
   const usage = snapshot.context.usage;
 
@@ -525,6 +532,19 @@ function FoodEditorScreen({
   if (snapshot.matches("ChoosingAction")) {
     return (
       <WorkflowPage food={food} title="Manage food">
+        {food.origin === "app-default" ? (
+          <SectionCard
+            title="Nutrition"
+            subtitle="Correct values for all past and future entries. Reset to catalog anytime."
+          >
+            <Button
+              icon={Pencil}
+              onPress={() => router.push(`/foods/${food.id}/nutrition`)}
+            >
+              Customize nutrition
+            </Button>
+          </SectionCard>
+        ) : null}
         <Notice
           message={
             usage.mealEntryCount === 0
@@ -569,7 +589,7 @@ function FoodEditorScreen({
         >
           {food.origin === "app-default" ? (
             <Notice
-              message="Pre-installed foods cannot be changed. Create your own food copy first."
+              message="To change catalog portions, create your own food copy."
               tone="warning"
             />
           ) : (
@@ -589,7 +609,7 @@ function FoodEditorScreen({
         >
           {food.origin === "app-default" ? (
             <Notice
-              message="Pre-installed foods cannot be edited. Create your own copy instead."
+              message="Use Customize nutrition above to correct nutrient values. Copy the food to change its name or reference amount."
               tone="warning"
             />
           ) : (

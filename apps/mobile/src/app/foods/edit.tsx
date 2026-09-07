@@ -13,7 +13,7 @@ import { formatNumber } from "@/lib/format";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { color, spacing } from "@/theme/tokens";
 import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
-import { Domain, Foods, MealEntries } from "@mai/nutrition";
+import { Utils, Domain, Foods, MealEntries } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
 import { Effect, Option, Schema } from "effect";
 import { Redirect, router, useFocusEffect } from "expo-router";
@@ -306,7 +306,7 @@ function ManageFoodsPanel({
           getPrimaryLabel={(food) =>
             `${formatNumber({
               maximumFractionDigits: 0,
-              value: food.energyKcal,
+              value: Utils.foodNutrition(food).energyKcal,
             })} kcal`
           }
           getSecondaryLabel={(food) => {

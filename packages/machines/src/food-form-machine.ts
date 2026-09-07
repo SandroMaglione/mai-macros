@@ -1,4 +1,4 @@
-import { Domain, FoodQuickInput, type Foods } from "@mai/nutrition";
+import { Utils, Domain, FoodQuickInput, type Foods } from "@mai/nutrition";
 import { Effect, Schema } from "effect";
 import { setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
 import { EmptyEvent } from "./schemas";
@@ -393,18 +393,24 @@ function _foodFormContextFromInput({
   readonly syncQuickInputFromFields: boolean;
 } {
   const food = initialFood;
+  const nutrients = food === null ? null : Utils.foodNutrition(food);
   const formValues = {
     name: food?.name ?? "",
     brand: food?.brand ?? "",
-    energyKcal: food === null ? "" : `${food.energyKcal}`,
-    proteinGrams: food === null ? "" : `${food.proteinGrams}`,
-    carbsGrams: food === null ? "" : `${food.carbsGrams}`,
-    fatGrams: food === null ? "" : `${food.fatGrams}`,
-    fiberGrams: food?.fiberGrams === undefined ? "" : `${food.fiberGrams}`,
-    sugarGrams: food?.sugarGrams === undefined ? "" : `${food.sugarGrams}`,
+    energyKcal: nutrients === null ? "" : `${nutrients.energyKcal}`,
+    proteinGrams: nutrients === null ? "" : `${nutrients.proteinGrams}`,
+    carbsGrams: nutrients === null ? "" : `${nutrients.carbsGrams}`,
+    fatGrams: nutrients === null ? "" : `${nutrients.fatGrams}`,
+    fiberGrams:
+      nutrients?.fiberGrams === undefined ? "" : `${nutrients.fiberGrams}`,
+    sugarGrams:
+      nutrients?.sugarGrams === undefined ? "" : `${nutrients.sugarGrams}`,
     saturatedFatGrams:
-      food?.saturatedFatGrams === undefined ? "" : `${food.saturatedFatGrams}`,
-    saltGrams: food?.saltGrams === undefined ? "" : `${food.saltGrams}`,
+      nutrients?.saturatedFatGrams === undefined
+        ? ""
+        : `${nutrients.saturatedFatGrams}`,
+    saltGrams:
+      nutrients?.saltGrams === undefined ? "" : `${nutrients.saltGrams}`,
     initialPriceValue: "",
     initialPriceQuantity: "1",
     initialPriceQuantityUnit: "kg",

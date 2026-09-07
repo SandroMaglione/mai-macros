@@ -45,22 +45,35 @@ export const calculatePlanEnergyKcal = ({
     fatGrams: plan.fatTargetGrams,
   });
 
+export const foodNutrition = (food: Food) => ({
+  energyKcal: food.nutritionCorrections.energyKcal ?? food.energyKcal,
+  proteinGrams: food.nutritionCorrections.proteinGrams ?? food.proteinGrams,
+  carbsGrams: food.nutritionCorrections.carbsGrams ?? food.carbsGrams,
+  fatGrams: food.nutritionCorrections.fatGrams ?? food.fatGrams,
+  fiberGrams: food.nutritionCorrections.fiberGrams ?? food.fiberGrams,
+  sugarGrams: food.nutritionCorrections.sugarGrams ?? food.sugarGrams,
+  saturatedFatGrams:
+    food.nutritionCorrections.saturatedFatGrams ?? food.saturatedFatGrams,
+  saltGrams: food.nutritionCorrections.saltGrams ?? food.saltGrams,
+});
+
 export const findDominantMacronutrients = ({
   food,
 }: {
-  readonly food: Pick<Food, "carbsGrams" | "fatGrams" | "proteinGrams">;
+  readonly food: Pick<Food, "carbsGrams" | "fatGrams" | "proteinGrams"> &
+    Partial<Pick<Food, "nutritionCorrections">>;
 }): readonly DominantMacronutrient[] => {
   const macronutrientGrams = [
     {
-      grams: food.proteinGrams,
+      grams: food.nutritionCorrections?.proteinGrams ?? food.proteinGrams,
       macronutrient: "protein",
     },
     {
-      grams: food.carbsGrams,
+      grams: food.nutritionCorrections?.carbsGrams ?? food.carbsGrams,
       macronutrient: "carbs",
     },
     {
-      grams: food.fatGrams,
+      grams: food.nutritionCorrections?.fatGrams ?? food.fatGrams,
       macronutrient: "fat",
     },
   ] satisfies readonly {
@@ -89,25 +102,26 @@ export const calculateEntryNutrients = ({
   readonly food: Food;
   readonly nutritionMultiplier: NutritionMultiplier;
 }): typeof EntryNutrients.Encoded => {
+  const nutrients = foodNutrition(food);
   return {
-    energyKcal: food.energyKcal * nutritionMultiplier,
-    proteinGrams: food.proteinGrams * nutritionMultiplier,
-    carbsGrams: food.carbsGrams * nutritionMultiplier,
-    fatGrams: food.fatGrams * nutritionMultiplier,
-    ...(food.fiberGrams === undefined
+    energyKcal: nutrients.energyKcal * nutritionMultiplier,
+    proteinGrams: nutrients.proteinGrams * nutritionMultiplier,
+    carbsGrams: nutrients.carbsGrams * nutritionMultiplier,
+    fatGrams: nutrients.fatGrams * nutritionMultiplier,
+    ...(nutrients.fiberGrams === undefined
       ? {}
-      : { fiberGrams: food.fiberGrams * nutritionMultiplier }),
-    ...(food.sugarGrams === undefined
+      : { fiberGrams: nutrients.fiberGrams * nutritionMultiplier }),
+    ...(nutrients.sugarGrams === undefined
       ? {}
-      : { sugarGrams: food.sugarGrams * nutritionMultiplier }),
-    ...(food.saturatedFatGrams === undefined
+      : { sugarGrams: nutrients.sugarGrams * nutritionMultiplier }),
+    ...(nutrients.saturatedFatGrams === undefined
       ? {}
       : {
-          saturatedFatGrams: food.saturatedFatGrams * nutritionMultiplier,
+          saturatedFatGrams: nutrients.saturatedFatGrams * nutritionMultiplier,
         }),
-    ...(food.saltGrams === undefined
+    ...(nutrients.saltGrams === undefined
       ? {}
-      : { saltGrams: food.saltGrams * nutritionMultiplier }),
+      : { saltGrams: nutrients.saltGrams * nutritionMultiplier }),
   };
 };
 

@@ -16,6 +16,7 @@ import {
   DateKey,
   Food,
   FoodId,
+  FoodNutritionCorrections,
   FoodPortion,
   FoodPortionId,
   FoodPrice,
@@ -309,6 +310,12 @@ export class AppDefaultFoodEditNotAllowed extends Data.TaggedError(
   readonly foodId: FoodId;
 }> {}
 
+export class CatalogNutritionCorrectionNotAllowed extends Data.TaggedError(
+  "CatalogNutritionCorrectionNotAllowed"
+)<{
+  readonly foodId: FoodId;
+}> {}
+
 export class Foods extends Context.Service<Foods>()("Foods", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
@@ -566,6 +573,37 @@ export class Foods extends Context.Service<Foods>()("Foods", {
     );
 
     return {
+      setNutritionCorrections: Effect.fn("Foods.setNutritionCorrections")(
+        function* ({
+          input,
+        }: {
+          readonly input: {
+            readonly foodId: typeof FoodId.Encoded;
+            readonly corrections: typeof FoodNutritionCorrections.Encoded;
+          };
+        }) {
+          const decoded = yield* Schema.decodeEffect(
+            Schema.Struct({
+              foodId: FoodId,
+              corrections: FoodNutritionCorrections,
+            })
+          )(input);
+          const previousFood = yield* findFood(decoded.foodId);
+          if (previousFood.origin !== "app-default") {
+            return yield* new CatalogNutritionCorrectionNotAllowed({
+              foodId: previousFood.id,
+            });
+          }
+          const encoded = yield* Schema.encodeEffect(Food)(previousFood);
+          const food = yield* Schema.decodeEffect(Food)({
+            ...encoded,
+            nutritionCorrections: decoded.corrections,
+            updatedAt: DateTime.toEpochMillis(yield* DateTime.now),
+          });
+          yield* store.applyFoodEdit({ food, mealEntries: [] });
+          return food;
+        }
+      ),
       list: Effect.fn("Foods.list")(function* () {
         return yield* store.listFoods;
       }),

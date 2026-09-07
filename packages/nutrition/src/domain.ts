@@ -215,12 +215,28 @@ export const FoodOrigin = Schema.Literals(["import", "app-default", "user"]);
 
 export type FoodOrigin = typeof FoodOrigin.Type;
 
+export const FoodNutritionCorrections = Schema.Struct({
+  energyKcal: Schema.optional(NonNegativeNumber),
+  proteinGrams: Schema.optional(NonNegativeNumber),
+  carbsGrams: Schema.optional(NonNegativeNumber),
+  fatGrams: Schema.optional(NonNegativeNumber),
+  fiberGrams: Schema.optional(NonNegativeNumber),
+  sugarGrams: Schema.optional(NonNegativeNumber),
+  saturatedFatGrams: Schema.optional(NonNegativeNumber),
+  saltGrams: Schema.optional(NonNegativeNumber),
+});
+
+export type FoodNutritionCorrections = typeof FoodNutritionCorrections.Type;
+
 export class Food extends Schema.Class<Food>("Food")({
   id: FoodId,
   name: NonEmptyString,
   brand: Schema.optional(NonEmptyString),
   category: Schema.optional(FoodCategory),
   origin: FoodOrigin,
+  nutritionCorrections: FoodNutritionCorrections.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({}))
+  ),
   nutritionReference: MeasuredQuantity.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed({ amount: 100, unit: "g" }))
   ),

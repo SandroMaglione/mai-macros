@@ -49,7 +49,7 @@ const _read = Effect.gen(function* () {
     entries:
       yield* sql`SELECT rowid, id, date_key, meal_id, food_id, quantity_kind, quantity_amount, quantity_unit, portion_id, portion_name, portion_size_amount, portion_size_unit, nutrition_multiplier, created_at, updated_at FROM meal_entries ORDER BY rowid`,
     related: yield* Effect.all([
-      sql`SELECT * FROM foods ORDER BY id`,
+      sql`SELECT id, name, brand, category, origin, energy_kcal_per_100g, protein_grams_per_100g, carbs_grams_per_100g, fat_grams_per_100g, fiber_grams_per_100g, sugar_grams_per_100g, saturated_fat_grams_per_100g, salt_grams_per_100g, nutrition_reference_amount, nutrition_reference_unit, conversion_mass_amount, conversion_mass_unit, conversion_volume_amount, conversion_volume_unit, created_at, updated_at FROM foods ORDER BY id`,
       sql`SELECT id, name, protein_target_grams, carbs_target_grams, fat_target_grams, fiber_target_grams, sugar_target_grams, salt_target_grams, saturated_fat_target_grams, created_at FROM plans`,
       sql`SELECT * FROM plan_meals`,
       sql`SELECT * FROM daily_logs`,
