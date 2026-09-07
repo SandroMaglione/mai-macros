@@ -31,7 +31,7 @@
     "@mai/sqlite": "workspace:^",
     "@shopify/react-native-skia": "2.6.9",
     "@xstate/react": "7.0.0-alpha.1",
-    "effect": "4.0.0-rc.111",
+    "effect": "4.0.0-rc.112",
     "expo": "56.0.12",
     "expo-constants": "56.0.18",
     "expo-crypto": "~56.0.4",

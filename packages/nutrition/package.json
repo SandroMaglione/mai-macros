@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@mai/event-tracking": "workspace:^",
-    "effect": "4.0.0-rc.111"
+    "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
     "@types/node": "latest",

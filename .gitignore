@@ -52,3 +52,4 @@ env.sh
 count.txt
 data
 scripts/food-catalogue.mjs
+.pnpm-store
