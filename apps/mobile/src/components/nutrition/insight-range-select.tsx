@@ -8,8 +8,17 @@ import {
   InsightDateRange,
   insightRangeDayCount,
 } from "@mai/machines/insight-range";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
+import { useAtomSet, useAtomSuspense } from "@effect/atom-react";
+import {
+  RangeEditorEvents,
+  rangeEditorMachine,
+} from "@/lib/range-editor-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import {
+  createMachineContext,
+  MachineState,
+} from "@typeonce/effect-machine-react";
+import { Suspense } from "react";
 import { Option, Schema } from "effect";
 import {
   KeyboardAvoidingView,
@@ -19,56 +28,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { setup } from "xstate";
 
-const rangeEditorMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        open: Schema.Boolean,
-        start: Schema.String,
-        end: Schema.String,
-        message: Schema.NullOr(Schema.String),
-      })
-    ),
-    events: {
-      open: Schema.toStandardSchemaV1(
-        Schema.Struct({ start: Schema.String, end: Schema.String })
-      ),
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      start: Schema.toStandardSchemaV1(Schema.Struct({ value: Schema.String })),
-      end: Schema.toStandardSchemaV1(Schema.Struct({ value: Schema.String })),
-      invalid: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-}).createMachine({
-  context: { open: false, start: "", end: "", message: null },
-  on: {
-    open: ({ event }) => ({
-      context: {
-        open: true,
-        start: event.start,
-        end: event.end,
-        message: null,
-      },
-    }),
-    close: () => ({ context: { open: false } }),
-    start: ({ event }) => ({ context: { start: event.value, message: null } }),
-    end: ({ event }) => ({ context: { end: event.value, message: null } }),
-    invalid: () => ({
-      context: {
-        message: "Enter valid dates as YYYY-MM-DD, with From on or before To.",
-      },
-    }),
-  },
-});
+const RangeEditor = createMachineContext(
+  AtomMachine.factory(rangeEditorMachine)
+);
 
-export function InsightRangeSelect({
-  compact = false,
-  rangeDayCount,
-  dateRange,
-  onSelect,
-}: {
+type InsightRangeSelectProps = {
   readonly compact?: boolean;
   readonly rangeDayCount: number;
   readonly dateRange: InsightDateRange | null;
@@ -76,8 +41,26 @@ export function InsightRangeSelect({
     rangeDayCount: number,
     dateRange: InsightDateRange | null
   ) => void;
-}) {
-  const [snapshot, , actor] = useMachine(rangeEditorMachine);
+};
+
+export function InsightRangeSelect(props: InsightRangeSelectProps) {
+  return (
+    <RangeEditor.Provider>
+      <Suspense fallback={null}>
+        <InsightRangeSelectContent {...props} />
+      </Suspense>
+    </RangeEditor.Provider>
+  );
+}
+
+function InsightRangeSelectContent({
+  compact = false,
+  rangeDayCount,
+  dateRange,
+  onSelect,
+}: InsightRangeSelectProps) {
+  const machine = RangeEditor.useMachine();
+  const send = useAtomSet(machine.send);
   return (
     <>
       <InputSelect
@@ -99,73 +82,97 @@ export function InsightRangeSelect({
         onSelect={(value) => {
           if (value === "custom") {
             const end = dateRange?.endDateKey ?? todayDateKey();
-            actor.trigger.open({
-              start:
-                dateRange?.startDateKey ??
-                shiftDateKey({ dateKey: end, days: -(rangeDayCount - 1) }),
-              end,
-            });
+            send(
+              RangeEditorEvents.open({
+                start:
+                  dateRange?.startDateKey ??
+                  shiftDateKey({ dateKey: end, days: -(rangeDayCount - 1) }),
+                end,
+              })
+            );
           } else if (value === "7" || value === "30" || value === "90") {
             onSelect(Number(value), null);
           }
         }}
       />
-      <Modal
-        transparent
-        visible={snapshot.context.open}
-        animationType="fade"
-        onRequestClose={actor.trigger.close}
-      >
-        <KeyboardAvoidingView behavior="padding" style={styles.keyboard}>
-          <ScrollView
-            contentContainerStyle={styles.backdrop}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.dialog}>
-              <Text style={styles.title}>Custom range</Text>
-              <Field
-                label="From"
-                accessibilityLabel="Range start date"
-                placeholder="YYYY-MM-DD"
-                autoCapitalize="none"
-                value={snapshot.context.start}
-                onChangeText={(value) => actor.trigger.start({ value })}
-              />
-              <Field
-                label="To"
-                accessibilityLabel="Range end date"
-                placeholder="YYYY-MM-DD"
-                autoCapitalize="none"
-                value={snapshot.context.end}
-                onChangeText={(value) => actor.trigger.end({ value })}
-              />
-              <Button
-                onPress={() => {
-                  const range = Schema.decodeOption(InsightDateRange)({
-                    startDateKey: snapshot.context.start.trim(),
-                    endDateKey: snapshot.context.end.trim(),
-                  });
-                  if (Option.isNone(range)) {
-                    actor.trigger.invalid();
-                    return;
-                  }
-                  onSelect(insightRangeDayCount(range.value), range.value);
-                  actor.trigger.close();
-                }}
-              >
-                Apply
-              </Button>
-              {snapshot.context.message === null ? null : (
-                <Notice message={snapshot.context.message} tone="danger" />
-              )}
-              <Button variant="secondary" onPress={actor.trigger.close}>
-                Cancel
-              </Button>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+      <RangeEditorDialog onSelect={onSelect} />
     </>
+  );
+}
+
+function RangeEditorDialog({
+  onSelect,
+}: Pick<InsightRangeSelectProps, "onSelect">) {
+  const machine = RangeEditor.useMachine();
+  const send = useAtomSet(machine.send);
+  const open = useAtomSuspense(AtomMachine.matches(machine, "Open")).value;
+  return (
+    <Modal
+      transparent
+      visible={open}
+      animationType="fade"
+      onRequestClose={() => send(RangeEditorEvents.close())}
+    >
+      <MachineState machine={machine} path="Open">
+        {({ value: draft }) => (
+          <KeyboardAvoidingView behavior="padding" style={styles.keyboard}>
+            <ScrollView
+              contentContainerStyle={styles.backdrop}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.dialog}>
+                <Text style={styles.title}>Custom range</Text>
+                <Field
+                  label="From"
+                  accessibilityLabel="Range start date"
+                  placeholder="YYYY-MM-DD"
+                  autoCapitalize="none"
+                  value={draft.start}
+                  onChangeText={(value) =>
+                    send(RangeEditorEvents.start({ value }))
+                  }
+                />
+                <Field
+                  label="To"
+                  accessibilityLabel="Range end date"
+                  placeholder="YYYY-MM-DD"
+                  autoCapitalize="none"
+                  value={draft.end}
+                  onChangeText={(value) =>
+                    send(RangeEditorEvents.end({ value }))
+                  }
+                />
+                <Button
+                  onPress={() => {
+                    const range = Schema.decodeOption(InsightDateRange)({
+                      startDateKey: draft.start.trim(),
+                      endDateKey: draft.end.trim(),
+                    });
+                    if (Option.isNone(range)) {
+                      send(RangeEditorEvents.invalid());
+                      return;
+                    }
+                    onSelect(insightRangeDayCount(range.value), range.value);
+                    send(RangeEditorEvents.close());
+                  }}
+                >
+                  Apply
+                </Button>
+                {draft.message === null ? null : (
+                  <Notice message={draft.message} tone="danger" />
+                )}
+                <Button
+                  variant="secondary"
+                  onPress={() => send(RangeEditorEvents.close())}
+                >
+                  Cancel
+                </Button>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        )}
+      </MachineState>
+    </Modal>
   );
 }
 
