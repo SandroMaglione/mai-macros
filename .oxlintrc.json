@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": ["@mai/oxc/oxlint"],
+  "jsPlugins": ["@mai/oxc/oxlint", "@typeonce/oxlint-plugin-effect-machine"],
   "ignorePatterns": [
     "**/scripts/**",
     ".repos/**",
@@ -83,9 +83,21 @@
     "no-param-reassign": "warn",
     "prefer-for-of": "warn",
     "array-type": "warn",
-    "prefer-as-const": "warn"
+    "prefer-as-const": "warn",
+    "effect-machine/no-async-planning-callback": "error",
+    "effect-machine/no-browser-api-in-planning": "error",
+    "effect-machine/no-conflicting-invocation-identity": "error",
+    "effect-machine/no-nondeterministic-planning": "error",
+    "effect-machine/no-redundant-resolve": "error",
+    "effect-machine/prefer-inline-handle": "error"
   },
   "overrides": [
+    {
+      "files": ["apps/mobile/src/hooks/use-machine-selector.ts"],
+      "rules": {
+        "mai/no-multiple-function-params": "off"
+      }
+    },
     {
       "files": ["packages/oxc/**/*.ts", "packages/typed-lint/**/*.ts"],
       "rules": {
