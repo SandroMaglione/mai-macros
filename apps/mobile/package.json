@@ -22,7 +22,7 @@
     "run:android": "expo run:android",
     "build:android:local": "eas build --platform android --profile production --local --output ./prod.aab",
     "machines:devtools": "effect-machine --include \"src/lib/*-machine.ts\"",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --conditions=import --test test/*.test.ts"
   },
   "dependencies": {
     "@effect/atom-react": "4.0.0-rc.112",
