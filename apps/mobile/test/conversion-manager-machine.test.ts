@@ -146,7 +146,7 @@ test("review requires confirmation and rejects edits while reviewing or saving",
   );
 });
 
-test("food ID belongs to loading and retry states, not the root", async () => {
+test("startup food identity stays local to loading and retry states", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const initial = yield* Machine.planInitial(conversionManagerMachine, {
@@ -161,8 +161,8 @@ test("food ID belongs to loading and retry states, not the root", async () => {
         { path: "" }
       );
       assert.deepEqual(
-        encoded.active.find(({ path }) => path === "Loading")?.value,
-        { _tag: "Loading", foodId }
+        encoded.active.find(({ path }) => path === "Loading"),
+        { path: "Loading", value: { _tag: "Loading", foodId } }
       );
       const failed = yield* Machine.decodeSnapshot(conversionManagerMachine, {
         version: 2,

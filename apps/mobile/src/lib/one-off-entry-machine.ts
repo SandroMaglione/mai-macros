@@ -21,7 +21,6 @@ class OneOffEntryDefect extends Data.TaggedError("OneOffEntryDefect")<{
 
 export const OneOffEntryStates = Machine.state({
   fields: { route: OneOffRoute, values: FormValues },
-  initial: "Loading",
   states: {
     Loading: {},
     Failure: { fields: { message: Schema.String } },
@@ -54,165 +53,185 @@ const formValues =
   Optic.id<Machine.Snapshot<typeof OneOffEntryStates>["value"]>().key("values");
 const nutrients = formValues.key("nutrients");
 
+const targets = Machine.targets(OneOffEntryStates);
+
 export const oneOffEntryMachine = Machine.make({
   id: "OneOffEntry",
   root: OneOffEntryStates,
   events: OneOffEntryEvents,
   input: OneOffRoute,
-  initial: (root) =>
-    root.from(({ input }) => ({
-      route: input,
-      values: _formValues(null),
-    })),
+  effects: {
+    load: (route: typeof OneOffRoute.Type) =>
+      Effect.gen(function* () {
+        const logs = yield* DailyLogs.DailyLogs;
+        const day = yield* logs.open({
+          input: { dateKey: route.dateKey },
+        });
+        if (
+          day._tag === "UnrecordedDay" ||
+          !day.selectedPlan.meals.some((meal) => meal.id === route.meal)
+        )
+          return yield* Effect.fail("Meal unavailable");
+        if (route.mealEntryId === null) return null;
+        const service = yield* MealEntries.MealEntries;
+        const entry = (yield* service.listForDay({
+          input: { dateKey: route.dateKey },
+        })).find(
+          (entry) =>
+            entry.id === route.mealEntryId && entry.mealId === route.meal
+        );
+        if (entry?.kind !== "one-off")
+          return yield* Effect.fail("Entry unavailable");
+        return entry;
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new OneOffEntryDefect({ cause }))
+        )
+      ),
+    save: ({
+      route,
+      values,
+    }: {
+      readonly route: typeof OneOffRoute.Type;
+      readonly values: typeof FormValues.Type;
+    }) =>
+      Effect.gen(function* () {
+        const details = yield* decodeOneOffEntryForm(values);
+        const service = yield* MealEntries.MealEntries;
+        if (route.mealEntryId === null)
+          yield* service.createOneOff({
+            input: {
+              ...details,
+              dateKey: route.dateKey,
+              mealId: route.meal,
+            },
+          });
+        else
+          yield* service.reviseOneOff({
+            input: { ...details, mealEntryId: route.mealEntryId },
+          });
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new OneOffEntryDefect({ cause }))
+        )
+      ),
+    delete: (mealEntryId: Domain.MealEntryId) =>
+      Effect.gen(function* () {
+        const service = yield* MealEntries.MealEntries;
+        yield* service.delete({
+          input: { mealEntryId },
+        });
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new OneOffEntryDefect({ cause }))
+        )
+      ),
+    backToDay: (dateKey: Domain.DateKey) =>
+      Effect.flatMap(Router, (router) =>
+        router.replace({
+          pathname: "/days/[dateKey]",
+          params: { dateKey },
+        })
+      ),
+  },
+  branches: {
+    deleteEntry: {
+      missingEntry: { none: true },
+      existingEntry: { target: targets.root.Deleting },
+    },
+  },
 }).handle({
+  root: ({ input }) => ({ route: input, values: _formValues(null) }),
+  initial: { target: targets.root.Loading },
   states: {
     Loading: {
-      invoke: (from) =>
-        from
-          .effect("load", ({ containingState: { route } }) =>
-            Effect.gen(function* () {
-              const logs = yield* DailyLogs.DailyLogs;
-              const day = yield* logs.open({
-                input: { dateKey: route.dateKey },
-              });
-              if (
-                day._tag === "UnrecordedDay" ||
-                !day.selectedPlan.meals.some((meal) => meal.id === route.meal)
-              )
-                return yield* Effect.fail("Meal unavailable");
-              if (route.mealEntryId === null) return null;
-              const service = yield* MealEntries.MealEntries;
-              const entry = (yield* service.listForDay({
-                input: { dateKey: route.dateKey },
-              })).find(
-                (entry) =>
-                  entry.id === route.mealEntryId && entry.mealId === route.meal
-              );
-              if (entry?.kind !== "one-off")
-                return yield* Effect.fail("Entry unavailable");
-              return entry;
-            }).pipe(
-              Effect.catchDefect((cause) =>
-                Effect.fail(new OneOffEntryDefect({ cause }))
-              )
-            )
-          )
-          .onDone((to) =>
-            to.local
-              .Ready()
-              .updating(to.root)
-              .from(({ current, output }) => ({
-                target: { notice: null },
-                update: { ...current, values: _formValues(output) },
-              }))
-          )
-          .onFailure((to) =>
-            to.local.Failure().from(({ error }) => ({
-              message: oneOffEntryErrorMessage({ error, action: "open" }),
-            }))
-          ),
+      invoke: {
+        src: "load",
+        input: ({ root }) => root.route,
+        onDone: {
+          target: targets.root.Ready,
+          update: targets.root,
+          data: ({ root: current, output }) => ({
+            target: { notice: null },
+            update: { ...current, values: _formValues(output) },
+          }),
+        },
+        onFailure: {
+          target: targets.root.Failure,
+          data: ({ error }) => ({
+            message: oneOffEntryErrorMessage({ error, action: "open" }),
+          }),
+        },
+      },
     },
-    Failure: { on: { retry: (to) => to.local.Loading() } },
+    Failure: { on: { retry: { target: targets.root.Loading } } },
     Ready: {
       on: {
-        text: (to) =>
-          to.root.update.from(({ current, event }) =>
-            formValues.key(event.field).replace(event.value, current)
-          ),
-        nutrient: (to) =>
-          to.root.update.from(({ current, event }) =>
+        text: {
+          update: targets.root,
+          data: ({ root: current, event }) =>
+            formValues.key(event.field).replace(event.value, current),
+        },
+        nutrient: {
+          update: targets.root,
+          data: ({ root: current, event }) =>
             nutrients
               .key(event.field)
               .key("value")
-              .replace(event.value, current)
-          ),
-        source: (to) =>
-          to.root.update.from(({ current, event }) =>
+              .replace(event.value, current),
+        },
+        source: {
+          update: targets.root,
+          data: ({ root: current, event }) =>
             nutrients
               .key(event.field)
               .key("source")
-              .replace(event.source, current)
-          ),
-        save: (to) => to.local.Saving(),
-        delete: (to) =>
-          to
-            .branches({
-              missingEntry: { target: to.none },
-              existingEntry: { target: to.local.Deleting() },
-            })
-            .resolve(({ containingState: { route }, select }) =>
-              route.mealEntryId === null
-                ? select.missingEntry()
-                : select.existingEntry.from({ mealEntryId: route.mealEntryId })
-            ),
+              .replace(event.source, current),
+        },
+        save: { target: targets.root.Saving },
+        delete: {
+          branches: "deleteEntry",
+          resolve: ({ containingState: { route }, select }) =>
+            route.mealEntryId === null
+              ? select.missingEntry()
+              : select.existingEntry({
+                  data: { mealEntryId: route.mealEntryId },
+                }),
+        },
       },
     },
     Saving: {
-      invoke: (from) =>
-        from
-          .effect("save", ({ containingState: { route, values } }) =>
-            Effect.gen(function* () {
-              const details = yield* decodeOneOffEntryForm(values);
-              const service = yield* MealEntries.MealEntries;
-              if (route.mealEntryId === null)
-                yield* service.createOneOff({
-                  input: {
-                    ...details,
-                    dateKey: route.dateKey,
-                    mealId: route.meal,
-                  },
-                });
-              else
-                yield* service.reviseOneOff({
-                  input: { ...details, mealEntryId: route.mealEntryId },
-                });
-            }).pipe(
-              Effect.catchDefect((cause) =>
-                Effect.fail(new OneOffEntryDefect({ cause }))
-              )
-            )
-          )
-          .onDone((to) => to.local.Done())
-          .onFailure((to) =>
-            to.local.Ready().from(({ error }) => ({
-              notice: oneOffEntryErrorMessage({ error, action: "save" }),
-            }))
-          ),
+      invoke: {
+        src: "save",
+        input: ({ root }) => root,
+        onDone: { target: targets.root.Done },
+        onFailure: {
+          target: targets.root.Ready,
+          data: ({ error }) => ({
+            notice: oneOffEntryErrorMessage({ error, action: "save" }),
+          }),
+        },
+      },
     },
     Deleting: {
-      invoke: (from) =>
-        from
-          .effect("delete", ({ state }) =>
-            Effect.gen(function* () {
-              const service = yield* MealEntries.MealEntries;
-              yield* service.delete({
-                input: { mealEntryId: state.mealEntryId },
-              });
-            }).pipe(
-              Effect.catchDefect((cause) =>
-                Effect.fail(new OneOffEntryDefect({ cause }))
-              )
-            )
-          )
-          .onDone((to) => to.local.Done())
-          .onFailure((to) =>
-            to.local.Ready().from(({ error }) => ({
-              notice: oneOffEntryErrorMessage({ error, action: "delete" }),
-            }))
-          ),
+      invoke: {
+        src: "delete",
+        input: ({ state }) => state.mealEntryId,
+        onDone: { target: targets.root.Done },
+        onFailure: {
+          target: targets.root.Ready,
+          data: ({ error }) => ({
+            notice: oneOffEntryErrorMessage({ error, action: "delete" }),
+          }),
+        },
+      },
     },
     Done: {
-      invoke: (from) =>
-        from
-          .effect("back-to-day", ({ containingState: { route } }) =>
-            Effect.flatMap(Router, (router) =>
-              router.replace({
-                pathname: "/days/[dateKey]",
-                params: { dateKey: route.dateKey },
-              })
-            )
-          )
-          .onDone((to) => to.none),
+      invoke: {
+        src: "backToDay",
+        input: ({ root }) => root.route.dateKey,
+        onDone: { none: true },
+      },
     },
   },
 });

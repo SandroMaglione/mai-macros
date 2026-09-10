@@ -45,7 +45,6 @@ export const ConversionEvents = Machine.events({
 });
 
 const ConversionStates = Machine.state({
-  initial: "Loading",
   states: {
     Loading: { fields: { foodId: Domain.FoodId } },
     LoadFailed: { fields: { foodId: Domain.FoodId } },
@@ -55,10 +54,8 @@ const ConversionStates = Machine.state({
         form: ConversionForm,
         usage: Foods.FoodEditUsage,
       },
-      initial: "Editing",
       states: {
         Editing: {
-          initial: "Pristine",
           states: {
             Pristine: {},
             Success: { fields: { message: Schema.String } },
@@ -77,188 +74,203 @@ const ConversionStates = Machine.state({
 const form =
   Optic.id<Machine.Value<typeof ConversionStates, "Loaded">>().key("form");
 
+const targets = Machine.targets(ConversionStates);
+
 export const conversionManagerMachine = Machine.make({
   id: "ConversionManager",
   root: ConversionStates,
   events: ConversionEvents,
   input: Schema.Struct({ foodId: Domain.FoodId }),
-  initialConfiguration: (root) =>
-    root.resolve(({ input, target }) =>
-      target.from((root) => root.Loading.from(input))
-    ),
+  effects: {
+    load: (foodId: Domain.FoodId) =>
+      Effect.gen(function* () {
+        const foods = yield* Foods.Foods;
+        return {
+          food: yield* foods.get({ input: { foodId } }),
+          usage: yield* foods.inspectEdit({ input: { foodId } }),
+        };
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new ConversionDefect({ cause }))
+        )
+      ),
+    preview: (input: Foods.SetFoodMassVolumeConversionInput) =>
+      Effect.gen(function* () {
+        const foods = yield* Foods.Foods;
+        return yield* foods.previewFoodMassVolumeConversionEdit({
+          input,
+        });
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new ConversionDefect({ cause }))
+        )
+      ),
+    save: (input: Foods.SetFoodMassVolumeConversionInput) =>
+      Effect.gen(function* () {
+        const foods = yield* Foods.Foods;
+        return yield* foods.setFoodMassVolumeConversion({
+          input,
+        });
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new ConversionDefect({ cause }))
+        )
+      ),
+  },
+  branches: {
+    removeConversion: { destination: { target: targets.root.Loaded } },
+    chooseSavePath: {
+      preview: { target: targets.root.Loaded.Previewing },
+      save: { target: targets.root.Loaded.Saving },
+    },
+  },
 }).handle({
+  initial: { target: targets.root.Loading, data: ({ input }) => input },
   states: {
     Loading: {
-      invoke: (from) =>
-        from
-          .effect("load", ({ state: { foodId } }) =>
-            Effect.gen(function* () {
-              const foods = yield* Foods.Foods;
-              return {
-                food: yield* foods.get({ input: { foodId } }),
-                usage: yield* foods.inspectEdit({ input: { foodId } }),
-              };
-            }).pipe(
-              Effect.catchDefect((cause) =>
-                Effect.fail(new ConversionDefect({ cause }))
-              )
-            )
-          )
-          .onDone((to) =>
-            to.local.Loaded.initial.from(({ output }) => ({
-              ...output,
-              form: _formFromFood(output.food),
-            }))
-          )
-          .onFailure((to) =>
-            to.local
-              .LoadFailed()
-              .from(({ state }) => ({ foodId: state.foodId }))
-          ),
+      invoke: {
+        src: "load",
+        input: ({ state }) => state.foodId,
+        onDone: {
+          target: targets.root.Loaded,
+          data: ({ output }) => ({
+            ...output,
+            form: _formFromFood(output.food),
+          }),
+        },
+        onFailure: {
+          target: targets.root.LoadFailed,
+          data: ({ state }) => ({ foodId: state.foodId }),
+        },
+      },
     },
     LoadFailed: {
       on: {
-        retry: (to) =>
-          to.local.Loading().from(({ state }) => ({ foodId: state.foodId })),
+        retry: {
+          target: targets.root.Loading,
+          data: ({ state }) => ({ foodId: state.foodId }),
+        },
       },
     },
     Loaded: {
+      initial: { target: targets.root.Loaded.Editing },
       states: {
         Editing: {
+          initial: { target: targets.root.Loaded.Editing.Pristine },
           on: {
-            changeMassAmount: (to) =>
-              to.branch.Loaded.update.from(({ current, event }) =>
-                form.key("massAmount").replace(event.value, current)
-              ),
-            changeMassUnit: (to) =>
-              to.branch.Loaded.update.from(({ current, event }) =>
-                form.key("massUnit").replace(event.unit, current)
-              ),
-            changeVolumeAmount: (to) =>
-              to.branch.Loaded.update.from(({ current, event }) =>
-                form.key("volumeAmount").replace(event.value, current)
-              ),
-            changeVolumeUnit: (to) =>
-              to.branch.Loaded.update.from(({ current, event }) =>
-                form.key("volumeUnit").replace(event.unit, current)
-              ),
-            submit: (to) =>
-              to.branch.Loaded.ChooseSavePath().resolve(({ target }) =>
-                target()
-              ),
-            remove: (to) =>
-              to.branch
-                .Loaded()
-                .resolve(({ containingState, target }) =>
-                  target.from(
-                    { ...containingState, form: emptyForm },
-                    (loaded) => loaded.ChooseSavePath()
-                  )
-                ),
+            changeMassAmount: {
+              update: targets.root.Loaded,
+              data: ({ ancestors: { Loaded: current }, event }) =>
+                form.key("massAmount").replace(event.value, current),
+            },
+            changeMassUnit: {
+              update: targets.root.Loaded,
+              data: ({ ancestors: { Loaded: current }, event }) =>
+                form.key("massUnit").replace(event.unit, current),
+            },
+            changeVolumeAmount: {
+              update: targets.root.Loaded,
+              data: ({ ancestors: { Loaded: current }, event }) =>
+                form.key("volumeAmount").replace(event.value, current),
+            },
+            changeVolumeUnit: {
+              update: targets.root.Loaded,
+              data: ({ ancestors: { Loaded: current }, event }) =>
+                form.key("volumeUnit").replace(event.unit, current),
+            },
+            submit: { target: targets.root.Loaded.ChooseSavePath },
+            remove: {
+              branches: "removeConversion",
+              resolve: ({ containingState, select: { destination } }) =>
+                destination({
+                  data: { ...containingState, form: emptyForm },
+                  states: { ChooseSavePath: {} },
+                }),
+            },
           },
         },
         ChooseSavePath: {
-          choice: (to) =>
-            to
-              .branches({
-                preview: { target: to.local.Previewing() },
-                save: { target: to.local.Saving() },
-              })
-              .resolve(({ containingState, select }) =>
-                containingState.usage.mealEntryCount > 0
-                  ? select.preview.from()
-                  : select.save.from()
-              ),
+          choice: {
+            branches: "chooseSavePath",
+            resolve: ({ containingState, select }) =>
+              containingState.usage.mealEntryCount > 0
+                ? select.preview()
+                : select.save(),
+          },
         },
         Previewing: {
-          invoke: (from) =>
-            from
-              .effect("preview", ({ containingState }) =>
-                Effect.gen(function* () {
-                  const foods = yield* Foods.Foods;
-                  return yield* foods.previewFoodMassVolumeConversionEdit({
-                    input: _setFoodMassVolumeConversionInput(containingState),
-                  });
-                }).pipe(
-                  Effect.catchDefect((cause) =>
-                    Effect.fail(new ConversionDefect({ cause }))
-                  )
-                )
-              )
-              .onDone((to) => to.local.Reviewing())
-              .onFailure((to) =>
-                to.branch.Loaded.Editing.Failure().from(({ error }) => ({
-                  message: Match.value(error).pipe(
-                    Match.tagsExhaustive({
-                      IncompatibleFoodMeasurement: () =>
-                        "This conversion cannot interpret every previous meal entry.",
-                      SchemaError: () =>
-                        "Could not save the conversion. Check the values and try again.",
-                      FoodNotFound: () => "This food is no longer available.",
-                      NutritionStoreError: () =>
-                        "Could not access your saved foods. Please try again.",
-                      ConversionDefect: () =>
-                        "Could not save the conversion. Please try again.",
-                    })
-                  ),
-                }))
-              ),
+          invoke: {
+            src: "preview",
+            input: ({ containingState }) =>
+              _setFoodMassVolumeConversionInput(containingState),
+            onDone: { target: targets.root.Loaded.Reviewing },
+            onFailure: {
+              target: targets.root.Loaded.Editing.Failure,
+              data: ({ error }) => ({
+                message: Match.value(error).pipe(
+                  Match.tagsExhaustive({
+                    IncompatibleFoodMeasurement: () =>
+                      "This conversion cannot interpret every previous meal entry.",
+                    SchemaError: () =>
+                      "Could not save the conversion. Check the values and try again.",
+                    FoodNotFound: () => "This food is no longer available.",
+                    NutritionStoreError: () =>
+                      "Could not access your saved foods. Please try again.",
+                    ConversionDefect: () =>
+                      "Could not save the conversion. Please try again.",
+                  })
+                ),
+              }),
+            },
+          },
         },
         Reviewing: {
           on: {
-            cancelReview: (to) => to.local.Editing.initial,
-            confirm: (to) => to.local.Saving(),
+            cancelReview: { target: targets.root.Loaded.Editing },
+            confirm: { target: targets.root.Loaded.Saving },
           },
         },
         Saving: {
-          invoke: (from) =>
-            from
-              .effect("save", ({ containingState }) =>
-                Effect.gen(function* () {
-                  const foods = yield* Foods.Foods;
-                  return yield* foods.setFoodMassVolumeConversion({
-                    input: _setFoodMassVolumeConversionInput(containingState),
-                  });
-                }).pipe(
-                  Effect.catchDefect((cause) =>
-                    Effect.fail(new ConversionDefect({ cause }))
-                  )
-                )
-              )
-              .onDone((to) =>
-                to.branch.Loaded.Editing.Success()
-                  .updating(to.branch.Loaded)
-                  .from(({ current, output }) => ({
-                    target: {
-                      message:
-                        output.food.massVolumeConversion === undefined
-                          ? "Conversion removed."
-                          : "Conversion saved.",
-                    },
-                    update: {
-                      ...current,
-                      food: output.food,
-                      form: _formFromFood(output.food),
-                    },
-                  }))
-              )
-              .onFailure((to) =>
-                to.branch.Loaded.Editing.Failure().from(({ error }) => ({
-                  message: Match.value(error).pipe(
-                    Match.tagsExhaustive({
-                      IncompatibleFoodMeasurement: () =>
-                        "This conversion cannot interpret every previous meal entry.",
-                      SchemaError: () =>
-                        "Could not save the conversion. Check the values and try again.",
-                      FoodNotFound: () => "This food is no longer available.",
-                      NutritionStoreError: () =>
-                        "Could not access your saved foods. Please try again.",
-                      ConversionDefect: () =>
-                        "Could not save the conversion. Please try again.",
-                    })
-                  ),
-                }))
-              ),
+          invoke: {
+            src: "save",
+            input: ({ containingState }) =>
+              _setFoodMassVolumeConversionInput(containingState),
+            onDone: {
+              target: targets.root.Loaded.Editing.Success,
+              update: targets.root.Loaded,
+              data: ({ ancestors: { Loaded: current }, output }) => ({
+                target: {
+                  message:
+                    output.food.massVolumeConversion === undefined
+                      ? "Conversion removed."
+                      : "Conversion saved.",
+                },
+                update: {
+                  ...current,
+                  food: output.food,
+                  form: _formFromFood(output.food),
+                },
+              }),
+            },
+            onFailure: {
+              target: targets.root.Loaded.Editing.Failure,
+              data: ({ error }) => ({
+                message: Match.value(error).pipe(
+                  Match.tagsExhaustive({
+                    IncompatibleFoodMeasurement: () =>
+                      "This conversion cannot interpret every previous meal entry.",
+                    SchemaError: () =>
+                      "Could not save the conversion. Check the values and try again.",
+                    FoodNotFound: () => "This food is no longer available.",
+                    NutritionStoreError: () =>
+                      "Could not access your saved foods. Please try again.",
+                    ConversionDefect: () =>
+                      "Could not save the conversion. Please try again.",
+                  })
+                ),
+              }),
+            },
+          },
         },
       },
     },

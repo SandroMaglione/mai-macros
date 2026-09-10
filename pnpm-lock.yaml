@@ -24,8 +24,8 @@ importers:
         specifier: workspace:^
         version: link:packages/typed-lint
       '@typeonce/oxlint-plugin-effect-machine':
-        specifier: 0.33.0
-        version: 0.33.0(oxlint@1.80.0)
+        specifier: 0.36.0
+        version: 0.36.0(oxlint@1.80.0)
       '@types/node':
         specifier: latest
         version: 26.4.1
@@ -72,11 +72,11 @@ importers:
         specifier: 2.6.2
         version: 2.6.2(react-native-reanimated@4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
       '@typeonce/effect-machine':
-        specifier: 0.33.0
-        version: 0.33.0(effect@4.0.0-rc.112)
+        specifier: 0.36.0
+        version: 0.36.0(effect@4.0.0-rc.112)
       '@typeonce/effect-machine-react':
-        specifier: 0.33.0
-        version: 0.33.0(@effect/atom-react@4.0.0-rc.112(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0))(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0)
+        specifier: 0.36.0
+        version: 0.36.0(@effect/atom-react@4.0.0-rc.112(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0))(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0)
       '@xstate/react':
         specifier: 7.0.0-alpha.1
         version: 7.0.0-alpha.1(@types/react@19.2.17)(react@19.2.3)(xstate@6.0.0-alpha.18)
@@ -169,8 +169,8 @@ importers:
         specifier: 0.86.3
         version: 0.86.3(@babel/core@7.29.7)(supports-color@8.1.1)
       '@typeonce/effect-machine-devtools':
-        specifier: 0.33.0
-        version: 0.33.0(@types/node@26.4.1)(effect@4.0.0-rc.112)(esbuild@0.28.1)(jiti@2.7.0)(redis@6.2.1)(terser@5.50.0)(tsx@4.22.4)(yaml@2.9.0)
+        specifier: 0.36.0
+        version: 0.36.0(@types/node@26.4.1)(effect@4.0.0-rc.112)(esbuild@0.28.1)(jiti@2.7.0)(redis@6.2.1)(terser@5.50.0)(tsx@4.22.4)(yaml@2.9.0)
       '@types/react':
         specifier: 19.2.17
         version: 19.2.17
@@ -2073,15 +2073,15 @@ packages:
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
 
-  '@typeonce/effect-machine-devtools@0.33.0':
-    resolution: {integrity: sha512-rnBKOa2AV4pFeV1lCE8DyqGWnmIIHw6N/NE2psrFkrTxwS3/tm6R/dGil+9LediEu7yG40oySPDHPWLAsBrz7Q==}
+  '@typeonce/effect-machine-devtools@0.36.0':
+    resolution: {integrity: sha512-09z7+wY3k8J7dLNriDWyqkQ2g0sa93dV77cQY46orPOwFAdVF7mFWiwnlw8yp+7B8vDvdZC9tRbsQmTYr465bA==}
     engines: {node: '>=22.19.0'}
     hasBin: true
     peerDependencies:
       effect: 4.0.0-rc.112
 
-  '@typeonce/effect-machine-react@0.33.0':
-    resolution: {integrity: sha512-OGENAHTIu6pjFcGaOcPIG0cA2NjB3LL8464Vi8KJQbZtJQ08BraCK5wcGBz1ekoRA8Sb2AVWFRXIP8NOAzSI8g==}
+  '@typeonce/effect-machine-react@0.36.0':
+    resolution: {integrity: sha512-bFUVnYbqb9OQOjRk40x/LFptOv2in0pZGFcG69471grYoKNBUhaI9T91blGqZjE+C93yheDq+P2J3VJc6Fqg8w==}
     engines: {node: '>=20'}
     peerDependencies:
       '@effect/atom-react': 4.0.0-rc.112
@@ -2089,14 +2089,14 @@ packages:
       react: 19.2.3
       scheduler: '>=0.25.0 <0.28.0'
 
-  '@typeonce/effect-machine@0.33.0':
-    resolution: {integrity: sha512-cJcw4CO9FTqj09McNWbtuHbn3NcIXrPrPvMrDveOwc6aNz4O0jQg76BXBfDgoKiagEnzcOjFaNUThawOzEQ0Og==}
+  '@typeonce/effect-machine@0.36.0':
+    resolution: {integrity: sha512-KpQWakM7+xNXpqY5Nxych58B7/zhnyxP61z+cBYN0jEMWOnnxwuEIZpo/6NfZMuqRIBVELxnnXqIo9FnrQiLHA==}
     engines: {node: '>=20'}
     peerDependencies:
       effect: 4.0.0-rc.112
 
-  '@typeonce/oxlint-plugin-effect-machine@0.33.0':
-    resolution: {integrity: sha512-nJmTCXuFqPjuM6EOH++cFLYHLk8S+1qwH395Efexrl5mfoQYc5xvKMRN3xjJxwlLiZgsZyakQJatwhNeeOw6cw==}
+  '@typeonce/oxlint-plugin-effect-machine@0.36.0':
+    resolution: {integrity: sha512-Cs1tYBH0fdU+hY+qOvXsGLdgaOj0MRkGdkdyFxdwWOOXMVKbbPc0cdF0AYxnwUm7v7Kj4tMG3PDBxQVP9lo3AA==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       oxlint: '>=1.80.0 <2'
@@ -7444,11 +7444,11 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@typeonce/effect-machine-devtools@0.33.0(@types/node@26.4.1)(effect@4.0.0-rc.112)(esbuild@0.28.1)(jiti@2.7.0)(redis@6.2.1)(terser@5.50.0)(tsx@4.22.4)(yaml@2.9.0)':
+  '@typeonce/effect-machine-devtools@0.36.0(@types/node@26.4.1)(effect@4.0.0-rc.112)(esbuild@0.28.1)(jiti@2.7.0)(redis@6.2.1)(terser@5.50.0)(tsx@4.22.4)(yaml@2.9.0)':
     dependencies:
       '@effect/platform-browser': 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1)
-      '@typeonce/effect-machine': 0.33.0(effect@4.0.0-rc.112)
+      '@typeonce/effect-machine': 0.36.0(effect@4.0.0-rc.112)
       chokidar: 4.0.3
       effect: 4.0.0-rc.112
       elkjs: 0.12.0
@@ -7471,19 +7471,19 @@ snapshots:
       - utf-8-validate
       - yaml
 
-  '@typeonce/effect-machine-react@0.33.0(@effect/atom-react@4.0.0-rc.112(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0))(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0)':
+  '@typeonce/effect-machine-react@0.36.0(@effect/atom-react@4.0.0-rc.112(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0))(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0)':
     dependencies:
       '@effect/atom-react': 4.0.0-rc.112(effect@4.0.0-rc.112)(react@19.2.3)(scheduler@0.27.0)
-      '@typeonce/effect-machine': 0.33.0(effect@4.0.0-rc.112)
+      '@typeonce/effect-machine': 0.36.0(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
       react: 19.2.3
       scheduler: 0.27.0
 
-  '@typeonce/effect-machine@0.33.0(effect@4.0.0-rc.112)':
+  '@typeonce/effect-machine@0.36.0(effect@4.0.0-rc.112)':
     dependencies:
       effect: 4.0.0-rc.112
 
-  '@typeonce/oxlint-plugin-effect-machine@0.33.0(oxlint@1.80.0)':
+  '@typeonce/oxlint-plugin-effect-machine@0.36.0(oxlint@1.80.0)':
     dependencies:
       '@oxlint/plugins': 1.80.0
       oxlint: 1.80.0

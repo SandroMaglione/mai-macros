@@ -34,7 +34,6 @@ export const ManageFoodsLoaderEvents = Machine.events({
 
 const ManageFoodsLoaderStates = Machine.state({
   fields: { dateKey: Schema.UndefinedOr(Domain.DateKey) },
-  initial: "Loading",
   states: {
     Loading: {},
     Failed: { fields: { message: Schema.String } },
@@ -42,49 +41,53 @@ const ManageFoodsLoaderStates = Machine.state({
   },
 });
 
+const targets = Machine.targets(ManageFoodsLoaderStates);
+
 export const manageFoodsLoaderMachine = Machine.make({
   id: "ManageFoodsLoader",
   root: ManageFoodsLoaderStates,
   events: ManageFoodsLoaderEvents,
   input: Schema.Struct({ dateKey: Schema.UndefinedOr(Domain.DateKey) }),
-  initial: (root) => root.from(({ input }) => ({ dateKey: input.dateKey })),
+  effects: {
+    load: (dateKey: Domain.DateKey | undefined) =>
+      Effect.gen(function* () {
+        const foods = yield* Foods.Foods;
+        const mealEntries = yield* MealEntries.MealEntries;
+        return {
+          dateKey,
+          foods: yield* foods.list(),
+          foodUsage: yield* mealEntries.listFoodUsage(),
+        };
+      }).pipe(
+        Effect.catchDefect((cause) =>
+          Effect.fail(new FoodLibraryLoadDefect({ cause }))
+        )
+      ),
+  },
 }).handle({
+  root: ({ input }) => ({ dateKey: input.dateKey }),
+  initial: { target: targets.root.Loading },
   states: {
     Loading: {
-      invoke: (from) =>
-        from
-          .effect("load", ({ containingState: { dateKey } }) =>
-            Effect.gen(function* () {
-              const foods = yield* Foods.Foods;
-              const mealEntries = yield* MealEntries.MealEntries;
-              return {
-                dateKey,
-                foods: yield* foods.list(),
-                foodUsage: yield* mealEntries.listFoodUsage(),
-              };
-            }).pipe(
-              Effect.catchDefect((cause) =>
-                Effect.fail(new FoodLibraryLoadDefect({ cause }))
-              )
-            )
-          )
-          .onDone((to) =>
-            to.local.Ready().from(({ output }) => ({ data: output }))
-          )
-          .onFailure((to) =>
-            to.local
-              .Failed()
-              .from(() => ({
-                message: "Could not load foods. Please try again.",
-              }))
-          ),
+      invoke: {
+        src: "load",
+        input: ({ root }) => root.dateKey,
+        onDone: {
+          target: targets.root.Ready,
+          data: ({ output }) => ({ data: output }),
+        },
+        onFailure: {
+          target: targets.root.Failed,
+          data: { message: "Could not load foods. Please try again." },
+        },
+      },
     },
     Failed: {
       on: {
-        refresh: (to) => to.local.Loading(),
-        retry: (to) => to.local.Loading(),
+        refresh: { target: targets.root.Loading },
+        retry: { target: targets.root.Loading },
       },
     },
-    Ready: { on: { refresh: (to) => to.local.Loading() } },
+    Ready: { on: { refresh: { target: targets.root.Loading } } },
   },
 });
