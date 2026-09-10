@@ -11,7 +11,7 @@ import { RuntimeClient } from "./runtime-client.ts";
 import { ExpoAnalysisDatabaseLayer } from "./expo-analysis-database.ts";
 import { AnalysisDatabase } from "@mai/nutrition/services/analysis-database";
 
-const BackupServicesLayer = Layer.mergeAll(
+export const BackupServicesLayer = Layer.mergeAll(
   Backup.Backups.layer,
   FoodCatalogTransfer.FoodCatalogTransfers.layer,
   ExpoBackupFileTransferLayer,
