@@ -10,40 +10,36 @@ import { AppHeader, MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-atoms";
+import {
+  ManageFoodsData,
+  MealFoodUsage,
+  ManageFoodsLoaderEvents,
+  manageFoodsLoaderMachine,
+} from "@/lib/manage-foods-loader-machine";
 import { color, spacing } from "@/theme/tokens";
-import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
-import { Utils, Domain, Foods, MealEntries } from "@mai/nutrition";
+import { FoodSearchMachine } from "@mai/machines";
+import { Utils, Domain } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Effect, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { ChevronLeft, RotateCcw } from "lucide-react-native";
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
+import { useAtomSet } from "@effect/atom-react";
+import {
+  createMachineContext,
+  MachineState,
+} from "@typeonce/effect-machine-react";
 import { StyleSheet, View } from "react-native";
-import { Actor, createAsyncLogic, setup } from "xstate";
+import { Actor, setup } from "xstate";
+
+export { ErrorBoundary } from "expo-router";
 
 type ManageFoodsLayout = "screen" | "embedded";
 
-const MealFoodUsage = Schema.Struct({
-  foodId: Domain.FoodId,
-  latestQuantity: Domain.LoggedFoodQuantity,
-  latestUsedAt: Schema.DateTimeUtc,
-  meals: Schema.Array(
-    Schema.Struct({
-      latestQuantity: Domain.LoggedFoodQuantity,
-      latestUsedAt: Schema.DateTimeUtc,
-      mealId: Domain.MealId,
-    })
-  ),
-});
-
-const ManageFoodsData = Schema.Struct({
-  dateKey: Schema.UndefinedOr(Domain.DateKey),
-  foods: Schema.Array(Domain.Food),
-  foodUsage: Schema.Array(MealFoodUsage),
-});
-
-type ManageFoodsData = typeof ManageFoodsData.Type;
+const ManageFoodsLoader = createMachineContext(
+  MachineAtoms.factory(manageFoodsLoaderMachine)
+);
 
 const FoodSearchActorSchema =
   Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
@@ -127,72 +123,6 @@ const manageFoodsMachine = setup({
   },
 });
 
-const ManageFoodsLoaderInput = Schema.Struct({
-  dateKey: Schema.UndefinedOr(Domain.DateKey),
-});
-
-const manageFoodsLoaderMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({ dateKey: Schema.UndefinedOr(Domain.DateKey) })
-    ),
-    events: {
-      refresh: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
-  },
-  actorSources: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
-        output: Schema.toStandardSchemaV1(ManageFoodsData),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const mealEntries = yield* MealEntries.MealEntries;
-
-            return {
-              dateKey: input.dateKey,
-              foods: [...(yield* foods.list())],
-              foodUsage: yield* mealEntries.listFoodUsage(),
-            };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({ dateKey: input.dateKey }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ dateKey: context.dateKey }),
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: { data: event.output },
-        }),
-        onError: {
-          target: "Failed",
-          context: { message: "Could not load foods. Please try again." },
-        },
-      },
-    },
-    Failed: {
-      on: {
-        refresh: { target: "Loading" },
-        retry: { target: "Loading" },
-      },
-    },
-    Ready: {
-      on: { refresh: { target: "Loading" } },
-    },
-  },
-});
-
 const ManageFoodsSearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
 });
@@ -214,59 +144,88 @@ export function ManageFoodsPanelLoader({
   readonly dateKey: Domain.DateKey | undefined;
   readonly layout: ManageFoodsLayout;
 }) {
-  const [snapshot, , actor] = useMachine(manageFoodsLoaderMachine, {
-    input: { dateKey },
-  });
+  return (
+    <ManageFoodsLoader.Provider key={dateKey ?? "all"} input={{ dateKey }}>
+      <Suspense fallback={<ManageFoodsLoading layout={layout} />}>
+        <ManageFoodsLoaderView dateKey={dateKey} layout={layout} />
+      </Suspense>
+    </ManageFoodsLoader.Provider>
+  );
+}
+
+function ManageFoodsLoaderView({
+  dateKey,
+  layout,
+}: {
+  readonly dateKey: Domain.DateKey | undefined;
+  readonly layout: ManageFoodsLayout;
+}) {
+  const machine = ManageFoodsLoader.useMachine();
+  const send = useAtomSet(machine.send);
   useFocusEffect(
     useCallback(() => {
-      actor.trigger.refresh();
-    }, [actor])
+      send(ManageFoodsLoaderEvents.refresh());
+    }, [send])
   );
+  return (
+    <>
+      <MachineState machine={machine} path="Loading">
+        {() => <ManageFoodsLoading layout={layout} />}
+      </MachineState>
+      <MachineState machine={machine} path="Failed">
+        {({ value: { message } }) => {
+          const failure = (
+            <View style={styles.centered}>
+              <Notice
+                message={message}
+                title="Food library unavailable"
+                tone="danger"
+              />
+              <Button
+                icon={RotateCcw}
+                onPress={() => send(ManageFoodsLoaderEvents.retry())}
+                variant="secondary"
+              >
+                Try again
+              </Button>
+            </View>
+          );
+          return layout === "embedded" ? (
+            failure
+          ) : (
+            <AppScreen contentStyle={styles.content}>
+              <MaiHeader
+                action={<BackButton dateKey={dateKey} />}
+                title="Manage foods"
+              />
+              {failure}
+            </AppScreen>
+          );
+        }}
+      </MachineState>
+      <MachineState machine={machine} path="Ready">
+        {({ value: { data } }) => (
+          <ManageFoodsPanel data={data} layout={layout} />
+        )}
+      </MachineState>
+    </>
+  );
+}
 
-  if (snapshot.matches("Loading")) {
-    return layout === "embedded" ? (
-      <View style={styles.centered}>
-        <LoadingView message="Loading foods" />
-      </View>
-    ) : (
-      <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading foods" />
-      </AppScreen>
-    );
-  }
-
-  if (snapshot.matches("Failed")) {
-    const failure = (
-      <View style={styles.centered}>
-        <Notice
-          message={snapshot.context.message}
-          title="Food library unavailable"
-          tone="danger"
-        />
-        <Button
-          icon={RotateCcw}
-          onPress={actor.trigger.retry}
-          variant="secondary"
-        >
-          Try again
-        </Button>
-      </View>
-    );
-
-    return layout === "embedded" ? (
-      failure
-    ) : (
-      <AppScreen contentStyle={styles.content}>
-        <MaiHeader
-          action={<BackButton dateKey={dateKey} />}
-          title="Manage foods"
-        />
-        {failure}
-      </AppScreen>
-    );
-  }
-
-  return <ManageFoodsPanel data={snapshot.context.data} layout={layout} />;
+function ManageFoodsLoading({
+  layout,
+}: {
+  readonly layout: ManageFoodsLayout;
+}) {
+  return layout === "embedded" ? (
+    <View style={styles.centered}>
+      <LoadingView message="Loading foods" />
+    </View>
+  ) : (
+    <AppScreen contentStyle={styles.centered}>
+      <LoadingView message="Loading foods" />
+    </AppScreen>
+  );
 }
 
 function ManageFoodsPanel({

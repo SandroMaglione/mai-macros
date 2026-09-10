@@ -27,3 +27,7 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - xstate@6.0.0-alpha.18
+  - "@typeonce/effect-machine@0.36.0"
+  - "@typeonce/effect-machine-react@0.36.0"
+  - "@typeonce/effect-machine-devtools@0.36.0"
+  - "@typeonce/oxlint-plugin-effect-machine@0.36.0"

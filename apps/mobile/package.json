@@ -20,9 +20,12 @@
     "prebuild:clean": "expo prebuild --clean",
     "run:ios": "expo run:ios",
     "run:android": "expo run:android",
-    "build:android:local": "eas build --platform android --profile production --local --output ./prod.aab"
+    "build:android:local": "eas build --platform android --profile production --local --output ./prod.aab",
+    "machines:devtools": "effect-machine --include \"src/lib/*-machine.ts\"",
+    "test": "tsx --conditions=import --test test/*.test.ts"
   },
   "dependencies": {
+    "@effect/atom-react": "4.0.0-rc.112",
     "@expo/dom-webview": "~57.0.1",
     "@expo/metro-runtime": "~57.0.15",
     "@mai/event-tracking": "workspace:^",
@@ -31,6 +34,8 @@
     "@mai/services": "workspace:^",
     "@mai/sqlite": "workspace:^",
     "@shopify/react-native-skia": "2.6.2",
+    "@typeonce/effect-machine": "0.36.0",
+    "@typeonce/effect-machine-react": "0.36.0",
     "@xstate/react": "7.0.0-alpha.1",
     "effect": "4.0.0-rc.112",
     "expo": "57.0.20",
@@ -57,13 +62,18 @@
     "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.10.1",
+    "use-sync-external-store": "1.6.0",
     "victory-native": "^41.26.0",
     "xstate": "6.0.0-alpha.18"
   },
   "devDependencies": {
     "@react-native/metro-config": "0.86.3",
+    "@typeonce/effect-machine-devtools": "0.36.0",
     "@types/react": "19.2.17",
+    "@types/react-test-renderer": "19.1.0",
+    "@types/use-sync-external-store": "1.5.0",
     "eas-cli": "^16.32.0",
+    "react-test-renderer": "19.2.3",
     "tsx": "4.22.4"
   }
 }
