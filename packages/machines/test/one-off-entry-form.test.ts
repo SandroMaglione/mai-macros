@@ -4,6 +4,7 @@ import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { assert, describe, it } from "vitest";
 import {
   decodeOneOffEntryForm,
+  oneOffEntryFormValues,
   oneOffEntryErrorMessage,
   OneOffFormValues,
   applyOneOffEntryQuickInput,
@@ -29,6 +30,46 @@ const values = {
 } satisfies typeof OneOffFormValues.Type;
 
 describe("one-off entry quick input", () => {
+  it("prefills a reusable draft preserving notes, mixed sources, unknown and recorded zero", async () => {
+    const entry = await Effect.runPromise(
+      Schema.decodeEffect(Domain.OneOffMealEntry)({
+        id: "11111111-1111-4111-8111-111111111111",
+        dateKey: "2026-09-01",
+        mealId: "dinner",
+        kind: "one-off",
+        createdAt: 1,
+        updatedAt: 2,
+        name: "Dinner",
+        amountDescription: "Half plate",
+        note: "Menu\nwith notes",
+        nutrients: {
+          energyKcal: { _tag: "Recorded", value: 650 },
+          proteinGrams: { _tag: "Estimated", value: 25 },
+          carbsGrams: { _tag: "Unknown" },
+          fatGrams: { _tag: "Unknown" },
+          fiberGrams: { _tag: "Unknown" },
+          sugarGrams: { _tag: "Unknown" },
+          saturatedFatGrams: { _tag: "Unknown" },
+          saltGrams: { _tag: "Recorded", value: 0 },
+        },
+      })
+    );
+    const draft = oneOffEntryQuickInputFromValues({
+      values: oneOffEntryFormValues(entry),
+    });
+    assert.equal(draft.values.nutrients.saltGrams.value, "0");
+    assert.equal(draft.values.nutrients.carbsGrams.value, "");
+    assert.deepEqual(draft.quickInputIssues, []);
+    assert.equal(draft.quickInput, "Dinner, Half plate, k650 p25 sa0");
+    const decoded = await Effect.runPromise(
+      decodeOneOffEntryForm(draft.values)
+    );
+    assert.deepEqual(
+      decoded,
+      await Effect.runPromise(Schema.encodeEffect(Domain.OneOffDetails)(entry))
+    );
+  });
+
   it.each(["Recorded", "Estimated"] as const)(
     "sets all sources to %s without changing nutrition or inventing unknown values",
     async (source) => {

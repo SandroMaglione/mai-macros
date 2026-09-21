@@ -155,6 +155,99 @@ const _seed = Effect.gen(function* () {
 const _json = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 
 describe("one-off entries and local backups", () => {
+  it("lists only one-offs by diary recency and copies details independently to another meal", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const catalog = yield* _seed;
+        const store = yield* Store.NutritionStore;
+        const service = yield* MealEntries.MealEntries;
+        assert.deepEqual(yield* service.listOneOffHistory(), []);
+        const original = (yield* service.createOneOff({
+          input: { ...details, dateKey, mealId },
+        })).mealEntry;
+        const destinationDate = "2026-09-03";
+        const destinationMeal = `${planId}:lunch`;
+        yield* store.insertPlan(
+          yield* Schema.decodeEffect(Domain.Plan)({
+            id: "33333333-3333-4333-8333-333333333333",
+            name: "Another plan",
+            proteinTargetGrams: 100,
+            carbsTargetGrams: 200,
+            fatTargetGrams: 60,
+            createdAt: 200,
+            meals: [
+              {
+                id: destinationMeal,
+                name: "Lunch",
+                position: 0,
+                createdAt: 201,
+              },
+            ],
+          })
+        );
+        yield* store.upsertDailyLog(
+          yield* Schema.decodeEffect(Domain.DailyLog)({
+            dateKey: destinationDate,
+            planId: "33333333-3333-4333-8333-333333333333",
+            mode: "eating",
+            waterServings: 0,
+            createdAt: 202,
+            updatedAt: 202,
+          })
+        );
+        const encodedDetails = yield* Schema.encodeEffect(Domain.OneOffDetails)(
+          original
+        );
+        const copied = (yield* service.createOneOff({
+          input: {
+            ...encodedDetails,
+            dateKey: destinationDate,
+            mealId: destinationMeal,
+          },
+        })).mealEntry;
+        assert.notEqual(copied.id, original.id);
+        assert.equal(copied.dateKey, destinationDate);
+        assert.equal(copied.mealId, destinationMeal);
+        assert.deepEqual(
+          yield* Schema.encodeEffect(Domain.OneOffDetails)(copied),
+          encodedDetails
+        );
+        const older = (yield* service.createOneOff({
+          input: { ...details, dateKey, mealId, name: "Backdated entry" },
+        })).mealEntry;
+        const history = yield* service.listOneOffHistory();
+        assert.equal(history[0]?.id, copied.id);
+        assert.sameMembers(
+          history.map((entry) => entry.id),
+          [original.id, copied.id, older.id]
+        );
+        yield* service.reviseOneOff({
+          input: {
+            ...encodedDetails,
+            mealEntryId: copied.id,
+            name: "Changed copy",
+            nutrients: {
+              ...encodedDetails.nutrients,
+              energyKcal: { _tag: "Estimated", value: 800 },
+            },
+          },
+        });
+        assert.deepEqual(yield* store.findMealEntryById(original.id), [
+          original,
+        ]);
+        assert.deepEqual(yield* store.findMealEntryById(catalog.id), [catalog]);
+        yield* service.delete({ input: { mealEntryId: copied.id } });
+        assert.deepEqual(yield* store.findMealEntryById(original.id), [
+          original,
+        ]);
+        assert.sameMembers(
+          (yield* service.listOneOffHistory()).map((entry) => entry.id),
+          [original.id, older.id]
+        );
+      }).pipe(Effect.provide(testLayer))
+    );
+  });
+
   it("reopens a saved one-off and exports it without changing any local store", async () => {
     const directory = await mkdtemp(join(tmpdir(), "mai-one-off-persistence-"));
     const filename = join(directory, "mai.sqlite");

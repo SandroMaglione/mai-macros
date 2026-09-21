@@ -5,6 +5,7 @@ import {
   oneOffEntryQuickInputFromValues,
   setAllOneOffNutrientSources,
   decodeOneOffEntryForm,
+  oneOffEntryFormValues,
   oneOffEntryErrorMessage,
 } from "@mai/machines/one-off-entry-form";
 import { RuntimeClient } from "@/lib/runtime-client";
@@ -37,6 +38,8 @@ export const oneOffEntryMachine = setup({
         quickInput: Schema.String,
         quickInputIssues: Schema.Array(Schema.String),
         notice: Schema.NullOr(Schema.String),
+        history: Schema.Array(Domain.OneOffMealEntry),
+        historyQuery: Schema.String,
       })
     ),
     events: {
@@ -63,6 +66,14 @@ export const oneOffEntryMachine = setup({
       ),
       allSources: Schema.toStandardSchemaV1(
         Schema.Struct({ source: NutrientField.fields.source })
+      ),
+      showHistory: Schema.toStandardSchemaV1(EmptyEvent),
+      showForm: Schema.toStandardSchemaV1(EmptyEvent),
+      searchHistory: Schema.toStandardSchemaV1(
+        Schema.Struct({ query: Schema.String })
+      ),
+      reuse: Schema.toStandardSchemaV1(
+        Schema.Struct({ mealEntryId: Domain.MealEntryId })
       ),
       save: Schema.toStandardSchemaV1(EmptyEvent),
       delete: Schema.toStandardSchemaV1(EmptyEvent),
@@ -96,6 +107,19 @@ export const oneOffEntryMachine = setup({
             if (entry?.kind !== "one-off")
               return yield* Effect.fail("Entry unavailable");
             return { entry };
+          })
+        ),
+    }),
+    loadHistory: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(Schema.Void),
+        output: Schema.toStandardSchemaV1(Schema.Array(Domain.OneOffMealEntry)),
+      },
+      run: () =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const service = yield* MealEntries.MealEntries;
+            return yield* service.listOneOffHistory();
           })
         ),
     }),
@@ -151,6 +175,9 @@ export const oneOffEntryMachine = setup({
     Loading: {},
     Failure: {},
     Ready: {},
+    History: {
+      states: { Loading: {}, Ready: {}, Failure: {} },
+    },
     Saving: {},
     Deleting: {},
     Done: {},
@@ -158,8 +185,10 @@ export const oneOffEntryMachine = setup({
 }).createMachine({
   context: ({ input }) => ({
     route: input,
-    ...oneOffEntryQuickInputFromValues({ values: _formValues(null) }),
+    ...oneOffEntryQuickInputFromValues({ values: oneOffEntryFormValues(null) }),
     notice: null,
+    history: [],
+    historyQuery: "",
   }),
   initial: "Loading",
   states: {
@@ -170,7 +199,7 @@ export const oneOffEntryMachine = setup({
         onDone: ({ event }) => ({
           target: "Ready",
           context: oneOffEntryQuickInputFromValues({
-            values: _formValues(event.output.entry),
+            values: oneOffEntryFormValues(event.output.entry),
           }),
         }),
         onError: ({ event }) => ({
@@ -185,8 +214,57 @@ export const oneOffEntryMachine = setup({
       },
     },
     Failure: { on: { retry: { target: "Loading" } } },
+    History: {
+      initial: "Loading",
+      on: {
+        showForm: { target: "Ready", context: { notice: null } },
+        searchHistory: ({ event }) => ({
+          context: { historyQuery: event.query },
+        }),
+        reuse: ({ context, event }) => {
+          const entry = context.history.find(
+            (entry) => entry.id === event.mealEntryId
+          );
+          if (entry === undefined || context.route.mealEntryId !== null)
+            return undefined;
+          return {
+            target: "Ready",
+            context: {
+              ...oneOffEntryQuickInputFromValues({
+                values: oneOffEntryFormValues(entry),
+              }),
+              notice: null,
+            },
+          };
+        },
+      },
+      states: {
+        Loading: {
+          invoke: {
+            src: "loadHistory",
+            input: undefined,
+            onDone: ({ event }) => ({
+              target: "Ready",
+              context: { history: event.output },
+            }),
+            onError: {
+              target: "Failure",
+              context: { notice: "Unable to load past entries" },
+            },
+          },
+        },
+        Ready: {},
+        Failure: {
+          on: { retry: { target: "Loading", context: { notice: null } } },
+        },
+      },
+    },
     Ready: {
       on: {
+        showHistory: ({ context }) =>
+          context.route.mealEntryId === null
+            ? { target: "History", context: { notice: null } }
+            : undefined,
         changeQuickInput: ({ context, event }) => ({
           context: Effect.runSync(
             applyOneOffEntryQuickInput({
@@ -301,34 +379,3 @@ export const oneOffEntryMachine = setup({
     },
   },
 });
-
-function _formField(
-  value: Domain.NutrientValue | undefined
-): typeof NutrientField.Type {
-  return {
-    value:
-      value === undefined || value._tag === "Unknown"
-        ? ""
-        : String(value.value),
-    source: value?._tag === "Recorded" ? "Recorded" : "Estimated",
-  };
-}
-function _formValues(
-  entry: Domain.OneOffMealEntry | null
-): typeof FormValues.Type {
-  return {
-    name: entry?.name ?? "",
-    amountDescription: entry?.amountDescription ?? "",
-    note: entry?.note ?? "",
-    nutrients: {
-      energyKcal: _formField(entry?.nutrients.energyKcal),
-      proteinGrams: _formField(entry?.nutrients.proteinGrams),
-      carbsGrams: _formField(entry?.nutrients.carbsGrams),
-      fatGrams: _formField(entry?.nutrients.fatGrams),
-      fiberGrams: _formField(entry?.nutrients.fiberGrams),
-      sugarGrams: _formField(entry?.nutrients.sugarGrams),
-      saturatedFatGrams: _formField(entry?.nutrients.saturatedFatGrams),
-      saltGrams: _formField(entry?.nutrients.saltGrams),
-    },
-  };
-}

@@ -2,6 +2,8 @@ import {
   FoodQuickInputTextField,
   FoodQuickInputFeedback,
 } from "@/components/nutrition/food-quick-input";
+import { OneOffEntryList } from "@/components/nutrition/one-off-entry-list";
+import { PagerTabBar } from "@/components/ui/pager-tabs";
 import { AppScreen } from "@/components/ui/app-screen";
 import { Button } from "@/components/ui/button";
 import { Field, NumberField, TextArea } from "@/components/ui/field";
@@ -20,7 +22,7 @@ import { useMachine } from "@xstate/react";
 import { Array, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 const RouteParams = Schema.Struct({
@@ -39,7 +41,20 @@ export default function OneOffScreen() {
 }
 function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
   const [snapshot, , actor] = useMachine(oneOffEntryMachine, { input: route });
-  const { values, notice, quickInput, quickInputIssues } = snapshot.context;
+  const {
+    values,
+    notice,
+    quickInput,
+    quickInputIssues,
+    historyQuery,
+    history,
+  } = snapshot.context;
+  const isHistory = snapshot.matches("History");
+  const historyEntries = history.filter((entry) =>
+    `${entry.name} ${entry.amountDescription}`
+      .toLocaleLowerCase()
+      .includes(historyQuery.trim().toLocaleLowerCase())
+  );
   const disabled = !snapshot.matches("Ready");
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.screen}>
@@ -68,6 +83,29 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
             />
           }
         />
+        {route.mealEntryId === null &&
+        (snapshot.matches("Ready") || isHistory) ? (
+          <PagerTabBar
+            activeIndex={isHistory ? 1 : 0}
+            onActiveIndexChange={(index) =>
+              index === 1
+                ? actor.trigger.showHistory()
+                : actor.trigger.showForm()
+            }
+            tabs={[
+              {
+                key: "new",
+                label: "New entry",
+                accessibilityLabel: "New one-off entry",
+              },
+              {
+                key: "past",
+                label: "Past entries",
+                accessibilityLabel: "Past one-off entries",
+              },
+            ]}
+          />
+        ) : null}
         {snapshot.matches("Loading") ? (
           <LoadingView message="Opening meal" />
         ) : null}
@@ -75,6 +113,43 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
           <>
             <Button onPress={() => actor.trigger.retry()}>Try again</Button>
             {notice === null ? null : <Notice message={notice} tone="danger" />}
+          </>
+        ) : isHistory ? (
+          <>
+            <Field
+              label="Search past entries"
+              accessibilityLabel="Search past one-off entries"
+              placeholder="Name or amount"
+              value={historyQuery}
+              onChangeText={(query) => actor.trigger.searchHistory({ query })}
+            />
+            {snapshot.matches({ History: "Loading" }) ? (
+              <LoadingView message="Loading past entries" />
+            ) : null}
+            {snapshot.matches({ History: "Failure" }) ? (
+              <>
+                {notice === null ? null : (
+                  <Notice message={notice} tone="danger" />
+                )}
+                <Button onPress={() => actor.trigger.retry()}>Try again</Button>
+              </>
+            ) : null}
+            {snapshot.matches({ History: "Ready" }) ? (
+              Array.isReadonlyArrayNonEmpty(historyEntries) ? (
+                <OneOffEntryList
+                  entries={historyEntries}
+                  onSelect={(entry) =>
+                    actor.trigger.reuse({ mealEntryId: entry.id })
+                  }
+                />
+              ) : (
+                <Text style={styles.empty}>
+                  {historyQuery.trim() === ""
+                    ? "No past one-off entries yet"
+                    : "No matching entries"}
+                </Text>
+              )
+            ) : null}
           </>
         ) : (
           <>
@@ -207,6 +282,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
   );
 }
 const styles = StyleSheet.create({
+  empty: { color: color.textMuted },
   screen: { flex: 1, backgroundColor: color.bg },
   content: { gap: spacing.lg, padding: spacing.lg },
   divider: { height: 1, backgroundColor: color.divider },

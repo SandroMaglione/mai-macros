@@ -232,3 +232,34 @@ function _errorDetails({
       : _errorDetails({ error: nested, depth: depth + 1 });
   return detail || error.message?.trim() || error._tag || "";
 }
+
+function _formField(
+  value: Domain.NutrientValue | undefined
+): typeof OneOffNutrientField.Type {
+  return {
+    value:
+      value === undefined || value._tag === "Unknown"
+        ? ""
+        : String(value.value),
+    source: value?._tag === "Recorded" ? "Recorded" : "Estimated",
+  };
+}
+export function oneOffEntryFormValues(
+  entry: Domain.OneOffMealEntry | null
+): typeof OneOffFormValues.Type {
+  return {
+    name: entry?.name ?? "",
+    amountDescription: entry?.amountDescription ?? "",
+    note: entry?.note ?? "",
+    nutrients: {
+      energyKcal: _formField(entry?.nutrients.energyKcal),
+      proteinGrams: _formField(entry?.nutrients.proteinGrams),
+      carbsGrams: _formField(entry?.nutrients.carbsGrams),
+      fatGrams: _formField(entry?.nutrients.fatGrams),
+      fiberGrams: _formField(entry?.nutrients.fiberGrams),
+      sugarGrams: _formField(entry?.nutrients.sugarGrams),
+      saturatedFatGrams: _formField(entry?.nutrients.saturatedFatGrams),
+      saltGrams: _formField(entry?.nutrients.saltGrams),
+    },
+  };
+}

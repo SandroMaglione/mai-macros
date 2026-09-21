@@ -2,13 +2,14 @@ import { OneOffIndicator } from "@/components/nutrition/one-off-indicator";
 import { color, spacing } from "@/theme/tokens";
 import { formatNutrientValue } from "@/lib/nutrient-quality";
 import type { Domain } from "@mai/nutrition";
-import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export function OneOffEntryList({
   entries,
+  onSelect,
 }: {
   readonly entries: readonly Domain.OneOffMealEntry[];
+  readonly onSelect: (entry: Domain.OneOffMealEntry) => void;
 }) {
   return (
     <View style={styles.list}>
@@ -16,18 +17,9 @@ export function OneOffEntryList({
         <Pressable
           key={entry.id}
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${entry.name}`}
+          accessibilityLabel={`Reuse ${entry.name}, ${entry.amountDescription}, ${entry.dateKey}`}
           style={styles.entry}
-          onPress={() =>
-            router.push({
-              pathname: "/days/[dateKey]/meals/[meal]/one-off",
-              params: {
-                dateKey: entry.dateKey,
-                meal: entry.mealId,
-                mealEntryId: entry.id,
-              },
-            })
-          }
+          onPress={() => onSelect(entry)}
         >
           <View style={styles.heading}>
             <OneOffIndicator />
