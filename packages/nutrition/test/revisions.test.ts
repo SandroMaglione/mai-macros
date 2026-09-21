@@ -1053,6 +1053,7 @@ function _revisionTestLayer({
             mealIds.includes(mealEntry.mealId)
           ).length
       ),
+    deleteUnusedUserFood: () => Effect.succeed(false),
     deleteMealEntry: (mealEntryId) =>
       Effect.sync(() => {
         currentStores = {

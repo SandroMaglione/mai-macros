@@ -213,6 +213,7 @@ function BodyWeightReportsTestLayer({
           ),
         deleteBodyWeightEntry: () => Effect.void,
         deleteDailyLog: () => Effect.void,
+        deleteUnusedUserFood: () => Effect.succeed(false),
         deleteMealEntry: () => Effect.void,
         findActiveMealPlanSelectionById: (activeMealPlanSelectionId) =>
           Effect.succeed(

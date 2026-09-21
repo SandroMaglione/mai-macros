@@ -619,6 +619,17 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       `,
   });
 
+  const deleteUnusedUserFoodRows = SqlSchema.findAll({
+    Request: Domain.FoodId,
+    Result: Schema.Struct({ id: Domain.FoodId }),
+    execute: (foodId) => sql`
+      DELETE FROM foods
+      WHERE id = ${foodId} AND origin = 'user'
+        AND NOT EXISTS (SELECT 1 FROM meal_entries WHERE food_id = ${foodId})
+      RETURNING id
+    `,
+  });
+
   const findFoodByIdRows = SqlSchema.findAll({
     Request: Domain.FoodId,
     Result: FoodRow,
@@ -1504,6 +1515,19 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
           Effect.map((counts) =>
             counts.reduce((total, count) => total + count, 0)
           )
+        )
+      ),
+
+    deleteUnusedUserFood: (foodId) =>
+      _mapStoreError(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            const deleted = yield* deleteUnusedUserFoodRows(foodId);
+            if (!Array.isReadonlyArrayNonEmpty(deleted)) return false;
+            yield* sql`DELETE FROM food_prices WHERE food_id = ${foodId}`;
+            yield* sql`DELETE FROM food_portions WHERE food_id = ${foodId}`;
+            return true;
+          })
         )
       ),
 

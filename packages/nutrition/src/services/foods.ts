@@ -273,6 +273,12 @@ export class SelectedCurrentFoodPrice extends Data.TaggedClass(
   readonly price: FoodPrice | null;
 }> {}
 
+export class FoodDeletionNotAllowed extends Data.TaggedError(
+  "FoodDeletionNotAllowed"
+)<{
+  readonly foodId: FoodId;
+}> {}
+
 export class FoodNotFound extends Data.TaggedError("FoodNotFound")<{
   readonly foodId: FoodId;
 }> {}
@@ -573,6 +579,21 @@ export class Foods extends Context.Service<Foods>()("Foods", {
     );
 
     return {
+      deleteUnused: Effect.fn("Foods.deleteUnused")(function* ({
+        input,
+      }: {
+        readonly input: GetFoodInput;
+      }) {
+        const { foodId } = yield* Schema.decodeEffect(_GetFoodInput)(input);
+        const food = yield* findFood(foodId);
+        if (
+          food.origin !== "user" ||
+          !(yield* store.deleteUnusedUserFood(foodId))
+        ) {
+          return yield* new FoodDeletionNotAllowed({ foodId });
+        }
+        return { food };
+      }),
       setNutritionCorrections: Effect.fn("Foods.setNutritionCorrections")(
         function* ({
           input,

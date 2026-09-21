@@ -260,6 +260,7 @@ function _getRange({
                   mealIds.includes(mealEntry.mealId)
                 ).length
               ),
+            deleteUnusedUserFood: () => Effect.succeed(false),
             deleteMealEntry: () => Effect.void,
             deleteDailyLog: () => Effect.void,
             deleteBodyWeightEntry: () => Effect.void,

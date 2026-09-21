@@ -117,7 +117,6 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
         ) : isHistory ? (
           <>
             <Field
-              label="Search past entries"
               accessibilityLabel="Search past one-off entries"
               placeholder="Name or amount"
               value={historyQuery}

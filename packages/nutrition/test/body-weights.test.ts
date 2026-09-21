@@ -134,6 +134,7 @@ function BodyWeightsTestContext({
             };
           }),
         deleteDailyLog: () => Effect.void,
+        deleteUnusedUserFood: () => Effect.succeed(false),
         deleteMealEntry: () => Effect.void,
         findActiveMealPlanSelectionById: () => Effect.succeed([]),
         findBodyWeightEntriesByRange: ({ endDateKey, startDateKey }) =>

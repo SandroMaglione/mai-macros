@@ -494,6 +494,7 @@ function _dailyLogsTestLayer({
             mealIds.includes(mealEntry.mealId)
           ).length
       ),
+    deleteUnusedUserFood: () => Effect.succeed(false),
     deleteMealEntry: (mealEntryId) =>
       Effect.sync(() => {
         currentStores = {

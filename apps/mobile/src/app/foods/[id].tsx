@@ -26,6 +26,7 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
+  Trash2,
 } from "lucide-react-native";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useCallback, type ReactNode } from "react";
@@ -110,6 +111,7 @@ const foodEditorMachine = setup({
       chooseCopy: Schema.toStandardSchemaV1(EmptyEvent),
       chooseEdit: Schema.toStandardSchemaV1(EmptyEvent),
       confirmEdit: Schema.toStandardSchemaV1(EmptyEvent),
+      deleteFood: Schema.toStandardSchemaV1(EmptyEvent),
       refresh: Schema.toStandardSchemaV1(EmptyEvent),
       retry: Schema.toStandardSchemaV1(EmptyEvent),
       submit: Schema.toStandardSchemaV1(SubmitFoodInput),
@@ -136,6 +138,21 @@ const foodEditorMachine = setup({
               foods: [...(yield* foods.list())],
               usage: yield* foods.inspectEdit({ input }),
             };
+          })
+        ),
+    }),
+    deleteFood: createAsyncLogic({
+      schemas: {
+        input: Schema.toStandardSchemaV1(
+          Schema.Struct({ foodId: Domain.FoodId })
+        ),
+        output: Schema.toStandardSchemaV1(Schema.Void),
+      },
+      run: ({ input }) =>
+        RuntimeClient.runPromise(
+          Effect.gen(function* () {
+            const foods = yield* Foods.Foods;
+            yield* foods.deleteUnused({ input });
           })
         ),
     }),
@@ -260,8 +277,27 @@ const foodEditorMachine = setup({
     LoadFailed: {
       on: { retry: { target: "Loading", context: { message: null } } },
     },
+    Deleting: {
+      invoke: {
+        src: "deleteFood",
+        input: ({ context }) => ({ foodId: context.foodId }),
+        onDone: { target: "Deleted" },
+        onError: {
+          target: "Loading",
+          context: {
+            message:
+              "Could not delete this food. Only unused foods you created can be removed.",
+          },
+        },
+      },
+    },
+    Deleted: {},
     ChoosingAction: {
       on: {
+        deleteFood: ({ context }) =>
+          context.food?.origin === "user" && context.usage?.mealEntryCount === 0
+            ? { target: "Deleting", context: { message: null } }
+            : undefined,
         refresh: { target: "Loading" },
         chooseCopy: ({ actions, context }, enq) => {
           if (context.food === null) {
@@ -419,10 +455,23 @@ function FoodEditorScreen({
   const food = snapshot.context.food;
   const usage = snapshot.context.usage;
 
-  if (snapshot.matches("Loading")) {
+  if (snapshot.matches("Deleted"))
+    return (
+      <Redirect
+        href={{
+          pathname: "/foods",
+          params: dateKey === undefined ? {} : { dateKey },
+        }}
+      />
+    );
+  if (snapshot.matches("Loading") || snapshot.matches("Deleting")) {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading food" />
+        <LoadingView
+          message={
+            snapshot.matches("Deleting") ? "Deleting food" : "Loading food"
+          }
+        />
       </AppScreen>
     );
   }
@@ -626,6 +675,18 @@ function FoodEditorScreen({
             Copy this food
           </Button>
         </SectionCard>
+        {snapshot.context.message === null ? null : (
+          <Notice message={snapshot.context.message} tone="danger" />
+        )}
+        {food.origin === "user" && usage.mealEntryCount === 0 ? (
+          <Button
+            icon={Trash2}
+            variant="danger"
+            onPress={actor.trigger.deleteFood}
+          >
+            Delete food
+          </Button>
+        ) : null}
       </WorkflowPage>
     );
   }
