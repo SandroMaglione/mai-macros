@@ -1,4 +1,4 @@
-import { Domain, MealEntries, Store } from "@mai/nutrition";
+import { Domain, MealEntries, Reporting, Store } from "@mai/nutrition";
 import { Cause, Effect, Schema } from "effect";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { assert, describe, it } from "vitest";
@@ -6,6 +6,9 @@ import {
   decodeOneOffEntryForm,
   oneOffEntryErrorMessage,
   OneOffFormValues,
+  applyOneOffEntryQuickInput,
+  oneOffEntryQuickInputFromValues,
+  setAllOneOffNutrientSources,
 } from "../src/one-off-entry-form.ts";
 
 const blank = { value: "", source: "Estimated" } as const;
@@ -24,6 +27,212 @@ const values = {
     saltGrams: blank,
   },
 } satisfies typeof OneOffFormValues.Type;
+
+describe("one-off entry quick input", () => {
+  it.each(["Recorded", "Estimated"] as const)(
+    "sets all sources to %s without changing nutrition or inventing unknown values",
+    async (source) => {
+      const draft = await Effect.runPromise(
+        applyOneOffEntryQuickInput({
+          input: "Dinner, Half a plate, k650 p25 sa0",
+          values,
+        })
+      );
+      const updated = setAllOneOffNutrientSources({
+        values: draft.values,
+        source,
+      });
+      assert.equal(updated.name, draft.values.name);
+      assert.equal(updated.amountDescription, draft.values.amountDescription);
+      assert.equal(updated.note, draft.values.note);
+      for (const field of Reporting.NutrientNames) {
+        assert.equal(updated.nutrients[field].source, source);
+        assert.equal(
+          updated.nutrients[field].value,
+          draft.values.nutrients[field].value
+        );
+      }
+      const details = await Effect.runPromise(decodeOneOffEntryForm(updated));
+      assert.deepEqual(details.nutrients.energyKcal, {
+        _tag: source,
+        value: 650,
+      });
+      assert.deepEqual(details.nutrients.saltGrams, { _tag: source, value: 0 });
+      assert.deepEqual(details.nutrients.fiberGrams, { _tag: "Unknown" });
+      const edited = await Effect.runPromise(
+        applyOneOffEntryQuickInput({
+          input: "Dinner,,k700 fi3",
+          values: updated,
+        })
+      );
+      assert.equal(edited.values.nutrients.fiberGrams.source, source);
+      assert.equal(edited.values.nutrients.energyKcal.source, source);
+    }
+  );
+
+  it("supports a single-nutrient override after setting every source", async () => {
+    const recorded = setAllOneOffNutrientSources({
+      values,
+      source: "Recorded",
+    });
+    const mixed = {
+      ...recorded,
+      nutrients: {
+        ...recorded.nutrients,
+        proteinGrams: { value: "25", source: "Estimated" as const },
+      },
+    };
+    const draft = await Effect.runPromise(
+      applyOneOffEntryQuickInput({ input: "Dinner,,k650 p30", values: mixed })
+    );
+    const details = await Effect.runPromise(
+      decodeOneOffEntryForm(draft.values)
+    );
+    assert.deepEqual(details.nutrients.energyKcal, {
+      _tag: "Recorded",
+      value: 650,
+    });
+    assert.deepEqual(details.nutrients.proteinGrams, {
+      _tag: "Estimated",
+      value: 30,
+    });
+  });
+  it("accepts partial nutrition and saves unknown separately from explicit zero", async () => {
+    const draft = await Effect.runPromise(
+      applyOneOffEntryQuickInput({
+        input: "Noodle bowl, 1 bowl, k650 p25 sa0",
+        values,
+      })
+    );
+    assert.deepEqual(draft.quickInputIssues, []);
+    const details = await Effect.runPromise(
+      decodeOneOffEntryForm(draft.values)
+    );
+    assert.equal(details.name, "Noodle bowl");
+    assert.equal(details.amountDescription, "1 bowl");
+    assert.equal(details.note, "Menu calories");
+    assert.deepEqual(details.nutrients.energyKcal, {
+      _tag: "Estimated",
+      value: 650,
+    });
+    assert.deepEqual(details.nutrients.saltGrams, {
+      _tag: "Estimated",
+      value: 0,
+    });
+    assert.deepEqual(details.nutrients.carbsGrams, { _tag: "Unknown" });
+  });
+
+  it("uses the same positional nutrient order as food creation", async () => {
+    const draft = await Effect.runPromise(
+      applyOneOffEntryQuickInput({
+        input: "Dinner,,650,20,5,80,10,3,25,0",
+        values,
+      })
+    );
+    assert.deepEqual(draft.quickInputIssues, []);
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries(draft.values.nutrients).map(([field, nutrient]) => [
+          field,
+          nutrient.value,
+        ])
+      ),
+      {
+        energyKcal: "650",
+        fatGrams: "20",
+        saturatedFatGrams: "5",
+        carbsGrams: "80",
+        sugarGrams: "10",
+        fiberGrams: "3",
+        proteinGrams: "25",
+        saltGrams: "0",
+      }
+    );
+    assert.equal(draft.values.amountDescription, "");
+  });
+
+  it("round-trips manual values and preserves existing certainty when editing text", async () => {
+    const existing = {
+      ...values,
+      nutrients: {
+        ...values.nutrients,
+        energyKcal: { value: "700", source: "Recorded" as const },
+        proteinGrams: { value: "30,5", source: "Estimated" as const },
+        saltGrams: { value: "0", source: "Recorded" as const },
+      },
+    };
+    const text = oneOffEntryQuickInputFromValues({ values: existing });
+    assert.equal(text.quickInput, "Dinner, Half a plate, k700 p30.5 sa0");
+    const draft = await Effect.runPromise(
+      applyOneOffEntryQuickInput({
+        input: text.quickInput.replace("k700", "k750"),
+        values: existing,
+      })
+    );
+    assert.deepEqual(draft.quickInputIssues, []);
+    const details = await Effect.runPromise(
+      decodeOneOffEntryForm(draft.values)
+    );
+    assert.deepEqual(details.nutrients.energyKcal, {
+      _tag: "Recorded",
+      value: 750,
+    });
+    assert.deepEqual(details.nutrients.proteinGrams, {
+      _tag: "Estimated",
+      value: 30.5,
+    });
+    assert.deepEqual(details.nutrients.saltGrams, {
+      _tag: "Recorded",
+      value: 0,
+    });
+    assert.equal(draft.values.note, existing.note);
+  });
+
+  it("removes cleared nutrients instead of retaining old values", async () => {
+    const first = await Effect.runPromise(
+      applyOneOffEntryQuickInput({ input: "Dinner,,k650 p25", values })
+    );
+    const next = await Effect.runPromise(
+      applyOneOffEntryQuickInput({
+        input: "Dinner,,k650",
+        values: first.values,
+      })
+    );
+    assert.equal(next.values.nutrients.proteinGrams.value, "");
+    const cleared = await Effect.runPromise(
+      applyOneOffEntryQuickInput({ input: "", values: next.values })
+    );
+    assert.equal(cleared.values.name, "");
+    assert.equal(cleared.values.nutrients.energyKcal.value, "");
+    assert.equal(cleared.values.note, values.note);
+  });
+
+  it.each(["Dinner", "Dinner, Half a plate", "Dinner,,k650"])(
+    "allows unknown nutrients in %s",
+    async (input) => {
+      const draft = await Effect.runPromise(
+        applyOneOffEntryQuickInput({ input, values })
+      );
+      assert.deepEqual(draft.quickInputIssues, []);
+      await Effect.runPromise(decodeOneOffEntryForm(draft.values));
+    }
+  );
+
+  it.each([
+    "Dinner,,k650 k700",
+    "Dinner,,k650 p-1",
+    "Dinner,,650,nope",
+    ",,k650",
+  ])("reports invalid notation in %s", async (input) => {
+    const draft = await Effect.runPromise(
+      applyOneOffEntryQuickInput({ input, values })
+    );
+    assert.isAbove(draft.quickInputIssues.length, 0);
+    assert.isFalse(
+      draft.quickInputIssues.some((issue) => issue.includes("missing required"))
+    );
+  });
+});
 
 describe("one-off entry form feedback", () => {
   it("preserves mixed certainty, comma decimals, explicit zero and unknown values", async () => {

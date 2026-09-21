@@ -265,46 +265,8 @@ export const foodFormMachine = setup({
             ...context.formValues,
             [event.name]: event.value,
           };
-          const name = formValues.name.trim();
-          const brand = formValues.brand.trim();
-          const nutrients = [
-            _quickNutrientTag({
-              tag: "k",
-              value: formValues.energyKcal,
-            }),
-            _quickNutrientTag({
-              tag: "f",
-              value: formValues.fatGrams,
-            }),
-            _quickNutrientTag({
-              tag: "sf",
-              value: formValues.saturatedFatGrams,
-            }),
-            _quickNutrientTag({
-              tag: "c",
-              value: formValues.carbsGrams,
-            }),
-            _quickNutrientTag({
-              tag: "su",
-              value: formValues.sugarGrams,
-            }),
-            _quickNutrientTag({
-              tag: "fi",
-              value: formValues.fiberGrams,
-            }),
-            _quickNutrientTag({
-              tag: "p",
-              value: formValues.proteinGrams,
-            }),
-            _quickNutrientTag({
-              tag: "sa",
-              value: formValues.saltGrams,
-            }),
-          ].filter((value): value is string => value !== undefined);
           const quickInput = context.syncQuickInputFromFields
-            ? [name, brand, nutrients.join(" ")]
-                .join(", ")
-                .replace(/(?:, )+$/g, "")
+            ? FoodQuickInput.formatFoodQuickInput({ values: formValues })
             : context.quickInput;
 
           return {
@@ -427,7 +389,10 @@ function _foodFormContextFromInput({
         : `${food.massVolumeConversion.volume.amount}`,
     conversionVolumeUnit: food?.massVolumeConversion?.volume.unit ?? "ml",
   } satisfies FoodFormValues;
-  const quickInput = "";
+  const quickInput =
+    food === null
+      ? ""
+      : FoodQuickInput.formatFoodQuickInput({ values: formValues });
 
   return {
     formValues,
@@ -705,18 +670,6 @@ export function createFoodInputFromFormValues({
           },
         }),
   };
-}
-
-function _quickNutrientTag({
-  tag,
-  value,
-}: {
-  readonly tag: string;
-  readonly value: string;
-}) {
-  const trimmedValue = value.trim();
-
-  return trimmedValue === "" ? undefined : `${tag}${trimmedValue}`;
 }
 
 function _optionalFormValue(value: string) {

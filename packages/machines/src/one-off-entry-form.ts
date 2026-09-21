@@ -1,4 +1,4 @@
-import { Domain, MealEntries, Reporting } from "@mai/nutrition";
+import { Domain, FoodQuickInput, MealEntries, Reporting } from "@mai/nutrition";
 import { Cause, Data, Effect, Schema } from "effect";
 
 export const OneOffNutrientField = Schema.Struct({
@@ -20,6 +20,78 @@ export const OneOffFormValues = Schema.Struct({
     saltGrams: OneOffNutrientField,
   }),
 });
+
+export function setAllOneOffNutrientSources({
+  values,
+  source,
+}: {
+  readonly values: typeof OneOffFormValues.Type;
+  readonly source: typeof OneOffNutrientField.Type.source;
+}): typeof OneOffFormValues.Type {
+  const nutrients = { ...values.nutrients };
+  for (const field of Reporting.NutrientNames) {
+    nutrients[field] = { ...nutrients[field], source };
+  }
+  return { ...values, nutrients };
+}
+
+export const applyOneOffEntryQuickInput = Effect.fn(
+  "applyOneOffEntryQuickInput"
+)(function* ({
+  input,
+  values,
+}: {
+  readonly input: string;
+  readonly values: typeof OneOffFormValues.Type;
+}) {
+  const result = yield* FoodQuickInput.parseFoodQuickInput({ input });
+  const nutrients = { ...values.nutrients };
+  for (const field of Reporting.NutrientNames) {
+    const value = result.partial[field];
+    nutrients[field] = {
+      ...values.nutrients[field],
+      value: value === undefined ? "" : String(value),
+    };
+  }
+  return {
+    values: {
+      ...values,
+      name: result.partial.name ?? "",
+      amountDescription: result.partial.brand ?? "",
+      nutrients,
+    },
+    quickInput: input,
+    quickInputIssues: result.issues
+      .filter((issue) => issue.reason !== "missing-required-nutrient")
+      .map((issue) => issue.message),
+  };
+});
+
+export function oneOffEntryQuickInputFromValues({
+  values,
+}: {
+  readonly values: typeof OneOffFormValues.Type;
+}) {
+  const quickInput = FoodQuickInput.formatFoodQuickInput({
+    values: {
+      name: values.name,
+      brand: values.amountDescription,
+      energyKcal: values.nutrients.energyKcal.value,
+      proteinGrams: values.nutrients.proteinGrams.value,
+      carbsGrams: values.nutrients.carbsGrams.value,
+      fatGrams: values.nutrients.fatGrams.value,
+      fiberGrams: values.nutrients.fiberGrams.value,
+      sugarGrams: values.nutrients.sugarGrams.value,
+      saturatedFatGrams: values.nutrients.saturatedFatGrams.value,
+      saltGrams: values.nutrients.saltGrams.value,
+    },
+  });
+  return {
+    values,
+    quickInput,
+    quickInputIssues: [],
+  };
+}
 const nutrientNames = {
   energyKcal: "Calories",
   proteinGrams: "Protein",

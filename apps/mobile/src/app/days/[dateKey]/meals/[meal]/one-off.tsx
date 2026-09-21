@@ -1,3 +1,7 @@
+import {
+  FoodQuickInputTextField,
+  FoodQuickInputFeedback,
+} from "@/components/nutrition/food-quick-input";
 import { AppScreen } from "@/components/ui/app-screen";
 import { Button } from "@/components/ui/button";
 import { Field, NumberField, TextArea } from "@/components/ui/field";
@@ -13,7 +17,7 @@ import { color, spacing } from "@/theme/tokens";
 import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { Domain, Reporting } from "@mai/nutrition";
 import { useMachine } from "@xstate/react";
-import { Option, Schema } from "effect";
+import { Array, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { Alert, StyleSheet, View } from "react-native";
@@ -35,7 +39,7 @@ export default function OneOffScreen() {
 }
 function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
   const [snapshot, , actor] = useMachine(oneOffEntryMachine, { input: route });
-  const { values, notice } = snapshot.context;
+  const { values, notice, quickInput, quickInputIssues } = snapshot.context;
   const disabled = !snapshot.matches("Ready");
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.screen}>
@@ -74,6 +78,15 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
           </>
         ) : (
           <>
+            <FoodQuickInputTextField
+              disabled={disabled}
+              input={quickInput}
+              onChangeText={(input) =>
+                actor.trigger.changeQuickInput({ input })
+              }
+              placeholder="Noodle bowl, 1 bowl, k650 p25 c80 f20"
+            />
+            <FoodQuickInputFeedback issues={quickInputIssues} />
             <Field
               label="Name"
               accessibilityLabel="One-off name"
@@ -95,6 +108,26 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               placeholder="1 bowl, half a plate…"
             />
             <View style={styles.divider} />
+            <View style={styles.sourceActions}>
+              <Button
+                disabled={disabled}
+                variant="secondary"
+                style={styles.sourceAction}
+                onPress={() =>
+                  actor.trigger.allSources({ source: "Estimated" })
+                }
+              >
+                All estimated
+              </Button>
+              <Button
+                disabled={disabled}
+                variant="secondary"
+                style={styles.sourceAction}
+                onPress={() => actor.trigger.allSources({ source: "Recorded" })}
+              >
+                All recorded
+              </Button>
+            </View>
             {Reporting.NutrientNames.map((field) => (
               <NumberField
                 key={field}
@@ -134,7 +167,11 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               }
             />
             <Button
-              disabled={disabled || values.name.trim() === ""}
+              disabled={
+                disabled ||
+                values.name.trim() === "" ||
+                Array.isReadonlyArrayNonEmpty(quickInputIssues)
+              }
               loading={snapshot.matches("Saving")}
               onPress={() => actor.trigger.save()}
             >
@@ -173,4 +210,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   content: { gap: spacing.lg, padding: spacing.lg },
   divider: { height: 1, backgroundColor: color.divider },
+  sourceActions: { flexDirection: "row", gap: spacing.sm },
+  sourceAction: { flex: 1 },
 });

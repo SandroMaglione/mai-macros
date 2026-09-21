@@ -146,6 +146,31 @@ export class FoodQuickInputParseError extends Data.TaggedError(
   "FoodQuickInputParseError"
 )<FoodQuickInputParseIssue> {}
 
+export function formatFoodQuickInput({
+  values,
+}: {
+  readonly values: Readonly<Record<FoodQuickInputFieldName, string>>;
+}) {
+  const tags = {
+    energyKcal: "k",
+    fatGrams: "f",
+    saturatedFatGrams: "sf",
+    carbsGrams: "c",
+    sugarGrams: "su",
+    fiberGrams: "fi",
+    proteinGrams: "p",
+    saltGrams: "sa",
+  } satisfies Record<FoodQuickInputNutrientFieldName, string>;
+  const nutrients = positionalNutrientFields.flatMap((field) => {
+    const value = values[field].trim().replace(",", ".");
+    return value === "" ? [] : [`${tags[field]}${value}`];
+  });
+
+  return [values.name.trim(), values.brand.trim(), nutrients.join(" ")]
+    .join(", ")
+    .replace(/(?:, )+$/g, "");
+}
+
 export const parseFoodQuickInput = Effect.fn("parseFoodQuickInput")(function* ({
   input,
 }: {

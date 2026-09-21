@@ -2,7 +2,7 @@ import { AppScreen } from "@/components/ui/app-screen";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { Button } from "@/components/ui/button";
 import { DisclosureCard } from "@/components/ui/disclosure-card";
-import { Field, NumberField, TextArea } from "@/components/ui/field";
+import { Field, NumberField } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
@@ -31,6 +31,10 @@ import {
 import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
+import {
+  FoodQuickInputTextField,
+  FoodQuickInputFeedback,
+} from "./food-quick-input";
 import { FoodNutrientOverview } from "./food-nutrient-overview";
 import { FoodPriceInputFields } from "./food-price-fields";
 import { MeasurementUnitSelect } from "./measurement-unit-select";
@@ -170,13 +174,13 @@ export function FoodForm({
   const SubmitIcon = hasFailed ? RotateCcw : isCreating ? Plus : Save;
   const form = (
     <View style={styles.form}>
-      {isCreating ? (
-        <FoodQuickInputTextField
-          actor={actor}
-          disabled={disabled}
-          input={quickInput}
-        />
-      ) : null}
+      <FoodQuickInputTextField
+        disabled={disabled}
+        input={quickInput}
+        onChangeText={(input) =>
+          actor.send({ type: "changeQuickInput", input })
+        }
+      />
 
       {intro}
 
@@ -198,9 +202,11 @@ export function FoodForm({
 
       <FoodNumberWarnings warnings={numberWarnings} />
 
-      {isCreating ? (
-        <FoodQuickInputFeedback parseResult={quickInputParseResult} />
-      ) : null}
+      <FoodQuickInputFeedback
+        issues={quickInputParseResult.issues.map(
+          (issue: FoodQuickInput.FoodQuickInputParseIssue) => issue.message
+        )}
+      />
 
       {feedback === undefined ? null : (
         <Notice
@@ -272,34 +278,6 @@ export function FoodForm({
 
       <BottomActionBar>{submitButton}</BottomActionBar>
     </View>
-  );
-}
-
-function FoodQuickInputTextField({
-  actor,
-  disabled,
-  input,
-}: {
-  readonly actor: FoodFormMachine.FoodFormActorRef;
-  readonly disabled: boolean;
-  readonly input: string;
-}) {
-  return (
-    <TextArea
-      autoCapitalize="sentences"
-      autoCorrect={false}
-      editable={!disabled}
-      label="Food text"
-      onChangeText={(value) => {
-        actor.send({
-          type: "changeQuickInput",
-          input: value,
-        });
-      }}
-      placeholder="Yogurt greco 0%, Fage, k59 f0.4 sf0.1 c3.6 su3.2 fi0 p10 sa0.1"
-      returnKeyType="default"
-      value={input}
-    />
   );
 }
 
@@ -694,14 +672,6 @@ function FoodNumberWarnings({
   );
 }
 
-function FoodQuickInputFeedback({
-  parseResult,
-}: {
-  readonly parseResult: FoodQuickInput.FoodQuickInputParseResult;
-}) {
-  return <FoodQuickInputIssues issues={parseResult.issues} />;
-}
-
 function FoodFormOverview({
   values,
 }: {
@@ -715,28 +685,6 @@ function FoodFormOverview({
       primaryLabel={foodNutrientOverviewPrimaryLabel({ values })}
       secondaryLabel={`per ${values.nutritionReferenceAmount || "…"} ${values.nutritionReferenceUnit}`}
     />
-  );
-}
-
-function FoodQuickInputIssues({
-  issues,
-}: {
-  readonly issues: readonly FoodQuickInput.FoodQuickInputParseIssue[];
-}) {
-  if (!Array.isReadonlyArrayNonEmpty(issues)) {
-    return null;
-  }
-
-  return (
-    <View style={styles.noticeStack}>
-      {issues.map((issue) => (
-        <Notice
-          key={`${issue.reason}:${issue.field ?? "input"}:${issue.message}`}
-          message={issue.message}
-          tone="danger"
-        />
-      ))}
-    </View>
   );
 }
 

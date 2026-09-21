@@ -231,7 +231,7 @@ const foodEditorMachine = setup({
     foods: [],
     foodFormActor: spawn(actorSources.foodForm, {
       id: "foodEditorForm",
-      input: { initialFood: null, syncQuickInputFromFields: false },
+      input: { initialFood: null, syncQuickInputFromFields: true },
     }),
     foodId: input.foodId,
     message: null,

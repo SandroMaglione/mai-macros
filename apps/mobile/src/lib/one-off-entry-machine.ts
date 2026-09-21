@@ -1,13 +1,16 @@
 import {
   OneOffFormValues as FormValues,
   OneOffNutrientField as NutrientField,
+  applyOneOffEntryQuickInput,
+  oneOffEntryQuickInputFromValues,
+  setAllOneOffNutrientSources,
   decodeOneOffEntryForm,
   oneOffEntryErrorMessage,
 } from "@mai/machines/one-off-entry-form";
 import { RuntimeClient } from "@/lib/runtime-client";
 import { Domain, DailyLogs, MealEntries, Reporting } from "@mai/nutrition";
 import { EmptyEvent } from "@mai/machines/schemas";
-import { Effect, Schema } from "effect";
+import { Array, Effect, Schema } from "effect";
 import { router } from "expo-router";
 import { createAsyncLogic, setup } from "xstate";
 
@@ -31,10 +34,15 @@ export const oneOffEntryMachine = setup({
       Schema.Struct({
         route: OneOffRoute,
         values: FormValues,
+        quickInput: Schema.String,
+        quickInputIssues: Schema.Array(Schema.String),
         notice: Schema.NullOr(Schema.String),
       })
     ),
     events: {
+      changeQuickInput: Schema.toStandardSchemaV1(
+        Schema.Struct({ input: Schema.String })
+      ),
       text: Schema.toStandardSchemaV1(
         Schema.Struct({
           field: Schema.Literals(["name", "amountDescription", "note"]),
@@ -52,6 +60,9 @@ export const oneOffEntryMachine = setup({
           field: Schema.Literals(Reporting.NutrientNames),
           source: Schema.Literals(["Recorded", "Estimated"]),
         })
+      ),
+      allSources: Schema.toStandardSchemaV1(
+        Schema.Struct({ source: NutrientField.fields.source })
       ),
       save: Schema.toStandardSchemaV1(EmptyEvent),
       delete: Schema.toStandardSchemaV1(EmptyEvent),
@@ -147,7 +158,7 @@ export const oneOffEntryMachine = setup({
 }).createMachine({
   context: ({ input }) => ({
     route: input,
-    values: _formValues(null),
+    ...oneOffEntryQuickInputFromValues({ values: _formValues(null) }),
     notice: null,
   }),
   initial: "Loading",
@@ -158,7 +169,9 @@ export const oneOffEntryMachine = setup({
         input: ({ context }) => context.route,
         onDone: ({ event }) => ({
           target: "Ready",
-          context: { values: _formValues(event.output.entry) },
+          context: oneOffEntryQuickInputFromValues({
+            values: _formValues(event.output.entry),
+          }),
         }),
         onError: ({ event }) => ({
           target: "Failure",
@@ -174,13 +187,25 @@ export const oneOffEntryMachine = setup({
     Failure: { on: { retry: { target: "Loading" } } },
     Ready: {
       on: {
-        text: ({ context, event }) => ({
-          context: {
-            values: { ...context.values, [event.field]: event.value },
-          },
+        changeQuickInput: ({ context, event }) => ({
+          context: Effect.runSync(
+            applyOneOffEntryQuickInput({
+              input: event.input,
+              values: context.values,
+            })
+          ),
         }),
+        text: ({ context, event }) => {
+          const values = { ...context.values, [event.field]: event.value };
+          return {
+            context:
+              event.field === "note"
+                ? { values }
+                : oneOffEntryQuickInputFromValues({ values }),
+          };
+        },
         nutrient: ({ context, event }) => ({
-          context: {
+          context: oneOffEntryQuickInputFromValues({
             values: {
               ...context.values,
               nutrients: {
@@ -191,7 +216,7 @@ export const oneOffEntryMachine = setup({
                 },
               },
             },
-          },
+          }),
         }),
         source: ({ context, event }) => ({
           context: {
@@ -207,7 +232,18 @@ export const oneOffEntryMachine = setup({
             },
           },
         }),
-        save: { target: "Saving", context: { notice: null } },
+        allSources: ({ context, event }) => ({
+          context: {
+            values: setAllOneOffNutrientSources({
+              values: context.values,
+              source: event.source,
+            }),
+          },
+        }),
+        save: ({ context }) =>
+          Array.isReadonlyArrayNonEmpty(context.quickInputIssues)
+            ? undefined
+            : { target: "Saving", context: { notice: null } },
         delete: ({ context }) =>
           context.route.mealEntryId === null
             ? undefined
