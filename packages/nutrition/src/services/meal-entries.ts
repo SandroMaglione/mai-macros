@@ -217,20 +217,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
       }),
       listOneOffHistory: Effect.fn("MealEntries.listOneOffHistory")(
         function* () {
-          const entries = yield* store.listMealEntries;
-          return Array.sortBy(
-            Order.flip(
-              Order.mapInput(
-                Order.String,
-                (entry: OneOffMealEntry) => entry.dateKey
-              )
-            ),
-            Order.flip(_mealEntryCreatedAtOrder)
-          )(
-            entries.filter(
-              (entry): entry is OneOffMealEntry => entry.kind === "one-off"
-            )
-          );
+          return yield* store.findOneOffMealEntries;
         }
       ),
       listForDay: Effect.fn("MealEntries.listForDay")(function* ({

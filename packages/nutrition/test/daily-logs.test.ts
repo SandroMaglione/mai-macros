@@ -599,6 +599,9 @@ function _dailyLogsTestLayer({
     findMealEntriesForFoodUsage: Effect.sync(() =>
       currentStores.mealEntries.filter(Domain.isCatalogMealEntry)
     ),
+    findOneOffMealEntries: Effect.sync(() =>
+      currentStores.mealEntries.filter(Domain.isOneOffMealEntry)
+    ),
     findLatestPlan: Effect.sync(() => currentStores.plans.slice(-1)),
     findPlanById: (planId) =>
       Effect.sync(() =>

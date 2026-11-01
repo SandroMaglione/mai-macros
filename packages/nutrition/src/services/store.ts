@@ -10,6 +10,7 @@ import type {
   FoodId,
   MealEntry,
   CatalogMealEntry,
+  OneOffMealEntry,
   MealEntryId,
   MealId,
   Plan,
@@ -117,6 +118,8 @@ export class NutritionStore extends Context.Service<
     readonly findMealEntriesForFoodUsage: StoreEffect<
       readonly CatalogMealEntry[]
     >;
+
+    readonly findOneOffMealEntries: StoreEffect<readonly OneOffMealEntry[]>;
 
     readonly findLatestPlan: StoreEffect<readonly Plan[]>;
 

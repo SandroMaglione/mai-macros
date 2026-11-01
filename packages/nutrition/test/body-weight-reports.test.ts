@@ -282,6 +282,9 @@ function BodyWeightReportsTestLayer({
         findMealEntriesForFoodUsage: Effect.succeed(
           stores.mealEntries.filter(Domain.isCatalogMealEntry)
         ),
+        findOneOffMealEntries: Effect.succeed(
+          stores.mealEntries.filter(Domain.isOneOffMealEntry)
+        ),
         findMealEntryById: (mealEntryId: Domain.MealEntryId) =>
           Effect.succeed(
             stores.mealEntries.filter(

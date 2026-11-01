@@ -341,6 +341,9 @@ function _getRange({
             findMealEntriesForFoodUsage: Effect.succeed(
               stores.mealEntries.filter(Domain.isCatalogMealEntry)
             ),
+            findOneOffMealEntries: Effect.succeed(
+              stores.mealEntries.filter(Domain.isOneOffMealEntry)
+            ),
             findLatestPlan: stores.activeMealPlanSelections.some((selection) =>
               stores.plans.some((plan) => plan.id === selection.planId)
             )

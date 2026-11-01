@@ -48,18 +48,14 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
     quickInputIssues,
     historyQuery,
     history,
+    matchingHistory,
   } = snapshot.context;
   const isHistory = snapshot.matches("History");
-  const historyEntries = history.filter((entry) =>
-    `${entry.name} ${entry.amountDescription}`
-      .toLocaleLowerCase()
-      .includes(historyQuery.trim().toLocaleLowerCase())
-  );
   const disabled = !snapshot.matches("Ready");
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppScreen
-        scroll
+        scroll={!isHistory}
         contentStyle={styles.content}
         safeAreaEdges={["top", "bottom"]}
         topSafeAreaColor={color.header}
@@ -134,19 +130,25 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               </>
             ) : null}
             {snapshot.matches({ History: "Ready" }) ? (
-              Array.isReadonlyArrayNonEmpty(historyEntries) ? (
+              history === null ? (
+                <>
+                  <Notice message="Unable to load past entries" tone="danger" />
+                  <Button onPress={() => actor.trigger.retry()}>
+                    Try again
+                  </Button>
+                </>
+              ) : (
                 <OneOffEntryList
-                  entries={historyEntries}
-                  onSelect={(entry) =>
-                    actor.trigger.reuse({ mealEntryId: entry.id })
+                  actor={actor}
+                  entries={matchingHistory}
+                  empty={
+                    <Text style={styles.empty}>
+                      {historyQuery.trim() === ""
+                        ? "No past one-off entries yet"
+                        : "No matching entries"}
+                    </Text>
                   }
                 />
-              ) : (
-                <Text style={styles.empty}>
-                  {historyQuery.trim() === ""
-                    ? "No past one-off entries yet"
-                    : "No matching entries"}
-                </Text>
               )
             ) : null}
           </>
