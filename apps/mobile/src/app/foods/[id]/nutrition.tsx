@@ -96,7 +96,7 @@ const nutritionEditorMachine = setup({
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
-  actorSources: {
+  actors: {
     load: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(FoodInput),

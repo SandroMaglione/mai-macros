@@ -21,9 +21,27 @@ export const OneOffRoute = Schema.Struct({
   mealEntryId: Schema.NullOr(Domain.MealEntryId),
 });
 const SaveInput = Schema.Struct({ route: OneOffRoute, values: FormValues });
+const OneOffHistory = Schema.Array(Domain.OneOffMealEntry);
 const LoadResult = Schema.Struct({
   entry: Schema.NullOr(Domain.OneOffMealEntry),
+  history: Schema.NullOr(OneOffHistory),
 });
+const _matchingHistory = ({
+  history,
+  query,
+}: {
+  readonly history: typeof OneOffHistory.Type | null;
+  readonly query: string;
+}) => {
+  const tokens = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  return history === null || !Array.isReadonlyArrayNonEmpty(tokens)
+    ? (history ?? [])
+    : history.filter((entry) => {
+        const searchable =
+          `${entry.name} ${entry.amountDescription}`.toLocaleLowerCase();
+        return tokens.every((token) => searchable.includes(token));
+      });
+};
 const MutationResult = Schema.Union([
   Schema.TaggedStruct("Success", {}),
   Schema.TaggedStruct("Invalid", { message: Schema.String }),
@@ -38,8 +56,9 @@ export const oneOffEntryMachine = setup({
         quickInput: Schema.String,
         quickInputIssues: Schema.Array(Schema.String),
         notice: Schema.NullOr(Schema.String),
-        history: Schema.Array(Domain.OneOffMealEntry),
+        history: Schema.NullOr(OneOffHistory),
         historyQuery: Schema.String,
+        matchingHistory: OneOffHistory,
       })
     ),
     events: {
@@ -80,7 +99,7 @@ export const oneOffEntryMachine = setup({
       retry: Schema.toStandardSchemaV1(EmptyEvent),
     },
   },
-  actorSources: {
+  actors: {
     load: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(OneOffRoute),
@@ -96,8 +115,14 @@ export const oneOffEntryMachine = setup({
               !day.selectedPlan.meals.some((meal) => meal.id === input.meal)
             )
               return yield* Effect.fail("Meal unavailable");
-            if (input.mealEntryId === null) return { entry: null };
             const service = yield* MealEntries.MealEntries;
+            if (input.mealEntryId === null)
+              return {
+                entry: null,
+                history: yield* service
+                  .listOneOffHistory()
+                  .pipe(Effect.orElseSucceed(() => null)),
+              };
             const entry = (yield* service.listForDay({
               input: { dateKey: input.dateKey },
             })).find(
@@ -106,14 +131,14 @@ export const oneOffEntryMachine = setup({
             );
             if (entry?.kind !== "one-off")
               return yield* Effect.fail("Entry unavailable");
-            return { entry };
+            return { entry, history: null };
           })
         ),
     }),
     loadHistory: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(Schema.Void),
-        output: Schema.toStandardSchemaV1(Schema.Array(Domain.OneOffMealEntry)),
+        output: Schema.toStandardSchemaV1(OneOffHistory),
       },
       run: () =>
         RuntimeClient.runPromise(
@@ -176,7 +201,7 @@ export const oneOffEntryMachine = setup({
     Failure: {},
     Ready: {},
     History: {
-      states: { Loading: {}, Ready: {}, Failure: {} },
+      states: { Ready: {}, Loading: {}, Failure: {} },
     },
     Saving: {},
     Deleting: {},
@@ -187,8 +212,9 @@ export const oneOffEntryMachine = setup({
     route: input,
     ...oneOffEntryQuickInputFromValues({ values: oneOffEntryFormValues(null) }),
     notice: null,
-    history: [],
+    history: null,
     historyQuery: "",
+    matchingHistory: [],
   }),
   initial: "Loading",
   states: {
@@ -196,11 +222,18 @@ export const oneOffEntryMachine = setup({
       invoke: {
         src: "load",
         input: ({ context }) => context.route,
-        onDone: ({ event }) => ({
+        onDone: ({ context, event }) => ({
           target: "Ready",
-          context: oneOffEntryQuickInputFromValues({
-            values: oneOffEntryFormValues(event.output.entry),
-          }),
+          context: {
+            ...oneOffEntryQuickInputFromValues({
+              values: oneOffEntryFormValues(event.output.entry),
+            }),
+            history: event.output.history,
+            matchingHistory: _matchingHistory({
+              history: event.output.history,
+              query: context.historyQuery,
+            }),
+          },
         }),
         onError: ({ event }) => ({
           target: "Failure",
@@ -215,14 +248,20 @@ export const oneOffEntryMachine = setup({
     },
     Failure: { on: { retry: { target: "Loading" } } },
     History: {
-      initial: "Loading",
+      initial: "Ready",
       on: {
         showForm: { target: "Ready", context: { notice: null } },
-        searchHistory: ({ event }) => ({
-          context: { historyQuery: event.query },
+        searchHistory: ({ context, event }) => ({
+          context: {
+            historyQuery: event.query,
+            matchingHistory: _matchingHistory({
+              history: context.history,
+              query: event.query,
+            }),
+          },
         }),
         reuse: ({ context, event }) => {
-          const entry = context.history.find(
+          const entry = context.history?.find(
             (entry) => entry.id === event.mealEntryId
           );
           if (entry === undefined || context.route.mealEntryId !== null)
@@ -243,9 +282,15 @@ export const oneOffEntryMachine = setup({
           invoke: {
             src: "loadHistory",
             input: undefined,
-            onDone: ({ event }) => ({
+            onDone: ({ context, event }) => ({
               target: "Ready",
-              context: { history: event.output },
+              context: {
+                history: event.output,
+                matchingHistory: _matchingHistory({
+                  history: event.output,
+                  query: context.historyQuery,
+                }),
+              },
             }),
             onError: {
               target: "Failure",
@@ -253,7 +298,14 @@ export const oneOffEntryMachine = setup({
             },
           },
         },
-        Ready: {},
+        Ready: {
+          on: {
+            retry: ({ context }) =>
+              context.history === null
+                ? { target: "Loading", context: { notice: null } }
+                : undefined,
+          },
+        },
         Failure: {
           on: { retry: { target: "Loading", context: { notice: null } } },
         },

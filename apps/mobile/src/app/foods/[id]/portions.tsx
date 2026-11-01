@@ -100,7 +100,7 @@ const portionManagerMachine = setup({
     },
     input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
   },
-  actorSources: {
+  actors: {
     load: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(

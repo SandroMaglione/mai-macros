@@ -218,7 +218,9 @@ export function buildInsightContext({
 }
 
 type MutableNutrientTotals = {
-  -readonly [Key in keyof Reporting.NutrientTotals]: Reporting.NutrientTotals[Key];
+  -readonly [
+    Key in keyof Reporting.NutrientTotals
+  ]: Reporting.NutrientTotals[Key];
 };
 
 type MutableFoodInsightContributor = Omit<

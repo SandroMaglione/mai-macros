@@ -5,10 +5,10 @@ packages:
 nodeLinker: hoisted
 
 overrides:
-  react: "19.2.3"
-  react-dom: "19.2.3"
-  react-native: "0.86.3"
-  "@op-engineering/op-sqlite": "15.0.4"
+  react: "19.3.0"
+  react-dom: "19.3.0"
+  react-native: "0.88.1"
+  "@op-engineering/op-sqlite": "18.2.5"
 
 onlyBuiltDependencies:
   - better-sqlite3
@@ -24,6 +24,4 @@ allowBuilds:
   dtrace-provider: false
   esbuild: true
   msgpackr-extract: false
-
-minimumReleaseAgeExclude:
-  - xstate@6.0.0-alpha.18
+  protobufjs: false

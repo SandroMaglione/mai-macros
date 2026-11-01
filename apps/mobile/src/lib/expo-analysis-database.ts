@@ -1,4 +1,5 @@
-import { Crypto, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as SqliteClient from "@effect/sql-sqlite-react-native/SqliteClient";
 import { Directory, File, Paths } from "expo-file-system";
 import { AnalysisDatabase } from "@mai/nutrition/services/analysis-database";
@@ -8,12 +9,12 @@ import { writeAnalysisDatabase } from "@mai/sqlite/layers/analysis-export";
 export const ExpoAnalysisDatabaseLayer = Layer.effect(
   AnalysisDatabase,
   Effect.gen(function* () {
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
     return AnalysisDatabase.of({
       render: (input) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const id = yield* crypto.randomUUIDv4;
+            const id = yield* crypto.uuidV4();
             const directory = yield* Effect.acquireRelease(
               Effect.try({
                 try: () => {

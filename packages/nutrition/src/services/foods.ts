@@ -1,7 +1,6 @@
 import {
   Array,
   Context,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -11,6 +10,7 @@ import {
   Option,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import {
   DateKey,
@@ -325,7 +325,7 @@ export class CatalogNutritionCorrectionNotAllowed extends Data.TaggedError(
 export class Foods extends Context.Service<Foods>()("Foods", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
 
     const findFood = Effect.fn("Foods.findFood")(function* (foodId: FoodId) {
       const foods = yield* store.findFoodById(foodId);
@@ -684,7 +684,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
           (portion, position) =>
             Effect.gen(function* () {
               return yield* Schema.decodeEffect(FoodPortion)({
-                id: yield* crypto.randomUUIDv4,
+                id: yield* crypto.uuidV4(),
                 name: portion.name,
                 position,
                 size: portion.size,
@@ -696,7 +696,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
             ? []
             : [
                 yield* Schema.decodeEffect(FoodPrice)({
-                  id: yield* crypto.randomUUIDv4,
+                  id: yield* crypto.uuidV4(),
                   priceMinor: _priceMinor(decodedInput.initialPrice),
                   currency: decodedInput.initialPrice.currency,
                   referenceQuantity:
@@ -708,7 +708,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
               ];
         const food = yield* _foodFromDetailsInput({
           createdAt: now,
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           input: decodedInput,
           now,
           origin: "user",
@@ -732,7 +732,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
         const portions = yield* Effect.forEach(sourceFood.portions, (portion) =>
           Effect.gen(function* () {
             return yield* Schema.decodeEffect(FoodPortion)({
-              id: yield* crypto.randomUUIDv4,
+              id: yield* crypto.uuidV4(),
               name: portion.name,
               position: portion.position,
               size: portion.size,
@@ -742,7 +742,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
         const food = yield* _foodFromDetailsInput({
           category: encodedSourceFood.category,
           createdAt: now,
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           input: decodedInput,
           now,
           origin: "user",
@@ -822,7 +822,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
             -1
           ) + 1;
         const portion = yield* Schema.decodeEffect(FoodPortion)({
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           name: decodedInput.name,
           position,
           size: decodedInput.size,
@@ -935,7 +935,7 @@ export class Foods extends Context.Service<Foods>()("Foods", {
         const previousFood = yield* findFood(decodedInput.foodId);
         const now = DateTime.toEpochMillis(yield* DateTime.now);
         const price = yield* Schema.decodeEffect(FoodPrice)({
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           priceMinor: _priceMinor({
             price: decodedInput.price,
             currency: decodedInput.currency,

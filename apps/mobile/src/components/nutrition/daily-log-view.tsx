@@ -216,7 +216,7 @@ const dailyLogRouteMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     createDailyLog: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(CreateDailyLogInput),

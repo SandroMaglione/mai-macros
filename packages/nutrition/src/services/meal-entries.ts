@@ -16,7 +16,6 @@ import {
 import {
   Array,
   Context,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -26,6 +25,7 @@ import {
   Order,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import { NutritionStore } from "./store.ts";
 import * as Measurements from "../measurements.ts";
@@ -158,7 +158,7 @@ export class RevisedMealEntry<
 export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
 
     return {
       createOneOff: Effect.fn("MealEntries.createOneOff")(function* ({
@@ -180,7 +180,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
           ...decoded,
           name: decoded.name.trim(),
           kind: "one-off",
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           createdAt: now,
           updatedAt: now,
         });
@@ -217,20 +217,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
       }),
       listOneOffHistory: Effect.fn("MealEntries.listOneOffHistory")(
         function* () {
-          const entries = yield* store.listMealEntries;
-          return Array.sortBy(
-            Order.flip(
-              Order.mapInput(
-                Order.String,
-                (entry: OneOffMealEntry) => entry.dateKey
-              )
-            ),
-            Order.flip(_mealEntryCreatedAtOrder)
-          )(
-            entries.filter(
-              (entry): entry is OneOffMealEntry => entry.kind === "one-off"
-            )
-          );
+          return yield* store.findOneOffMealEntries;
         }
       ),
       listForDay: Effect.fn("MealEntries.listForDay")(function* ({
@@ -393,7 +380,7 @@ export class MealEntries extends Context.Service<MealEntries>()("MealEntries", {
                   });
                 const now = DateTime.toEpochMillis(yield* DateTime.now);
                 const mealEntry = yield* Schema.decodeEffect(CatalogMealEntry)({
-                  id: yield* crypto.randomUUIDv4,
+                  id: yield* crypto.uuidV4(),
                   dateKey: decodedInput.dateKey,
                   mealId: decodedInput.mealId,
                   foodId: decodedInput.foodId,

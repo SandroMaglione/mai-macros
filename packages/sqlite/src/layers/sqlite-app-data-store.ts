@@ -2,8 +2,8 @@ import * as EventStore from "@mai/event-tracking/services/store";
 import * as AppData from "@mai/nutrition/services/app-data-store";
 import * as NutritionStore from "@mai/nutrition/services/store";
 import { Array, Data, Effect, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 
 const EmptyRequest = Schema.Struct({});
 

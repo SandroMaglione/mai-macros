@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "@mai/nutrition": "workspace:^",
-    "effect": "4.0.0-rc.112",
-    "xstate": "6.0.0-alpha.18"
+    "effect": "4.1.1",
+    "xstate": "6.0.0-alpha.71"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "vitest": "^4.0.8"
+    "vitest": "^5.0.5"
   }
 }

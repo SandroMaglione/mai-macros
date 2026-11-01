@@ -1,6 +1,6 @@
 import { Array, Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 import {
   AnalysisData,
   TableSchemas,
@@ -96,7 +96,10 @@ export const writeAnalysisDatabase = Effect.fn("writeAnalysisDatabase")(
           }
         }
         yield* sql`CREATE TABLE documentation (name TEXT PRIMARY KEY NOT NULL, content TEXT NOT NULL) STRICT`;
-        const documents = [
+        const documents: Array.NonEmptyReadonlyArray<{
+          readonly name: string;
+          readonly content: string;
+        }> = [
           {
             name: "schema.json",
             content: yield* Schema.encodeEffect(json)(

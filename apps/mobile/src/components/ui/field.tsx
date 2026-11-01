@@ -7,6 +7,7 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type TextInputInstance,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
@@ -37,7 +38,7 @@ export function Field({
   ...inputProps
 }: FieldProps) {
   const supportingText = error ?? helperText;
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   const selectionHandled = useRef(false);
 
   return (

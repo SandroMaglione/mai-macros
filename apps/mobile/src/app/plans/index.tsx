@@ -213,7 +213,7 @@ const plansRouteMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     changePlan: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(ChangePlanInput),

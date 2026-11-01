@@ -72,7 +72,7 @@ const manageFoodsMachine = setup({
     },
     input: Schema.toStandardSchemaV1(ManageFoodsData),
   },
-  actorSources: {
+  actors: {
     foodSearch: FoodSearchMachine.foodSearchMachine,
   },
   actions: {
@@ -93,9 +93,9 @@ const manageFoodsMachine = setup({
     },
   },
 }).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
+  context: ({ actors, input, spawn }) => ({
     dateKey: input.dateKey,
-    foodSearchActor: spawn(actorSources.foodSearch, {
+    foodSearchActor: spawn(actors.foodSearch, {
       id: "manageFoodsSearch",
       input: {
         foods: input.foods,
@@ -142,7 +142,7 @@ const manageFoodsLoaderMachine = setup({
     },
     input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
   },
-  actorSources: {
+  actors: {
     load: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(ManageFoodsLoaderInput),
@@ -162,6 +162,23 @@ const manageFoodsLoaderMachine = setup({
           })
         ),
     }),
+  },
+  states: {
+    Loading: {},
+    Failed: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ message: Schema.String })
+        ),
+      },
+    },
+    Ready: {
+      schemas: {
+        context: Schema.toStandardSchemaV1(
+          Schema.Struct({ data: ManageFoodsData })
+        ),
+      },
+    },
   },
 }).createMachine({
   context: ({ input }) => ({ dateKey: input.dateKey }),

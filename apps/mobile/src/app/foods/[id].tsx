@@ -118,7 +118,7 @@ const foodEditorMachine = setup({
     },
     input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
   },
-  actorSources: {
+  actors: {
     foodForm: FoodFormMachine.foodFormMachine,
     load: createAsyncLogic({
       schemas: {
@@ -242,11 +242,11 @@ const foodEditorMachine = setup({
     },
   },
 }).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
+  context: ({ actors, input, spawn }) => ({
     draft: null,
     food: null,
     foods: [],
-    foodFormActor: spawn(actorSources.foodForm, {
+    foodFormActor: spawn(actors.foodForm, {
       id: "foodEditorForm",
       input: { initialFood: null, syncQuickInputFromFields: true },
     }),

@@ -1,6 +1,6 @@
 import { Domain, MealEntries, Reporting, Store } from "@mai/nutrition";
 import { Cause, Effect, Schema } from "effect";
-import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
+import { SqlError, UnknownError } from "effect/sql/SqlError";
 import { assert, describe, it } from "vitest";
 import {
   decodeOneOffEntryForm,

@@ -75,7 +75,7 @@ const dailyBodyWeightMachine = setup({
     Loading: {},
     Saving: {},
   },
-  actorSources: {
+  actors: {
     deleteWeight: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(DeleteDailyBodyWeightInput),

@@ -1,8 +1,8 @@
 import * as Domain from "@mai/nutrition/domain";
 import * as Store from "@mai/nutrition/services/store";
 import { Array, Effect, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 
 const EmptyRequest = Schema.Struct({});
 
@@ -884,6 +884,18 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       `,
   });
 
+  const findOneOffMealEntryRows = SqlSchema.findAll({
+    Request: EmptyRequest,
+    Result: MealEntryRow,
+    execute: () =>
+      sql`
+        SELECT ${sql.literal(selectMealEntryColumns)}
+        FROM meal_entries
+        WHERE kind = 'one-off'
+        ORDER BY date_key DESC, created_at DESC, rowid DESC
+      `,
+  });
+
   const countMealEntriesByDateRows = SqlSchema.findOne({
     Request: Domain.DateKey,
     Result: CountRow,
@@ -1639,6 +1651,13 @@ export const makeSqliteNutritionStore = Effect.gen(function* () {
       findMealEntriesForFoodUsageRows({}).pipe(
         Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow)),
         Effect.map((entries) => entries.filter(Domain.isCatalogMealEntry))
+      )
+    ),
+
+    findOneOffMealEntries: _mapStoreError(
+      findOneOffMealEntryRows({}).pipe(
+        Effect.flatMap((rows) => Effect.forEach(rows, decodeMealEntryRow)),
+        Effect.map((entries) => entries.filter(Domain.isOneOffMealEntry))
       )
     ),
 

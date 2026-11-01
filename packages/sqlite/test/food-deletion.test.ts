@@ -1,17 +1,15 @@
 import { Domain, Foods, Store } from "@mai/nutrition";
-import { Crypto, Effect, Exit, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { Effect, Exit, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import * as SqlClient from "effect/sql/SqlClient";
 import { assert, it } from "vitest";
 import { TestSqliteNutritionStoreLayer } from "./sqlite-test-layers.ts";
 
 const testLayer = Foods.Foods.layer.pipe(
   Layer.provideMerge(TestSqliteNutritionStoreLayer),
   Layer.provide(
-    Layer.succeed(Crypto.Crypto)(
-      Crypto.make({
-        digest: (_, data) => Effect.succeed(data),
-        randomBytes: (size) => new Uint8Array(size).fill(1),
-      })
+    Layer.succeed(SecureRandom.SecureRandom)(
+      SecureRandom.make((size) => new Uint8Array(size).fill(1))
     )
   )
 );

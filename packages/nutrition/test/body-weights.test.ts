@@ -161,6 +161,7 @@ function BodyWeightsTestContext({
         findMealEntriesByFood: () => Effect.succeed([]),
         findMealEntriesByRange: () => Effect.succeed([]),
         findMealEntriesForFoodUsage: Effect.succeed([]),
+        findOneOffMealEntries: Effect.succeed([]),
         findMealEntryById: () => Effect.succeed([]),
         findLatestPlan: Effect.succeed([]),
         findPlanById: () => Effect.succeed([]),

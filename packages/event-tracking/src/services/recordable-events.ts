@@ -1,7 +1,6 @@
 import {
   Array,
   Context,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -9,6 +8,7 @@ import {
   Option,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import {
   EventEmoji,
@@ -117,7 +117,7 @@ export class RecordableEvents extends Context.Service<RecordableEvents>()(
   {
     make: Effect.gen(function* () {
       const store = yield* EventTrackingStore;
-      const crypto = yield* Crypto.Crypto;
+      const crypto = yield* SecureRandom.SecureRandom;
       const findById = Effect.fn("RecordableEvents.findById")(function* (
         recordableEventId: RecordableEventId
       ) {
@@ -188,7 +188,7 @@ export class RecordableEvents extends Context.Service<RecordableEvents>()(
           );
           const now = DateTime.toEpochMillis(yield* DateTime.now);
           const recordableEvent = yield* Schema.decodeEffect(RecordableEvent)({
-            id: yield* crypto.randomUUIDv4,
+            id: yield* crypto.uuidV4(),
             name: decodedInput.name,
             emoji: decodedInput.emoji,
             position: decodedInput.position ?? nextPosition,
