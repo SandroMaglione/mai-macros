@@ -64,7 +64,7 @@ const analysisExportMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     export: createAsyncLogic({
       schemas: {
         output: Schema.toStandardSchemaV1(
@@ -163,7 +163,7 @@ const exportBackupMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     exportBackup: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(
@@ -273,7 +273,7 @@ const importBackupMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     importBackupFile: createAsyncLogic({
       schemas: {
         output: Schema.toStandardSchemaV1(MobileBackupImportResult),
@@ -384,7 +384,7 @@ const catalogExportMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     exportCatalog: createAsyncLogic({
       schemas: {
         output: Schema.toStandardSchemaV1(
@@ -498,7 +498,7 @@ const catalogImportMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     previewCatalogImportFile: createAsyncLogic({
       schemas: {
         output: Schema.toStandardSchemaV1(MobileCatalogFilePreviewResult),

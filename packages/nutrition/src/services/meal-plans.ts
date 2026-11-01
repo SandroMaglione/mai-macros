@@ -1,7 +1,6 @@
 import {
   Array,
   Context,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -9,6 +8,7 @@ import {
   Option,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import {
   ActiveMealPlanSelection,
@@ -107,7 +107,7 @@ export class PlanMealNameAlreadyExists extends Data.TaggedError(
 export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
   make: Effect.gen(function* () {
     const store = yield* NutritionStore;
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
     const makePlanMeals = Effect.fn("MealPlans.makePlanMeals")(function* ({
       forkExistingMeals,
       mealInputs,
@@ -142,7 +142,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                 : previousPlan.meals.find((meal) => meal.id === mealInput.id);
             const id =
               forkExistingMeals || mealInput.id === undefined
-                ? yield* crypto.randomUUIDv4
+                ? yield* crypto.uuidV4()
                 : mealInput.id;
             const createdAt =
               previousMeal === undefined || forkExistingMeals
@@ -212,7 +212,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
           meals
         );
         const plan = yield* Schema.decodeEffect(Plan)({
-          id: yield* crypto.randomUUIDv4,
+          id: yield* crypto.uuidV4(),
           name: decodedInput.name,
           targetRules: decodedInput.targetRules ?? DefaultPlanTargetRules,
           meals: encodedMeals,
@@ -294,7 +294,7 @@ export class MealPlans extends Context.Service<MealPlans>()("MealPlans", {
                 const encodedPreviousPlan =
                   yield* Schema.encodeEffect(Plan)(previousPlan);
                 const planIdEffect = planIsUsed
-                  ? crypto.randomUUIDv4
+                  ? crypto.uuidV4()
                   : Effect.succeed(previousPlan.id);
                 const planId = yield* planIdEffect;
                 const meals = yield* makePlanMeals({

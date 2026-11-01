@@ -12,9 +12,10 @@ import {
   LocalData,
   Store as NutritionStore,
 } from "@mai/nutrition";
-import { Crypto, DateTime, Effect, Exit, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import { DateTime, Effect, Exit, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 import { assert, describe, it } from "vitest";
 
 import {
@@ -81,18 +82,14 @@ describe("SqliteEventTrackingStore", () => {
   it("records now through the services and round-trips the occurrence", async () => {
     let nextByte = 1;
     const cryptoLayer = Layer.succeed(
-      Crypto.Crypto,
-      Crypto.make({
-        digest: (algorithm, data) =>
-          Effect.succeed(algorithm).pipe(Effect.as(data)),
-        randomBytes: (size) => {
-          const bytes = new Uint8Array(size);
+      SecureRandom.SecureRandom,
+      SecureRandom.make((size) => {
+        const bytes = new Uint8Array(size);
 
-          bytes.fill(nextByte);
-          nextByte += 1;
+        bytes.fill(nextByte);
+        nextByte += 1;
 
-          return bytes;
-        },
+        return bytes;
       })
     );
     const serviceLayer = Layer.mergeAll(

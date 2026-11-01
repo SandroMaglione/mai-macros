@@ -1,7 +1,6 @@
 import {
   Array,
   Context,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -9,6 +8,7 @@ import {
   Option,
   Schema,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 
 import {
   DateKey,
@@ -159,7 +159,7 @@ export class RecordedEvents extends Context.Service<RecordedEvents>()(
   {
     make: Effect.gen(function* () {
       const store = yield* EventTrackingStore;
-      const crypto = yield* Crypto.Crypto;
+      const crypto = yield* SecureRandom.SecureRandom;
       const timeZone = yield* EventTrackingTimeZone;
       const findRecordableEvent = Effect.fn(
         "RecordedEvents.findRecordableEvent"
@@ -198,7 +198,7 @@ export class RecordedEvents extends Context.Service<RecordedEvents>()(
           readonly recordableEventId: RecordableEventId;
         }) {
           return yield* Schema.decodeEffect(RecordedEvent)({
-            id: yield* crypto.randomUUIDv4,
+            id: yield* crypto.uuidV4(),
             recordableEventId,
             dateKey,
             ...(occurredAt === undefined ? {} : { occurredAt }),

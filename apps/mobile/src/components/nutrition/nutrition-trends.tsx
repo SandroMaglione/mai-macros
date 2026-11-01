@@ -136,7 +136,7 @@ const nutritionCalendarMachine = setup({
     Loading: {},
     Ready: {},
   },
-  actorSources: {
+  actors: {
     loadMonth: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(LoadNutritionCalendarInput),

@@ -238,7 +238,7 @@ const eventTrackerMachine = setup({
     SavingRecordableEvent: {},
     TogglingRecordableEvent: {},
   },
-  actorSources: {
+  actors: {
     trackToday: createCallbackLogic(({ sendBack }) => {
       const refreshToday = () => {
         Schema.decodeOption(EventDomain.DateKey)(

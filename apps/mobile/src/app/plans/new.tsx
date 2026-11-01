@@ -165,7 +165,7 @@ const newPlanRouteMachine = setup({
       Alert.alert("Plan not saved", params.message);
     },
   },
-  actorSources: {
+  actors: {
     createMealPlan: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(CreateMealPlanInput),

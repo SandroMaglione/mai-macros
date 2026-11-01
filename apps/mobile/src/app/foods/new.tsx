@@ -166,7 +166,7 @@ const createFoodRouteMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     foodForm: FoodFormMachine.foodFormMachine,
     submitFood: createAsyncLogic({
       schemas: {
@@ -196,9 +196,9 @@ const createFoodRouteMachine = setup({
     }),
   },
 }).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
+  context: ({ actors, input, spawn }) => ({
     dateKey: input.dateKey,
-    foodFormActor: spawn(actorSources.foodForm, {
+    foodFormActor: spawn(actors.foodForm, {
       id: "createFoodRouteFoodForm",
       input: {
         initialFood: null,

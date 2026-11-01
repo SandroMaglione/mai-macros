@@ -1,8 +1,8 @@
 import * as Domain from "@mai/event-tracking/domain";
 import * as Store from "@mai/event-tracking/services/store";
 import { Array, Data, Effect, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 
 const EmptyRequest = Schema.Struct({});
 
@@ -320,13 +320,13 @@ export const makeSqliteEventTrackingStore = Effect.gen(function* () {
     recordedEvents: readonly Domain.RecordedEvent[]
   ) =>
     Array.isReadonlyArrayNonEmpty(recordedEvents)
-      ? Effect.forEach(recordedEvents, (recordedEvent) =>
-          Schema.encodeEffect(Domain.RecordedEvent)(recordedEvent)
+      ? Schema.encodeEffect(Schema.NonEmptyArray(Domain.RecordedEvent))(
+          recordedEvents
         ).pipe(
           Effect.flatMap(
             (encodedRecordedEvents) =>
               sql`INSERT INTO recorded_events ${sql.insert(
-                encodedRecordedEvents.map(recordedEventRowValues)
+                Array.map(encodedRecordedEvents, recordedEventRowValues)
               )}`
           )
         )

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SqliteClient } from "@effect/sql-sqlite-node";
 import { Backup, Domain, Store } from "@mai/nutrition";
 import { Effect, Exit, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { assert, it } from "vitest";
 import migration001 from "../src/migrations/001-initial.ts";
 import migration002 from "../src/migrations/002-custom-plan-meals.ts";

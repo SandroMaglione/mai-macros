@@ -175,12 +175,12 @@ export const mealPlanFormMachine = setup({
   states: {
     Ready: {},
   },
-  actorSources: {
+  actors: {
     mealPlanMeals: mealPlanMealsMachine,
   },
 }).createMachine({
-  context: ({ actorSources, input, spawn }) => ({
-    mealsActor: spawn(actorSources.mealPlanMeals, {
+  context: ({ actors, input, spawn }) => ({
+    mealsActor: spawn(actors.mealPlanMeals, {
       id: "mealPlanFormMeals",
       input: {
         initialPlan: input.initialPlan,

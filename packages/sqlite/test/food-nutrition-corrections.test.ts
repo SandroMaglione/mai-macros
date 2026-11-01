@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteClient } from "@effect/sql-sqlite-node";
 import { Backup, Domain, Foods, Reporting, Store, Utils } from "@mai/nutrition";
-import { Crypto, Effect, Exit, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { Effect, Exit, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import * as SqlClient from "effect/sql/SqlClient";
 import { assert, it } from "vitest";
 import migration001 from "../src/migrations/001-initial.ts";
 import migration002 from "../src/migrations/002-custom-plan-meals.ts";
@@ -39,11 +40,8 @@ it("migrates catalog corrections safely, recalculates history, resets, restores 
   const layer = Layer.mergeAll(Backup.Backups.layer, Foods.Foods.layer).pipe(
     Layer.provideMerge(appData),
     Layer.provide(
-      Layer.succeed(Crypto.Crypto)(
-        Crypto.make({
-          digest: (_, data) => Effect.succeed(data),
-          randomBytes: (size) => new Uint8Array(size).fill(1),
-        })
+      Layer.succeed(SecureRandom.SecureRandom)(
+        SecureRandom.make((size) => new Uint8Array(size).fill(1))
       )
     )
   );

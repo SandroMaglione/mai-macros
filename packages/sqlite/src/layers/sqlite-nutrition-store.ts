@@ -1,8 +1,8 @@
 import * as Domain from "@mai/nutrition/domain";
 import * as Store from "@mai/nutrition/services/store";
 import { Array, Effect, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 
 const EmptyRequest = Schema.Struct({});
 

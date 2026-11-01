@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteClient as NodeSqliteClient } from "@effect/sql-sqlite-node";
 import { Effect, Exit } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { assert, describe, it } from "vitest";
 import migration001 from "../src/migrations/001-initial.ts";
 import migration002 from "../src/migrations/002-custom-plan-meals.ts";

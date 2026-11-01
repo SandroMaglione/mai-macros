@@ -48,7 +48,7 @@ export const makeLocalDataResetMachine = ({
       Resetting: {},
       ResetCompleted: {},
     },
-    actorSources: {
+    actors: {
       resetLocalData: createAsyncLogic({
         run: () =>
           runtime.runPromise(

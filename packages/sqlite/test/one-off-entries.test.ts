@@ -17,8 +17,9 @@ import {
   NutritionReports,
   Store,
 } from "@mai/nutrition";
-import { Crypto, Effect, Exit, Layer, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { Effect, Exit, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import * as SqlClient from "effect/sql/SqlClient";
 import { assert, describe, it } from "vitest";
 import { TestSqliteAppDataStoreLayer } from "./sqlite-test-layers.ts";
 
@@ -41,18 +42,14 @@ const details = {
     saltGrams: { _tag: "Recorded", value: 0 },
   },
 } as const;
-const cryptoLayer = Layer.effect(Crypto.Crypto)(
+const cryptoLayer = Layer.effect(SecureRandom.SecureRandom)(
   Effect.sync(() => {
     let nextByte = 1;
-    return Crypto.make({
-      digest: (algorithm, data) =>
-        Effect.succeed(algorithm).pipe(Effect.as(data)),
-      randomBytes: (size) => {
-        const bytes = new Uint8Array(size);
-        bytes.fill(nextByte);
-        nextByte += 1;
-        return bytes;
-      },
+    return SecureRandom.make((size) => {
+      const bytes = new Uint8Array(size);
+      bytes.fill(nextByte);
+      nextByte += 1;
+      return bytes;
     });
   })
 );

@@ -1,4 +1,5 @@
-import { Crypto, Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { assert, describe, it } from "vitest";
 
 import {
@@ -1305,18 +1306,14 @@ function _revisionTestLayer({
   } satisfies Store.NutritionStore["Service"]);
   let nextByte = 1;
   const cryptoLayer = Layer.succeed(
-    Crypto.Crypto,
-    Crypto.make({
-      digest: (algorithm, data) =>
-        Effect.succeed(algorithm).pipe(Effect.as(data)),
-      randomBytes: (size) => {
-        const bytes = new Uint8Array(size);
+    SecureRandom.SecureRandom,
+    SecureRandom.make((size) => {
+      const bytes = new Uint8Array(size);
 
-        bytes.fill(nextByte);
-        nextByte += 1;
+      bytes.fill(nextByte);
+      nextByte += 1;
 
-        return bytes;
-      },
+      return bytes;
     })
   );
 

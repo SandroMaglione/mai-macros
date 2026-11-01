@@ -40,7 +40,7 @@ import {
   Scatter,
   useChartPressState,
 } from "victory-native";
-import { Actor, createAsyncLogic, setup, type ActorRefFromLogic } from "xstate";
+import { Actor, createAsyncLogic, setup, type ActorRefFrom } from "xstate";
 
 import { Button } from "@/components/ui/button";
 import { NumberField, TextArea } from "@/components/ui/field";
@@ -211,7 +211,7 @@ const bodyWeightEditorMachine = setup({
     Idle: {},
     Saving: {},
   },
-  actorSources: {
+  actors: {
     deleteBodyWeight: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(DeleteBodyWeightInput),
@@ -388,7 +388,7 @@ const bodyWeightImporterMachine = setup({
     Idle: {},
     Submitting: {},
   },
-  actorSources: {
+  actors: {
     importBodyWeights: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(ImportBodyWeightsInput),
@@ -520,9 +520,9 @@ const bodyWeightImporterMachine = setup({
 });
 
 const BodyWeightEditorActor = Schema.declare<
-  ActorRefFromLogic<typeof bodyWeightEditorMachine>
+  ActorRefFrom<typeof bodyWeightEditorMachine>
 >(
-  (value): value is ActorRefFromLogic<typeof bodyWeightEditorMachine> =>
+  (value): value is ActorRefFrom<typeof bodyWeightEditorMachine> =>
     value instanceof Actor && value.logic === bodyWeightEditorMachine,
   {
     expected: "BodyWeightEditorActor",
@@ -530,9 +530,9 @@ const BodyWeightEditorActor = Schema.declare<
 );
 
 const BodyWeightImporterActor = Schema.declare<
-  ActorRefFromLogic<typeof bodyWeightImporterMachine>
+  ActorRefFrom<typeof bodyWeightImporterMachine>
 >(
-  (value): value is ActorRefFromLogic<typeof bodyWeightImporterMachine> =>
+  (value): value is ActorRefFrom<typeof bodyWeightImporterMachine> =>
     value instanceof Actor && value.logic === bodyWeightImporterMachine,
   {
     expected: "BodyWeightImporterActor",
@@ -566,10 +566,17 @@ const bodyWeightRouteMachine = setup({
   },
   states: {
     Failed: {},
-    Loading: {},
-    Ready: {},
+    Loading: { id: "bodyWeightLoading" },
+    Ready: {
+      states: {
+        LoadingMonth: {},
+        Closed: {},
+        Editing: {},
+        ImportingForm: {},
+      },
+    },
   },
-  actorSources: {
+  actors: {
     bodyWeightEditor: bodyWeightEditorMachine,
     bodyWeightImporter: bodyWeightImporterMachine,
     loadMonth: createAsyncLogic({
@@ -649,6 +656,7 @@ const bodyWeightRouteMachine = setup({
   initial: "Loading",
   states: {
     Loading: {
+      id: "bodyWeightLoading",
       invoke: {
         src: "loadBodyWeight",
         input: ({ context }) => ({
@@ -700,21 +708,21 @@ const bodyWeightRouteMachine = setup({
       initial: "Closed",
       on: {
         nextMonth: ({ context }) => ({
-          target: "#bodyWeightRoute.Ready.LoadingMonth",
+          target: ".LoadingMonth",
           context: _monthNavigationContext({
             context,
             months: 1,
           }),
         }),
         previousMonth: ({ context }) => ({
-          target: "#bodyWeightRoute.Ready.LoadingMonth",
+          target: ".LoadingMonth",
           context: _monthNavigationContext({
             context,
             months: -1,
           }),
         }),
         reload: {
-          target: "#bodyWeightRoute.Loading",
+          target: "Loading",
           context: {
             message: null,
           },
@@ -774,13 +782,13 @@ const bodyWeightRouteMachine = setup({
               },
             },
             editorDeleted: {
-              target: "#bodyWeightRoute.Loading",
+              target: "#bodyWeightLoading",
               context: {
                 message: null,
               },
             },
             editorSaved: {
-              target: "#bodyWeightRoute.Loading",
+              target: "#bodyWeightLoading",
               context: {
                 message: null,
               },
@@ -800,7 +808,7 @@ const bodyWeightRouteMachine = setup({
               },
             },
             weightsImported: {
-              target: "#bodyWeightRoute.Loading",
+              target: "#bodyWeightLoading",
               context: {
                 message: null,
               },
@@ -1210,7 +1218,7 @@ function BodyWeightCalendar({
 function BodyWeightEntryDialog({
   actor,
 }: {
-  readonly actor: ActorRefFromLogic<typeof bodyWeightEditorMachine>;
+  readonly actor: ActorRefFrom<typeof bodyWeightEditorMachine>;
 }) {
   const snapshot = useSelector(actor, (snapshot) => snapshot);
   const dateKey = snapshot.context.dateKey;
@@ -1337,7 +1345,7 @@ function BodyWeightEntryDialog({
 function BodyWeightImportDialog({
   actor,
 }: {
-  readonly actor: ActorRefFromLogic<typeof bodyWeightImporterMachine>;
+  readonly actor: ActorRefFrom<typeof bodyWeightImporterMachine>;
 }) {
   const snapshot = useSelector(actor, (snapshot) => snapshot);
   const importing = snapshot.matches("Submitting");

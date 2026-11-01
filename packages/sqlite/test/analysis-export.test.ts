@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { SqliteClient as NodeSqlite } from "@effect/sql-sqlite-node";
-import { Crypto, Effect, Layer, Schema } from "effect";
-import * as Sql from "effect/unstable/sql/SqlClient";
+import { Effect, Layer, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
+import * as Sql from "effect/sql/SqlClient";
 import { assert, describe, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { exportForAnalysis } from "@mai/services/services/analysis-export";
@@ -23,19 +24,12 @@ import {
 } from "../../nutrition/test/analysis-fixture.ts";
 import { writeAnalysisDatabase } from "../src/layers/analysis-export.ts";
 
-const cryptoLayer = Layer.succeed(
-  Crypto.Crypto,
-  Crypto.make({
-    randomBytes,
-    digest: (algorithm, bytes) =>
-      Effect.succeed(
-        new Uint8Array(
-          createHash(algorithm.toLowerCase().replace("-", ""))
-            .update(bytes)
-            .digest()
-        )
-      ),
-  })
+const cryptoLayer = Layer.mergeAll(
+  Layer.succeed(
+    SecureRandom.SecureRandom,
+    SecureRandom.make((size) => new Uint8Array(randomBytes(size)))
+  ),
+  Digest.layerWebCrypto
 );
 
 describe("analysis SQLite archive", () => {

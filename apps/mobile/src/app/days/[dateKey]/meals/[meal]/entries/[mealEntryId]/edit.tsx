@@ -80,7 +80,7 @@ const editMealEntryRouteLoaderMachine = setup({
     InvalidRoute: {},
     Ready: {},
   },
-  actorSources: {
+  actors: {
     loadRouteData: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(EditMealEntryRouteLoaderInput),
@@ -244,7 +244,7 @@ const editMealEntryRouteMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     deleteMealEntry: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(Domain.MealEntryId),

@@ -157,7 +157,7 @@ const addMealFoodRouteMachine = setup({
       router.replace("/");
     },
   },
-  actorSources: {
+  actors: {
     addMealEntry: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(AddMealEntryInput),
@@ -423,7 +423,7 @@ const addMealFoodRouteLoaderMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     loadRouteData: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(AddMealFoodRouteLoaderInput),

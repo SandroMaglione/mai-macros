@@ -13,13 +13,13 @@
   },
   "dependencies": {
     "@mai/nutrition": "workspace:^",
-    "effect": "4.0.0-rc.112",
+    "effect": "4.1.1",
     "fflate": "0.8.3",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/qrcode": "^1.5.6",
-    "vitest": "^4.0.8"
+    "vitest": "^5.0.5"
   }
 }

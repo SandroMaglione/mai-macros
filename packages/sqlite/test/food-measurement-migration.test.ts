@@ -1,7 +1,7 @@
 import { DefaultFoods } from "@mai/nutrition";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
 import { assert, describe, it } from "vitest";
 
 import migration001 from "../src/migrations/001-initial.ts";

@@ -196,7 +196,7 @@ const macroDetailsRouteMachine = setup({
       });
     },
   },
-  actorSources: {
+  actors: {
     loadMacroDetails: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(MacroDetailsRouteInput),

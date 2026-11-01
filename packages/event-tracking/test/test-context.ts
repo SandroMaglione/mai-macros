@@ -1,4 +1,5 @@
-import { Crypto, DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 
 import {
@@ -162,18 +163,14 @@ export function EventTrackingTestContext({
   } satisfies Store.EventTrackingStore["Service"]);
   let nextByte = 1;
   const cryptoLayer = Layer.succeed(
-    Crypto.Crypto,
-    Crypto.make({
-      digest: (algorithm, data) =>
-        Effect.succeed(algorithm).pipe(Effect.as(data)),
-      randomBytes: (size) => {
-        const bytes = new Uint8Array(size);
+    SecureRandom.SecureRandom,
+    SecureRandom.make((size) => {
+      const bytes = new Uint8Array(size);
 
-        bytes.fill(nextByte);
-        nextByte += 1;
+      bytes.fill(nextByte);
+      nextByte += 1;
 
-        return bytes;
-      },
+      return bytes;
     })
   );
   const timeZoneLayer = Layer.succeed(TimeZone.EventTrackingTimeZone, {

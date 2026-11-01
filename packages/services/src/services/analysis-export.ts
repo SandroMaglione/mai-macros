@@ -1,4 +1,5 @@
-import { Crypto, DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
 import { strToU8, zipSync } from "fflate";
 import { Backups } from "@mai/nutrition/services/backup";
 import { buildAnalysisData } from "@mai/nutrition/services/analysis-data";
@@ -14,7 +15,8 @@ const json = Schema.fromJsonString(Schema.Unknown);
 export const exportForAnalysis = Effect.fn("exportForAnalysis")(function* () {
   const backups = yield* Backups;
   const database = yield* AnalysisDatabase;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
+  const digester = yield* Digest.Digest;
   const snapshot = yield* backups.exportToJson();
   const data = yield* buildAnalysisData(snapshot.backup);
   const documentation = yield* makeAnalysisDocumentation();
@@ -22,7 +24,7 @@ export const exportForAnalysis = Effect.fn("exportForAnalysis")(function* () {
     format: "mai.analysis",
     formatVersion: AnalysisVersion,
     calculationVersion: AnalysisVersion,
-    exportId: yield* crypto.randomUUIDv4,
+    exportId: yield* crypto.uuidV4(),
     exportedAt: DateTime.formatIso(snapshot.backup.source.exportedAt),
     backupFormatVersion: snapshot.backup.formatVersion,
     sourceDatabaseVersion: snapshot.backup.source.databaseVersion,
@@ -56,13 +58,10 @@ export const exportForAnalysis = Effect.fn("exportForAnalysis")(function* () {
     readonly sha256: string;
   }[] = [];
   for (const [name, bytes] of Object.entries(files)) {
-    const digest = yield* crypto.digest("SHA-256", bytes);
     checksums.push({
       name,
       bytes: bytes.byteLength,
-      sha256: [...digest]
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join(""),
+      sha256: yield* digester.digestHex(Digest.sha256, bytes),
     });
   }
   files["manifest.json"] = strToU8(

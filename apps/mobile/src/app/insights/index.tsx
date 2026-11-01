@@ -264,7 +264,7 @@ const nutritionInsightsRouteMachine = setup({
       },
     },
   },
-  actorSources: {
+  actors: {
     loadRange: createAsyncLogic({
       schemas: {
         input: Schema.toStandardSchemaV1(LoadNutritionInsightsInput),
