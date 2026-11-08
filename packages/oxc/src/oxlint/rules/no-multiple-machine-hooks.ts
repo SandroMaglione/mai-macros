@@ -1,4 +1,14 @@
-const xstateActorHooks = new Set(["useActor", "useActorRef", "useMachine"]);
+const machineOwnerHooks = {
+  library: new Set(["useMachineAtom"]),
+  local: new Set(["useMachine"]),
+};
+
+const _hookSource = ({ source }: { source: string | undefined }) =>
+  source === "@typeonce/effect-machine-react"
+    ? "library"
+    : source !== undefined && /(^|\/)use-machine(\.ts)?$/.test(source)
+      ? "local"
+      : undefined;
 
 type Node = {
   arguments?: Array<Node>;
@@ -80,26 +90,30 @@ const rule = {
     type: "problem",
     docs: {
       description:
-        "Disallow multiple @xstate/react actor hooks in the same component. Compose machines with actors instead.",
+        "Disallow owning more than one effect-machine machine in the same component. Compose machines with child machines instead.",
     },
   },
   create(context: {
     report: (opts: { node: unknown; message: string }) => void;
   }) {
     const localHookNames = new Set<string>();
-    const namespaceNames = new Set<string>();
+    const namespaceHooks = new Map<string, Set<string>>();
     const componentHookCounts = new WeakMap<Node, number>();
 
     return {
       ImportDeclaration(node: Node) {
-        if (node.source?.value !== "@xstate/react") {
+        const hookSource = _hookSource({ source: node.source?.value });
+
+        if (hookSource === undefined) {
           return;
         }
+
+        const ownerHooks = machineOwnerHooks[hookSource];
 
         for (const specifier of node.specifiers ?? []) {
           if (specifier.type === "ImportNamespaceSpecifier") {
             if (specifier.local?.name !== undefined) {
-              namespaceNames.add(specifier.local.name);
+              namespaceHooks.set(specifier.local.name, ownerHooks);
             }
 
             continue;
@@ -107,7 +121,7 @@ const rule = {
 
           if (
             specifier.type === "ImportSpecifier" &&
-            xstateActorHooks.has(specifier.imported?.name ?? "") &&
+            ownerHooks.has(specifier.imported?.name ?? "") &&
             specifier.local?.name !== undefined
           ) {
             localHookNames.add(specifier.local.name);
@@ -121,10 +135,10 @@ const rule = {
             ? node.callee.name
             : node.callee?.type === "MemberExpression" &&
                 node.callee.object?.type === "Identifier" &&
-                namespaceNames.has(node.callee.object.name ?? "") &&
-                xstateActorHooks.has(
-                  _memberPropertyName({ node: node.callee }) ?? ""
-                )
+                (
+                  namespaceHooks.get(node.callee.object.name ?? "") ??
+                  new Set<string>()
+                ).has(_memberPropertyName({ node: node.callee }) ?? "")
               ? _memberPropertyName({ node: node.callee })
               : undefined;
 
@@ -147,7 +161,7 @@ const rule = {
 
         context.report({
           node: node.callee,
-          message: `${component.name} uses multiple @xstate/react actor hooks. Compose machines with actors instead.`,
+          message: `${component.name} owns multiple machines. Compose machines with child machines instead.`,
         });
       },
     };

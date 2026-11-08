@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": ["@mai/oxc/oxlint"],
+  "jsPlugins": ["@mai/oxc/oxlint", "@typeonce/oxlint-plugin-effect-machine"],
   "ignorePatterns": [
     "**/scripts/**",
     ".repos/**",
@@ -17,6 +17,13 @@
     "*.vue"
   ],
   "rules": {
+    "effect-machine/no-async-planning-callback": "error",
+    "effect-machine/no-browser-api-in-planning": "error",
+    "effect-machine/no-conditional-none-branch": "error",
+    "effect-machine/no-conflicting-invocation-identity": "error",
+    "effect-machine/no-nondeterministic-planning": "error",
+    "effect-machine/no-redundant-resolve": "error",
+    "effect-machine/prefer-inline-handle": "error",
     "mai/no-banned-type-assertions": "error",
     "mai/no-comments": "error",
     "mai/no-direct-browser-storage": "error",
@@ -28,7 +35,7 @@
     "mai/no-global-json": "error",
     "mai/no-in-operator": "error",
     "mai/no-multiple-function-params": "error",
-    "mai/no-multiple-xstate-hooks": "error",
+    "mai/no-multiple-machine-hooks": "error",
     "mai/no-nested-effect-array-methods": "error",
     "mai/no-nested-layer-provide": "warn",
     "mai/no-optional-function-parameters": "error",
@@ -43,8 +50,6 @@
     "mai/no-shadowed-standard-array-static": "error",
     "mai/no-silent-error-swallow": "error",
     "mai/no-single-use-private-functions": "error",
-    "mai/no-single-use-xstate-actions": "error",
-    "mai/no-single-use-xstate-guards": "error",
     "mai/no-sql-type-parameter": "error",
     "mai/no-standard-map-set": "error",
     "mai/no-switch": "error",
@@ -55,7 +60,6 @@
     "mai/pipe-max-arguments": "warn",
     "mai/prefer-option-from-nullable": "warn",
     "mai/private-function-prefix": "error",
-    "mai/require-xstate-event-satisfies": "error",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "no-console": "error",
     "no-empty": "error",
