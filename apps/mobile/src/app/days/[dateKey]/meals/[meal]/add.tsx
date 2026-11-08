@@ -13,530 +13,31 @@ import { InputSelect } from "@/components/ui/input-select";
 import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
-import { todayDateKey } from "@/lib/date-keys";
+import { useMachine } from "@/hooks/use-machine";
 import * as FoodMeasurements from "@/lib/food-measurements";
 import { formatLoggedFoodQuantity, formatNumber } from "@/lib/format";
+import { MachineAtoms } from "@/lib/machine-runtime";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { RuntimeClient } from "@/lib/runtime-client";
+import {
+  AddMealFoodEvents,
+  AddMealFoodLoaderMachine,
+  AddMealFoodMachine,
+  AddMealFoodStates,
+  findFoodUsage,
+  type AddMealFoodData,
+} from "@/machines/add-meal-food-machine";
 import { color, spacing } from "@/theme/tokens";
-import { DailyLogs, Domain, Foods, MealEntries } from "@mai/nutrition";
-import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
-import { useMachine } from "@xstate/react";
-import { Array, Effect, Match, Option, Order, Schema } from "effect";
+import { Domain } from "@mai/nutrition";
+import { FoodSearchMachine } from "@mai/machines";
+import { Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { Check, ChevronLeft, Plus } from "lucide-react-native";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { Actor, createAsyncLogic, setup } from "xstate";
-
-const MealFoodUsage = Schema.Struct({
-  foodId: Domain.FoodId,
-  latestQuantity: Domain.LoggedFoodQuantity,
-  latestUsedAt: Schema.DateTimeUtcFromMillis,
-  meals: Schema.Array(
-    Schema.Struct({
-      latestQuantity: Domain.LoggedFoodQuantity,
-      latestUsedAt: Schema.DateTimeUtcFromMillis,
-      mealId: Domain.MealId,
-    })
-  ),
-});
-
-const AddMealFoodRouteData = Schema.Struct({
-  dateKey: Domain.DateKey,
-  foodUsage: Schema.Array(MealFoodUsage),
-  foods: Schema.Array(Domain.Food),
-  meal: Domain.MealId,
-  mealLabel: Schema.NonEmptyString,
-});
-
-type AddMealFoodRouteData = typeof AddMealFoodRouteData.Type;
-
-const AddMealEntryInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  foodId: Domain.FoodId,
-  mealId: Domain.MealId,
-  quantity: FoodMeasurements.MealEntryQuantityFormInput,
-  quantityAccuracy: Domain.QuantityAccuracy,
-});
-
-const AddMealEntryResult = Schema.Union([
-  Schema.TaggedStruct("FoodNotFound", {}),
-  Schema.TaggedStruct("MealNotFound", {}),
-  Schema.TaggedStruct("SchemaError", {}),
-  Schema.TaggedStruct("Success", {}),
-]);
-
-const AddMealFoodRouteLoaderInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  meal: Domain.MealId,
-});
-
-const AddMealFoodRouteLoadResult = Schema.Union([
-  Schema.TaggedStruct("InvalidRoute", {}),
-  Schema.TaggedStruct("NoMealPlans", {
-    dateKey: Domain.DateKey,
-  }),
-  Schema.TaggedStruct("Ready", {
-    data: AddMealFoodRouteData,
-  }),
-  Schema.TaggedStruct("UnrecordedDay", {
-    dateKey: Domain.DateKey,
-  }),
-]);
-
-const FoodSearchSelectedEvent = Schema.Struct({
-  food: Schema.NullOr(Domain.Food),
-  selection: Schema.Literals(["explicit", "firstMatching"]),
-});
-
-const FoodSearchActorSchema =
-  Schema.declare<FoodSearchMachine.FoodSearchActorRef>(
-    (value): value is FoodSearchMachine.FoodSearchActorRef =>
-      value instanceof Actor &&
-      value.logic === FoodSearchMachine.foodSearchMachine,
-    { expected: "FoodSearchActor" }
-  );
 
 const AddMealFoodRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
   meal: Domain.MealId,
-});
-
-const addMealFoodRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        dateKey: Domain.DateKey,
-        foodSearchActor: FoodSearchActorSchema,
-        foodUsage: Schema.Array(MealFoodUsage),
-        meal: Domain.MealId,
-        mealLabel: Schema.NonEmptyString,
-        notice: Schema.NullOr(Schema.String),
-        quantityAmount: Schema.String,
-        quantityAccuracy: Domain.QuantityAccuracy,
-        quantityUnit: Domain.MeasurementUnit,
-        portionId: Schema.NullOr(Domain.FoodPortionId),
-        selectedFood: Schema.NullOr(Domain.Food),
-      })
-    ),
-    events: {
-      changeAccuracy: Schema.toStandardSchemaV1(
-        Schema.Struct({ accuracy: Domain.QuantityAccuracy })
-      ),
-      changeQuantity: Schema.toStandardSchemaV1(
-        Schema.Struct({ quantityAmount: Schema.String })
-      ),
-      selectMeasurementUnit: Schema.toStandardSchemaV1(
-        Schema.Struct({ unit: Domain.MeasurementUnit })
-      ),
-      selectPortion: Schema.toStandardSchemaV1(
-        Schema.Struct({ portionId: Domain.FoodPortionId })
-      ),
-      clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
-      clearSelectedFood: Schema.toStandardSchemaV1(EmptyEvent),
-      foodSearchSelected: Schema.toStandardSchemaV1(FoodSearchSelectedEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(AddMealFoodRouteData),
-  },
-  states: {
-    SelectingFood: {},
-    EnteringQuantity: {},
-    Submitting: {},
-    Submitted: {},
-  },
-  actions: {
-    replaceDay: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/days/[dateKey]",
-        params,
-      });
-    },
-    replaceHome: () => {
-      router.replace("/");
-    },
-  },
-  actors: {
-    addMealEntry: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(AddMealEntryInput),
-        output: Schema.toStandardSchemaV1(AddMealEntryResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const mealEntries = yield* MealEntries.MealEntries;
-            yield* mealEntries.create({
-              input,
-            });
-
-            return {
-              _tag: "Success" as const,
-            };
-          }).pipe(
-            Effect.catchTag("FoodNotFound", () =>
-              Effect.succeed({
-                _tag: "FoodNotFound" as const,
-              })
-            ),
-            Effect.catchTag("MealNotFound", () =>
-              Effect.succeed({
-                _tag: "MealNotFound" as const,
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input, spawn }) => {
-    const mealFoodRecencyOrder = Order.mapInput(
-      Order.flip(Order.Number),
-      (food: Domain.Food) =>
-        _findFoodUsage({
-          foodId: food.id,
-          foodUsage: input.foodUsage,
-        })?.meals.find((usage) => usage.mealId === input.meal)?.latestUsedAt
-          .epochMilliseconds ?? Number.NEGATIVE_INFINITY
-    );
-
-    return {
-      dateKey: input.dateKey,
-      foodSearchActor: spawn(FoodSearchMachine.foodSearchMachine, {
-        id: "addMealFoodRouteFoodSearch",
-        input: {
-          baseOrder: "provided",
-          foods: Array.sortBy(
-            mealFoodRecencyOrder,
-            FoodSearchMachine.foodUserOriginOrder,
-            FoodSearchMachine.foodLowercaseNameOrder
-          )(input.foods),
-        },
-      }),
-      foodUsage: input.foodUsage,
-      meal: input.meal,
-      mealLabel: input.mealLabel,
-      notice: null,
-      quantityAmount: "",
-      quantityAccuracy: "unspecified",
-      quantityUnit: "g",
-      portionId: null,
-      selectedFood: null,
-    };
-  },
-  initial: "SelectingFood",
-  states: {
-    SelectingFood: {
-      on: {
-        clearNotice: {
-          context: { notice: null },
-        },
-        foodSearchSelected: ({ context, event }) => {
-          const selectedFood =
-            event.selection === "firstMatching"
-              ? (event.food ?? context.selectedFood)
-              : event.food;
-          const foodUsage =
-            event.food === null
-              ? undefined
-              : _findFoodUsage({
-                  foodId: event.food.id,
-                  foodUsage: context.foodUsage,
-                });
-          const mealUsage =
-            foodUsage === undefined
-              ? undefined
-              : foodUsage.meals.find((usage) => usage.mealId === context.meal);
-          const previousQuantityAmount = context.quantityAmount.trim();
-          const recentQuantity =
-            foodUsage === undefined || mealUsage === undefined
-              ? undefined
-              : mealUsage.latestQuantity;
-          const recentSelection =
-            FoodMeasurements.quantitySelectionFromLoggedQuantity({
-              food: selectedFood,
-              quantity: recentQuantity,
-            });
-          const quantitySelection =
-            event.selection === "firstMatching" &&
-            (event.food === null || previousQuantityAmount !== "")
-              ? {
-                  quantityAmount: context.quantityAmount,
-                  quantityUnit: context.quantityUnit,
-                  portionId: context.portionId,
-                }
-              : recentSelection;
-
-          return {
-            target: "EnteringQuantity",
-            context: {
-              notice: null,
-              ...quantitySelection,
-              selectedFood,
-            },
-          };
-        },
-      },
-    },
-    EnteringQuantity: {
-      on: {
-        changeAccuracy: ({ event }) => ({
-          context: { quantityAccuracy: event.accuracy },
-        }),
-        changeQuantity: ({ event }) => ({
-          context: {
-            quantityAmount: event.quantityAmount,
-          },
-        }),
-        selectMeasurementUnit: ({ event }) => ({
-          context: {
-            portionId: null,
-            quantityUnit: event.unit,
-          },
-        }),
-        selectPortion: ({ event }) => ({
-          context: {
-            portionId: event.portionId,
-          },
-        }),
-        clearNotice: {
-          context: { notice: null },
-        },
-        clearSelectedFood: ({ context }, enq) => {
-          enq.sendTo(context.foodSearchActor, {
-            type: "clearSelectedFood",
-          } satisfies FoodSearchMachine.FoodSearchEvent);
-
-          return {
-            target: "SelectingFood",
-            context: {
-              selectedFood: null,
-            },
-          };
-        },
-        submit: ({ context }) =>
-          context.selectedFood !== null && context.quantityAmount.trim() !== ""
-            ? { target: "Submitting" }
-            : undefined,
-      },
-    },
-    Submitting: {
-      invoke: {
-        src: "addMealEntry",
-        input: ({ context }) => {
-          if (context.selectedFood === null) {
-            throw new Error("Cannot submit without a selected food.");
-          }
-
-          return {
-            dateKey: context.dateKey,
-            foodId: context.selectedFood.id,
-            quantityAccuracy: context.quantityAccuracy,
-            mealId: context.meal,
-            quantity: FoodMeasurements.mealEntryQuantityInputFromSelection({
-              quantityAmount: context.quantityAmount,
-              quantityUnit: context.quantityUnit,
-              portionId: context.portionId,
-            }),
-          };
-        },
-        onDone: ({ actions, context, event }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              FoodNotFound: () => ({
-                target: "EnteringQuantity" as const,
-                context: {
-                  notice:
-                    "Could not find that food. Pick another food and try again.",
-                },
-              }),
-              MealNotFound: () => ({
-                target: "EnteringQuantity" as const,
-                context: {
-                  notice:
-                    "Could not find that food. Pick another food and try again.",
-                },
-              }),
-              SchemaError: () => ({
-                target: "EnteringQuantity" as const,
-                context: {
-                  notice: "Enter a quantity greater than zero.",
-                },
-              }),
-              Success: () => {
-                const today = todayDateKey();
-
-                if (context.dateKey === today) {
-                  enq(actions.replaceHome);
-
-                  return { target: "Submitted" as const };
-                }
-
-                enq(actions.replaceDay, { dateKey: context.dateKey });
-
-                return { target: "Submitted" as const };
-              },
-            })
-          ),
-        onError: {
-          target: "EnteringQuantity",
-          context: {
-            notice:
-              "Could not add the meal entry. Check the quantity and try again.",
-          },
-        },
-      },
-    },
-    Submitted: {},
-  },
-});
-
-const addMealFoodRouteLoaderMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        data: Schema.NullOr(AddMealFoodRouteData),
-        dateKey: Domain.DateKey,
-        meal: Domain.MealId,
-        message: Schema.NullOr(Schema.String),
-      })
-    ),
-    input: Schema.toStandardSchemaV1(AddMealFoodRouteLoaderInput),
-  },
-  states: {
-    Loading: {},
-    Failed: {},
-    Ready: {},
-    Redirected: {},
-  },
-  actions: {
-    replaceNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/plans/new",
-        params,
-      });
-    },
-  },
-  actors: {
-    loadRouteData: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(AddMealFoodRouteLoaderInput),
-        output: Schema.toStandardSchemaV1(AddMealFoodRouteLoadResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const foodsService = yield* Foods.Foods;
-            const mealEntriesService = yield* MealEntries.MealEntries;
-            const day = yield* input.dateKey === todayDateKey()
-              ? dailyLogs.openOrCreate({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                })
-              : dailyLogs.open({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                });
-
-            if (day._tag === "UnrecordedDay") {
-              return {
-                _tag: "UnrecordedDay" as const,
-                dateKey: day.dateKey,
-              };
-            }
-
-            const foods = yield* foodsService.list();
-            const foodUsage = yield* mealEntriesService.listFoodUsage();
-            const planMeal = day.selectedPlan.meals.find(
-              (candidate) => candidate.id === input.meal
-            );
-
-            if (planMeal === undefined) {
-              return {
-                _tag: "InvalidRoute" as const,
-              };
-            }
-
-            return {
-              _tag: "Ready" as const,
-              data: {
-                dateKey: day.dailyLog.dateKey,
-                foodUsage,
-                foods,
-                meal: input.meal,
-                mealLabel: planMeal.name,
-              },
-            };
-          }).pipe(
-            Effect.catchTag("NoMealPlans", ({ dateKey }) =>
-              Effect.succeed({
-                _tag: "NoMealPlans" as const,
-                dateKey,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    data: null,
-    dateKey: input.dateKey,
-    meal: input.meal,
-    message: null,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadRouteData",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          meal: context.meal,
-        }),
-        onDone: ({ actions, event }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              InvalidRoute: () => ({
-                target: "Failed" as const,
-                context: { message: "Could not find this meal." },
-              }),
-              NoMealPlans: ({ dateKey }) => {
-                enq(actions.replaceNewPlan, { dateKey });
-
-                return { target: "Redirected" as const };
-              },
-              Ready: ({ data }) => ({
-                target: "Ready" as const,
-                context: { data },
-              }),
-              UnrecordedDay: () => ({
-                target: "Failed" as const,
-                context: { message: "Create this day before adding food." },
-              }),
-            })
-          ),
-        onError: {
-          target: "Failed",
-          context: {
-            message: "Could not load this meal.",
-          },
-        },
-      },
-    },
-    Failed: {},
-    Ready: {},
-    Redirected: {},
-  },
 });
 
 export default function AddMealFoodRoute() {
@@ -546,15 +47,31 @@ export default function AddMealFoodRoute() {
     return <Redirect href="/" />;
   }
 
-  const [snapshot] = useMachine(addMealFoodRouteLoaderMachine, {
-    input: {
-      dateKey: routeParams.value.dateKey,
-      meal: routeParams.value.meal,
-    },
-  });
-  const routeState = snapshot.value;
+  return (
+    <AddMealFoodRouteLoader
+      dateKey={routeParams.value.dateKey}
+      meal={routeParams.value.meal}
+    />
+  );
+}
 
-  if (routeState === "Loading" || routeState === "Redirected") {
+function AddMealFoodRouteLoader({
+  dateKey,
+  meal,
+}: {
+  readonly dateKey: Domain.DateKey;
+  readonly meal: Domain.MealId;
+}) {
+  const [snapshot] = useMachine(() =>
+    MachineAtoms.make(AddMealFoodLoaderMachine, { dateKey, meal })
+  );
+  const state = snapshot.state;
+
+  if (
+    state.path === "Loading" ||
+    state.path === "Redirecting" ||
+    state.path === "Redirected"
+  ) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading meal" />
@@ -562,13 +79,10 @@ export default function AddMealFoodRoute() {
     );
   }
 
-  if (routeState === "Failed") {
+  if (state.path === "Failed") {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load this meal."}
-          tone="danger"
-        />
+        <Notice message={state.value.message} tone="danger" />
         <Button
           onPress={() => {
             _replacePath("/");
@@ -581,44 +95,42 @@ export default function AddMealFoodRoute() {
     );
   }
 
-  return snapshot.context.data === null ? (
-    <AppScreen contentStyle={styles.centered}>
-      <LoadingView message="Loading meal" />
-    </AppScreen>
-  ) : (
-    <ReadyAddMealFoodRoute data={snapshot.context.data} />
-  );
+  return <ReadyAddMealFoodRoute data={state.value.data} />;
 }
 
-function ReadyAddMealFoodRoute({
-  data,
-}: {
-  readonly data: AddMealFoodRouteData;
-}) {
-  const [snapshot, , actor] = useMachine(addMealFoodRouteMachine, {
-    input: data,
-  });
+function ReadyAddMealFoodRoute({ data }: { readonly data: AddMealFoodData }) {
+  const [snapshot, send, machine] = useMachine(() =>
+    MachineAtoms.make(AddMealFoodMachine, data)
+  );
   const {
     dateKey,
-    foodSearchActor,
     foodUsage,
     meal,
     mealLabel,
     notice,
     portionId,
+    quantityAccuracy,
     quantityAmount,
     quantityUnit,
-  } = snapshot.context;
-  const selectedFood = snapshot.context.selectedFood;
-  const routeState = snapshot.value;
-  const disabled = routeState === "Submitting" || routeState === "Submitted";
-  const canClearSelectedFood = routeState === "EnteringQuantity";
+  } = snapshot.value;
+  const foodSearch = machine.child(FoodSearchMachine.FoodSearchChild);
+  const selectedFood = AddMealFoodStates.get(snapshot, "Logging.Quantity").pipe(
+    Option.map((quantity) => quantity.selectedFood),
+    Option.getOrNull
+  );
+  const disabled =
+    AddMealFoodStates.matches(snapshot, "Logging.Quantity.Submitting") ||
+    AddMealFoodStates.matches(snapshot, "Logging.Quantity.Submitted");
+  const canClearSelectedFood = AddMealFoodStates.matches(
+    snapshot,
+    "Logging.Quantity.Entering"
+  );
   const submitDisabled =
     disabled || selectedFood === null || quantityAmount.trim() === "";
   const selectedFoodUsage =
     selectedFood === null
       ? undefined
-      : _findFoodUsage({
+      : findFoodUsage({
           foodId: selectedFood.id,
           foodUsage,
         });
@@ -668,7 +180,7 @@ function ReadyAddMealFoodRoute({
               icon={ChevronLeft}
               onPress={() => {
                 if (canClearSelectedFood) {
-                  actor.trigger.clearSelectedFood();
+                  send(AddMealFoodEvents.ClearSelectedFood());
                   return;
                 }
 
@@ -706,7 +218,7 @@ function ReadyAddMealFoodRoute({
                 disabled={submitDisabled}
                 icon={Check}
                 onPress={() => {
-                  actor.trigger.submit();
+                  send(AddMealFoodEvents.Submit());
                 }}
                 variant="ghost"
               />
@@ -714,7 +226,7 @@ function ReadyAddMealFoodRoute({
           }
         >
           {selectedFood === null ? (
-            <FoodSearchField actor={foodSearchActor} disabled={disabled} />
+            <FoodSearchField foodSearch={foodSearch} disabled={disabled} />
           ) : null}
         </AppHeader>
 
@@ -741,12 +253,12 @@ function ReadyAddMealFoodRoute({
                   </Button>
                 </View>
               }
-              actor={foodSearchActor}
+              foodSearch={foodSearch}
               disabled={disabled}
               emptyFoodsText="Create a food before logging this meal."
               emptySearchText="No foods found."
               getPrimaryLabel={(food) => {
-                const foodHistory = _findFoodUsage({
+                const foodHistory = findFoodUsage({
                   foodId: food.id,
                   foodUsage,
                 });
@@ -769,7 +281,7 @@ function ReadyAddMealFoodRoute({
                     })} kcal`;
               }}
               getSecondaryLabel={(food) => {
-                const foodHistory = _findFoodUsage({
+                const foodHistory = findFoodUsage({
                   foodId: food.id,
                   foodUsage,
                 });
@@ -787,12 +299,12 @@ function ReadyAddMealFoodRoute({
           </View>
         ) : (
           <QuantityEntry
-            quantityAccuracy={snapshot.context.quantityAccuracy}
+            quantityAccuracy={quantityAccuracy}
             changeAccuracy={(accuracy) =>
-              actor.trigger.changeAccuracy({ accuracy })
+              send(AddMealFoodEvents.ChangeAccuracy({ accuracy }))
             }
             changeQuantity={(value) => {
-              actor.trigger.changeQuantity({ quantityAmount: value });
+              send(AddMealFoodEvents.ChangeQuantity({ quantityAmount: value }));
             }}
             disabled={disabled}
             mealLabel={mealLabel}
@@ -800,17 +312,21 @@ function ReadyAddMealFoodRoute({
             quantityAmount={quantityAmount}
             quantityUnit={quantityUnit}
             selectMeasurementUnit={(unit) => {
-              actor.trigger.selectMeasurementUnit({ unit });
+              send(AddMealFoodEvents.SelectMeasurementUnit({ unit }));
             }}
             selectPortion={(selectedPortionId) => {
-              actor.trigger.selectPortion({
-                portionId: selectedPortionId,
-              });
+              send(
+                AddMealFoodEvents.SelectPortion({
+                  portionId: selectedPortionId,
+                })
+              );
             }}
             selectedFood={selectedFood}
             selectedFoodNutrients={selectedFoodNutrients}
             selectedFoodQuantityLabel={selectedFoodQuantityLabel}
-            submit={actor.trigger.submit}
+            submit={() => {
+              send(AddMealFoodEvents.Submit());
+            }}
             submitDisabled={submitDisabled}
           />
         )}
@@ -949,16 +465,6 @@ function QuantityEntry({
       </BottomActionBar>
     </View>
   );
-}
-
-function _findFoodUsage({
-  foodId,
-  foodUsage,
-}: {
-  readonly foodId: Domain.Food["id"];
-  readonly foodUsage: readonly MealEntries.MealFoodUsage[];
-}) {
-  return foodUsage.find((usage) => usage.foodId === foodId);
 }
 
 function _replacePath(path: Parameters<typeof router.replace>[0]) {

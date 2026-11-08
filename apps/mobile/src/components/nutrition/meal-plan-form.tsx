@@ -15,7 +15,9 @@ import { IconButton } from "@/components/ui/icon-button";
 import { MaiHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
-import { useMachine, useSelector } from "@xstate/react";
+import { useChildMachine, useMachine } from "@/hooks/use-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Option } from "effect";
 import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -110,14 +112,17 @@ export function MealPlanForm({
   readonly onBack: () => void;
   readonly onSubmit: (input: MealPlans.CreateMealPlanInput) => void;
 }) {
-  const [snapshot, , actor] = useMachine(
-    MealPlanFormMachine.mealPlanFormMachine,
-    {
-      input: { initialPlan },
-    }
+  const [snapshot, send, machine] = useMachine(() =>
+    AtomMachine.make(MealPlanFormMachine.MealPlanFormMachine, { initialPlan })
   );
-  const { mealsActor, values } = snapshot.context;
-  const meals = useSelector(mealsActor, (snapshot) => snapshot.context.meals);
+  const { values } = snapshot.value;
+  const [mealsSnapshot, sendMeals] = useChildMachine(
+    machine.child(MealPlanFormMachine.MealPlanMealsChild)
+  );
+  const meals = Option.match(mealsSnapshot, {
+    onNone: () => [],
+    onSome: ({ value }) => value.meals,
+  });
   const isCreating = action === "create";
   const title = isCreating ? "Create plan" : "Edit plan";
   const submitText = isCreating ? "Create plan" : "Save revised plan";
@@ -136,9 +141,14 @@ export function MealPlanForm({
         autoCorrect={false}
         editable={!isSubmitting}
         label="Name"
-        onChangeText={(value) =>
-          actor.trigger.changeField({ name: "name", value })
-        }
+        onChangeText={(value) => {
+          send(
+            MealPlanFormMachine.MealPlanFormEvents.ChangeField({
+              name: "name",
+              value,
+            })
+          );
+        }}
         placeholder="Training day"
         returnKeyType="next"
         value={values.name}
@@ -150,17 +160,24 @@ export function MealPlanForm({
             <PlanTargetInput
               field={field}
               rule={values.targetRules[field.nutrient]}
-              onChangeRule={(rule) =>
-                actor.trigger.changeTargetRule({
-                  nutrient: field.nutrient,
-                  rule,
-                })
-              }
+              onChangeRule={(rule) => {
+                send(
+                  MealPlanFormMachine.MealPlanFormEvents.ChangeTargetRule({
+                    nutrient: field.nutrient,
+                    rule,
+                  })
+                );
+              }}
               isSubmitting={isSubmitting}
               key={field.name}
-              onChangeText={(value) =>
-                actor.trigger.changeField({ name: field.name, value })
-              }
+              onChangeText={(value) => {
+                send(
+                  MealPlanFormMachine.MealPlanFormEvents.ChangeField({
+                    name: field.name,
+                    value,
+                  })
+                );
+              }}
               value={values[field.name]}
             />
           ))}
@@ -173,9 +190,14 @@ export function MealPlanForm({
               label="Calories"
               rule={values.targetRules.energyKcal}
               disabled={isSubmitting}
-              onSelect={(rule) =>
-                actor.trigger.changeTargetRule({ nutrient: "energyKcal", rule })
-              }
+              onSelect={(rule) => {
+                send(
+                  MealPlanFormMachine.MealPlanFormEvents.ChangeTargetRule({
+                    nutrient: "energyKcal",
+                    rule,
+                  })
+                );
+              }}
             />
           </View>
           <View style={styles.energyValueGroup}>
@@ -200,17 +222,24 @@ export function MealPlanForm({
             <PlanTargetInput
               field={field}
               rule={values.targetRules[field.nutrient]}
-              onChangeRule={(rule) =>
-                actor.trigger.changeTargetRule({
-                  nutrient: field.nutrient,
-                  rule,
-                })
-              }
+              onChangeRule={(rule) => {
+                send(
+                  MealPlanFormMachine.MealPlanFormEvents.ChangeTargetRule({
+                    nutrient: field.nutrient,
+                    rule,
+                  })
+                );
+              }}
               isSubmitting={isSubmitting}
               key={field.name}
-              onChangeText={(value) =>
-                actor.trigger.changeField({ name: field.name, value })
-              }
+              onChangeText={(value) => {
+                send(
+                  MealPlanFormMachine.MealPlanFormEvents.ChangeField({
+                    name: field.name,
+                    value,
+                  })
+                );
+              }}
               value={values[field.name]}
             />
           ))}
@@ -227,11 +256,12 @@ export function MealPlanForm({
                   autoCorrect={false}
                   editable={!isSubmitting}
                   onChangeText={(value) => {
-                    mealsActor.send({
-                      type: "changeMealName",
-                      index,
-                      value,
-                    });
+                    sendMeals(
+                      MealPlanFormMachine.MealPlanMealsEvents.ChangeMealName({
+                        index,
+                        value,
+                      })
+                    );
                   }}
                   placeholder="Meal name"
                   returnKeyType="next"
@@ -242,10 +272,11 @@ export function MealPlanForm({
                   disabled={isSubmitting}
                   index={index}
                   onPress={() => {
-                    mealsActor.send({
-                      type: "removeMeal",
-                      index,
-                    });
+                    sendMeals(
+                      MealPlanFormMachine.MealPlanMealsEvents.RemoveMeal({
+                        index,
+                      })
+                    );
                   }}
                 />
               </View>
@@ -256,9 +287,7 @@ export function MealPlanForm({
             disabled={isSubmitting}
             icon={Plus}
             onPress={() => {
-              mealsActor.send({
-                type: "addMeal",
-              });
+              sendMeals(MealPlanFormMachine.MealPlanMealsEvents.AddMeal());
             }}
             variant="secondary"
           >

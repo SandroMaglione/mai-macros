@@ -13,12 +13,18 @@ import { Notice } from "@/components/ui/notice";
 import { InputSelect } from "@/components/ui/input-select";
 import { LoadingView } from "@/components/ui/loading-view";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { oneOffEntryMachine, OneOffRoute } from "@/lib/one-off-entry-machine";
+import { useMachine } from "@/hooks/use-machine";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  OneOffEntryEvents,
+  OneOffEntryMachine,
+  OneOffEntryStates,
+  type OneOffRoute,
+} from "@/machines/one-off-entry-machine";
 import { nutrientLabels } from "@/lib/nutrient-quality";
 import { color, spacing } from "@/theme/tokens";
 import { nutrientFieldColors } from "@/theme/nutrient-field-colors";
 import { Domain, Reporting } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
 import { Array, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
@@ -39,8 +45,10 @@ export default function OneOffScreen() {
     />
   );
 }
-function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
-  const [snapshot, , actor] = useMachine(oneOffEntryMachine, { input: route });
+function OneOffForm({ route }: { readonly route: OneOffRoute }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(OneOffEntryMachine, route)
+  );
   const {
     values,
     notice,
@@ -49,9 +57,9 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
     historyQuery,
     history,
     matchingHistory,
-  } = snapshot.context;
-  const isHistory = snapshot.matches("History");
-  const disabled = !snapshot.matches("Ready");
+  } = snapshot.value;
+  const isHistory = OneOffEntryStates.matches(snapshot, "History");
+  const disabled = !OneOffEntryStates.matches(snapshot, "Ready");
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppScreen
@@ -80,13 +88,13 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
           }
         />
         {route.mealEntryId === null &&
-        (snapshot.matches("Ready") || isHistory) ? (
+        (OneOffEntryStates.matches(snapshot, "Ready") || isHistory) ? (
           <PagerTabBar
             activeIndex={isHistory ? 1 : 0}
             onActiveIndexChange={(index) =>
               index === 1
-                ? actor.trigger.showHistory()
-                : actor.trigger.showForm()
+                ? send(OneOffEntryEvents.ShowHistory())
+                : send(OneOffEntryEvents.ShowForm())
             }
             tabs={[
               {
@@ -102,12 +110,14 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
             ]}
           />
         ) : null}
-        {snapshot.matches("Loading") ? (
+        {OneOffEntryStates.matches(snapshot, "Loading") ? (
           <LoadingView message="Opening meal" />
         ) : null}
-        {snapshot.matches("Failure") ? (
+        {OneOffEntryStates.matches(snapshot, "Failure") ? (
           <>
-            <Button onPress={() => actor.trigger.retry()}>Try again</Button>
+            <Button onPress={() => send(OneOffEntryEvents.Retry())}>
+              Try again
+            </Button>
             {notice === null ? null : <Notice message={notice} tone="danger" />}
           </>
         ) : isHistory ? (
@@ -116,30 +126,34 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               accessibilityLabel="Search past one-off entries"
               placeholder="Name or amount"
               value={historyQuery}
-              onChangeText={(query) => actor.trigger.searchHistory({ query })}
+              onChangeText={(query) =>
+                send(OneOffEntryEvents.SearchHistory({ query }))
+              }
             />
-            {snapshot.matches({ History: "Loading" }) ? (
+            {OneOffEntryStates.matches(snapshot, "History.Loading") ? (
               <LoadingView message="Loading past entries" />
             ) : null}
-            {snapshot.matches({ History: "Failure" }) ? (
+            {OneOffEntryStates.matches(snapshot, "History.Failure") ? (
               <>
                 {notice === null ? null : (
                   <Notice message={notice} tone="danger" />
                 )}
-                <Button onPress={() => actor.trigger.retry()}>Try again</Button>
+                <Button onPress={() => send(OneOffEntryEvents.Retry())}>
+                  Try again
+                </Button>
               </>
             ) : null}
-            {snapshot.matches({ History: "Ready" }) ? (
+            {OneOffEntryStates.matches(snapshot, "History.Ready") ? (
               history === null ? (
                 <>
                   <Notice message="Unable to load past entries" tone="danger" />
-                  <Button onPress={() => actor.trigger.retry()}>
+                  <Button onPress={() => send(OneOffEntryEvents.Retry())}>
                     Try again
                   </Button>
                 </>
               ) : (
                 <OneOffEntryList
-                  actor={actor}
+                  send={send}
                   entries={matchingHistory}
                   empty={
                     <Text style={styles.empty}>
@@ -158,7 +172,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               disabled={disabled}
               input={quickInput}
               onChangeText={(input) =>
-                actor.trigger.changeQuickInput({ input })
+                send(OneOffEntryEvents.ChangeQuickInput({ input }))
               }
               placeholder="Noodle bowl, 1 bowl, k650 p25 c80 f20"
             />
@@ -169,7 +183,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               value={values.name}
               editable={!disabled}
               onChangeText={(value) =>
-                actor.trigger.text({ field: "name", value })
+                send(OneOffEntryEvents.Text({ field: "name", value }))
               }
               placeholder="Restaurant noodle bowl"
             />
@@ -179,7 +193,9 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               value={values.amountDescription}
               editable={!disabled}
               onChangeText={(value) =>
-                actor.trigger.text({ field: "amountDescription", value })
+                send(
+                  OneOffEntryEvents.Text({ field: "amountDescription", value })
+                )
               }
               placeholder="1 bowl, half a plate…"
             />
@@ -190,7 +206,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                 variant="secondary"
                 style={styles.sourceAction}
                 onPress={() =>
-                  actor.trigger.allSources({ source: "Estimated" })
+                  send(OneOffEntryEvents.AllSources({ source: "Estimated" }))
                 }
               >
                 All estimated
@@ -199,7 +215,9 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                 disabled={disabled}
                 variant="secondary"
                 style={styles.sourceAction}
-                onPress={() => actor.trigger.allSources({ source: "Recorded" })}
+                onPress={() =>
+                  send(OneOffEntryEvents.AllSources({ source: "Recorded" }))
+                }
               >
                 All recorded
               </Button>
@@ -214,7 +232,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                 placeholder="—"
                 editable={!disabled}
                 onChangeText={(value) =>
-                  actor.trigger.nutrient({ field, value })
+                  send(OneOffEntryEvents.Nutrient({ field, value }))
                 }
                 rightElement={
                   <InputSelect
@@ -227,7 +245,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                     ]}
                     onSelect={(source) => {
                       if (source === "Estimated" || source === "Recorded")
-                        actor.trigger.source({ field, source });
+                        send(OneOffEntryEvents.Source({ field, source }));
                     }}
                   />
                 }
@@ -239,7 +257,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
               value={values.note}
               editable={!disabled}
               onChangeText={(value) =>
-                actor.trigger.text({ field: "note", value })
+                send(OneOffEntryEvents.Text({ field: "note", value }))
               }
             />
             <Button
@@ -248,8 +266,8 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                 values.name.trim() === "" ||
                 Array.isReadonlyArrayNonEmpty(quickInputIssues)
               }
-              loading={snapshot.matches("Saving")}
-              onPress={() => actor.trigger.save()}
+              loading={OneOffEntryStates.matches(snapshot, "Saving")}
+              onPress={() => send(OneOffEntryEvents.Save())}
             >
               {route.mealEntryId === null ? "Add to meal" : "Save entry"}
             </Button>
@@ -267,7 +285,7 @@ function OneOffForm({ route }: { readonly route: typeof OneOffRoute.Type }) {
                       {
                         text: "Delete",
                         style: "destructive",
-                        onPress: () => actor.trigger.delete(),
+                        onPress: () => send(OneOffEntryEvents.Delete()),
                       },
                     ]
                   )
