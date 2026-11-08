@@ -1,7 +1,6 @@
-import { Utils, Domain, FoodQuickInput, type Foods } from "@mai/nutrition";
+import { Utils, Domain, FoodQuickInput } from "@mai/nutrition";
+import { Machine } from "@typeonce/effect-machine";
 import { Effect, Schema } from "effect";
-import { setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
-import { EmptyEvent } from "./schemas";
 
 export type FoodNutrientFieldName =
   | "energyKcal"
@@ -139,206 +138,299 @@ const FoodNumberWarningSchema = Schema.Struct({
   message: Schema.String,
 });
 
-const FoodFormMachineContextSchema = Schema.Struct({
-  formValues: FoodFormValuesSchema,
-  portions: Schema.Array(FoodPortionFormValueSchema),
-  numberWarnings: Schema.Array(FoodNumberWarningSchema),
-  quickInput: Schema.String,
-  quickInputParseResult: Schema.Any,
-  syncQuickInputFromFields: Schema.Boolean,
+const FoodQuickInputParseIssueSchema = Schema.Struct({
+  field: Schema.optionalKey(
+    Schema.Literals([
+      "brand",
+      "carbsGrams",
+      "energyKcal",
+      "fatGrams",
+      "fiberGrams",
+      "name",
+      "proteinGrams",
+      "saltGrams",
+      "saturatedFatGrams",
+      "sugarGrams",
+    ])
+  ),
+  input: Schema.String,
+  message: Schema.String,
+  reason: Schema.Literals([
+    "duplicate-tag",
+    "invalid-number",
+    "missing-name",
+    "missing-required-nutrient",
+    "schema-error",
+    "too-many-fields",
+    "unrecognized-token",
+  ]),
 });
 
-export type FoodFormSubmitEvent = {
-  readonly input: Foods.CreateFoodInput;
-  readonly type: "submit";
-};
+const FoodQuickInputParseResultSchema = Schema.Struct({
+  food: Schema.optionalKey(FoodQuickInput.FoodQuickInput),
+  input: Schema.String,
+  issues: Schema.Array(FoodQuickInputParseIssueSchema),
+  partial: Schema.Struct({
+    name: Schema.optionalKey(Schema.String),
+    brand: Schema.optionalKey(Schema.String),
+    energyKcal: Schema.optionalKey(Schema.Number),
+    proteinGrams: Schema.optionalKey(Schema.Number),
+    carbsGrams: Schema.optionalKey(Schema.Number),
+    fatGrams: Schema.optionalKey(Schema.Number),
+    fiberGrams: Schema.optionalKey(Schema.Number),
+    sugarGrams: Schema.optionalKey(Schema.Number),
+    saturatedFatGrams: Schema.optionalKey(Schema.Number),
+    saltGrams: Schema.optionalKey(Schema.Number),
+  }),
+  status: Schema.Literals(["complete", "empty", "incomplete", "invalid"]),
+});
 
-export const foodFormMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(FoodFormMachineContextSchema),
-    events: {
-      changeFormValue: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          name: FoodFormValueNameSchema,
-          value: Schema.String,
-        })
-      ),
-      changeQuickInput: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          input: Schema.String,
-        })
-      ),
-      addPortion: Schema.toStandardSchemaV1(EmptyEvent),
-      loadFood: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
-      changePortion: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          field: FoodPortionFormFieldSchema,
-          index: Schema.Int,
-          value: Schema.String,
-        })
-      ),
-      removePortion: Schema.toStandardSchemaV1(
-        Schema.Struct({ index: Schema.Int })
-      ),
-      reset: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
+export const FoodFormSubmitInput = Schema.Struct({
+  name: Schema.String,
+  brand: Schema.optionalKey(Schema.String),
+  energyKcal: Schema.String,
+  proteinGrams: Schema.String,
+  carbsGrams: Schema.String,
+  fatGrams: Schema.String,
+  fiberGrams: Schema.optionalKey(Schema.String),
+  sugarGrams: Schema.optionalKey(Schema.String),
+  saturatedFatGrams: Schema.optionalKey(Schema.String),
+  saltGrams: Schema.optionalKey(Schema.String),
+  nutritionReference: Schema.Struct({
+    amount: Schema.String,
+    unit: Domain.MeasurementUnit,
+  }),
+  initialPrice: Schema.optionalKey(
+    Schema.Struct({
+      price: Schema.String,
+      currency: Schema.Literal("EUR"),
+      referenceQuantity: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MeasurementUnit,
+      }),
+    })
+  ),
+  portions: Schema.Array(
+    Schema.Struct({
+      id: Schema.optionalKey(Domain.FoodPortionId),
+      name: Schema.String,
+      size: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MeasurementUnit,
+      }),
+    })
+  ),
+  massVolumeConversion: Schema.optionalKey(
+    Schema.Struct({
+      mass: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.MassUnit,
+      }),
+      volume: Schema.Struct({
+        amount: Schema.String,
+        unit: Domain.VolumeUnit,
+      }),
+    })
+  ),
+});
+
+export type FoodFormSubmitInput = typeof FoodFormSubmitInput.Type;
+
+export const FoodFormParentEvents = Machine.events({
+  FoodFormSubmitted: { input: FoodFormSubmitInput },
+});
+
+export const FoodFormEvents = Machine.events({
+  AddPortion: {},
+  ChangeFormValue: { name: FoodFormValueNameSchema, value: Schema.String },
+  ChangePortion: {
+    field: FoodPortionFormFieldSchema,
+    index: Schema.Int,
+    value: Schema.String,
+  },
+  ChangeQuickInput: { input: Schema.String },
+  LoadFood: { food: Domain.Food },
+  RemovePortion: { index: Schema.Int },
+  Reset: {},
+  Submit: {},
+});
+
+export const FoodFormStates = Machine.state({
+  fields: {
+    formValues: FoodFormValuesSchema,
+    portions: Schema.Array(FoodPortionFormValueSchema),
+    numberWarnings: Schema.Array(FoodNumberWarningSchema),
+    quickInput: Schema.String,
+    quickInputParseResult: FoodQuickInputParseResultSchema,
+    syncQuickInputFromFields: Schema.Boolean,
+  },
+});
+
+export const FoodFormMachine = Machine.make({
+  id: "FoodForm",
+  root: FoodFormStates,
+  events: FoodFormEvents,
+  input: Schema.Struct({
+    initialFood: Schema.NullOr(Domain.Food),
+    syncQuickInputFromFields: Schema.Boolean,
+  }),
+  parent: Machine.optionalParent(FoodFormParentEvents),
+  branches: {
+    submit: { submitted: { none: true } },
+  },
+}).handle({
+  root: ({ input }) => _foodFormContextFromInput(input),
+  on: {
+    LoadFood: {
+      update: "root",
+      data: ({ root, event }) =>
+        _foodFormContextFromInput({
+          initialFood: event.food,
+          syncQuickInputFromFields: root.syncQuickInputFromFields,
+        }),
     },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        initialFood: Schema.NullOr(Domain.Food),
-        syncQuickInputFromFields: Schema.Boolean,
-      })
-    ),
-  },
-  states: {
-    Ready: {},
-  },
-}).createMachine({
-  context: ({ input }) => _foodFormContextFromInput(input),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        loadFood: ({ context, event }) => ({
-          context: _foodFormContextFromInput({
-            initialFood: event.food,
-            syncQuickInputFromFields: context.syncQuickInputFromFields,
-          }),
+    Reset: {
+      update: "root",
+      data: ({ root }) =>
+        _foodFormContextFromInput({
+          initialFood: null,
+          syncQuickInputFromFields: root.syncQuickInputFromFields,
         }),
-        reset: ({ context }) => ({
-          context: _foodFormContextFromInput({
-            initialFood: null,
-            syncQuickInputFromFields: context.syncQuickInputFromFields,
-          }),
-        }),
-        submit: ({ context, parent }, enq) => {
-          if (
-            parent === undefined ||
-            !foodPortionFormValuesAreValid({ portions: context.portions }) ||
-            !foodInitialPriceFormValuesAreValid({
-              formValues: context.formValues,
-            })
-          ) {
-            return;
-          }
+    },
+    Submit: {
+      branches: "submit",
+      declinable: true,
+      resolve: ({ root, parent, select, decline }, enqueue) => {
+        if (
+          parent === undefined ||
+          !foodPortionFormValuesAreValid({ portions: root.portions }) ||
+          !foodInitialPriceFormValuesAreValid({ formValues: root.formValues })
+        ) {
+          return decline();
+        }
 
-          enq.sendTo(parent, {
-            type: "submit",
+        enqueue.sendTo(
+          parent,
+          FoodFormParentEvents.FoodFormSubmitted({
             input: createFoodInputFromFormValues({
-              formValues: context.formValues,
-              portions: context.portions,
+              formValues: root.formValues,
+              portions: root.portions,
             }),
-          } satisfies FoodFormSubmitEvent);
-        },
-        addPortion: ({ context }) => ({
-          context: {
-            portions: [
-              ...context.portions,
-              { name: "", amount: "", unit: "g" },
-            ],
-          },
-        }),
-        changePortion: ({ context, event }) => ({
-          context: {
-            portions: context.portions.map((portion, index) =>
-              index === event.index
-                ? {
-                    ...portion,
-                    [event.field]:
-                      event.field === "unit"
-                        ? (measurementUnitByValue[event.value] ?? portion.unit)
-                        : event.value,
-                  }
-                : portion
-            ),
-          },
-        }),
-        removePortion: ({ context, event }) => ({
-          context: {
-            portions: context.portions.filter(
-              (_portion, index) => index !== event.index
-            ),
-          },
-        }),
-        changeFormValue: ({ context, event }) => {
-          const formValues = {
-            ...context.formValues,
-            [event.name]: event.value,
-          };
-          const quickInput = context.syncQuickInputFromFields
-            ? FoodQuickInput.formatFoodQuickInput({ values: formValues })
-            : context.quickInput;
+          })
+        );
 
-          return {
-            context: {
-              formValues,
-              numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
-              quickInput,
-              quickInputParseResult: context.syncQuickInputFromFields
-                ? Effect.runSync(
-                    FoodQuickInput.parseFoodQuickInput({ input: quickInput })
-                  )
-                : context.quickInputParseResult,
-            },
-          };
-        },
-        changeQuickInput: ({ context, event }) => {
-          const quickInputParseResult = Effect.runSync(
-            FoodQuickInput.parseFoodQuickInput({ input: event.input })
-          );
-          const { partial } = quickInputParseResult;
-          const formValues = {
-            name: partial.name ?? "",
-            brand: partial.brand ?? "",
-            energyKcal:
-              partial.energyKcal === undefined ? "" : `${partial.energyKcal}`,
-            proteinGrams:
-              partial.proteinGrams === undefined
-                ? ""
-                : `${partial.proteinGrams}`,
-            carbsGrams:
-              partial.carbsGrams === undefined ? "" : `${partial.carbsGrams}`,
-            fatGrams:
-              partial.fatGrams === undefined ? "" : `${partial.fatGrams}`,
-            fiberGrams:
-              partial.fiberGrams === undefined ? "" : `${partial.fiberGrams}`,
-            sugarGrams:
-              partial.sugarGrams === undefined ? "" : `${partial.sugarGrams}`,
-            saturatedFatGrams:
-              partial.saturatedFatGrams === undefined
-                ? ""
-                : `${partial.saturatedFatGrams}`,
-            saltGrams:
-              partial.saltGrams === undefined ? "" : `${partial.saltGrams}`,
-            initialPriceValue: context.formValues.initialPriceValue,
-            initialPriceQuantity: context.formValues.initialPriceQuantity,
-            initialPriceQuantityUnit:
-              context.formValues.initialPriceQuantityUnit,
-            nutritionReferenceAmount:
-              context.formValues.nutritionReferenceAmount,
-            nutritionReferenceUnit: context.formValues.nutritionReferenceUnit,
-            conversionMassAmount: context.formValues.conversionMassAmount,
-            conversionMassUnit: context.formValues.conversionMassUnit,
-            conversionVolumeAmount: context.formValues.conversionVolumeAmount,
-            conversionVolumeUnit: context.formValues.conversionVolumeUnit,
-          } satisfies FoodFormValues;
+        return select.submitted();
+      },
+    },
+    AddPortion: {
+      update: "root",
+      data: ({ root }) => ({
+        ...root,
+        portions: [...root.portions, { name: "", amount: "", unit: "g" }],
+      }),
+    },
+    ChangePortion: {
+      update: "root",
+      data: ({ root, event }) => ({
+        ...root,
+        portions: root.portions.map((portion, index) =>
+          index !== event.index
+            ? portion
+            : event.field === "unit"
+              ? {
+                  ...portion,
+                  unit: measurementUnitByValue[event.value] ?? portion.unit,
+                }
+              : event.field === "name"
+                ? { ...portion, name: event.value }
+                : { ...portion, amount: event.value }
+        ),
+      }),
+    },
+    RemovePortion: {
+      update: "root",
+      data: ({ root, event }) => ({
+        ...root,
+        portions: root.portions.filter(
+          (_portion, index) => index !== event.index
+        ),
+      }),
+    },
+    ChangeFormValue: {
+      update: "root",
+      data: ({ root, event }) => {
+        const formValues = {
+          ...root.formValues,
+          [event.name]: event.value,
+        };
+        const quickInput = root.syncQuickInputFromFields
+          ? FoodQuickInput.formatFoodQuickInput({ values: formValues })
+          : root.quickInput;
 
-          return {
-            context: {
-              formValues,
-              numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
-              quickInput: event.input,
-              quickInputParseResult,
-            },
-          };
-        },
+        return {
+          ...root,
+          formValues,
+          numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+          quickInput,
+          quickInputParseResult: root.syncQuickInputFromFields
+            ? Effect.runSync(
+                FoodQuickInput.parseFoodQuickInput({ input: quickInput })
+              )
+            : root.quickInputParseResult,
+        };
+      },
+    },
+    ChangeQuickInput: {
+      update: "root",
+      data: ({ root, event }) => {
+        const quickInputParseResult = Effect.runSync(
+          FoodQuickInput.parseFoodQuickInput({ input: event.input })
+        );
+        const { partial } = quickInputParseResult;
+        const formValues = {
+          name: partial.name ?? "",
+          brand: partial.brand ?? "",
+          energyKcal:
+            partial.energyKcal === undefined ? "" : `${partial.energyKcal}`,
+          proteinGrams:
+            partial.proteinGrams === undefined ? "" : `${partial.proteinGrams}`,
+          carbsGrams:
+            partial.carbsGrams === undefined ? "" : `${partial.carbsGrams}`,
+          fatGrams: partial.fatGrams === undefined ? "" : `${partial.fatGrams}`,
+          fiberGrams:
+            partial.fiberGrams === undefined ? "" : `${partial.fiberGrams}`,
+          sugarGrams:
+            partial.sugarGrams === undefined ? "" : `${partial.sugarGrams}`,
+          saturatedFatGrams:
+            partial.saturatedFatGrams === undefined
+              ? ""
+              : `${partial.saturatedFatGrams}`,
+          saltGrams:
+            partial.saltGrams === undefined ? "" : `${partial.saltGrams}`,
+          initialPriceValue: root.formValues.initialPriceValue,
+          initialPriceQuantity: root.formValues.initialPriceQuantity,
+          initialPriceQuantityUnit: root.formValues.initialPriceQuantityUnit,
+          nutritionReferenceAmount: root.formValues.nutritionReferenceAmount,
+          nutritionReferenceUnit: root.formValues.nutritionReferenceUnit,
+          conversionMassAmount: root.formValues.conversionMassAmount,
+          conversionMassUnit: root.formValues.conversionMassUnit,
+          conversionVolumeAmount: root.formValues.conversionVolumeAmount,
+          conversionVolumeUnit: root.formValues.conversionVolumeUnit,
+        } satisfies FoodFormValues;
+
+        return {
+          ...root,
+          formValues,
+          numberWarnings: foodNumberWarningsFromFormValues({ formValues }),
+          quickInput: event.input,
+          quickInputParseResult,
+        };
       },
     },
   },
 });
 
-export type FoodFormActorRef = ActorRefFrom<typeof foodFormMachine>;
-export type FoodFormSnapshot = SnapshotFrom<typeof foodFormMachine>;
+export const FoodFormChild = Machine.child("foodForm", FoodFormMachine);
 
 function _foodFormContextFromInput({
   initialFood,
@@ -597,7 +689,7 @@ export function createFoodInputFromFormValues({
 }: {
   readonly formValues: FoodFormValues;
   readonly portions: readonly FoodPortionFormValue[];
-}): Foods.CreateFoodInput {
+}): FoodFormSubmitInput {
   const brand = formValues.brand.trim();
   const fiberGrams = _optionalFormValue(formValues.fiberGrams);
   const sugarGrams = _optionalFormValue(formValues.sugarGrams);
