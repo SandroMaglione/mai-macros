@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/main.ts",
-    "./schemas": "./src/schemas.ts",
     "./one-off-entry-form": "./src/one-off-entry-form.ts",
     "./insight-range": "./src/insight-range.ts"
   },
@@ -15,10 +14,11 @@
   },
   "dependencies": {
     "@mai/nutrition": "workspace:^",
-    "effect": "4.1.1",
-    "xstate": "6.0.0-alpha.71"
+    "@typeonce/effect-machine": "0.46.0",
+    "effect": "4.1.1"
   },
   "devDependencies": {
+    "@effect/vitest": "4.1.1",
     "@types/node": "latest",
     "vitest": "^5.0.5"
   }

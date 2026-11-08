@@ -1,15 +1,15 @@
 import * as Backup from "@mai/nutrition/services/backup";
 import * as FoodCatalogTransfer from "@mai/nutrition/services/food-catalog-transfer";
-import * as BackupFileTransfer from "@mai/services/services/backup-file-transfer";
 import * as Gzip from "@mai/services/services/gzip";
 import * as QrCode from "@mai/services/services/qr-code";
-import { Effect, Layer } from "effect";
-import type { ManagedRuntime as ManagedRuntimeType } from "effect/ManagedRuntime";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Layer } from "effect";
+import { Atom } from "effect/reactivity";
 
-import { ExpoBackupFileTransferLayer } from "./expo-backup-file-transfer.ts";
-import { RuntimeClient } from "./runtime-client.ts";
+import { AppRestartLayer } from "./app-restart-layer.ts";
 import { ExpoAnalysisDatabaseLayer } from "./expo-analysis-database.ts";
-import { AnalysisDatabase } from "@mai/nutrition/services/analysis-database";
+import { ExpoBackupFileTransferLayer } from "./expo-backup-file-transfer.ts";
+import { MobileMachineLayer } from "./machine-runtime.ts";
 
 const BackupServicesLayer = Layer.mergeAll(
   Backup.Backups.layer,
@@ -17,22 +17,10 @@ const BackupServicesLayer = Layer.mergeAll(
   ExpoBackupFileTransferLayer,
   Gzip.Gzip.Default,
   QrCode.QrCode.Default,
-  ExpoAnalysisDatabaseLayer
+  ExpoAnalysisDatabaseLayer,
+  AppRestartLayer
 );
 
-export const BackupRuntimeClient = {
-  runPromise: <A, E>(
-    effect: Effect.Effect<
-      A,
-      E,
-      | Backup.Backups
-      | BackupFileTransfer.BackupFileTransfer
-      | FoodCatalogTransfer.FoodCatalogTransfers
-      | Gzip.Gzip
-      | QrCode.QrCode
-      | AnalysisDatabase
-      | ManagedRuntimeType.Services<typeof RuntimeClient>
-    >
-  ) =>
-    RuntimeClient.runPromise(effect.pipe(Effect.provide(BackupServicesLayer))),
-};
+export const BackupMachineAtoms = AtomMachine.bind(
+  Atom.runtime(Layer.provideMerge(BackupServicesLayer, MobileMachineLayer))
+);

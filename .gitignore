@@ -53,3 +53,4 @@ count.txt
 data
 scripts/food-catalogue.mjs
 .pnpm-store
+.effect-machine
