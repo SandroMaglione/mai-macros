@@ -7,14 +7,23 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatShortDate } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  FoodPortionsEvents,
+  FoodPortionsLoaderEvents,
+  FoodPortionsLoaderMachine,
+  FoodPortionsMachine,
+  FoodPortionsStates,
+  type FoodPortionsData,
+  type PortionFormField,
+  type PortionFormValues,
+} from "@/machines/food-portions-machine";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
 import { Domain, Foods } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Array, Effect, Option, Predicate, Schema } from "effect";
+import { Array, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import {
   ChevronLeft,
@@ -27,466 +36,96 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const RouteParams = Schema.Struct({ id: Domain.FoodId });
-
-const PortionFormValues = Schema.Struct({
-  amount: Schema.String,
-  name: Schema.String,
-  unit: Domain.MeasurementUnit,
-});
-type PortionFormValues = typeof PortionFormValues.Type;
-
-const measurementUnitByValue: Readonly<
-  Record<string, Domain.MeasurementUnit | undefined>
-> = {
-  g: "g",
-  kg: "kg",
-  l: "l",
-  lb: "lb",
-  ml: "ml",
-  oz: "oz",
-};
-
-const LoadOutput = Schema.Struct({
-  food: Domain.Food,
-  usage: Foods.FoodEditUsage,
-});
-
-const Context = Schema.Struct({
-  food: Schema.NullOr(Domain.Food),
-  foodId: Domain.FoodId,
-  form: PortionFormValues,
-  message: Schema.NullOr(Schema.String),
-  messageTone: Schema.Literals(["danger", "success"]),
-  selectedPortionId: Schema.NullOr(Domain.FoodPortionId),
-  usage: Schema.NullOr(Foods.FoodEditUsage),
-});
-
-const PortionIdEvent = Schema.Struct({ portionId: Domain.FoodPortionId });
-const ChangeFormEvent = Schema.Struct({
-  field: Schema.Literals(["amount", "name", "unit"]),
-  value: Schema.String,
-});
-const PortionMutationInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  form: PortionFormValues,
-});
-const PortionEditInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  form: PortionFormValues,
-  portionId: Domain.FoodPortionId,
-});
-const PortionRemoveInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  portionId: Domain.FoodPortionId,
-});
-
-const portionManagerMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(Context),
-    events: {
-      add: Schema.toStandardSchemaV1(EmptyEvent),
-      back: Schema.toStandardSchemaV1(EmptyEvent),
-      cancel: Schema.toStandardSchemaV1(EmptyEvent),
-      changeForm: Schema.toStandardSchemaV1(ChangeFormEvent),
-      confirmChangeEverywhere: Schema.toStandardSchemaV1(EmptyEvent),
-      createFromPortion: Schema.toStandardSchemaV1(PortionIdEvent),
-      editPortion: Schema.toStandardSchemaV1(PortionIdEvent),
-      removePortion: Schema.toStandardSchemaV1(PortionIdEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
-  },
-  actors: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(LoadOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return {
-              food: yield* foods.get({ input }),
-              usage: yield* foods.inspectEdit({ input }),
-            };
-          })
-        ),
-    }),
-    addPortion: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PortionMutationInput),
-        output: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.addFoodPortion({
-              input: {
-                foodId: input.foodId,
-                name: input.form.name,
-                size: {
-                  amount: input.form.amount,
-                  unit: input.form.unit,
-                },
-              },
-            });
-            return { food: result.food };
-          })
-        ),
-    }),
-    previewEdit: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PortionEditInput),
-        output: Schema.toStandardSchemaV1(Foods.FoodPortionEditPreview),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return yield* foods.previewFoodPortionEdit({
-              input: _editInput(input),
-            });
-          })
-        ),
-    }),
-    editPortion: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PortionEditInput),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            food: Domain.Food,
-            revisedMealEntryCount: Schema.Number,
-          })
-        ),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.editFoodPortionEverywhere({
-              input: _editInput(input),
-            });
-            return {
-              food: result.food,
-              revisedMealEntryCount: result.revisedMealEntryCount,
-            };
-          })
-        ),
-    }),
-    removePortion: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PortionRemoveInput),
-        output: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.removeUnusedFoodPortion({ input });
-            return { food: result.food };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    food: null,
-    foodId: input.foodId,
-    form: { amount: "", name: "", unit: "g" },
-    message: null,
-    messageTone: "success",
-    selectedPortionId: null,
-    usage: null,
-  }),
-  initial: "Loading",
-  on: {
-    changeForm: ({ context, event }) => ({
-      context: {
-        form: {
-          ...context.form,
-          [event.field]:
-            event.field === "unit"
-              ? (measurementUnitByValue[event.value] ?? context.form.unit)
-              : event.value,
-        },
-      },
-    }),
-  },
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: {
-            food: event.output.food,
-            selectedPortionId: null,
-            usage: event.output.usage,
-          },
-        }),
-        onError: {
-          target: "LoadFailed",
-          context: { message: "Could not load the portions for this food." },
-        },
-      },
-    },
-    LoadFailed: {
-      on: { retry: { target: "Loading", context: { message: null } } },
-    },
-    Listing: {
-      on: {
-        add: {
-          target: "Adding",
-          context: {
-            form: { amount: "", name: "", unit: "g" },
-            message: null,
-            selectedPortionId: null,
-          },
-        },
-        createFromPortion: ({ context, event }) => {
-          const portion = context.food?.portions.find(
-            (candidate) => candidate.id === event.portionId
-          );
-          if (portion === undefined) return;
-          return {
-            target: "CreatingFromPortion",
-            context: {
-              form: {
-                amount: `${portion.size.amount}`,
-                name: `${portion.name} copy`,
-                unit: portion.size.unit,
-              },
-              message: null,
-              selectedPortionId: portion.id,
-            },
-          };
-        },
-        editPortion: ({ context, event }) => {
-          const portion = context.food?.portions.find(
-            (candidate) => candidate.id === event.portionId
-          );
-          const portionUsage = context.usage?.portions.find(
-            (candidate) => candidate.portionId === event.portionId
-          );
-          if (portion === undefined || portionUsage === undefined) return;
-          return {
-            target: portionUsage.mealEntryCount > 0 ? "EditWarning" : "Editing",
-            context: {
-              form: {
-                amount: `${portion.size.amount}`,
-                name: portion.name,
-                unit: portion.size.unit,
-              },
-              message: null,
-              selectedPortionId: portion.id,
-            },
-          };
-        },
-        removePortion: ({ context, event }) => {
-          const portion = context.food?.portions.find(
-            (candidate) => candidate.id === event.portionId
-          );
-          const portionUsage = context.usage?.portions.find(
-            (candidate) => candidate.portionId === event.portionId
-          );
-          if (
-            portion === undefined ||
-            portionUsage === undefined ||
-            portionUsage.mealEntryCount > 0
-          ) {
-            return;
-          }
-          return {
-            target: "Removing",
-            context: {
-              form: {
-                amount: `${portion.size.amount}`,
-                name: portion.name,
-                unit: portion.size.unit,
-              },
-              message: null,
-              selectedPortionId: portion.id,
-            },
-          };
-        },
-      },
-    },
-    EditWarning: {
-      on: {
-        back: { target: "Listing" },
-        confirmChangeEverywhere: { target: "Editing" },
-      },
-    },
-    Adding: {
-      on: {
-        cancel: { target: "Listing", context: { message: null } },
-        submit: { target: "SavingNew" },
-      },
-    },
-    CreatingFromPortion: {
-      on: {
-        cancel: { target: "Listing", context: { message: null } },
-        submit: { target: "SavingNew" },
-      },
-    },
-    SavingNew: {
-      invoke: {
-        src: "addPortion",
-        input: ({ context }) => ({
-          foodId: context.foodId,
-          form: context.form,
-        }),
-        onDone: {
-          target: "Loading",
-          context: {
-            message: "Portion added. Previous entries were unchanged.",
-            messageTone: "success",
-          },
-        },
-        onError: ({ event }) => ({
-          target: "Adding",
-          context: { message: _mutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    Editing: {
-      on: {
-        cancel: { target: "Listing", context: { message: null } },
-        submit: ({ context }) => {
-          const portionUsage = context.usage?.portions.find(
-            (candidate) => candidate.portionId === context.selectedPortionId
-          );
-          return {
-            target:
-              (portionUsage?.mealEntryCount ?? 0) > 0
-                ? "PreviewingEdit"
-                : "SavingEdit",
-          };
-        },
-      },
-    },
-    PreviewingEdit: {
-      invoke: {
-        src: "previewEdit",
-        input: ({ context }) => _editActorInput(context),
-        onDone: { target: "ReviewingEdit", context: { message: null } },
-        onError: ({ event }) => ({
-          target: "Editing",
-          context: { message: _mutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    ReviewingEdit: {
-      on: {
-        back: { target: "Editing" },
-        confirmChangeEverywhere: { target: "SavingEdit" },
-      },
-    },
-    SavingEdit: {
-      invoke: {
-        src: "editPortion",
-        input: ({ context }) => _editActorInput(context),
-        onDone: ({ event }) => ({
-          target: "Loading",
-          context: {
-            message:
-              event.output.revisedMealEntryCount === 0
-                ? "Unused portion updated. No previous entry changed."
-                : `Portion updated across ${event.output.revisedMealEntryCount} previous meal ${event.output.revisedMealEntryCount === 1 ? "entry" : "entries"}.`,
-            messageTone: "success",
-          },
-        }),
-        onError: ({ event }) => ({
-          target: "Editing",
-          context: { message: _mutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    Removing: {
-      invoke: {
-        src: "removePortion",
-        input: ({ context }) => {
-          if (context.selectedPortionId === null) {
-            throw new Error("Expected a selected portion.");
-          }
-          return {
-            foodId: context.foodId,
-            portionId: context.selectedPortionId,
-          };
-        },
-        onDone: {
-          target: "Loading",
-          context: {
-            message: "Unused portion removed.",
-            messageTone: "success",
-          },
-        },
-        onError: ({ event }) => ({
-          target: "Listing",
-          context: {
-            message: _mutationErrorMessage(event.error),
-            messageTone: "danger",
-          },
-        }),
-      },
-    },
-  },
-});
 
 export default function FoodPortionsRoute() {
   const params = useSchemaLocalSearchParams(RouteParams);
   return Option.isNone(params) ? (
     <Redirect href="/" />
   ) : (
-    <FoodPortionsScreen foodId={params.value.id} />
+    <FoodPortionsLoader foodId={params.value.id} />
   );
 }
 
-function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
-  const [snapshot, , actor] = useMachine(portionManagerMachine, {
-    input: { foodId },
-  });
-  const { food, usage } = snapshot.context;
+function FoodPortionsLoader({ foodId }: { readonly foodId: Domain.FoodId }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodPortionsLoaderMachine, { foodId })
+  );
+  const state = snapshot.state;
 
-  if (snapshot.matches("Loading")) {
-    return (
-      <AppScreen contentStyle={styles.centered}>
-        <LoadingView message="Loading portions" />
-      </AppScreen>
-    );
+  if (state.path === "Loading") {
+    return <PortionsLoading />;
   }
-  if (snapshot.matches("LoadFailed") || food === null || usage === null) {
+  if (state.path === "Failed") {
     return (
-      <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load portions."}
-          tone="danger"
-        />
-        <Button icon={RotateCcw} onPress={actor.trigger.retry}>
-          Try again
-        </Button>
-        <Button onPress={() => router.back()} variant="secondary">
-          Back
-        </Button>
-      </AppScreen>
+      <PortionsLoadFailure
+        message={state.value.message}
+        onRetry={() => {
+          send(FoodPortionsLoaderEvents.Retry());
+        }}
+      />
     );
   }
 
+  return <FoodPortionsScreen data={state.value.data} />;
+}
+
+function PortionsLoading() {
+  return (
+    <AppScreen contentStyle={styles.centered}>
+      <LoadingView message="Loading portions" />
+    </AppScreen>
+  );
+}
+
+function PortionsLoadFailure({
+  message,
+  onRetry,
+}: {
+  readonly message: string;
+  readonly onRetry: () => void;
+}) {
+  return (
+    <AppScreen contentStyle={styles.centered}>
+      <Notice message={message} tone="danger" />
+      <Button icon={RotateCcw} onPress={onRetry}>
+        Try again
+      </Button>
+      <Button onPress={() => router.back()} variant="secondary">
+        Back
+      </Button>
+    </AppScreen>
+  );
+}
+
+function FoodPortionsScreen({ data }: { readonly data: FoodPortionsData }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodPortionsMachine, data)
+  );
+  const state = snapshot.state;
+
+  if (state.path === "Reloading") {
+    return <PortionsLoading />;
+  }
+  if (state.path === "ReloadFailed") {
+    return (
+      <PortionsLoadFailure
+        message={state.value.message}
+        onRetry={() => {
+          send(FoodPortionsEvents.Retry());
+        }}
+      />
+    );
+  }
+
+  const { food, form, message, messageTone, usage } = state.value;
+  const selectedPortionId =
+    state.state.path === "Loaded.Listing" ? null : state.state.value.portionId;
   const selectedPortion =
-    snapshot.context.selectedPortionId === null
+    selectedPortionId === null
       ? undefined
-      : food.portions.find(
-          (portion) => portion.id === snapshot.context.selectedPortionId
-        );
+      : food.portions.find((portion) => portion.id === selectedPortionId);
   const selectedUsage =
     selectedPortion === undefined
       ? undefined
@@ -494,18 +133,15 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           (candidate) => candidate.portionId === selectedPortion.id
         );
 
-  if (snapshot.matches("Listing")) {
+  if (FoodPortionsStates.matches(snapshot, "Loaded.Listing")) {
     return (
       <PortionPage food={food} title="Manage portions">
         <Notice
           message="Portions are managed separately from nutrition and other food details."
           tone="neutral"
         />
-        {snapshot.context.message === null ? null : (
-          <Notice
-            message={snapshot.context.message}
-            tone={snapshot.context.messageTone}
-          />
+        {message === null ? null : (
+          <Notice message={message} tone={messageTone} />
         )}
         {Array.isReadonlyArrayNonEmpty(food.portions) ? (
           <View style={styles.stack}>
@@ -530,12 +166,13 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
                     <View style={styles.actions}>
                       <Button
                         icon={Pencil}
-                        onPress={() =>
-                          actor.send({
-                            type: "editPortion",
-                            portionId: portion.id,
-                          })
-                        }
+                        onPress={() => {
+                          send(
+                            FoodPortionsEvents.EditPortion({
+                              portionId: portion.id,
+                            })
+                          );
+                        }}
                         style={styles.action}
                         variant={isUsed ? "primary" : "secondary"}
                       >
@@ -543,14 +180,17 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
                       </Button>
                       <Button
                         icon={isUsed ? CopyPlus : Trash2}
-                        onPress={() =>
-                          actor.send({
-                            type: isUsed
-                              ? "createFromPortion"
-                              : "removePortion",
-                            portionId: portion.id,
-                          })
-                        }
+                        onPress={() => {
+                          send(
+                            isUsed
+                              ? FoodPortionsEvents.CreateFromPortion({
+                                  portionId: portion.id,
+                                })
+                              : FoodPortionsEvents.RemovePortion({
+                                  portionId: portion.id,
+                                })
+                          );
+                        }}
                         style={styles.action}
                         variant={isUsed ? "secondary" : "danger"}
                       >
@@ -568,7 +208,12 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             tone="neutral"
           />
         )}
-        <Button icon={Plus} onPress={actor.trigger.add}>
+        <Button
+          icon={Plus}
+          onPress={() => {
+            send(FoodPortionsEvents.Add());
+          }}
+        >
           Add a portion
         </Button>
       </PortionPage>
@@ -576,14 +221,14 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
   }
 
   const addingBlankPortion =
-    snapshot.matches("Adding") ||
-    (snapshot.matches("SavingNew") &&
-      snapshot.context.selectedPortionId === null);
+    FoodPortionsStates.matches(snapshot, "Loaded.Adding") ||
+    (FoodPortionsStates.matches(snapshot, "Loaded.SavingNew") &&
+      selectedPortionId === null);
   if (addingBlankPortion) {
-    const saving = snapshot.matches("SavingNew");
+    const saving = FoodPortionsStates.matches(snapshot, "Loaded.SavingNew");
     const formIsValid = _formIsValid({
       food,
-      form: snapshot.context.form,
+      form,
       exceptPortionId: undefined,
     });
     return (
@@ -594,18 +239,18 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
         />
         <PortionFields
           disabled={saving}
-          form={snapshot.context.form}
-          onChange={(field, value) =>
-            actor.send({ type: "changeForm", field, value })
-          }
+          form={form}
+          onChange={(field, value) => {
+            send(FoodPortionsEvents.ChangeForm({ field, value }));
+          }}
         />
-        {snapshot.context.message === null ? null : (
-          <Notice message={snapshot.context.message} tone="danger" />
-        )}
+        {message === null ? null : <Notice message={message} tone="danger" />}
         <View style={styles.actions}>
           <Button
             disabled={saving}
-            onPress={actor.trigger.cancel}
+            onPress={() => {
+              send(FoodPortionsEvents.Cancel());
+            }}
             style={styles.action}
             variant="secondary"
           >
@@ -615,7 +260,9 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             disabled={!formIsValid}
             icon={Save}
             loading={saving}
-            onPress={actor.trigger.submit}
+            onPress={() => {
+              send(FoodPortionsEvents.Submit());
+            }}
             style={styles.action}
           >
             Add portion
@@ -629,13 +276,19 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <Notice message="This portion could not be found." tone="danger" />
-        <Button onPress={actor.trigger.back}>Back to portions</Button>
+        <Button
+          onPress={() => {
+            send(FoodPortionsEvents.Back());
+          }}
+        >
+          Back to portions
+        </Button>
       </AppScreen>
     );
   }
 
   const isUsed = selectedUsage.mealEntryCount > 0;
-  if (snapshot.matches("Removing")) {
+  if (FoodPortionsStates.matches(snapshot, "Loaded.Removing")) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message={`Removing ${selectedPortion.name}`} />
@@ -644,35 +297,31 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
   }
 
   const isNew =
-    snapshot.matches("CreatingFromPortion") || snapshot.matches("SavingNew");
-  if (
-    isNew ||
-    snapshot.matches("EditWarning") ||
-    snapshot.matches("Editing") ||
-    snapshot.matches("PreviewingEdit") ||
-    snapshot.matches("ReviewingEdit") ||
-    snapshot.matches("SavingEdit")
-  ) {
+    FoodPortionsStates.matches(snapshot, "Loaded.CreatingFromPortion") ||
+    FoodPortionsStates.matches(snapshot, "Loaded.SavingNew");
+  if (isNew || FoodPortionsStates.matches(snapshot, "Loaded.Edit")) {
     const saving =
-      snapshot.matches("SavingNew") || snapshot.matches("SavingEdit");
-    const reviewing = snapshot.matches("PreviewingEdit");
+      FoodPortionsStates.matches(snapshot, "Loaded.SavingNew") ||
+      FoodPortionsStates.matches(snapshot, "Loaded.Edit.Saving");
+    const reviewing = FoodPortionsStates.matches(
+      snapshot,
+      "Loaded.Edit.Previewing"
+    );
     const formIsValid = _formIsValid({
       food,
-      form: snapshot.context.form,
+      form,
       exceptPortionId: isNew ? undefined : selectedPortion.id,
     });
     const changes: string[] = [];
-    if (snapshot.context.form.name.trim() !== selectedPortion.name) {
-      changes.push(
-        `Name: “${selectedPortion.name}” → “${snapshot.context.form.name.trim()}”`
-      );
+    if (form.name.trim() !== selectedPortion.name) {
+      changes.push(`Name: “${selectedPortion.name}” → “${form.name.trim()}”`);
     }
     if (
-      Number(snapshot.context.form.amount) !== selectedPortion.size.amount ||
-      snapshot.context.form.unit !== selectedPortion.size.unit
+      Number(form.amount) !== selectedPortion.size.amount ||
+      form.unit !== selectedPortion.size.unit
     ) {
       changes.push(
-        `Size: ${selectedPortion.size.amount} ${selectedPortion.size.unit} → ${snapshot.context.form.amount} ${snapshot.context.form.unit}`
+        `Size: ${selectedPortion.size.amount} ${selectedPortion.size.unit} → ${form.amount} ${form.unit}`
       );
     }
     return (
@@ -690,18 +339,18 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           />
           <PortionFields
             disabled={saving || reviewing}
-            form={snapshot.context.form}
-            onChange={(field, value) =>
-              actor.send({ type: "changeForm", field, value })
-            }
+            form={form}
+            onChange={(field, value) => {
+              send(FoodPortionsEvents.ChangeForm({ field, value }));
+            }}
           />
-          {snapshot.context.message === null ? null : (
-            <Notice message={snapshot.context.message} tone="danger" />
-          )}
+          {message === null ? null : <Notice message={message} tone="danger" />}
           <View style={styles.actions}>
             <Button
               disabled={saving || reviewing}
-              onPress={actor.trigger.cancel}
+              onPress={() => {
+                send(FoodPortionsEvents.Cancel());
+              }}
               style={styles.action}
               variant="secondary"
             >
@@ -711,7 +360,9 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
               disabled={!formIsValid}
               icon={Save}
               loading={saving || reviewing}
-              onPress={actor.trigger.submit}
+              onPress={() => {
+                send(FoodPortionsEvents.Submit());
+              }}
               style={styles.action}
             >
               {isNew ? "Add portion" : isUsed ? "Review changes" : "Save"}
@@ -721,19 +372,28 @@ function FoodPortionsScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
         <ConfirmationDialog
           confirmLabel="Continue"
           message={`This portion is used in ${selectedUsage.mealEntryCount} meal ${selectedUsage.mealEntryCount === 1 ? "entry" : "entries"}${_usageDateRange(selectedUsage)}. Any saved changes will apply to all of them.`}
-          onCancel={actor.trigger.back}
-          onConfirm={actor.trigger.confirmChangeEverywhere}
+          onCancel={() => {
+            send(FoodPortionsEvents.Back());
+          }}
+          onConfirm={() => {
+            send(FoodPortionsEvents.ConfirmChangeEverywhere());
+          }}
           title="Change this portion everywhere?"
-          visible={snapshot.matches("EditWarning")}
+          visible={FoodPortionsStates.matches(snapshot, "Loaded.Edit.Warning")}
         />
         <ReviewDialog
           changes={changes}
-          loading={snapshot.matches("SavingEdit")}
-          onCancel={actor.trigger.back}
-          onConfirm={actor.trigger.confirmChangeEverywhere}
+          loading={FoodPortionsStates.matches(snapshot, "Loaded.Edit.Saving")}
+          onCancel={() => {
+            send(FoodPortionsEvents.Back());
+          }}
+          onConfirm={() => {
+            send(FoodPortionsEvents.ConfirmChangeEverywhere());
+          }}
           usage={selectedUsage}
           visible={
-            snapshot.matches("ReviewingEdit") || snapshot.matches("SavingEdit")
+            FoodPortionsStates.matches(snapshot, "Loaded.Edit.Reviewing") ||
+            FoodPortionsStates.matches(snapshot, "Loaded.Edit.Saving")
           }
         />
       </>
@@ -790,7 +450,7 @@ function PortionFields({
 }: {
   readonly disabled: boolean;
   readonly form: PortionFormValues;
-  readonly onChange: (field: "amount" | "name" | "unit", value: string) => void;
+  readonly onChange: (field: PortionFormField, value: string) => void;
 }) {
   return (
     <SectionCard title="Portion details">
@@ -943,30 +603,6 @@ function ReviewDialog({
   );
 }
 
-function _editInput(
-  input: typeof PortionEditInput.Type
-): Foods.EditFoodPortionInput {
-  return {
-    foodId: input.foodId,
-    portionId: input.portionId,
-    name: input.form.name,
-    size: { amount: input.form.amount, unit: input.form.unit },
-  };
-}
-
-function _editActorInput(
-  context: typeof Context.Type
-): typeof PortionEditInput.Type {
-  if (context.selectedPortionId === null) {
-    throw new Error("Expected a selected portion.");
-  }
-  return {
-    foodId: context.foodId,
-    form: context.form,
-    portionId: context.selectedPortionId,
-  };
-}
-
 function _formIsValid({
   exceptPortionId,
   food,
@@ -997,22 +633,6 @@ function _usageDateRange(usage: Foods.FoodPortionUsage) {
   return usage.firstDateKey === usage.lastDateKey
     ? ` on ${first}`
     : ` between ${first} and ${formatShortDate({ dateKey: usage.lastDateKey })}`;
-}
-
-function _mutationErrorMessage(error: unknown) {
-  if (Predicate.isTagged(error, "FoodPortionNameAlreadyExists")) {
-    return "Use a name that is not already assigned to another portion.";
-  }
-  if (Predicate.isTagged(error, "UsedFoodPortionMutationNotAllowed")) {
-    return "This portion is now used and cannot be removed.";
-  }
-  if (Predicate.isTagged(error, "IncompatibleFoodMeasurement")) {
-    return "This unit cannot be applied to the food’s current measurement settings.";
-  }
-  if (Predicate.isTagged(error, "AppDefaultFoodEditNotAllowed")) {
-    return "Pre-installed foods cannot be changed. Create a food copy first.";
-  }
-  return "Could not save this portion. Review the values and try again.";
 }
 
 const styles = StyleSheet.create({

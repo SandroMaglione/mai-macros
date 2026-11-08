@@ -6,15 +6,20 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { RuntimeClient } from "@/lib/runtime-client";
 import { describeFoodChanges } from "@/lib/food-change-summary";
 import { formatNumber, formatShortDate } from "@/lib/format";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  FoodEditorEvents,
+  FoodEditorMachine,
+  foodEditorLoadFailedMessage,
+} from "@/machines/food-editor-machine";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent, FoodFormMachine } from "@mai/machines";
-import { Domain, Foods } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Array, Effect, Option, Predicate, Schema } from "effect";
+import { FoodFormMachine } from "@mai/machines";
+import { Domain, type Foods } from "@mai/nutrition";
+import { Array, Option, Schema } from "effect";
 import { Redirect, router, useFocusEffect } from "expo-router";
 import {
   CircleCheck,
@@ -30,401 +35,10 @@ import {
 } from "lucide-react-native";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useCallback, type ReactNode } from "react";
-import { Actor, createAsyncLogic, setup } from "xstate";
-
-const FoodFormInput = Schema.Struct({
-  name: Schema.String,
-  brand: Schema.optionalKey(Schema.String),
-  energyKcal: Schema.String,
-  proteinGrams: Schema.String,
-  carbsGrams: Schema.String,
-  fatGrams: Schema.String,
-  fiberGrams: Schema.optionalKey(Schema.String),
-  sugarGrams: Schema.optionalKey(Schema.String),
-  saturatedFatGrams: Schema.optionalKey(Schema.String),
-  saltGrams: Schema.optionalKey(Schema.String),
-  nutritionReference: Schema.Struct({
-    amount: Schema.String,
-    unit: Domain.MeasurementUnit,
-  }),
-  portions: Schema.Array(
-    Schema.Struct({
-      id: Schema.optionalKey(Domain.FoodPortionId),
-      name: Schema.String,
-      size: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MeasurementUnit,
-      }),
-    })
-  ),
-  massVolumeConversion: Schema.optionalKey(
-    Schema.Struct({
-      mass: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MassUnit,
-      }),
-      volume: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.VolumeUnit,
-      }),
-    })
-  ),
-});
 
 const FoodEditorRouteParams = Schema.Struct({
   id: Domain.FoodId,
   dateKey: Schema.optionalKey(Domain.DateKey),
-});
-
-const FoodFormActorSchema = Schema.declare<FoodFormMachine.FoodFormActorRef>(
-  (value): value is FoodFormMachine.FoodFormActorRef =>
-    value instanceof Actor && value.logic === FoodFormMachine.foodFormMachine,
-  { expected: "FoodFormActor" }
-);
-
-const FoodEditorLoadOutput = Schema.Struct({
-  food: Domain.Food,
-  foods: Schema.Array(Domain.Food),
-  usage: Foods.FoodEditUsage,
-});
-
-const FoodEditorContext = Schema.Struct({
-  draft: Schema.NullOr(FoodFormInput),
-  food: Schema.NullOr(Domain.Food),
-  foods: Schema.Array(Domain.Food),
-  foodFormActor: FoodFormActorSchema,
-  foodId: Domain.FoodId,
-  message: Schema.NullOr(Schema.String),
-  usage: Schema.NullOr(Foods.FoodEditUsage),
-});
-
-const SubmitFoodInput = Schema.Struct({ input: FoodFormInput });
-
-const foodEditorMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(FoodEditorContext),
-    events: {
-      acknowledgeEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      apply: Schema.toStandardSchemaV1(EmptyEvent),
-      backToChoice: Schema.toStandardSchemaV1(EmptyEvent),
-      backToForm: Schema.toStandardSchemaV1(EmptyEvent),
-      chooseCopy: Schema.toStandardSchemaV1(EmptyEvent),
-      chooseEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      confirmEdit: Schema.toStandardSchemaV1(EmptyEvent),
-      deleteFood: Schema.toStandardSchemaV1(EmptyEvent),
-      refresh: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(SubmitFoodInput),
-    },
-    input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
-  },
-  actors: {
-    foodForm: FoodFormMachine.foodFormMachine,
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(FoodEditorLoadOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const food = yield* foods.get({ input });
-
-            return {
-              food,
-              foods: [...(yield* foods.list())],
-              usage: yield* foods.inspectEdit({ input }),
-            };
-          })
-        ),
-    }),
-    deleteFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(Schema.Void),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            yield* foods.deleteUnused({ input });
-          })
-        ),
-    }),
-    previewEdit: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            draft: FoodFormInput,
-            foodId: Domain.FoodId,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(Foods.FoodEditPreview),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return yield* foods.previewFoodDetailsEdit({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                foodId: input.foodId,
-              },
-            });
-          })
-        ),
-    }),
-    copyFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            draft: FoodFormInput,
-            sourceFoodId: Domain.FoodId,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(Schema.Struct({ food: Domain.Food })),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.copy({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                sourceFoodId: input.sourceFoodId,
-              },
-            });
-            return { food: result.food };
-          })
-        ),
-    }),
-    editFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ draft: FoodFormInput, foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            food: Domain.Food,
-            revisedMealEntryCount: Schema.Number,
-          })
-        ),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.editFoodDetails({
-              input: {
-                ..._foodDetailsFromDraft(input.draft),
-                foodId: input.foodId,
-              },
-            });
-            return {
-              food: result.food,
-              revisedMealEntryCount: result.revisedMealEntryCount,
-            };
-          })
-        ),
-    }),
-  },
-  actions: {
-    loadFoodForm: (params: {
-      readonly actor: FoodFormMachine.FoodFormActorRef;
-      readonly food: Domain.Food;
-    }) => {
-      params.actor.send({ type: "loadFood", food: params.food });
-    },
-  },
-}).createMachine({
-  context: ({ actors, input, spawn }) => ({
-    draft: null,
-    food: null,
-    foods: [],
-    foodFormActor: spawn(actors.foodForm, {
-      id: "foodEditorForm",
-      input: { initialFood: null, syncQuickInputFromFields: true },
-    }),
-    foodId: input.foodId,
-    message: null,
-    usage: null,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "ChoosingAction",
-          context: {
-            food: event.output.food,
-            foods: event.output.foods,
-            usage: event.output.usage,
-          },
-        }),
-        onError: {
-          target: "LoadFailed",
-          context: { message: "Could not load this food." },
-        },
-      },
-    },
-    LoadFailed: {
-      on: { retry: { target: "Loading", context: { message: null } } },
-    },
-    Deleting: {
-      invoke: {
-        src: "deleteFood",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: { target: "Deleted" },
-        onError: {
-          target: "Loading",
-          context: {
-            message:
-              "Could not delete this food. Only unused foods you created can be removed.",
-          },
-        },
-      },
-    },
-    Deleted: {},
-    ChoosingAction: {
-      on: {
-        deleteFood: ({ context }) =>
-          context.food?.origin === "user" && context.usage?.mealEntryCount === 0
-            ? { target: "Deleting", context: { message: null } }
-            : undefined,
-        refresh: { target: "Loading" },
-        chooseCopy: ({ actions, context }, enq) => {
-          if (context.food === null) {
-            return;
-          }
-          enq(actions.loadFoodForm, {
-            actor: context.foodFormActor,
-            food: context.food,
-          });
-          return { target: "CopyForm", context: { message: null } };
-        },
-        chooseEdit: ({ actions, context }, enq) => {
-          if (context.food === null || context.food.origin === "app-default") {
-            return;
-          }
-          enq(actions.loadFoodForm, {
-            actor: context.foodFormActor,
-            food: context.food,
-          });
-          return { target: "EditFormWarning", context: { message: null } };
-        },
-      },
-    },
-    EditFormWarning: {
-      on: {
-        backToChoice: { target: "ChoosingAction" },
-        acknowledgeEdit: { target: "EditForm", context: { message: null } },
-      },
-    },
-    CopyForm: {
-      on: {
-        backToChoice: { target: "ChoosingAction", context: { message: null } },
-        submit: ({ event }) => ({
-          target: "ReviewingCopy",
-          context: { draft: event.input, message: null },
-        }),
-      },
-    },
-    EditForm: {
-      on: {
-        backToChoice: { target: "ChoosingAction", context: { message: null } },
-        submit: ({ event }) => ({
-          target: "PreviewingEdit",
-          context: { draft: event.input, message: null },
-        }),
-      },
-    },
-    PreviewingEdit: {
-      invoke: {
-        src: "previewEdit",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected an edit draft.");
-          }
-          return { draft: context.draft, foodId: context.foodId };
-        },
-        onDone: {
-          target: "ReviewingEdit",
-          context: { message: null },
-        },
-        onError: ({ event }) => ({
-          target: "EditForm",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    ReviewingCopy: {
-      on: {
-        backToForm: { target: "CopyForm" },
-        apply: { target: "Copying" },
-      },
-    },
-    ReviewingEdit: {
-      on: {
-        backToForm: { target: "EditForm" },
-        confirmEdit: { target: "Editing" },
-      },
-    },
-    Copying: {
-      invoke: {
-        src: "copyFood",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected a copy draft.");
-          }
-          return { draft: context.draft, sourceFoodId: context.foodId };
-        },
-        onDone: ({ event }) => ({
-          target: "Completed",
-          context: {
-            food: event.output.food,
-            message: "Food copy created. Previous meal entries were unchanged.",
-          },
-        }),
-        onError: ({ event }) => ({
-          target: "ReviewingCopy",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    Editing: {
-      invoke: {
-        src: "editFood",
-        input: ({ context }) => {
-          if (context.draft === null) {
-            throw new Error("Expected an edit draft.");
-          }
-          return { draft: context.draft, foodId: context.foodId };
-        },
-        onDone: ({ event }) => ({
-          target: "Completed",
-          context: {
-            food: event.output.food,
-            message:
-              event.output.revisedMealEntryCount === 0
-                ? "Food updated. No previous meal entries changed."
-                : `Food updated across ${event.output.revisedMealEntryCount} previous meal ${event.output.revisedMealEntryCount === 1 ? "entry" : "entries"}.`,
-          },
-        }),
-        onError: ({ event }) => ({
-          target: "EditForm",
-          context: { message: _foodMutationErrorMessage(event.error) },
-        }),
-      },
-    },
-    Completed: {},
-  },
 });
 
 export default function FoodEditorRoute() {
@@ -444,18 +58,19 @@ function FoodEditorScreen({
   readonly dateKey: Domain.DateKey | undefined;
   readonly foodId: Domain.FoodId;
 }) {
-  const [snapshot, , actor] = useMachine(foodEditorMachine, {
-    input: { foodId },
-  });
+  const [snapshot, send, machine] = useMachine(() =>
+    MachineAtoms.make(FoodEditorMachine, { foodId })
+  );
   useFocusEffect(
     useCallback(() => {
-      actor.send({ type: "refresh" });
-    }, [actor])
+      send(FoodEditorEvents.Refresh());
+    }, [send])
   );
-  const food = snapshot.context.food;
-  const usage = snapshot.context.usage;
+  const { message } = snapshot.value;
+  const editorState = snapshot.state.state;
+  const foodForm = machine.child(FoodFormMachine.FoodFormChild);
 
-  if (snapshot.matches("Deleted"))
+  if (editorState.path === "Editor.Deleted")
     return (
       <Redirect
         href={{
@@ -464,26 +79,37 @@ function FoodEditorScreen({
         }}
       />
     );
-  if (snapshot.matches("Loading") || snapshot.matches("Deleting")) {
+  if (
+    editorState.path === "Editor.Loading" ||
+    (editorState.path === "Editor.Loaded" &&
+      editorState.state.path === "Editor.Loaded.Deleting")
+  ) {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView
           message={
-            snapshot.matches("Deleting") ? "Deleting food" : "Loading food"
+            editorState.path === "Editor.Loaded"
+              ? "Deleting food"
+              : "Loading food"
           }
         />
       </AppScreen>
     );
   }
 
-  if (snapshot.matches("LoadFailed") || food === null || usage === null) {
+  if (editorState.path === "Editor.LoadFailed") {
     return (
       <AppScreen contentStyle={styles.centered}>
         <Notice
-          message={snapshot.context.message ?? "Could not load this food."}
+          message={message ?? foodEditorLoadFailedMessage}
           tone="danger"
         />
-        <Button icon={RotateCcw} onPress={actor.trigger.retry}>
+        <Button
+          icon={RotateCcw}
+          onPress={() => {
+            send(FoodEditorEvents.Retry());
+          }}
+        >
           Try again
         </Button>
         <Button onPress={() => router.back()} variant="secondary">
@@ -493,17 +119,35 @@ function FoodEditorScreen({
     );
   }
 
-  if (snapshot.matches("CopyForm")) {
+  if (editorState.path === "Editor.Completed") {
+    return (
+      <WorkflowPage food={editorState.value.food} title="Food saved">
+        <Notice message={message ?? "Food saved."} tone="success" />
+        <Button
+          icon={Save}
+          onPress={() => {
+            router.replace({
+              pathname: "/foods",
+              params: dateKey === undefined ? {} : { dateKey },
+            });
+          }}
+        >
+          Back to foods
+        </Button>
+      </WorkflowPage>
+    );
+  }
+
+  const { food, foods, usage } = editorState.value;
+  const step = editorState.state;
+
+  if (step.path === "Editor.Loaded.CopyForm") {
     return (
       <FoodForm
         action="edit"
-        actor={snapshot.context.foodFormActor}
         disabled={false}
-        feedback={
-          snapshot.context.message === null
-            ? undefined
-            : { message: snapshot.context.message, tone: "danger" }
-        }
+        feedback={message === null ? undefined : { message, tone: "danger" }}
+        foodForm={foodForm}
         hasFailed={false}
         heading="Copy food"
         intro={
@@ -512,7 +156,9 @@ function FoodEditorScreen({
             tone="neutral"
           />
         }
-        onBack={actor.trigger.backToChoice}
+        onBack={() => {
+          send(FoodEditorEvents.BackToChoice());
+        }}
         portionUsage={[]}
         showMassVolumeConversion={false}
         showPortions={false}
@@ -522,33 +168,30 @@ function FoodEditorScreen({
   }
 
   if (
-    snapshot.matches("EditFormWarning") ||
-    snapshot.matches("EditForm") ||
-    snapshot.matches("PreviewingEdit") ||
-    snapshot.matches("ReviewingEdit") ||
-    snapshot.matches("Editing")
+    step.path === "Editor.Loaded.EditFormWarning" ||
+    step.path === "Editor.Loaded.EditForm" ||
+    step.path === "Editor.Loaded.PreviewingEdit" ||
+    step.path === "Editor.Loaded.ReviewingEdit" ||
+    step.path === "Editor.Loaded.Editing"
   ) {
-    const previewing = snapshot.matches("PreviewingEdit");
-    const editing = snapshot.matches("Editing");
-    const changes =
-      snapshot.context.draft === null
-        ? []
-        : describeFoodChanges({ draft: snapshot.context.draft, food });
+    const previewing = step.path === "Editor.Loaded.PreviewingEdit";
+    const editing = step.path === "Editor.Loaded.Editing";
+    const draft =
+      step.path === "Editor.Loaded.EditFormWarning" ? null : step.value.draft;
+    const changes = draft === null ? [] : describeFoodChanges({ draft, food });
 
     return (
       <>
         <FoodForm
           action="edit"
-          actor={snapshot.context.foodFormActor}
           disabled={previewing || editing}
-          feedback={
-            snapshot.context.message === null
-              ? undefined
-              : { message: snapshot.context.message, tone: "danger" }
-          }
+          feedback={message === null ? undefined : { message, tone: "danger" }}
+          foodForm={foodForm}
           hasFailed={false}
           heading="Edit food details"
-          onBack={actor.trigger.backToChoice}
+          onBack={() => {
+            send(FoodEditorEvents.BackToChoice());
+          }}
           portionUsage={usage.portions}
           showMassVolumeConversion={false}
           showPortions={false}
@@ -561,24 +204,32 @@ function FoodEditorScreen({
           }
         />
         <EditImpactDialog
-          onCancel={actor.trigger.backToChoice}
-          onContinue={actor.trigger.acknowledgeEdit}
+          onCancel={() => {
+            send(FoodEditorEvents.BackToChoice());
+          }}
+          onContinue={() => {
+            send(FoodEditorEvents.AcknowledgeEdit());
+          }}
           usage={usage}
-          visible={snapshot.matches("EditFormWarning")}
+          visible={step.path === "Editor.Loaded.EditFormWarning"}
         />
         <EditReviewDialog
           changes={changes}
           loading={editing}
-          onCancel={actor.trigger.backToForm}
-          onConfirm={actor.trigger.confirmEdit}
+          onCancel={() => {
+            send(FoodEditorEvents.BackToForm());
+          }}
+          onConfirm={() => {
+            send(FoodEditorEvents.ConfirmEdit());
+          }}
           usage={usage}
-          visible={snapshot.matches("ReviewingEdit") || editing}
+          visible={step.path === "Editor.Loaded.ReviewingEdit" || editing}
         />
       </>
     );
   }
 
-  if (snapshot.matches("ChoosingAction")) {
+  if (step.path === "Editor.Loaded.ChoosingAction") {
     return (
       <WorkflowPage food={food} title="Manage food">
         {food.origin === "app-default" ? (
@@ -662,7 +313,12 @@ function FoodEditorScreen({
               tone="warning"
             />
           ) : (
-            <Button icon={Pencil} onPress={actor.trigger.chooseEdit}>
+            <Button
+              icon={Pencil}
+              onPress={() => {
+                send(FoodEditorEvents.ChooseEdit());
+              }}
+            >
               Edit food details
             </Button>
           )}
@@ -671,18 +327,23 @@ function FoodEditorScreen({
           subtitle="Create a separate food from these values. Previous entries stay unchanged."
           title="Copy food"
         >
-          <Button icon={Copy} onPress={actor.trigger.chooseCopy}>
+          <Button
+            icon={Copy}
+            onPress={() => {
+              send(FoodEditorEvents.ChooseCopy());
+            }}
+          >
             Copy this food
           </Button>
         </SectionCard>
-        {snapshot.context.message === null ? null : (
-          <Notice message={snapshot.context.message} tone="danger" />
-        )}
+        {message === null ? null : <Notice message={message} tone="danger" />}
         {food.origin === "user" && usage.mealEntryCount === 0 ? (
           <Button
             icon={Trash2}
             variant="danger"
-            onPress={actor.trigger.deleteFood}
+            onPress={() => {
+              send(FoodEditorEvents.DeleteFood());
+            }}
           >
             Delete food
           </Button>
@@ -691,18 +352,18 @@ function FoodEditorScreen({
     );
   }
 
-  if (snapshot.matches("ReviewingCopy") || snapshot.matches("Copying")) {
-    const draft = snapshot.context.draft;
-    const duplicateCount =
-      draft === null
-        ? 0
-        : snapshot.context.foods.filter(
-            (candidate) =>
-              _normalizeNameGroupValue(candidate.name) ===
-                _normalizeNameGroupValue(draft.name) &&
-              _normalizeNameGroupValue(candidate.brand ?? "") ===
-                _normalizeNameGroupValue(draft.brand ?? "")
-          ).length;
+  if (
+    step.path === "Editor.Loaded.ReviewingCopy" ||
+    step.path === "Editor.Loaded.Copying"
+  ) {
+    const { draft } = step.value;
+    const duplicateCount = foods.filter(
+      (candidate) =>
+        _normalizeNameGroupValue(candidate.name) ===
+          _normalizeNameGroupValue(draft.name) &&
+        _normalizeNameGroupValue(candidate.brand ?? "") ===
+          _normalizeNameGroupValue(draft.brand ?? "")
+    ).length;
     return (
       <WorkflowPage food={food} title="Review food copy">
         <Notice
@@ -715,38 +376,22 @@ function FoodEditorScreen({
             tone="warning"
           />
         )}
-        {snapshot.context.message === null ? null : (
-          <Notice message={snapshot.context.message} tone="danger" />
-        )}
+        {message === null ? null : <Notice message={message} tone="danger" />}
         <BottomActions
-          back={actor.trigger.backToForm}
-          confirm={actor.trigger.apply}
+          back={() => {
+            send(FoodEditorEvents.BackToForm());
+          }}
+          confirm={() => {
+            send(FoodEditorEvents.Apply());
+          }}
           confirmLabel="Create food copy"
-          loading={snapshot.matches("Copying")}
+          loading={step.path === "Editor.Loaded.Copying"}
         />
       </WorkflowPage>
     );
   }
 
-  return (
-    <WorkflowPage food={food} title="Food saved">
-      <Notice
-        message={snapshot.context.message ?? "Food saved."}
-        tone="success"
-      />
-      <Button
-        icon={Save}
-        onPress={() => {
-          router.replace({
-            pathname: "/foods",
-            params: dateKey === undefined ? {} : { dateKey },
-          });
-        }}
-      >
-        Back to foods
-      </Button>
-    </WorkflowPage>
-  );
+  return null;
 }
 
 function WorkflowPage({
@@ -979,19 +624,6 @@ function EditReviewDialog({
   );
 }
 
-function _foodMutationErrorMessage(error: unknown) {
-  if (Predicate.isTagged(error, "UsedFoodPortionMutationNotAllowed")) {
-    return "A used portion was changed or removed. Restore it before saving.";
-  }
-  if (Predicate.isTagged(error, "IncompatibleFoodMeasurement")) {
-    return "The edited measurement settings cannot interpret every previous entry.";
-  }
-  if (Predicate.isTagged(error, "AppDefaultFoodEditNotAllowed")) {
-    return "Pre-installed foods cannot be edited. Create a copy instead.";
-  }
-  return "Could not save this food. Please review the values and try again.";
-}
-
 function _usageDateRange(usage: Foods.FoodEditUsage) {
   if (usage.firstDateKey === undefined || usage.lastDateKey === undefined) {
     return "";
@@ -1005,11 +637,6 @@ function _usageDateRange(usage: Foods.FoodEditUsage) {
 
 function _normalizeNameGroupValue(value: string) {
   return value.trim().normalize("NFKC").toLocaleLowerCase();
-}
-
-function _foodDetailsFromDraft(draft: typeof FoodFormInput.Type) {
-  const { portions: _portions, ...details } = draft;
-  return details;
 }
 
 const styles = StyleSheet.create({

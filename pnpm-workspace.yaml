@@ -10,6 +10,10 @@ overrides:
   react-native: "0.88.1"
   "@op-engineering/op-sqlite": "18.2.5"
 
+peerDependencyRules:
+  allowedVersions:
+    "@typeonce/effect-machine-react>scheduler": "0.28.0"
+
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild

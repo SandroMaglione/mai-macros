@@ -9,454 +9,29 @@ import { InputSelect } from "@/components/ui/input-select";
 import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { todayDateKey } from "@/lib/date-keys";
 import * as FoodMeasurements from "@/lib/food-measurements";
 import { formatLoggedFoodQuantity } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  EditMealEntryEvents,
+  EditMealEntryLoaderMachine,
+  EditMealEntryMachine,
+  type EditMealEntryData,
+} from "@/machines/edit-meal-entry-machine";
 import { color, spacing } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
-import * as DailyLogs from "@mai/nutrition/services/daily-logs";
-import * as Foods from "@mai/nutrition/services/foods";
-import * as MealEntries from "@mai/nutrition/services/meal-entries";
-import { useMachine } from "@xstate/react";
-import { Effect, Match, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, Save, Trash2 } from "lucide-react-native";
 import { Alert, ScrollView, StyleSheet, Text } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { createAsyncLogic, setup } from "xstate";
-
-const EditMealEntryRouteData = Schema.Struct({
-  dateKey: Domain.DateKey,
-  food: Schema.UndefinedOr(Domain.Food),
-  meal: Domain.MealId,
-  mealLabel: Schema.NonEmptyString,
-  mealEntry: Domain.CatalogMealEntry,
-});
-
-const EditMealEntryRouteLoaderInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  meal: Domain.MealId,
-  mealEntryId: Domain.MealEntryId,
-});
-
-const EditMealEntryRouteLoadResult = Schema.Union([
-  Schema.TaggedStruct("InvalidRoute", {}),
-  Schema.TaggedStruct("Ready", {
-    data: EditMealEntryRouteData,
-  }),
-]);
-
-const MealEntryMutationResult = Schema.Union([
-  Schema.TaggedStruct("MealEntryNotFound", {}),
-  Schema.TaggedStruct("SchemaError", {}),
-  Schema.TaggedStruct("Success", {}),
-]);
-
-type MealEntryMutationResult = typeof MealEntryMutationResult.Type;
 
 const EditMealEntryRouteParams = Schema.Struct({
   dateKey: Domain.DateKey,
   meal: Domain.MealId,
   mealEntryId: Domain.MealEntryId,
-});
-
-const editMealEntryRouteLoaderMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        data: Schema.NullOr(EditMealEntryRouteData),
-        dateKey: Domain.DateKey,
-        meal: Domain.MealId,
-        mealEntryId: Domain.MealEntryId,
-      })
-    ),
-    input: Schema.toStandardSchemaV1(EditMealEntryRouteLoaderInput),
-  },
-  states: {
-    Loading: {},
-    InvalidRoute: {},
-    Ready: {},
-  },
-  actors: {
-    loadRouteData: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(EditMealEntryRouteLoaderInput),
-        output: Schema.toStandardSchemaV1(EditMealEntryRouteLoadResult),
-      },
-      run: ({ input: { dateKey, meal, mealEntryId } }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const foodsService = yield* Foods.Foods;
-            const mealEntriesService = yield* MealEntries.MealEntries;
-            const day = yield* dateKey === todayDateKey()
-              ? dailyLogs.openOrCreate({
-                  input: {
-                    dateKey,
-                  },
-                })
-              : dailyLogs.open({
-                  input: {
-                    dateKey,
-                  },
-                });
-
-            if (day._tag === "UnrecordedDay") {
-              return {
-                _tag: "InvalidRoute" as const,
-              };
-            }
-
-            const planMeal = day.selectedPlan.meals.find(
-              (candidate) => candidate.id === meal
-            );
-
-            if (planMeal === undefined) {
-              return {
-                _tag: "InvalidRoute" as const,
-              };
-            }
-
-            const mealEntries = yield* mealEntriesService.listForDay({
-              input: {
-                dateKey,
-              },
-            });
-            const mealEntry = mealEntries.find(
-              (entry) => entry.id === mealEntryId && entry.mealId === meal
-            );
-
-            if (mealEntry === undefined || mealEntry.kind !== "catalog") {
-              return {
-                _tag: "InvalidRoute" as const,
-              };
-            }
-
-            const food = yield* foodsService.get({
-              input: {
-                foodId: mealEntry.foodId,
-              },
-            });
-
-            return {
-              _tag: "Ready" as const,
-              data: {
-                dateKey,
-                food,
-                meal,
-                mealLabel: planMeal.name,
-                mealEntry,
-              },
-            };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    data: null,
-    dateKey: input.dateKey,
-    meal: input.meal,
-    mealEntryId: input.mealEntryId,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadRouteData",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          meal: context.meal,
-          mealEntryId: context.mealEntryId,
-        }),
-        onDone: ({ event }) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              InvalidRoute: () => ({ target: "InvalidRoute" as const }),
-              Ready: ({ data }) => ({
-                target: "Ready" as const,
-                context: { data },
-              }),
-            })
-          ),
-        onError: {
-          target: "InvalidRoute",
-        },
-      },
-    },
-    InvalidRoute: {
-      entry: (_, enq) => {
-        enq(() => router.replace("/"));
-      },
-    },
-    Ready: {},
-  },
-});
-
-const editMealEntryRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        data: EditMealEntryRouteData,
-        notice: Schema.NullOr(Schema.String),
-        portionId: Schema.NullOr(Domain.FoodPortionId),
-        quantityAmount: Schema.String,
-        quantityAccuracy: Domain.QuantityAccuracy,
-        quantityUnit: Domain.MeasurementUnit,
-      })
-    ),
-    events: {
-      changeAccuracy: Schema.toStandardSchemaV1(
-        Schema.Struct({ accuracy: Domain.QuantityAccuracy })
-      ),
-      changeQuantity: Schema.toStandardSchemaV1(
-        Schema.Struct({ quantityAmount: Schema.String })
-      ),
-      selectMeasurementUnit: Schema.toStandardSchemaV1(
-        Schema.Struct({ unit: Domain.MeasurementUnit })
-      ),
-      selectPortion: Schema.toStandardSchemaV1(
-        Schema.Struct({ portionId: Domain.FoodPortionId })
-      ),
-      delete: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
-      replaceDay: Schema.toStandardSchemaV1(
-        Schema.Struct({ dateKey: Domain.DateKey })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(EditMealEntryRouteData),
-  },
-  states: {
-    Ready: {},
-    Deleting: {},
-    Saving: {},
-    Deleted: {},
-    Saved: {},
-  },
-  actions: {
-    replaceDay: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/days/[dateKey]",
-        params,
-      });
-    },
-  },
-  actors: {
-    deleteMealEntry: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(Domain.MealEntryId),
-        output: Schema.toStandardSchemaV1(MealEntryMutationResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const mealEntries = yield* MealEntries.MealEntries;
-
-            yield* mealEntries.delete({
-              input: {
-                mealEntryId: input,
-              },
-            });
-
-            return {
-              _tag: "Success" as const,
-            };
-          }).pipe(
-            Effect.catchTag("MealEntryNotFound", () =>
-              Effect.succeed({
-                _tag: "MealEntryNotFound" as const,
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            )
-          )
-        ),
-    }),
-    reviseMealEntry: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            mealEntryId: Domain.MealEntryId,
-            quantity: FoodMeasurements.MealEntryQuantityFormInput,
-            quantityAccuracy: Domain.QuantityAccuracy,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(MealEntryMutationResult),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const mealEntries = yield* MealEntries.MealEntries;
-
-            yield* mealEntries.revise({
-              input: {
-                mealEntryId: input.mealEntryId,
-                quantity: input.quantity,
-                quantityAccuracy: input.quantityAccuracy,
-              },
-            });
-
-            return {
-              _tag: "Success" as const,
-            };
-          }).pipe(
-            Effect.catchTag("MealEntryNotFound", () =>
-              Effect.succeed({
-                _tag: "MealEntryNotFound" as const,
-              })
-            ),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => {
-    const quantity = input.mealEntry.quantity;
-
-    return {
-      data: input,
-      quantityAccuracy: input.mealEntry.quantityAccuracy,
-      notice: null,
-      portionId:
-        quantity._tag === "PortionFoodQuantity" ? quantity.portionId : null,
-      quantityAmount: `${
-        quantity._tag === "MeasuredFoodQuantity"
-          ? quantity.amount
-          : quantity.count
-      }`,
-      quantityUnit:
-        quantity._tag === "MeasuredFoodQuantity"
-          ? quantity.unit
-          : quantity.portionSize.unit,
-    };
-  },
-  initial: "Ready",
-  on: {
-    replaceDay: ({ actions, event }, enq) => {
-      enq(actions.replaceDay, { dateKey: event.dateKey });
-    },
-  },
-  states: {
-    Ready: {
-      on: {
-        changeAccuracy: ({ event }) => ({
-          context: { quantityAccuracy: event.accuracy },
-        }),
-        changeQuantity: ({ event }) => ({
-          context: { quantityAmount: event.quantityAmount },
-        }),
-        selectMeasurementUnit: ({ event }) => ({
-          context: {
-            portionId: null,
-            quantityUnit: event.unit,
-          },
-        }),
-        selectPortion: ({ event }) => ({
-          context: { portionId: event.portionId },
-        }),
-        delete: {
-          target: "Deleting",
-          context: { notice: null },
-        },
-        submit: {
-          target: "Saving",
-          context: { notice: null },
-        },
-      },
-    },
-    Deleting: {
-      invoke: {
-        src: "deleteMealEntry",
-        input: ({ context }) => context.data.mealEntry.id,
-        onDone: ({ context, event, actions }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              MealEntryNotFound: (result) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: _mutationMessage({ result }),
-                },
-              }),
-              SchemaError: (result) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: _mutationMessage({ result }),
-                },
-              }),
-              Success: () => {
-                enq(actions.replaceDay, { dateKey: context.data.dateKey });
-
-                return { target: "Deleted" as const };
-              },
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: { notice: "Could not delete this entry. Please try again." },
-        },
-      },
-    },
-    Saving: {
-      invoke: {
-        src: "reviseMealEntry",
-        input: ({ context }) => ({
-          mealEntryId: context.data.mealEntry.id,
-          quantityAccuracy: context.quantityAccuracy,
-          quantity:
-            context.portionId === null
-              ? {
-                  _tag: "MeasuredFoodQuantity" as const,
-                  amount: context.quantityAmount,
-                  unit: context.quantityUnit,
-                }
-              : {
-                  _tag: "PortionFoodQuantity" as const,
-                  count: context.quantityAmount,
-                  portionId: context.portionId,
-                },
-        }),
-        onDone: ({ context, event, actions }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              MealEntryNotFound: (result) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: _mutationMessage({ result }),
-                },
-              }),
-              SchemaError: (result) => ({
-                target: "Ready" as const,
-                context: {
-                  notice: _mutationMessage({ result }),
-                },
-              }),
-              Success: () => {
-                enq(actions.replaceDay, { dateKey: context.data.dateKey });
-
-                return { target: "Saved" as const };
-              },
-            })
-          ),
-        onError: {
-          target: "Ready",
-          context: { notice: "Could not save this entry. Please try again." },
-        },
-      },
-    },
-    Deleted: {},
-    Saved: {},
-  },
 });
 
 export default function EditMealEntryScreen() {
@@ -466,16 +41,34 @@ export default function EditMealEntryScreen() {
     return <Redirect href="/" />;
   }
 
-  const [snapshot] = useMachine(editMealEntryRouteLoaderMachine, {
-    input: {
-      dateKey: routeParams.value.dateKey,
-      meal: routeParams.value.meal,
-      mealEntryId: routeParams.value.mealEntryId,
-    },
-  });
-  const routeState = snapshot.value;
+  return (
+    <EditMealEntryScreenLoader
+      dateKey={routeParams.value.dateKey}
+      meal={routeParams.value.meal}
+      mealEntryId={routeParams.value.mealEntryId}
+    />
+  );
+}
 
-  if (routeState === "Loading" || routeState === "InvalidRoute") {
+function EditMealEntryScreenLoader({
+  dateKey,
+  meal,
+  mealEntryId,
+}: {
+  readonly dateKey: Domain.DateKey;
+  readonly meal: Domain.MealId;
+  readonly mealEntryId: Domain.MealEntryId;
+}) {
+  const [snapshot] = useMachine(() =>
+    MachineAtoms.make(EditMealEntryLoaderMachine, {
+      dateKey,
+      meal,
+      mealEntryId,
+    })
+  );
+  const state = snapshot.state;
+
+  if (state.path === "Loading" || state.path === "InvalidRoute") {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading meal entry" />
@@ -483,24 +76,18 @@ export default function EditMealEntryScreen() {
     );
   }
 
-  return snapshot.context.data === null ? (
-    <AppScreen contentStyle={styles.centered}>
-      <LoadingView message="Loading meal entry" />
-    </AppScreen>
-  ) : (
-    <ReadyEditMealEntryScreen data={snapshot.context.data} />
-  );
+  return <ReadyEditMealEntryScreen data={state.value.data} />;
 }
 
 function ReadyEditMealEntryScreen({
   data,
 }: {
-  readonly data: typeof EditMealEntryRouteData.Type;
+  readonly data: EditMealEntryData;
 }) {
-  const [snapshot, , actor] = useMachine(editMealEntryRouteMachine, {
-    input: data,
-  });
-  const routeState = snapshot.value;
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(EditMealEntryMachine, data)
+  );
+  const routeState = snapshot.state.path;
   const disabled =
     routeState === "Saving" ||
     routeState === "Saved" ||
@@ -508,16 +95,14 @@ function ReadyEditMealEntryScreen({
     routeState === "Deleted";
   const food = data.food;
   const selectedPortion =
-    food === undefined || snapshot.context.portionId === null
+    food === undefined || snapshot.value.portionId === null
       ? undefined
       : food.portions.find(
-          (portion) => portion.id === snapshot.context.portionId
+          (portion) => portion.id === snapshot.value.portionId
         );
   const selectedMeasureLabel =
     selectedPortion?.name ??
-    (snapshot.context.quantityUnit === "l"
-      ? "L"
-      : snapshot.context.quantityUnit);
+    (snapshot.value.quantityUnit === "l" ? "L" : snapshot.value.quantityUnit);
   const measureOptions =
     food === undefined
       ? []
@@ -539,16 +124,16 @@ function ReadyEditMealEntryScreen({
         ];
   const selectedMeasureValue =
     selectedPortion === undefined
-      ? `unit:${snapshot.context.quantityUnit}`
+      ? `unit:${snapshot.value.quantityUnit}`
       : `portion:${selectedPortion.id}`;
   const selectedFoodNutrients =
     food === undefined
       ? undefined
       : FoodMeasurements.loggedQuantityFromForm({
           food,
-          portionId: snapshot.context.portionId,
-          quantityAmount: snapshot.context.quantityAmount,
-          quantityUnit: snapshot.context.quantityUnit,
+          portionId: snapshot.value.portionId,
+          quantityAmount: snapshot.value.quantityAmount,
+          quantityUnit: snapshot.value.quantityUnit,
         }).pipe(
           Option.match({
             onNone: () => undefined,
@@ -572,7 +157,10 @@ function ReadyEditMealEntryScreen({
               icon={ChevronLeft}
               variant="ghost"
               onPress={() =>
-                actor.trigger.replaceDay({ dateKey: data.dateKey })
+                router.replace({
+                  pathname: "/days/[dateKey]",
+                  params: { dateKey: data.dateKey },
+                })
               }
             />
           }
@@ -580,9 +168,9 @@ function ReadyEditMealEntryScreen({
           title={data.food?.name ?? "Meal entry"}
         />
 
-        {snapshot.context.notice === null ? null : (
+        {snapshot.value.notice === null ? null : (
           <Notice
-            message={snapshot.context.notice}
+            message={snapshot.value.notice}
             style={styles.notice}
             tone="danger"
           />
@@ -600,7 +188,7 @@ function ReadyEditMealEntryScreen({
             editable={!disabled}
             label="Amount"
             onChangeText={(quantityAmount) => {
-              actor.trigger.changeQuantity({ quantityAmount });
+              send(EditMealEntryEvents.ChangeQuantity({ quantityAmount }));
             }}
             placeholder={selectedPortion === undefined ? "150" : "1"}
             rightElement={
@@ -615,13 +203,17 @@ function ReadyEditMealEntryScreen({
                     );
 
                     if (selectedOption?._tag === "MeasurementUnit") {
-                      actor.trigger.selectMeasurementUnit({
-                        unit: selectedOption.unit,
-                      });
+                      send(
+                        EditMealEntryEvents.SelectMeasurementUnit({
+                          unit: selectedOption.unit,
+                        })
+                      );
                     } else if (selectedOption?._tag === "Portion") {
-                      actor.trigger.selectPortion({
-                        portionId: selectedOption.portionId,
-                      });
+                      send(
+                        EditMealEntryEvents.SelectPortion({
+                          portionId: selectedOption.portionId,
+                        })
+                      );
                     }
                   }}
                   options={measureOptions}
@@ -631,7 +223,7 @@ function ReadyEditMealEntryScreen({
               )
             }
             selectTextOnFocus
-            value={snapshot.context.quantityAmount}
+            value={snapshot.value.quantityAmount}
           />
 
           {data.food === undefined ? (
@@ -650,9 +242,11 @@ function ReadyEditMealEntryScreen({
             />
           )}
           <QuantityAccuracySelect
-            accuracy={snapshot.context.quantityAccuracy}
+            accuracy={snapshot.value.quantityAccuracy}
             disabled={disabled}
-            change={(accuracy) => actor.trigger.changeAccuracy({ accuracy })}
+            change={(accuracy) =>
+              send(EditMealEntryEvents.ChangeAccuracy({ accuracy }))
+            }
           />
         </ScrollView>
       </AppScreen>
@@ -672,7 +266,7 @@ function ReadyEditMealEntryScreen({
                 },
                 {
                   onPress: () => {
-                    actor.trigger.delete();
+                    send(EditMealEntryEvents.Delete());
                   },
                   style: "destructive",
                   text: "Delete",
@@ -686,11 +280,11 @@ function ReadyEditMealEntryScreen({
           Delete
         </Button>
         <Button
-          disabled={disabled || snapshot.context.quantityAmount.trim() === ""}
+          disabled={disabled || snapshot.value.quantityAmount.trim() === ""}
           icon={Save}
           loading={routeState === "Saving"}
           onPress={() => {
-            actor.trigger.submit();
+            send(EditMealEntryEvents.Submit());
           }}
           style={styles.footerButton}
         >
@@ -699,22 +293,6 @@ function ReadyEditMealEntryScreen({
       </BottomActionBar>
     </KeyboardAvoidingView>
   );
-}
-
-function _mutationMessage({
-  result,
-}: {
-  readonly result: MealEntryMutationResult;
-}) {
-  if (result._tag === "MealEntryNotFound") {
-    return "This meal entry is no longer available.";
-  }
-
-  if (result._tag === "SchemaError") {
-    return "Enter a quantity greater than zero.";
-  }
-
-  return "";
 }
 
 const styles = StyleSheet.create({

@@ -1,27 +1,16 @@
 import { dailySummaryNutrients } from "@/lib/daily-summary-nutrients";
 import { formatCurrencyMinor, formatNumber } from "@/lib/format";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  MealComparisonEvents,
+  MealComparisonMachine,
+  MealComparisonStates,
+} from "@/machines/meal-comparison-machine";
 import { MealComparisons, type Domain } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { setup } from "xstate";
-
-const disclosureMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({ expanded: Schema.Boolean })
-    ),
-    events: { toggle: Schema.toStandardSchemaV1(EmptyEvent) },
-  },
-}).createMachine({
-  context: { expanded: false },
-  on: {
-    toggle: ({ context }) => ({ context: { expanded: !context.expanded } }),
-  },
-});
 
 const metrics = [
   ...dailySummaryNutrients.map((nutrient) => ({
@@ -44,7 +33,10 @@ export function MealComparison({
   readonly mealEntries: readonly Domain.MealEntry[];
   readonly mealLabel: string;
 }) {
-  const [snapshot, , actor] = useMachine(disclosureMachine);
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(MealComparisonMachine)
+  );
+  const expanded = MealComparisonStates.matches(snapshot, "Expanded");
   const values = MealComparisons.mealValues({ foods, mealEntries });
   const energy = values.find((value) => value.metric === "energyKcal");
   const energyBaseline = baseline?.metrics.find(
@@ -54,14 +46,16 @@ export function MealComparison({
     value: energy?.value ?? null,
     average: energyBaseline?.average ?? null,
   });
-  const Icon = snapshot.context.expanded ? ChevronUp : ChevronDown;
+  const Icon = expanded ? ChevronUp : ChevronDown;
   return (
     <View style={styles.root}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${mealLabel} comparison with the previous ${MealComparisons.LOOKBACK_DAYS} days`}
-        accessibilityState={{ expanded: snapshot.context.expanded }}
-        onPress={actor.trigger.toggle}
+        accessibilityState={{ expanded: expanded }}
+        onPress={() => {
+          send(MealComparisonEvents.Toggle());
+        }}
         style={styles.toggle}
       >
         <Text style={styles.title}>Compared with usual</Text>
@@ -72,7 +66,7 @@ export function MealComparison({
         </Text>
         <Icon size={16} color={color.textMuted} />
       </Pressable>
-      {snapshot.context.expanded ? (
+      {expanded ? (
         baseline === undefined ? (
           <Text style={styles.empty}>
             No matching {mealLabel.toLowerCase()} meals in the previous{" "}

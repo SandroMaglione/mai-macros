@@ -1,9 +1,16 @@
 import { formatNumber } from "@/lib/format";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent, FoodSearchMachine } from "@mai/machines";
+import { useChildMachine, useMachine } from "@/hooks/use-machine";
+import {
+  FoodSearchOrderDialogEvents,
+  FoodSearchOrderDialogMachine,
+  FoodSearchOrderDialogStates,
+} from "@/machines/food-search-order-dialog-machine";
+import { useAtomSet } from "@effect/atom-react";
+import { FoodSearchMachine } from "@mai/machines";
 import { Utils, type Domain } from "@mai/nutrition";
-import { useMachine, useSelector } from "@xstate/react";
-import { Array, Schema } from "effect";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Array, Option } from "effect";
 import { Check, ChevronDown, Search } from "lucide-react-native";
 import {
   ActionSheetIOS,
@@ -17,7 +24,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { setup } from "xstate";
 import type { ReactElement } from "react";
 
 import { FoodCurrentPriceIndicator } from "./food-current-price-indicator";
@@ -43,6 +49,10 @@ const dominantMacronutrientIndicator = {
   }
 >;
 
+export type FoodSearchAtom = AtomMachine.ChildMachineAtom<
+  typeof FoodSearchMachine.FoodSearchChild
+>;
+
 type FoodSearchMacroOrderOption = {
   readonly accessibilityLabel: string;
   readonly color: string;
@@ -50,37 +60,6 @@ type FoodSearchMacroOrderOption = {
   readonly label: string;
   readonly macroOrder: FoodSearchMachine.FoodSearchMacroOrder | null;
 };
-
-const foodSearchMacroOrderDialogMachine = setup({
-  schemas: {
-    events: {
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      open: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Closed: {},
-    Open: {},
-  },
-}).createMachine({
-  initial: "Closed",
-  states: {
-    Closed: {
-      on: {
-        open: {
-          target: "Open",
-        },
-      },
-    },
-    Open: {
-      on: {
-        close: {
-          target: "Closed",
-        },
-      },
-    },
-  },
-});
 
 const foodSearchDefaultMacroOrderOption = {
   accessibilityLabel: "Use default food order",
@@ -186,7 +165,7 @@ const foodSearchMacroOrderOptions = [
 ] satisfies readonly FoodSearchMacroOrderOption[];
 
 export function FoodSearch({
-  actor,
+  foodSearch,
   disabled = false,
   emptyFoodsText = "No foods available.",
   emptySearchText = "No foods found.",
@@ -194,7 +173,7 @@ export function FoodSearch({
   getSecondaryLabel,
   placeholder = "Search food or brand",
 }: {
-  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly foodSearch: FoodSearchAtom;
   readonly disabled?: boolean;
   readonly emptyFoodsText?: string;
   readonly emptySearchText?: string;
@@ -205,12 +184,12 @@ export function FoodSearch({
   return (
     <View style={styles.root}>
       <FoodSearchField
-        actor={actor}
+        foodSearch={foodSearch}
         disabled={disabled}
         placeholder={placeholder}
       />
       <FoodSearchResults
-        actor={actor}
+        foodSearch={foodSearch}
         disabled={disabled}
         emptyFoodsText={emptyFoodsText}
         emptySearchText={emptySearchText}
@@ -222,24 +201,26 @@ export function FoodSearch({
 }
 
 export function FoodSearchField({
-  actor,
+  foodSearch,
   autoFocus = false,
   disabled,
   placeholder = "Search food or brand",
 }: {
-  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly foodSearch: FoodSearchAtom;
   readonly autoFocus?: boolean;
   readonly disabled: boolean;
   readonly placeholder?: string;
 }) {
-  const [dialogSnapshot, , dialogActor] = useMachine(
-    foodSearchMacroOrderDialogMachine
+  const [dialogSnapshot, sendDialog] = useMachine(() =>
+    AtomMachine.make(FoodSearchOrderDialogMachine)
   );
-  const query = useSelector(actor, (snapshot) => snapshot.context.query);
-  const macroOrder = useSelector(
-    actor,
-    (snapshot) => snapshot.context.macroOrder
-  );
+  const [search, send] = useChildMachine(foodSearch);
+
+  if (Option.isNone(search)) {
+    return null;
+  }
+
+  const { macroOrder, query } = search.value.value;
   const selectedOrderOption =
     foodSearchMacroOrderOptions.find(
       (option) => option.macroOrder === macroOrder
@@ -256,15 +237,12 @@ export function FoodSearchField({
         editable={!disabled}
         inputMode="search"
         onChangeText={(value) => {
-          actor.send({
-            type: "changeQuery",
-            query: value,
-          });
+          send(
+            FoodSearchMachine.FoodSearchEvents.ChangeQuery({ query: value })
+          );
         }}
         onSubmitEditing={() => {
-          actor.send({
-            type: "selectFirstMatchingFood",
-          });
+          send(FoodSearchMachine.FoodSearchEvents.SelectFirstMatchingFood());
         }}
         placeholder={placeholder}
         placeholderTextColor={color.textSubtle}
@@ -295,24 +273,25 @@ export function FoodSearchField({
                   return;
                 }
 
-                actor.send({
-                  type: "changeMacroOrder",
-                  macroOrder: option.macroOrder,
-                });
+                send(
+                  FoodSearchMachine.FoodSearchEvents.ChangeMacroOrder({
+                    macroOrder: option.macroOrder,
+                  })
+                );
               }
             );
             return;
           }
 
-          dialogActor.trigger.open();
+          sendDialog(FoodSearchOrderDialogEvents.Open());
         }}
       />
       <FoodSearchMacroOrderDialog
-        actor={actor}
+        foodSearch={foodSearch}
         selectedOption={selectedOrderOption}
-        visible={dialogSnapshot.matches("Open")}
+        visible={FoodSearchOrderDialogStates.matches(dialogSnapshot, "Open")}
         onClose={() => {
-          dialogActor.trigger.close();
+          sendDialog(FoodSearchOrderDialogEvents.Close());
         }}
       />
     </View>
@@ -354,16 +333,18 @@ function FoodSearchMacroOrderSelector({
 }
 
 function FoodSearchMacroOrderDialog({
-  actor,
+  foodSearch,
   onClose,
   selectedOption,
   visible,
 }: {
-  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly foodSearch: FoodSearchAtom;
   readonly onClose: () => void;
   readonly selectedOption: FoodSearchMacroOrderOption;
   readonly visible: boolean;
 }) {
+  const send = useAtomSet(foodSearch.send);
+
   return (
     <Modal
       animationType="fade"
@@ -389,10 +370,11 @@ function FoodSearchMacroOrderDialog({
                 accessibilityRole="button"
                 key={option.key}
                 onPress={() => {
-                  actor.send({
-                    type: "changeMacroOrder",
-                    macroOrder: option.macroOrder,
-                  });
+                  send(
+                    FoodSearchMachine.FoodSearchEvents.ChangeMacroOrder({
+                      macroOrder: option.macroOrder,
+                    })
+                  );
                   onClose();
                 }}
                 style={({ pressed }) => [
@@ -426,7 +408,7 @@ function FoodSearchMacroOrderDialog({
 }
 
 export function FoodSearchResults({
-  actor,
+  foodSearch,
   disabled,
   emptyFoodsText,
   emptySearchText,
@@ -435,23 +417,20 @@ export function FoodSearchResults({
   header,
 }: {
   readonly header?: ReactElement;
-  readonly actor: FoodSearchMachine.FoodSearchActorRef;
+  readonly foodSearch: FoodSearchAtom;
   readonly disabled: boolean;
   readonly emptyFoodsText: string;
   readonly emptySearchText: string;
   readonly getPrimaryLabel?: (food: Domain.Food) => string | undefined;
   readonly getSecondaryLabel?: (food: Domain.Food) => string | undefined;
 }) {
-  const foods = useSelector(actor, (snapshot) => snapshot.context.foods);
-  const matchingFoods = useSelector(
-    actor,
-    (snapshot) => snapshot.context.matchingFoods
-  );
-  const query = useSelector(actor, (snapshot) => snapshot.context.query);
-  const selectedFoodId = useSelector(
-    actor,
-    (snapshot) => snapshot.context.selectedFoodId
-  );
+  const [search, send] = useChildMachine(foodSearch);
+
+  if (Option.isNone(search)) {
+    return null;
+  }
+
+  const { foods, matchingFoods, query, selectedFoodId } = search.value.value;
   const emptyText =
     !Array.isReadonlyArrayNonEmpty(foods) || query.trim() === ""
       ? emptyFoodsText
@@ -477,10 +456,9 @@ export function FoodSearchResults({
           secondaryLabel={getSecondaryLabel?.(item)}
           selected={selectedFoodId === item.id}
           onPress={() => {
-            actor.send({
-              type: "selectFood",
-              foodId: item.id,
-            });
+            send(
+              FoodSearchMachine.FoodSearchEvents.SelectFood({ foodId: item.id })
+            );
           }}
         />
       )}

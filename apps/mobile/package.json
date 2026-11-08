@@ -20,9 +20,11 @@
     "prebuild:clean": "expo prebuild --clean",
     "run:ios": "expo run:ios",
     "run:android": "expo run:android",
-    "build:android:local": "eas build --platform android --profile production --local --output ./prod.aab"
+    "build:android:local": "eas build --platform android --profile production --local --output ./prod.aab",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@effect/atom-react": "4.1.1",
     "@expo/dom-webview": "~58.0.2",
     "@expo/metro-runtime": "~58.0.16",
     "@mai/event-tracking": "workspace:^",
@@ -31,7 +33,8 @@
     "@mai/services": "workspace:^",
     "@mai/sqlite": "workspace:^",
     "@shopify/react-native-skia": "2.14.0",
-    "@xstate/react": "7.0.0-alpha.6",
+    "@typeonce/effect-machine": "0.46.0",
+    "@typeonce/effect-machine-react": "0.46.0",
     "effect": "4.1.1",
     "expo": "58.0.22",
     "expo-constants": "~58.0.14",
@@ -57,13 +60,14 @@
     "react-native-svg": "15.16.0",
     "react-native-web": "~0.21.4",
     "react-native-worklets": "0.13.0",
-    "victory-native": "^42.0.1",
-    "xstate": "6.0.0-alpha.71"
+    "victory-native": "^42.0.1"
   },
   "devDependencies": {
+    "@effect/vitest": "4.1.1",
     "@react-native/metro-config": "0.88.1",
     "@types/react": "~19.3.0",
     "eas-cli": "^27.2.0",
-    "tsx": "4.23.15"
+    "tsx": "4.23.15",
+    "vitest": "^5.0.5"
   }
 }

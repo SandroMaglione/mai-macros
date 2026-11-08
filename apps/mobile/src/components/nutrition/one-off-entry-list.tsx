@@ -1,12 +1,11 @@
 import { color, spacing } from "@/theme/tokens";
 import { formatNutrientValue } from "@/lib/nutrient-quality";
-import type { oneOffEntryMachine } from "@/lib/one-off-entry-machine";
+import { OneOffEntryEvents } from "@/machines/one-off-entry-machine";
 import type { Domain } from "@mai/nutrition";
 import { memo, type ReactElement } from "react";
 import { FlatList, Pressable, StyleSheet, Text } from "react-native";
-import type { ActorFromLogic } from "xstate";
 
-type OneOffEntryActor = ActorFromLogic<typeof oneOffEntryMachine>;
+type SendReuse = (event: ReturnType<typeof OneOffEntryEvents.Reuse>) => void;
 
 const monthFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -14,11 +13,11 @@ const monthFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export function OneOffEntryList({
-  actor,
+  send,
   entries,
   empty,
 }: {
-  readonly actor: OneOffEntryActor;
+  readonly send: SendReuse;
   readonly entries: readonly Domain.OneOffMealEntry[];
   readonly empty: ReactElement;
 }) {
@@ -26,7 +25,7 @@ export function OneOffEntryList({
     <FlatList
       data={entries}
       keyExtractor={(entry) => entry.id}
-      renderItem={({ item }) => <OneOffEntryRow actor={actor} entry={item} />}
+      renderItem={({ item }) => <OneOffEntryRow send={send} entry={item} />}
       ListEmptyComponent={empty}
       initialNumToRender={12}
       maxToRenderPerBatch={12}
@@ -40,10 +39,10 @@ export function OneOffEntryList({
 }
 
 const OneOffEntryRow = memo(function OneOffEntryRow({
-  actor,
+  send,
   entry,
 }: {
-  readonly actor: OneOffEntryActor;
+  readonly send: SendReuse;
   readonly entry: Domain.OneOffMealEntry;
 }) {
   const date = `${entry.dateKey.slice(0, 4)}, ${monthFormatter.format(
@@ -54,7 +53,7 @@ const OneOffEntryRow = memo(function OneOffEntryRow({
       accessibilityRole="button"
       accessibilityLabel={`Reuse ${entry.name}, ${entry.amountDescription}, ${date}`}
       style={styles.entry}
-      onPress={() => actor.trigger.reuse({ mealEntryId: entry.id })}
+      onPress={() => send(OneOffEntryEvents.Reuse({ mealEntryId: entry.id }))}
     >
       <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail">
         {entry.name}

@@ -1,312 +1,20 @@
 import { FoodForm } from "@/components/nutrition/food-form";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { todayDateKey } from "@/lib/date-keys";
-import { RuntimeClient } from "@/lib/runtime-client";
-import { EmptyEvent, FoodFormMachine } from "@mai/machines";
-import { Domain, Foods } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Effect, Match, Option, Schema } from "effect";
-import { router, useRouter } from "expo-router";
-import { Alert } from "react-native";
-import { Actor, createAsyncLogic, setup } from "xstate";
-
-const CreateFoodRouteMode = Schema.Literals(["screen", "embedded"]);
-
-type CreateFoodRouteMode = typeof CreateFoodRouteMode.Type;
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  CreateFoodMachine,
+  createFoodCreatedNotice,
+  type CreateFoodRouteMode,
+} from "@/machines/create-food-machine";
+import { FoodFormMachine } from "@mai/machines";
+import { Domain } from "@mai/nutrition";
+import { Option, Schema } from "effect";
+import { useRouter } from "expo-router";
 
 const SearchParams = Schema.Struct({
   dateKey: Schema.optionalKey(Domain.DateKey),
   source: Schema.optionalKey(Schema.Literal("foods")),
-});
-
-const FoodFormInput = Schema.Struct({
-  name: Schema.String,
-  brand: Schema.optionalKey(Schema.String),
-  energyKcal: Schema.String,
-  proteinGrams: Schema.String,
-  carbsGrams: Schema.String,
-  fatGrams: Schema.String,
-  fiberGrams: Schema.optionalKey(Schema.String),
-  sugarGrams: Schema.optionalKey(Schema.String),
-  saturatedFatGrams: Schema.optionalKey(Schema.String),
-  saltGrams: Schema.optionalKey(Schema.String),
-  nutritionReference: Schema.Struct({
-    amount: Schema.String,
-    unit: Domain.MeasurementUnit,
-  }),
-  initialPrice: Schema.optionalKey(
-    Schema.Struct({
-      price: Schema.String,
-      currency: Schema.Literal("EUR"),
-      referenceQuantity: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MeasurementUnit,
-      }),
-    })
-  ),
-  portions: Schema.Array(
-    Schema.Struct({
-      id: Schema.optionalKey(Domain.FoodPortionId),
-      name: Schema.String,
-      size: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MeasurementUnit,
-      }),
-    })
-  ),
-  massVolumeConversion: Schema.optionalKey(
-    Schema.Struct({
-      mass: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.MassUnit,
-      }),
-      volume: Schema.Struct({
-        amount: Schema.String,
-        unit: Domain.VolumeUnit,
-      }),
-    })
-  ),
-});
-
-const SubmitFoodInput = Schema.Struct({
-  input: FoodFormInput,
-});
-
-const SubmitFoodOutput = Schema.Union([
-  Schema.TaggedStruct("Created", {}),
-  Schema.TaggedStruct("SchemaError", {}),
-]);
-
-const CreateFoodRouteInput = Schema.Struct({
-  dateKey: Schema.UndefinedOr(Domain.DateKey),
-  initialNotice: Schema.NullOr(Schema.String),
-  mode: CreateFoodRouteMode,
-  returnToFoods: Schema.Boolean,
-});
-
-const FoodFormActorSchema = Schema.declare<FoodFormMachine.FoodFormActorRef>(
-  (value): value is FoodFormMachine.FoodFormActorRef =>
-    value instanceof Actor && value.logic === FoodFormMachine.foodFormMachine,
-  { expected: "FoodFormActor" }
-);
-
-const createFoodRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        dateKey: Schema.UndefinedOr(Domain.DateKey),
-        foodFormActor: FoodFormActorSchema,
-        mode: CreateFoodRouteMode,
-        notice: Schema.NullOr(Schema.String),
-        returnToFoods: Schema.Boolean,
-      })
-    ),
-    events: {
-      clearNotice: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(SubmitFoodInput),
-    },
-    input: Schema.toStandardSchemaV1(CreateFoodRouteInput),
-  },
-  states: {
-    Idle: {},
-    Submitting: {},
-    Failure: {},
-    Created: {},
-  },
-  actions: {
-    alertCreateFoodValidationError: () => {
-      Alert.alert(
-        "Food not saved",
-        "Check the name, required nutrients, price, and any custom portions."
-      );
-    },
-    alertCreateFoodFailure: () => {
-      Alert.alert(
-        "Food not saved",
-        "Something went wrong while saving the food. Please try again."
-      );
-    },
-    navigateAfterCreate: (params: {
-      readonly dateKey: Domain.DateKey | undefined;
-      readonly returnToFoods: boolean;
-    }) => {
-      if (params.returnToFoods) {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace({
-            pathname: "/foods",
-            params:
-              params.dateKey === undefined ? {} : { dateKey: params.dateKey },
-          });
-        }
-        return;
-      }
-
-      const today = todayDateKey();
-      const targetDateKey = params.dateKey ?? today;
-
-      if (targetDateKey === today) {
-        router.replace("/");
-        return;
-      }
-
-      router.replace({
-        pathname: "/days/[dateKey]",
-        params: {
-          dateKey: targetDateKey,
-        },
-      });
-    },
-    resetFoodForm: (params: {
-      readonly foodFormActor: FoodFormMachine.FoodFormActorRef;
-    }) => {
-      params.foodFormActor.send({
-        type: "reset",
-      });
-    },
-  },
-  actors: {
-    foodForm: FoodFormMachine.foodFormMachine,
-    submitFood: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SubmitFoodInput),
-        output: Schema.toStandardSchemaV1(SubmitFoodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-
-            yield* foods.create({
-              input: input.input,
-            });
-
-            return {
-              _tag: "Created" as const,
-            };
-          }).pipe(
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "SchemaError" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ actors, input, spawn }) => ({
-    dateKey: input.dateKey,
-    foodFormActor: spawn(actors.foodForm, {
-      id: "createFoodRouteFoodForm",
-      input: {
-        initialFood: null,
-        syncQuickInputFromFields: true,
-      },
-    }),
-    mode: input.mode,
-    notice: input.initialNotice,
-    returnToFoods: input.returnToFoods,
-  }),
-  initial: "Idle",
-  states: {
-    Idle: {
-      on: {
-        clearNotice: () => ({
-          context: {
-            notice: null,
-          },
-        }),
-        submit: () => ({
-          target: "Submitting",
-          context: {
-            notice: null,
-          },
-        }),
-      },
-    },
-    Submitting: {
-      invoke: {
-        src: "submitFood",
-        input: ({ event }) => {
-          if (event.type !== "submit") {
-            throw new Error("Expected food submission input.");
-          }
-
-          return {
-            input: event.input,
-          };
-        },
-        onDone: ({ actions, context, event }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Created: () => {
-                if (context.mode === "screen") {
-                  enq(actions.navigateAfterCreate, {
-                    dateKey: context.dateKey,
-                    returnToFoods: context.returnToFoods,
-                  });
-
-                  return {
-                    target: "Created" as const,
-                  };
-                }
-
-                enq(actions.resetFoodForm, {
-                  foodFormActor: context.foodFormActor,
-                });
-
-                return {
-                  target: "Idle" as const,
-                  context: {
-                    notice: "Food created.",
-                  },
-                };
-              },
-              SchemaError: () => {
-                enq(actions.alertCreateFoodValidationError);
-
-                return {
-                  target: "Failure" as const,
-                  context: {
-                    notice:
-                      "Check the name, required nutrients, price, and any custom portions.",
-                  },
-                };
-              },
-            })
-          ),
-        onError: ({ actions }, enq) => {
-          enq(actions.alertCreateFoodFailure);
-
-          return {
-            target: "Failure",
-            context: {
-              notice:
-                "Something went wrong while saving the food. Please try again.",
-            },
-          };
-        },
-      },
-    },
-    Failure: {
-      on: {
-        clearNotice: () => ({
-          context: {
-            notice: null,
-          },
-        }),
-        submit: () => ({
-          target: "Submitting",
-          context: {
-            notice: null,
-          },
-        }),
-      },
-    },
-    Created: {},
-  },
 });
 
 export default function NewFoodScreen() {
@@ -384,28 +92,31 @@ export function CreateFoodPanel({
   readonly onBack: () => void;
   readonly returnToFoods?: boolean;
 }) {
-  const [rawSnapshot] = useMachine(createFoodRouteMachine, {
-    input: {
+  const [snapshot, , machine] = useMachine(() =>
+    MachineAtoms.make(CreateFoodMachine, {
       dateKey,
       initialNotice,
       mode,
       returnToFoods,
-    },
-  });
-  const { foodFormActor } = rawSnapshot.context;
-  const routeState = rawSnapshot.value;
-  const isSubmitting = routeState === "Submitting" || routeState === "Created";
-  const notice = rawSnapshot.context.notice;
+    })
+  );
+  const routeState = snapshot.state.state;
+  const isSubmitting =
+    routeState.path === "Form.Submitting" || routeState.path === "Form.Created";
+  const notice =
+    routeState.path === "Form.Idle" || routeState.path === "Form.Failure"
+      ? routeState.value.notice
+      : null;
   const feedback =
     notice === null
       ? undefined
-      : routeState === "Failure"
+      : routeState.path === "Form.Failure"
         ? {
             message: notice,
             title: "Food not saved",
             tone: "danger" as const,
           }
-        : notice === "Food created."
+        : notice === createFoodCreatedNotice
           ? {
               message: notice,
               tone: "success" as const,
@@ -418,10 +129,10 @@ export function CreateFoodPanel({
   return (
     <FoodForm
       action="create"
-      actor={foodFormActor}
       disabled={isSubmitting}
       feedback={feedback}
-      hasFailed={routeState === "Failure"}
+      foodForm={machine.child(FoodFormMachine.FoodFormChild)}
+      hasFailed={routeState.path === "Form.Failure"}
       layout={mode}
       onBack={onBack}
     />

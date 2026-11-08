@@ -1,7 +1,6 @@
 import { Domain, MealPlans, Utils } from "@mai/nutrition";
+import { Machine } from "@typeonce/effect-machine";
 import { Schema } from "effect";
-import { Actor, setup, type ActorRefFrom, type SnapshotFrom } from "xstate";
-import { EmptyEvent } from "./schemas";
 
 export type MealPlanTargetFieldName =
   | "proteinTargetGrams"
@@ -52,38 +51,47 @@ const MealPlanFormTextFieldNameSchema = Schema.Literals([
   "saltTargetGrams",
 ]);
 
-export const mealPlanMealsMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        meals: Schema.Array(MealPlanFormMealValueSchema),
-      })
-    ),
-    events: {
-      addMeal: Schema.toStandardSchemaV1(EmptyEvent),
-      changeMealName: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: Schema.Number,
-          value: Schema.String,
-        })
-      ),
-      removeMeal: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          index: Schema.Number,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        initialPlan: Schema.NullOr(Domain.Plan),
-      })
-    ),
-  },
-  states: {
-    Ready: {},
-  },
-}).createMachine({
-  context: ({ input }) => ({
+export const MealPlanFormSubmission = Schema.Struct({
+  targetRules: Schema.optional(Domain.PlanTargetRules),
+  name: Schema.String,
+  meals: Schema.Array(
+    Schema.Struct({
+      id: Schema.optional(Schema.String),
+      name: Schema.String,
+    })
+  ),
+  proteinTargetGrams: Schema.String,
+  carbsTargetGrams: Schema.String,
+  fatTargetGrams: Schema.String,
+  fiberTargetGrams: Schema.optional(Schema.String),
+  sugarTargetGrams: Schema.optional(Schema.String),
+  saltTargetGrams: Schema.optional(Schema.String),
+  saturatedFatTargetGrams: Schema.optional(Schema.String),
+});
+
+export type MealPlanFormSubmission = typeof MealPlanFormSubmission.Type;
+
+const MealPlanFormInput = Schema.Struct({
+  initialPlan: Schema.NullOr(Domain.Plan),
+});
+
+export const MealPlanMealsStates = Machine.state({
+  fields: { meals: Schema.Array(MealPlanFormMealValueSchema) },
+});
+
+export const MealPlanMealsEvents = Machine.events({
+  AddMeal: {},
+  ChangeMealName: { index: Schema.Number, value: Schema.String },
+  RemoveMeal: { index: Schema.Number },
+});
+
+export const MealPlanMealsMachine = Machine.make({
+  id: "MealPlanMeals",
+  root: MealPlanMealsStates,
+  events: MealPlanMealsEvents,
+  input: MealPlanFormInput,
+}).handle({
+  root: ({ input }) => ({
     meals:
       input.initialPlan === null
         ? []
@@ -94,98 +102,70 @@ export const mealPlanMealsMachine = setup({
               name: meal.name,
             })),
   }),
-  initial: "Ready",
-  states: {
-    Ready: {
-      on: {
-        addMeal: ({ context }) => ({
-          context: {
-            meals: [...context.meals, { name: "" }],
-          },
-        }),
-        changeMealName: ({ context, event }) => ({
-          context: {
-            meals: context.meals.map((meal, index) =>
-              index === event.index
-                ? {
-                    ...meal,
-                    name: event.value,
-                  }
-                : meal
-            ),
-          },
-        }),
-        removeMeal: ({ context, event }) => ({
-          context: {
-            meals: context.meals.flatMap((meal, index) =>
-              index === event.index ? [] : [meal]
-            ),
-          },
-        }),
-      },
+  on: {
+    AddMeal: {
+      update: "root",
+      data: ({ root }) => ({ meals: [...root.meals, { name: "" }] }),
+    },
+    ChangeMealName: {
+      update: "root",
+      data: ({ root, event }) => ({
+        meals: root.meals.map((meal, index) =>
+          index === event.index ? { ...meal, name: event.value } : meal
+        ),
+      }),
+    },
+    RemoveMeal: {
+      update: "root",
+      data: ({ root, event }) => ({
+        meals: root.meals.flatMap((meal, index) =>
+          index === event.index ? [] : [meal]
+        ),
+      }),
     },
   },
 });
 
-type MealPlanMealsActor = ActorRefFrom<typeof mealPlanMealsMachine>;
-
-const MealPlanMealsActorSchema = Schema.declare<MealPlanMealsActor>(
-  (value): value is MealPlanMealsActor =>
-    value instanceof Actor && value.logic === mealPlanMealsMachine,
-  { expected: "MealPlanMealsActor" }
+export const MealPlanMealsChild = Machine.child(
+  "mealPlanFormMeals",
+  MealPlanMealsMachine
 );
 
-export const mealPlanFormMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        mealsActor: MealPlanMealsActorSchema,
-        values: MealPlanFormValuesSchema,
-      })
-    ),
-    events: {
-      changeTargetRule: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          nutrient: Schema.Literals([
-            "energyKcal",
-            "proteinGrams",
-            "carbsGrams",
-            "fatGrams",
-            "fiberGrams",
-            "sugarGrams",
-            "saturatedFatGrams",
-            "saltGrams",
-          ]),
-          rule: Domain.NutrientTargetSemantics,
-        })
-      ),
-      changeField: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          name: MealPlanFormTextFieldNameSchema,
-          value: Schema.String,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        initialPlan: Schema.NullOr(Domain.Plan),
-      })
-    ),
-  },
+export const MealPlanFormStates = Machine.state({
+  fields: { values: MealPlanFormValuesSchema },
   states: {
-    Ready: {},
+    Ready: { fields: { initialPlan: Schema.NullOr(Domain.Plan) } },
   },
-  actors: {
-    mealPlanMeals: mealPlanMealsMachine,
+});
+
+export const MealPlanFormEvents = Machine.events({
+  ChangeTargetRule: {
+    nutrient: Schema.Literals([
+      "energyKcal",
+      "proteinGrams",
+      "carbsGrams",
+      "fatGrams",
+      "fiberGrams",
+      "sugarGrams",
+      "saturatedFatGrams",
+      "saltGrams",
+    ]),
+    rule: Domain.NutrientTargetSemantics,
   },
-}).createMachine({
-  context: ({ actors, input, spawn }) => ({
-    mealsActor: spawn(actors.mealPlanMeals, {
-      id: "mealPlanFormMeals",
-      input: {
-        initialPlan: input.initialPlan,
-      },
-    }),
+  ChangeField: {
+    name: MealPlanFormTextFieldNameSchema,
+    value: Schema.String,
+  },
+});
+
+export const MealPlanFormMachine = Machine.make({
+  id: "MealPlanForm",
+  root: MealPlanFormStates,
+  events: MealPlanFormEvents,
+  input: MealPlanFormInput,
+  children: { mealPlanFormMeals: MealPlanMealsChild },
+}).handle({
+  root: ({ input }) => ({
     values: {
       targetRules:
         input.initialPlan?.targetRules ?? Domain.DefaultPlanTargetRules,
@@ -213,38 +193,39 @@ export const mealPlanFormMachine = setup({
       ),
     },
   }),
-  initial: "Ready",
+  initial: {
+    target: "Ready",
+    data: ({ input }) => ({ initialPlan: input.initialPlan }),
+  },
+  on: {
+    ChangeTargetRule: {
+      update: "root",
+      data: ({ root, event }) => ({
+        values: {
+          ...root.values,
+          targetRules: {
+            ...root.values.targetRules,
+            [event.nutrient]: event.rule,
+          },
+        },
+      }),
+    },
+    ChangeField: {
+      update: "root",
+      data: ({ root, event }) => ({
+        values: { ...root.values, [event.name]: event.value },
+      }),
+    },
+  },
   states: {
     Ready: {
-      on: {
-        changeTargetRule: ({ context, event }) => ({
-          context: {
-            values: {
-              ...context.values,
-              targetRules: {
-                ...context.values.targetRules,
-                [event.nutrient]: event.rule,
-              },
-            },
-          },
-        }),
-        changeField: ({ context, event }) => ({
-          context: {
-            values: {
-              ...context.values,
-              [event.name]: event.value,
-            },
-          },
-        }),
+      invoke: {
+        src: "mealPlanFormMeals",
+        input: ({ state }) => ({ initialPlan: state.initialPlan }),
       },
     },
   },
 });
-
-export type MealPlanMealsActorRef = MealPlanMealsActor;
-export type MealPlanMealsSnapshot = SnapshotFrom<typeof mealPlanMealsMachine>;
-export type MealPlanFormActorRef = ActorRefFrom<typeof mealPlanFormMachine>;
-export type MealPlanFormSnapshot = SnapshotFrom<typeof mealPlanFormMachine>;
 
 export function createMealPlanInputFromValues({
   meals,

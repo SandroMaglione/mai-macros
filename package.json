@@ -12,12 +12,15 @@
     "lint:all": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config",
     "lint": "NODE_OPTIONS='--experimental-strip-types' oxlint --disable-nested-config --quiet",
     "lint:types": "NODE_OPTIONS='--experimental-strip-types' node packages/typed-lint/src/main.ts",
-    "verify": "pnpm run format && pnpm run typecheck && pnpm run lint:all && pnpm run lint:types"
+    "machines:check": "effect-machine build --root apps/mobile --include 'src/machines/**/*.ts' --out-dir .effect-machine/mobile && effect-machine build --root packages/machines --include 'src/**/*.ts' --out-dir .effect-machine/machines",
+    "verify": "pnpm run format && pnpm run typecheck && pnpm run lint:all && pnpm run lint:types && pnpm run machines:check"
   },
   "devDependencies": {
     "@effect/language-service": "^0.87.5",
     "@mai/oxc": "workspace:^",
     "@mai/typed-lint": "workspace:^",
+    "@typeonce/effect-machine-devtools": "0.46.0",
+    "@typeonce/oxlint-plugin-effect-machine": "0.46.0",
     "@types/node": "latest",
     "@typescript/native-preview": "beta",
     "oxfmt": "^0.75.0",

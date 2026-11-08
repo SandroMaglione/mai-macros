@@ -1,22 +1,10 @@
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { useMachine } from "@/hooks/use-machine";
+import { ChartDateLabelMachine } from "@/machines/chart-date-label-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Text, type StyleProp, type TextStyle } from "react-native";
 import { useAnimatedReaction } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import type { ChartPressState } from "victory-native";
-import { setup } from "xstate";
-
-const SelectedDay = Schema.Struct({ dayIndex: Schema.NullOr(Schema.Number) });
-
-const chartDateMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(SelectedDay),
-    events: { select: Schema.toStandardSchemaV1(SelectedDay) },
-  },
-}).createMachine({
-  context: { dayIndex: null },
-  on: { select: ({ event }) => ({ context: { dayIndex: event.dayIndex } }) },
-});
 
 export function ChartDateLabel({
   pressState,
@@ -30,16 +18,18 @@ export function ChartDateLabel({
   readonly rangeLabel: string;
   readonly style: StyleProp<TextStyle>;
 }) {
-  const [snapshot, , actor] = useMachine(chartDateMachine);
-  const select = actor.trigger.select;
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(ChartDateLabelMachine)
+  );
   const { isActive, matchedIndex, x } = pressState;
   useAnimatedReaction(
     () => (isActive.value && matchedIndex.value >= 0 ? x.value.value : null),
     (dayIndex, previous) => {
-      if (dayIndex !== previous) scheduleOnRN(select, { dayIndex });
+      if (dayIndex !== previous)
+        scheduleOnRN(send, { _tag: "Select", dayIndex });
     }
   );
-  const dayIndex = snapshot.context.dayIndex;
+  const dayIndex = snapshot.value.dayIndex;
   return (
     <Text style={style}>
       {dayIndex === null

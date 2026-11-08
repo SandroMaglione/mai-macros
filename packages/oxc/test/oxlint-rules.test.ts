@@ -12,7 +12,7 @@ import noEffectIgnore from "../src/oxlint/rules/no-effect-ignore.ts";
 import noGlobalJson from "../src/oxlint/rules/no-global-json.ts";
 import noInOperator from "../src/oxlint/rules/no-in-operator.ts";
 import noMultipleFunctionParams from "../src/oxlint/rules/no-multiple-function-params.ts";
-import noMultipleXstateHooks from "../src/oxlint/rules/no-multiple-xstate-hooks.ts";
+import noMultipleMachineHooks from "../src/oxlint/rules/no-multiple-machine-hooks.ts";
 import noNestedEffectArrayMethods from "../src/oxlint/rules/no-nested-effect-array-methods.ts";
 import noNestedLayerProvide from "../src/oxlint/rules/no-nested-layer-provide.ts";
 import noOptionalFunctionParameters from "../src/oxlint/rules/no-optional-function-parameters.ts";
@@ -24,8 +24,6 @@ import noServiceOption from "../src/oxlint/rules/no-service-option.ts";
 import noShadowedStandardArrayStatic from "../src/oxlint/rules/no-shadowed-standard-array-static.ts";
 import noSilentErrorSwallow from "../src/oxlint/rules/no-silent-error-swallow.ts";
 import noSingleUsePrivateFunctions from "../src/oxlint/rules/no-single-use-private-functions.ts";
-import noSingleUseXstateActions from "../src/oxlint/rules/no-single-use-xstate-actions.ts";
-import noSingleUseXstateGuards from "../src/oxlint/rules/no-single-use-xstate-guards.ts";
 import noSqlTypeParameter from "../src/oxlint/rules/no-sql-type-parameter.ts";
 import noStandardMapSet from "../src/oxlint/rules/no-standard-map-set.ts";
 import noSwitch from "../src/oxlint/rules/no-switch.ts";
@@ -36,7 +34,6 @@ import noTryCatch from "../src/oxlint/rules/no-try-catch.ts";
 import pipeMaxArguments from "../src/oxlint/rules/pipe-max-arguments.ts";
 import preferOptionFromNullable from "../src/oxlint/rules/prefer-option-from-nullable.ts";
 import privateFunctionPrefix from "../src/oxlint/rules/private-function-prefix.ts";
-import requireXstateEventSatisfies from "../src/oxlint/rules/require-xstate-event-satisfies.ts";
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -276,38 +273,39 @@ run("no-multiple-function-params", noMultipleFunctionParams, {
   ],
 });
 
-run("no-multiple-xstate-hooks", noMultipleXstateHooks, {
+run("no-multiple-machine-hooks", noMultipleMachineHooks, {
   valid: [
-    "import { useMachine } from '@xstate/react';\nfunction Screen() { const [snapshot, send] = useMachine(machine); return null; }",
-    "import { useMachine, useActorRef } from '@xstate/react';\nfunction Parent() { useMachine(parentMachine); return null; }\nfunction Child() { useActorRef(childMachine); return null; }",
-    "import { useMachine } from '@xstate/react';\nfunction _helper() { useMachine(machine); useMachine(otherMachine); }",
-    "import { useMachine } from './local';\nfunction Screen() { useMachine(machine); useMachine(otherMachine); return null; }",
-    "import { useActorRef, useMachine } from '@xstate/react';\nconst Screen = memo(() => { useMachine(machine); return null; });\nconst Child = forwardRef(() => { useActorRef(childMachine); return null; });",
+    "import { useMachine } from '@/hooks/use-machine';\nfunction Screen() { const [snapshot, send] = useMachine(create); return null; }",
+    "import { useMachine } from '@/hooks/use-machine';\nimport { useMachineAtom } from '@typeonce/effect-machine-react';\nfunction Parent() { useMachine(create); return null; }\nfunction Child() { useMachineAtom(create); return null; }",
+    "import { useMachine } from '@/hooks/use-machine';\nfunction _helper() { useMachine(create); useMachine(createOther); }",
+    "import { useMachine } from './local';\nfunction Screen() { useMachine(create); useMachine(createOther); return null; }",
+    "import { useChildMachine, useMachine, useMachineValue } from '@/hooks/use-machine';\nfunction Screen() { useMachine(create); useChildMachine(child); useMachineValue(atom); return null; }",
+    "import { useMachine } from '../hooks/use-machine.ts';\nconst Screen = memo(() => { useMachine(create); return null; });\nconst Child = forwardRef(() => { useMachine(createChild); return null; });",
   ],
   invalid: [
     {
-      code: "import { useMachine } from '@xstate/react';\nfunction Screen() { useMachine(machine); useMachine(otherMachine); return null; }",
-      errors: [/Screen uses multiple @xstate\/react actor hooks/],
+      code: "import { useMachine } from '@/hooks/use-machine';\nfunction Screen() { useMachine(create); useMachine(createOther); return null; }",
+      errors: [/Screen owns multiple machines/],
     },
     {
-      code: "import { useActorRef, useMachine } from '@xstate/react';\nconst Screen = () => { useMachine(machine); useActorRef(otherMachine); return null; };",
-      errors: [/Compose machines with actors/],
+      code: "import { useMachine } from '../hooks/use-machine.ts';\nimport { useMachineAtom } from '@typeonce/effect-machine-react';\nconst Screen = () => { useMachine(create); useMachineAtom(createOther); return null; };",
+      errors: [/Compose machines with child machines/],
     },
     {
-      code: "import { useMachine as useXstateMachine, useActor } from '@xstate/react';\nconst Screen = () => { useXstateMachine(machine); useActor(actor); return null; };",
-      errors: [/Screen uses multiple @xstate\/react actor hooks/],
+      code: "import { useMachine as useScreenMachine } from '@/hooks/use-machine';\nconst Screen = () => { useScreenMachine(create); useScreenMachine(createOther); return null; };",
+      errors: [/Screen owns multiple machines/],
     },
     {
-      code: "import * as XStateReact from '@xstate/react';\nconst Screen = () => { XStateReact.useMachine(machine); XStateReact.useActorRef(otherMachine); return null; };",
-      errors: [/Screen uses multiple @xstate\/react actor hooks/],
+      code: "import * as MachineReact from '@typeonce/effect-machine-react';\nconst Screen = () => { MachineReact.useMachineAtom(create); MachineReact.useMachineAtom(createOther); return null; };",
+      errors: [/Screen owns multiple machines/],
     },
     {
-      code: "import { useActor, useActorRef } from '@xstate/react';\nconst Screen = memo(() => { useActor(actor); useActorRef(machine); return null; });",
-      errors: [/Screen uses multiple @xstate\/react actor hooks/],
+      code: "import { useMachineAtom } from '@typeonce/effect-machine-react';\nconst Screen = memo(() => { useMachineAtom(create); useMachineAtom(createOther); return null; });",
+      errors: [/Screen owns multiple machines/],
     },
     {
-      code: "import { useActor, useMachine } from '@xstate/react';\nconst Screen = forwardRef(() => { useMachine(machine); useActor(actor); return null; });",
-      errors: [/Screen uses multiple @xstate\/react actor hooks/],
+      code: "import { useMachine } from '@/hooks/use-machine';\nconst Screen = forwardRef(() => { useMachine(create); useMachine(createOther); return null; });",
+      errors: [/Screen owns multiple machines/],
     },
   ],
 });
@@ -370,7 +368,7 @@ run("no-react-state-hooks", noReactStateHooks, {
   invalid: [
     {
       code: "useState(0);",
-      errors: [/useState is banned/],
+      errors: [/useState is banned. Use effect-machine machines instead./],
     },
     {
       code: "React.useEffect(() => {}, []);",
@@ -768,48 +766,6 @@ run("no-single-use-private-functions", noSingleUsePrivateFunctions, {
   ],
 });
 
-run("no-single-use-xstate-actions", noSingleUseXstateActions, {
-  valid: [
-    "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: ['reset', 'reset'] } } });",
-    "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: [] } } });",
-    "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: assign({ value: null }) } } });",
-    "const configured = setup({ actions: { reset: () => {} } }); configured.createMachine({ on: { CHANGE: { actions: 'reset' } } });",
-  ],
-  invalid: [
-    {
-      code: "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: 'reset' } } });",
-      errors: [/Inline the "reset" XState action/],
-    },
-    {
-      code: "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: ['reset', assign({ value: null })] } } });",
-      errors: [/Inline the "reset" XState action/],
-    },
-    {
-      code: "setup({ actions: { reset: () => {} } }).createMachine({ on: { CHANGE: { actions: { type: 'reset' } } } });",
-      errors: [/Inline the "reset" XState action/],
-    },
-  ],
-});
-
-run("no-single-use-xstate-guards", noSingleUseXstateGuards, {
-  valid: [
-    "setup({ guards: { hasValue: () => true } }).createMachine({ on: { CHANGE: [{ guard: 'hasValue' }, { guard: 'hasValue' }] } });",
-    "setup({ guards: { hasValue: () => true } }).createMachine({ on: { CHANGE: { guard: ({ context }) => context.value !== null } } });",
-    "setup({ guards: { hasValue: () => true } }).createMachine({ on: { CHANGE: { actions: 'hasValue' } } });",
-    "const configured = setup({ guards: { hasValue: () => true } }); configured.createMachine({ on: { CHANGE: { guard: 'hasValue' } } });",
-  ],
-  invalid: [
-    {
-      code: "setup({ guards: { hasValue: () => true } }).createMachine({ on: { CHANGE: { guard: 'hasValue' } } });",
-      errors: [/Inline the "hasValue" XState guard/],
-    },
-    {
-      code: "setup({ guards: { hasValue: () => true } }).createMachine({ on: { CHANGE: { guard: { type: 'hasValue' } } } });",
-      errors: [/Inline the "hasValue" XState guard/],
-    },
-  ],
-});
-
 run("no-sql-type-parameter", noSqlTypeParameter, {
   valid: ["sql`select * from prompts`;", "db.sql`select * from prompts`;"],
   invalid: [
@@ -1007,35 +963,6 @@ run("private-function-prefix", privateFunctionPrefix, {
     {
       code: "const load = () => 1;",
       errors: [/Private top-level functions must start with an underscore/],
-    },
-  ],
-});
-
-run("require-xstate-event-satisfies", requireXstateEventSatisfies, {
-  valid: [
-    "sendTo(actorId, () => ({ type: 'child.close' }) satisfies ChildEvent);",
-    "sendParent(() => ({ type: 'parent.changed' }) satisfies ParentEvent);",
-    "sendTo(actorId, function () { return ({ type: 'child.close' }) satisfies ChildEvent; });",
-    "sendTo(actorId, event);",
-    "sendTo(actorId, () => event);",
-    "otherSend(() => ({ type: 'event' }));",
-  ],
-  invalid: [
-    {
-      code: "sendTo(actorId, () => ({ type: 'child.close' }));",
-      errors: [/XState sent object events must use satisfies/],
-    },
-    {
-      code: "sendTo(actorId, function () { return { type: 'child.close' }; });",
-      errors: [/XState sent object events must use satisfies/],
-    },
-    {
-      code: "sendParent(() => ({ type: 'parent.changed' }));",
-      errors: [/XState sent object events must use satisfies/],
-    },
-    {
-      code: "sendParent({ type: 'parent.changed' });",
-      errors: [/XState sent object events must use satisfies/],
     },
   ],
 });

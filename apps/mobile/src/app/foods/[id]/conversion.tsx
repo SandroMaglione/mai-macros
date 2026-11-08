@@ -7,14 +7,24 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatNumber, formatShortDate } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  conversionFromForm,
+  FoodConversionEvents,
+  FoodConversionLoaderEvents,
+  FoodConversionLoaderMachine,
+  FoodConversionMachine,
+  FoodConversionStates,
+  type ConversionForm,
+  type ConversionValue,
+  type FoodConversionData,
+} from "@/machines/food-conversion-machine";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
 import { Domain, Foods, Measurements } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Effect, Option, Predicate, Schema } from "effect";
+import { Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import {
   ChevronLeft,
@@ -32,248 +42,25 @@ import {
   Text,
   View,
 } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const RouteParams = Schema.Struct({ id: Domain.FoodId });
-
-const ConversionForm = Schema.Struct({
-  massAmount: Schema.String,
-  massUnit: Domain.MassUnit,
-  volumeAmount: Schema.String,
-  volumeUnit: Domain.VolumeUnit,
-});
-type ConversionForm = typeof ConversionForm.Type;
-type ConversionValue = {
-  readonly mass: {
-    readonly amount: number;
-    readonly unit: Domain.MassUnit;
-  };
-  readonly volume: {
-    readonly amount: number;
-    readonly unit: Domain.VolumeUnit;
-  };
-};
-
-const LoadOutput = Schema.Struct({
-  food: Domain.Food,
-  usage: Foods.FoodEditUsage,
-});
-const Context = Schema.Struct({
-  food: Schema.NullOr(Domain.Food),
-  foodId: Domain.FoodId,
-  form: ConversionForm,
-  message: Schema.NullOr(Schema.String),
-  messageTone: Schema.Literals(["danger", "success"]),
-  usage: Schema.NullOr(Foods.FoodEditUsage),
-});
-const ChangeTextEvent = Schema.Struct({ value: Schema.String });
-const ChangeMassUnitEvent = Schema.Struct({ unit: Domain.MassUnit });
-const ChangeVolumeUnitEvent = Schema.Struct({ unit: Domain.VolumeUnit });
-const ConversionMutationInput = Schema.Struct({
-  food: Domain.Food,
-  form: ConversionForm,
-});
-const ConversionMutationOutput = Schema.Struct({
-  food: Domain.Food,
-  revisedMealEntryCount: Schema.Number,
-});
-
-const conversionManagerMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(Context),
-    events: {
-      cancelReview: Schema.toStandardSchemaV1(EmptyEvent),
-      changeMassAmount: Schema.toStandardSchemaV1(ChangeTextEvent),
-      changeMassUnit: Schema.toStandardSchemaV1(ChangeMassUnitEvent),
-      changeVolumeAmount: Schema.toStandardSchemaV1(ChangeTextEvent),
-      changeVolumeUnit: Schema.toStandardSchemaV1(ChangeVolumeUnitEvent),
-      confirm: Schema.toStandardSchemaV1(EmptyEvent),
-      remove: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
-  },
-  actors: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(LoadOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return {
-              food: yield* foods.get({ input }),
-              usage: yield* foods.inspectEdit({ input }),
-            };
-          })
-        ),
-    }),
-    preview: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ConversionMutationInput),
-        output: Schema.toStandardSchemaV1(Foods.FoodEditPreview),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return yield* foods.previewFoodMassVolumeConversionEdit({
-              input: _setFoodMassVolumeConversionInput(input),
-            });
-          })
-        ),
-    }),
-    save: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ConversionMutationInput),
-        output: Schema.toStandardSchemaV1(ConversionMutationOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.setFoodMassVolumeConversion({
-              input: _setFoodMassVolumeConversionInput(input),
-            });
-            return {
-              food: result.food,
-              revisedMealEntryCount: result.revisedMealEntryCount,
-            };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    food: null,
-    foodId: input.foodId,
-    form: _emptyForm(),
-    message: null,
-    messageTone: "success",
-    usage: null,
-  }),
-  initial: "Loading",
-  on: {
-    changeMassAmount: ({ context, event }) => ({
-      context: { form: { ...context.form, massAmount: event.value } },
-    }),
-    changeMassUnit: ({ context, event }) => ({
-      context: { form: { ...context.form, massUnit: event.unit } },
-    }),
-    changeVolumeAmount: ({ context, event }) => ({
-      context: { form: { ...context.form, volumeAmount: event.value } },
-    }),
-    changeVolumeUnit: ({ context, event }) => ({
-      context: { form: { ...context.form, volumeUnit: event.unit } },
-    }),
-  },
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "Editing",
-          context: {
-            food: event.output.food,
-            form: _formFromFood(event.output.food),
-            usage: event.output.usage,
-          },
-        }),
-        onError: {
-          target: "LoadFailed",
-          context: { message: "Could not load this food conversion." },
-        },
-      },
-    },
-    LoadFailed: {
-      on: {
-        retry: { target: "Loading", context: { message: null } },
-      },
-    },
-    Editing: {
-      on: {
-        remove: ({ context }) => ({
-          target:
-            (context.usage?.mealEntryCount ?? 0) > 0 ? "Previewing" : "Saving",
-          context: { form: _emptyForm(), message: null },
-        }),
-        submit: ({ context }) => ({
-          target:
-            (context.usage?.mealEntryCount ?? 0) > 0 ? "Previewing" : "Saving",
-          context: { message: null },
-        }),
-      },
-    },
-    Previewing: {
-      invoke: {
-        src: "preview",
-        input: ({ context }) => _mutationInput(context),
-        onDone: { target: "Reviewing" },
-        onError: ({ event }) => ({
-          target: "Editing",
-          context: {
-            message: _mutationErrorMessage(event.error),
-            messageTone: "danger",
-          },
-        }),
-      },
-    },
-    Reviewing: {
-      on: {
-        cancelReview: { target: "Editing" },
-        confirm: { target: "Saving" },
-      },
-    },
-    Saving: {
-      invoke: {
-        src: "save",
-        input: ({ context }) => _mutationInput(context),
-        onDone: ({ event }) => ({
-          target: "Editing",
-          context: {
-            food: event.output.food,
-            form: _formFromFood(event.output.food),
-            message:
-              event.output.food.massVolumeConversion === undefined
-                ? "Conversion removed."
-                : "Conversion saved.",
-            messageTone: "success",
-          },
-        }),
-        onError: ({ event }) => ({
-          target: "Editing",
-          context: {
-            message: _mutationErrorMessage(event.error),
-            messageTone: "danger",
-          },
-        }),
-      },
-    },
-  },
-});
 
 export default function FoodConversionRoute() {
   const params = useSchemaLocalSearchParams(RouteParams);
   return Option.isNone(params) ? (
     <Redirect href="/" />
   ) : (
-    <FoodConversionScreen foodId={params.value.id} />
+    <FoodConversionLoader foodId={params.value.id} />
   );
 }
 
-function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
-  const [snapshot, , actor] = useMachine(conversionManagerMachine, {
-    input: { foodId },
-  });
-  const { food, form, usage } = snapshot.context;
+function FoodConversionLoader({ foodId }: { readonly foodId: Domain.FoodId }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodConversionLoaderMachine, { foodId })
+  );
+  const state = snapshot.state;
 
-  if (snapshot.matches("Loading")) {
+  if (state.path === "Loading") {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading conversion" />
@@ -281,14 +68,16 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
     );
   }
 
-  if (snapshot.matches("LoadFailed") || food === null || usage === null) {
+  if (state.path === "Failed") {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load conversion."}
-          tone="danger"
-        />
-        <Button icon={RotateCcw} onPress={actor.trigger.retry}>
+        <Notice message={state.value.message} tone="danger" />
+        <Button
+          icon={RotateCcw}
+          onPress={() => {
+            send(FoodConversionLoaderEvents.Retry());
+          }}
+        >
           Try again
         </Button>
         <Button onPress={() => router.back()} variant="secondary">
@@ -298,7 +87,17 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
     );
   }
 
-  const busy = snapshot.matches("Previewing") || snapshot.matches("Saving");
+  return <FoodConversionScreen data={state.value.data} />;
+}
+
+function FoodConversionScreen({ data }: { readonly data: FoodConversionData }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodConversionMachine, data)
+  );
+  const { food, form, message, messageTone, usage } = snapshot.value;
+  const busy =
+    FoodConversionStates.matches(snapshot, "Previewing") ||
+    FoodConversionStates.matches(snapshot, "Saving");
   const massBlank = form.massAmount.trim() === "";
   const volumeBlank = form.volumeAmount.trim() === "";
   const massAmount = Number(form.massAmount.replace(",", "."));
@@ -311,7 +110,7 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
         Number.isFinite(volumeAmount) &&
         volumeAmount > 0;
   const currentConversion = food.massVolumeConversion;
-  const nextConversion = _conversionFromForm(form);
+  const nextConversion = conversionFromForm(form);
   const hasChanges =
     currentConversion === undefined || nextConversion === undefined
       ? currentConversion !== nextConversion
@@ -334,11 +133,8 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             tone="warning"
           />
         )}
-        {snapshot.context.message === null ? null : (
-          <Notice
-            message={snapshot.context.message}
-            tone={snapshot.context.messageTone}
-          />
+        {message === null ? null : (
+          <Notice message={message} tone={messageTone} />
         )}
         <SectionCard
           subtitle={
@@ -352,16 +148,16 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             <NumberField
               editable={!busy}
               label="Mass amount"
-              onChangeText={(value) =>
-                actor.send({ type: "changeMassAmount", value })
-              }
+              onChangeText={(value) => {
+                send(FoodConversionEvents.ChangeMassAmount({ value }));
+              }}
               placeholder="1.03"
               rightElement={
                 <MeasurementUnitSelect
                   disabled={busy}
                   onSelect={(unit) => {
                     if (Measurements.isMassUnit(unit)) {
-                      actor.send({ type: "changeMassUnit", unit });
+                      send(FoodConversionEvents.ChangeMassUnit({ unit }));
                     }
                   }}
                   selectedUnit={form.massUnit}
@@ -374,16 +170,16 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             <NumberField
               editable={!busy}
               label="Equivalent volume"
-              onChangeText={(value) =>
-                actor.send({ type: "changeVolumeAmount", value })
-              }
+              onChangeText={(value) => {
+                send(FoodConversionEvents.ChangeVolumeAmount({ value }));
+              }}
               placeholder="1"
               rightElement={
                 <MeasurementUnitSelect
                   disabled={busy}
                   onSelect={(unit) => {
                     if (Measurements.isVolumeUnit(unit)) {
-                      actor.send({ type: "changeVolumeUnit", unit });
+                      send(FoodConversionEvents.ChangeVolumeUnit({ unit }));
                     }
                   }}
                   selectedUnit={form.volumeUnit}
@@ -402,7 +198,9 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           disabled={busy || !formIsValid || !hasChanges}
           icon={Save}
           loading={busy}
-          onPress={actor.trigger.submit}
+          onPress={() => {
+            send(FoodConversionEvents.Submit());
+          }}
         >
           Save conversion
         </Button>
@@ -410,7 +208,9 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           <Button
             disabled={busy}
             icon={Trash2}
-            onPress={actor.trigger.remove}
+            onPress={() => {
+              send(FoodConversionEvents.Remove());
+            }}
             variant="danger"
           >
             Remove conversion
@@ -420,11 +220,18 @@ function FoodConversionScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
       <ReviewDialog
         food={food}
         form={form}
-        loading={snapshot.matches("Saving")}
-        onCancel={actor.trigger.cancelReview}
-        onConfirm={actor.trigger.confirm}
+        loading={FoodConversionStates.matches(snapshot, "Saving")}
+        onCancel={() => {
+          send(FoodConversionEvents.CancelReview());
+        }}
+        onConfirm={() => {
+          send(FoodConversionEvents.Confirm());
+        }}
         usage={usage}
-        visible={snapshot.matches("Reviewing") || snapshot.matches("Saving")}
+        visible={
+          FoodConversionStates.matches(snapshot, "Reviewing") ||
+          FoodConversionStates.matches(snapshot, "Saving")
+        }
       />
     </>
   );
@@ -486,7 +293,7 @@ function ReviewDialog({
   readonly visible: boolean;
 }) {
   const previousLabel = _conversionLabel(food.massVolumeConversion);
-  const nextLabel = _conversionLabel(_conversionFromForm(form));
+  const nextLabel = _conversionLabel(conversionFromForm(form));
   return (
     <Modal
       animationType="fade"
@@ -553,69 +360,6 @@ function ReviewDialog({
   );
 }
 
-function _emptyForm(): ConversionForm {
-  return { massAmount: "", massUnit: "kg", volumeAmount: "", volumeUnit: "l" };
-}
-
-function _formFromFood(food: Domain.Food): ConversionForm {
-  const conversion = food.massVolumeConversion;
-  return conversion === undefined
-    ? _emptyForm()
-    : {
-        massAmount: `${conversion.mass.amount}`,
-        massUnit: conversion.mass.unit,
-        volumeAmount: `${conversion.volume.amount}`,
-        volumeUnit: conversion.volume.unit,
-      };
-}
-
-function _conversionFromForm(form: ConversionForm) {
-  if (form.massAmount.trim() === "" && form.volumeAmount.trim() === "") {
-    return undefined;
-  }
-  return {
-    mass: {
-      amount: Number(form.massAmount.replace(",", ".")),
-      unit: form.massUnit,
-    },
-    volume: {
-      amount: Number(form.volumeAmount.replace(",", ".")),
-      unit: form.volumeUnit,
-    },
-  } satisfies ConversionValue;
-}
-
-function _setFoodMassVolumeConversionInput({
-  food,
-  form,
-}: typeof ConversionMutationInput.Type): Foods.SetFoodMassVolumeConversionInput {
-  const conversion = _conversionFromForm(form);
-  return {
-    foodId: food.id,
-    ...(conversion === undefined
-      ? {}
-      : {
-          massVolumeConversion: {
-            mass: {
-              amount: `${conversion.mass.amount}`,
-              unit: conversion.mass.unit,
-            },
-            volume: {
-              amount: `${conversion.volume.amount}`,
-              unit: conversion.volume.unit,
-            },
-          },
-        }),
-  };
-}
-
-function _mutationInput(context: typeof Context.Type) {
-  if (context.food === null) {
-    throw new Error("Expected a loaded food.");
-  }
-  return { food: context.food, form: context.form };
-}
-
 function _conversionLabel(conversion: ConversionValue | undefined) {
   return conversion === undefined
     ? null
@@ -630,13 +374,6 @@ function _usageDateRange(usage: Foods.FoodEditUsage) {
   return usage.firstDateKey === usage.lastDateKey
     ? ` on ${firstDate}`
     : ` between ${firstDate} and ${formatShortDate({ dateKey: usage.lastDateKey })}`;
-}
-
-function _mutationErrorMessage(error: unknown) {
-  if (Predicate.isTagged(error, "IncompatibleFoodMeasurement")) {
-    return "This conversion cannot interpret every previous meal entry.";
-  }
-  return "Could not save the conversion. Check the values and try again.";
 }
 
 const styles = StyleSheet.create({

@@ -1,19 +1,33 @@
 import { ChartDateLabel } from "@/components/ui/chart-date-label";
+import { useChildMachine, useMachine } from "@/hooks/use-machine";
+import { InsightsMachineAtoms } from "@/lib/insights-runtime-client";
 import {
+  BodyWeightCalendarDates,
+  BodyWeightEditorChild,
+  BodyWeightEditorEvents,
+  BodyWeightEditorStates,
+  BodyWeightImporterChild,
+  BodyWeightImporterEvents,
+  BodyWeightImporterStates,
+  BodyWeightRouteEvents,
+  BodyWeightRouteMachine,
+  BodyWeightRouteStates,
+  findBodyWeightEntryForDateKey,
+  type BodyWeightChartKind,
+  type BodyWeightReportRange,
+} from "@/machines/body-weight-panel-machine";
+import type {
   InsightDateRange,
   InsightRangeDayCount,
 } from "@mai/machines/insight-range";
-import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
-import * as BodyWeightReports from "@mai/nutrition/services/body-weight-reports";
-import * as BodyWeights from "@mai/nutrition/services/body-weights";
 import {
   Circle as SkiaCircle,
   DashPathEffect,
   Rect as SkiaRect,
 } from "@shopify/react-native-skia";
-import { useMachine, useSelector } from "@xstate/react";
-import { Array, DateTime, Effect, Match, Option, Schema } from "effect";
+import type { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Array, Option, Schema } from "effect";
 import {
   ChevronLeft,
   ChevronRight,
@@ -40,17 +54,14 @@ import {
   Scatter,
   useChartPressState,
 } from "victory-native";
-import { Actor, createAsyncLogic, setup, type ActorRefFrom } from "xstate";
 
 import { Button } from "@/components/ui/button";
 import { NumberField, TextArea } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { Notice } from "@/components/ui/notice";
-import { dateKeyFromDate, shiftDateKey, todayDateKey } from "@/lib/date-keys";
+import { todayDateKey } from "@/lib/date-keys";
 import { formatNumber, niceLinearDomain } from "@/lib/format";
-import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
-import { RuntimeClient } from "@/lib/runtime-client";
 import {
   color,
   radius,
@@ -59,766 +70,9 @@ import {
   weightCalendarColors,
 } from "@/theme/tokens";
 
-const BodyWeightReportPoint = Schema.Struct({
-  dateKey: Domain.DateKey,
-  weightKilograms: Schema.Number,
-});
-
-const BodyWeightReportOutlier = Schema.Struct({
-  entry: Domain.BodyWeightEntry,
-  residualKilograms: Schema.Number,
-});
-
-const BodyWeightReportInsightPart = Schema.Struct({
-  text: Schema.String,
-  tone: Schema.Literals(["default", "highlight"]),
-});
-
-const BodyWeightReportInsight = Schema.Struct({
-  id: Schema.String,
-  parts: Schema.Array(BodyWeightReportInsightPart),
-  text: Schema.String,
-  tone: Schema.Literals(["neutral", "positive", "warning"]),
-});
-
-const BodyWeightReportRange = Schema.Struct({
-  cleanedEntries: Schema.Array(Domain.BodyWeightEntry),
-  endDateKey: Domain.DateKey,
-  entries: Schema.Array(Domain.BodyWeightEntry),
-  insights: Schema.Array(BodyWeightReportInsight),
-  latestEntry: Schema.NullOr(Domain.BodyWeightEntry),
-  outliers: Schema.Array(BodyWeightReportOutlier),
-  stableTrendPoints: Schema.Array(BodyWeightReportPoint),
-  startDateKey: Domain.DateKey,
-  trendPoints: Schema.Array(BodyWeightReportPoint),
-  weightedWeightKilograms: Schema.NullOr(Schema.Number),
-});
-
-type BodyWeightReportRange = typeof BodyWeightReportRange.Type;
-
 const estimateWeightWindowDays = 14;
 
-const BodyWeightReportDayCount = InsightRangeDayCount;
-
-export type BodyWeightReportDayCount = typeof BodyWeightReportDayCount.Type;
-
-export const BodyWeightChartKind = Schema.Literals(["trend", "change"]);
-
-type BodyWeightChartKind = typeof BodyWeightChartKind.Type;
-
-const BodyWeightRouteInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  reportDateRange: Schema.NullOr(InsightDateRange),
-  reportDayCount: BodyWeightReportDayCount,
-});
-
-const LoadBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  reportDateRange: Schema.NullOr(InsightDateRange),
-  reportDayCount: BodyWeightReportDayCount,
-});
-
-const LoadBodyWeightOutput = Schema.Struct({
-  monthEntries: Schema.Array(Domain.BodyWeightEntry),
-  report: BodyWeightReportRange,
-});
-
-const SaveBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  weightInput: Schema.String,
-});
-
-const SaveBodyWeightOutput = Schema.Union([
-  Schema.TaggedStruct("Saved", {}),
-  Schema.TaggedStruct("ValidationFailure", {}),
-]);
-
-const DeleteBodyWeightInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-});
-
-const BodyWeightEditorInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  selectedEntry: Schema.NullOr(Domain.BodyWeightEntry),
-});
-
-const ImportBodyWeightsInput = Schema.Struct({
-  value: Schema.String,
-});
-
-const ImportBodyWeightsOutput = Schema.Union([
-  Schema.TaggedStruct("Imported", {}),
-  Schema.TaggedStruct("ValidationFailure", {
-    message: Schema.String,
-  }),
-]);
-
-const BodyWeightEditorContext = Schema.Struct({
-  dateKey: Domain.DateKey,
-  message: Schema.NullOr(Schema.String),
-  selectedEntry: Schema.NullOr(Domain.BodyWeightEntry),
-  weightInput: Schema.String,
-});
-
-const BodyWeightImporterContext = Schema.Struct({
-  input: Schema.String,
-  message: Schema.NullOr(Schema.String),
-});
-
-const BodyWeightRouteContext = Schema.Struct({
-  dateKey: Domain.DateKey,
-  message: Schema.NullOr(Schema.String),
-  monthEntries: Schema.Array(Domain.BodyWeightEntry),
-  report: Schema.NullOr(BodyWeightReportRange),
-  reportDateRange: Schema.NullOr(InsightDateRange),
-  reportDayCount: BodyWeightReportDayCount,
-});
-
-type BodyWeightRouteChildEvent =
-  | {
-      readonly type: "editorClosed";
-    }
-  | {
-      readonly type: "editorDeleted";
-    }
-  | {
-      readonly type: "editorSaved";
-    }
-  | {
-      readonly type: "importClosed";
-    }
-  | {
-      readonly type: "weightsImported";
-    };
-
-const bodyWeightEditorMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(BodyWeightEditorContext),
-    events: {
-      changeWeight: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          value: Schema.String,
-        })
-      ),
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      deleteWeight: Schema.toStandardSchemaV1(EmptyEvent),
-      save: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(BodyWeightEditorInput),
-  },
-  states: {
-    Deleting: {},
-    Idle: {},
-    Saving: {},
-  },
-  actors: {
-    deleteBodyWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(DeleteBodyWeightInput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-
-            yield* bodyWeights.delete({
-              input: {
-                dateKey: input.dateKey,
-              },
-            });
-          })
-        ),
-    }),
-    saveBodyWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SaveBodyWeightInput),
-        output: Schema.toStandardSchemaV1(SaveBodyWeightOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-
-            yield* bodyWeights.save({
-              input: {
-                dateKey: input.dateKey,
-                weightKilograms: input.weightInput,
-              },
-            });
-
-            return {
-              _tag: "Saved" as const,
-            };
-          }).pipe(
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "ValidationFailure" as const,
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-    message: null,
-    selectedEntry: input.selectedEntry,
-    weightInput:
-      input.selectedEntry === null
-        ? ""
-        : formatNumber({
-            maximumFractionDigits: 2,
-            minimumFractionDigits: 2,
-            value: input.selectedEntry.weightKilograms,
-          }),
-  }),
-  initial: "Idle",
-  states: {
-    Idle: {
-      on: {
-        changeWeight: ({ event }) => ({
-          context: {
-            message: null,
-            weightInput: event.value,
-          },
-        }),
-        close: ({ parent }, enq) => {
-          if (parent !== undefined) {
-            enq.sendTo(parent, {
-              type: "editorClosed",
-            } satisfies BodyWeightRouteChildEvent);
-          }
-
-          return {};
-        },
-        deleteWeight: ({ context }) =>
-          context.selectedEntry === null
-            ? undefined
-            : {
-                target: "Deleting" as const,
-              },
-        save: {
-          target: "Saving",
-        },
-      },
-    },
-    Saving: {
-      invoke: {
-        src: "saveBodyWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          weightInput: context.weightInput,
-        }),
-        onDone: ({ event, parent }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Saved: () => {
-                if (parent !== undefined) {
-                  enq.sendTo(parent, {
-                    type: "editorSaved",
-                  } satisfies BodyWeightRouteChildEvent);
-                }
-
-                return {
-                  target: "Idle" as const,
-                  context: {
-                    message: null,
-                  },
-                };
-              },
-              ValidationFailure: () => ({
-                target: "Idle" as const,
-                context: {
-                  message: "Enter a positive weight in kilograms.",
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Idle",
-          context: {
-            message: "Could not save this weight.",
-          },
-        },
-      },
-    },
-    Deleting: {
-      invoke: {
-        src: "deleteBodyWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-        }),
-        onDone: ({ parent }, enq) => {
-          if (parent !== undefined) {
-            enq.sendTo(parent, {
-              type: "editorDeleted",
-            } satisfies BodyWeightRouteChildEvent);
-          }
-
-          return {
-            target: "Idle" as const,
-          };
-        },
-        onError: {
-          target: "Idle",
-          context: {
-            message: "Could not delete this weight.",
-          },
-        },
-      },
-    },
-  },
-});
-
-const bodyWeightImporterMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(BodyWeightImporterContext),
-    events: {
-      changeImportInput: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          value: Schema.String,
-        })
-      ),
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      importWeights: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Idle: {},
-    Submitting: {},
-  },
-  actors: {
-    importBodyWeights: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(ImportBodyWeightsInput),
-        output: Schema.toStandardSchemaV1(ImportBodyWeightsOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-
-            yield* bodyWeights.importBatch({
-              input: {
-                text: input.value,
-              },
-            });
-
-            return {
-              _tag: "Imported" as const,
-            };
-          }).pipe(
-            Effect.catchTag("InvalidBodyWeightBatchImport", (error) => {
-              const lineLabel =
-                error.lineNumber === null ? null : `Line ${error.lineNumber}`;
-              const message = Match.value(error.reason).pipe(
-                Match.when(
-                  "empty-input",
-                  () => "Paste at least one weight to import."
-                ),
-                Match.when(
-                  "invalid-date",
-                  () => `${lineLabel ?? "A line"} has an invalid date.`
-                ),
-                Match.when(
-                  "invalid-line",
-                  () =>
-                    `${lineLabel ?? "A line"} should look like 26-06-26 77.40.`
-                ),
-                Match.when(
-                  "invalid-weight",
-                  () => `${lineLabel ?? "A line"} has an invalid weight.`
-                ),
-                Match.exhaustive
-              );
-
-              return Effect.succeed({
-                _tag: "ValidationFailure" as const,
-                message,
-              });
-            }),
-            Effect.catchTag("SchemaError", () =>
-              Effect.succeed({
-                _tag: "ValidationFailure" as const,
-                message: "Paste one date and weight per line.",
-              })
-            )
-          )
-        ),
-    }),
-  },
-}).createMachine({
-  context: {
-    input: "",
-    message: null,
-  },
-  initial: "Idle",
-  states: {
-    Idle: {
-      on: {
-        changeImportInput: ({ event }) => ({
-          context: {
-            input: event.value,
-            message: null,
-          },
-        }),
-        close: ({ parent }, enq) => {
-          if (parent !== undefined) {
-            enq.sendTo(parent, {
-              type: "importClosed",
-            } satisfies BodyWeightRouteChildEvent);
-          }
-
-          return {};
-        },
-        importWeights: {
-          target: "Submitting",
-        },
-      },
-    },
-    Submitting: {
-      invoke: {
-        src: "importBodyWeights",
-        input: ({ context }) => ({
-          value: context.input,
-        }),
-        onDone: ({ event, parent }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              Imported: () => {
-                if (parent !== undefined) {
-                  enq.sendTo(parent, {
-                    type: "weightsImported",
-                  } satisfies BodyWeightRouteChildEvent);
-                }
-
-                return {
-                  target: "Idle" as const,
-                  context: {
-                    message: null,
-                  },
-                };
-              },
-              ValidationFailure: ({ message }) => ({
-                target: "Idle" as const,
-                context: {
-                  message,
-                },
-              }),
-            })
-          ),
-        onError: {
-          target: "Idle",
-          context: {
-            message: "Could not import these weights.",
-          },
-        },
-      },
-    },
-  },
-});
-
-const BodyWeightEditorActor = Schema.declare<
-  ActorRefFrom<typeof bodyWeightEditorMachine>
->(
-  (value): value is ActorRefFrom<typeof bodyWeightEditorMachine> =>
-    value instanceof Actor && value.logic === bodyWeightEditorMachine,
-  {
-    expected: "BodyWeightEditorActor",
-  }
-);
-
-const BodyWeightImporterActor = Schema.declare<
-  ActorRefFrom<typeof bodyWeightImporterMachine>
->(
-  (value): value is ActorRefFrom<typeof bodyWeightImporterMachine> =>
-    value instanceof Actor && value.logic === bodyWeightImporterMachine,
-  {
-    expected: "BodyWeightImporterActor",
-  }
-);
-
-const bodyWeightRouteMachine = setup({
-  schemas: {
-    children: {
-      bodyWeightEditor: Schema.toStandardSchemaV1(BodyWeightEditorActor),
-      bodyWeightImporter: Schema.toStandardSchemaV1(BodyWeightImporterActor),
-    },
-    context: Schema.toStandardSchemaV1(BodyWeightRouteContext),
-    events: {
-      editorClosed: Schema.toStandardSchemaV1(EmptyEvent),
-      editorDeleted: Schema.toStandardSchemaV1(EmptyEvent),
-      editorSaved: Schema.toStandardSchemaV1(EmptyEvent),
-      importClosed: Schema.toStandardSchemaV1(EmptyEvent),
-      nextMonth: Schema.toStandardSchemaV1(EmptyEvent),
-      openImport: Schema.toStandardSchemaV1(EmptyEvent),
-      previousMonth: Schema.toStandardSchemaV1(EmptyEvent),
-      reload: Schema.toStandardSchemaV1(EmptyEvent),
-      selectDate: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          dateKey: Domain.DateKey,
-        })
-      ),
-      weightsImported: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(BodyWeightRouteInput),
-  },
-  states: {
-    Failed: {},
-    Loading: { id: "bodyWeightLoading" },
-    Ready: {
-      states: {
-        LoadingMonth: {},
-        Closed: {},
-        Editing: {},
-        ImportingForm: {},
-      },
-    },
-  },
-  actors: {
-    bodyWeightEditor: bodyWeightEditorMachine,
-    bodyWeightImporter: bodyWeightImporterMachine,
-    loadMonth: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ dateKey: Domain.DateKey })
-        ),
-        output: Schema.toStandardSchemaV1(Schema.Array(Domain.BodyWeightEntry)),
-      },
-      run: ({ input }) =>
-        InsightsRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-            return yield* bodyWeights.listRange({
-              input: CalendarMonthModel.range({ dateKey: input.dateKey }),
-            });
-          })
-        ),
-    }),
-    loadBodyWeight: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(LoadBodyWeightInput),
-        output: Schema.toStandardSchemaV1(LoadBodyWeightOutput),
-      },
-      run: ({ input }) =>
-        InsightsRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const bodyWeights = yield* BodyWeights.BodyWeights;
-            const reports = yield* BodyWeightReports.BodyWeightReports;
-            const monthRange = CalendarMonthModel.range({
-              dateKey: input.dateKey,
-            });
-            const today = yield* Schema.decodeEffect(Domain.DateKey)(
-              dateKeyFromDate({
-                date: yield* DateTime.nowAsDate,
-              })
-            );
-            const endDateKey =
-              input.reportDateRange?.endDateKey ??
-              (input.dateKey > today ? input.dateKey : today);
-            const startDateKey =
-              input.reportDateRange?.startDateKey ??
-              (yield* Schema.decodeEffect(Domain.DateKey)(
-                shiftDateKey({
-                  dateKey: endDateKey,
-                  days: -(input.reportDayCount - 1),
-                })
-              ));
-            const monthEntries = yield* bodyWeights.listRange({
-              input: monthRange,
-            });
-            const report = yield* reports.getRange({
-              input: {
-                endDateKey,
-                startDateKey,
-              },
-            });
-
-            return {
-              monthEntries,
-              report,
-            };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  id: "bodyWeightRoute",
-  context: ({ input }) => ({
-    dateKey: input.dateKey,
-    message: null,
-    monthEntries: [],
-    report: null,
-    reportDateRange: input.reportDateRange,
-    reportDayCount: input.reportDayCount,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      id: "bodyWeightLoading",
-      invoke: {
-        src: "loadBodyWeight",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-          reportDateRange: context.reportDateRange,
-          reportDayCount: context.reportDayCount,
-        }),
-        onDone: ({ context, event }) => ({
-          target: "Ready",
-          context: {
-            message: context.message,
-            monthEntries: event.output.monthEntries,
-            report: event.output.report,
-          },
-        }),
-        onError: {
-          target: "Failed",
-          context: {
-            message: "Could not load weight data.",
-          },
-        },
-      },
-    },
-    Failed: {
-      on: {
-        nextMonth: ({ context }) => ({
-          target: "Loading",
-          context: _monthNavigationContext({
-            context,
-            months: 1,
-          }),
-        }),
-        previousMonth: ({ context }) => ({
-          target: "Loading",
-          context: _monthNavigationContext({
-            context,
-            months: -1,
-          }),
-        }),
-        reload: {
-          target: "Loading",
-          context: {
-            message: null,
-          },
-        },
-      },
-    },
-    Ready: {
-      initial: "Closed",
-      on: {
-        nextMonth: ({ context }) => ({
-          target: ".LoadingMonth",
-          context: _monthNavigationContext({
-            context,
-            months: 1,
-          }),
-        }),
-        previousMonth: ({ context }) => ({
-          target: ".LoadingMonth",
-          context: _monthNavigationContext({
-            context,
-            months: -1,
-          }),
-        }),
-        reload: {
-          target: "Loading",
-          context: {
-            message: null,
-          },
-        },
-      },
-      states: {
-        LoadingMonth: {
-          invoke: {
-            src: "loadMonth",
-            input: ({ context }) => ({ dateKey: context.dateKey }),
-            onDone: ({ event }) => ({
-              target: "Closed",
-              context: { monthEntries: event.output, message: null },
-            }),
-            onError: {
-              target: "Closed",
-              context: {
-                message: "Could not load this month's weights. Try again.",
-              },
-            },
-          },
-        },
-        Closed: {
-          on: {
-            openImport: {
-              target: "ImportingForm",
-              context: {
-                message: null,
-              },
-            },
-            selectDate: ({ event }) => ({
-              target: "Editing",
-              context: {
-                dateKey: event.dateKey,
-                message: null,
-              },
-            }),
-          },
-        },
-        Editing: {
-          invoke: {
-            id: "bodyWeightEditor",
-            src: "bodyWeightEditor",
-            input: ({ context }) => ({
-              dateKey: context.dateKey,
-              selectedEntry: _findEntryForDateKey({
-                dateKey: context.dateKey,
-                entries: context.monthEntries,
-              }),
-            }),
-          },
-          on: {
-            editorClosed: {
-              target: "Closed",
-              context: {
-                message: null,
-              },
-            },
-            editorDeleted: {
-              target: "#bodyWeightLoading",
-              context: {
-                message: null,
-              },
-            },
-            editorSaved: {
-              target: "#bodyWeightLoading",
-              context: {
-                message: null,
-              },
-            },
-          },
-        },
-        ImportingForm: {
-          invoke: {
-            id: "bodyWeightImporter",
-            src: "bodyWeightImporter",
-          },
-          on: {
-            importClosed: {
-              target: "Closed",
-              context: {
-                message: null,
-              },
-            },
-            weightsImported: {
-              target: "#bodyWeightLoading",
-              context: {
-                message: null,
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-});
+export type BodyWeightReportDayCount = typeof InsightRangeDayCount.Type;
 
 export function BodyWeightPanel({
   chartKind,
@@ -882,28 +136,29 @@ function BodyWeightRoute({
   readonly reportDayCount: BodyWeightReportDayCount;
   readonly showImport: boolean;
 }) {
-  const [snapshot, , actor] = useMachine(bodyWeightRouteMachine, {
-    input: {
+  const [snapshot, send, machine] = useMachine(() =>
+    InsightsMachineAtoms.make(BodyWeightRouteMachine, {
       dateKey,
       reportDateRange,
       reportDayCount,
-    },
-  });
-  const isEditing = snapshot.matches("Ready.Editing");
-  const isImportingForm = snapshot.matches("Ready.ImportingForm");
-  const editorActor = isEditing
-    ? snapshot.children.bodyWeightEditor
-    : undefined;
-  const importerActor = isImportingForm
-    ? snapshot.children.bodyWeightImporter
-    : undefined;
+    })
+  );
+  const isEditing = BodyWeightRouteStates.matches(snapshot, "Ready.Editing");
+  const isImportingForm = BodyWeightRouteStates.matches(
+    snapshot,
+    "Ready.ImportingForm"
+  );
+  const route = snapshot.value;
   const disabled =
     isEditing ||
     isImportingForm ||
-    snapshot.matches("Loading") ||
-    snapshot.matches("Ready.LoadingMonth");
+    BodyWeightRouteStates.matches(snapshot, "Loading") ||
+    BodyWeightRouteStates.matches(snapshot, "Ready.LoadingMonth");
 
-  if (snapshot.matches("Loading") && snapshot.context.report === null) {
+  if (
+    BodyWeightRouteStates.matches(snapshot, "Loading") &&
+    route.report === null
+  ) {
     return (
       <View style={styles.centered}>
         <LoadingView message="Loading weight data..." />
@@ -911,28 +166,31 @@ function BodyWeightRoute({
     );
   }
 
-  if (snapshot.matches("Failed") && snapshot.context.report === null) {
+  if (
+    BodyWeightRouteStates.matches(snapshot, "Failed") &&
+    route.report === null
+  ) {
     return (
       <View style={styles.failureStack}>
         <BodyWeightMonthNavigator
-          dateKey={snapshot.context.dateKey}
+          dateKey={route.dateKey}
           disabled={false}
           onNextMonth={() => {
-            actor.trigger.nextMonth();
+            send(BodyWeightRouteEvents.NextMonth());
           }}
           onPreviousMonth={() => {
-            actor.trigger.previousMonth();
+            send(BodyWeightRouteEvents.PreviousMonth());
           }}
         />
         <Notice
-          message={snapshot.context.message ?? "Could not load weight data."}
+          message={route.message ?? "Could not load weight data."}
           title="Weight unavailable"
           tone="danger"
         />
         <Button
           icon={RotateCcw}
           onPress={() => {
-            actor.trigger.reload();
+            send(BodyWeightRouteEvents.Reload());
           }}
           variant="secondary"
         >
@@ -942,7 +200,7 @@ function BodyWeightRoute({
     );
   }
 
-  if (snapshot.context.report === null) {
+  if (route.report === null) {
     return (
       <View style={styles.centered}>
         <LoadingView message="Loading weight data..." />
@@ -952,23 +210,25 @@ function BodyWeightRoute({
 
   const calendar = (
     <BodyWeightCalendar
-      dateKey={snapshot.context.dateKey}
+      dateKey={route.dateKey}
       disabled={disabled}
-      entries={snapshot.context.monthEntries}
-      message={snapshot.context.message}
-      onRetry={actor.trigger.reload}
+      entries={route.monthEntries}
+      message={route.message}
+      onRetry={() => {
+        send(BodyWeightRouteEvents.Reload());
+      }}
       onImport={
         showImport
           ? () => {
-              actor.trigger.openImport();
+              send(BodyWeightRouteEvents.OpenImport());
             }
           : undefined
       }
       onNextMonth={() => {
-        actor.trigger.nextMonth();
+        send(BodyWeightRouteEvents.NextMonth());
       }}
       onPreviousMonth={() => {
-        actor.trigger.previousMonth();
+        send(BodyWeightRouteEvents.PreviousMonth());
       }}
       onSelectDate={(selectedDateKey) => {
         if (onSelectDate !== undefined) {
@@ -976,9 +236,11 @@ function BodyWeightRoute({
           return;
         }
 
-        actor.trigger.selectDate({
-          dateKey: selectedDateKey,
-        });
+        send(
+          BodyWeightRouteEvents.SelectDate({
+            dateKey: selectedDateKey,
+          })
+        );
       }}
     />
   );
@@ -986,15 +248,17 @@ function BodyWeightRoute({
   return (
     <View style={styles.stack}>
       {calendarPosition === "top" ? calendar : null}
-      {editorActor === undefined ? null : (
-        <BodyWeightEntryDialog actor={editorActor} />
-      )}
-      {importerActor === undefined ? null : (
-        <BodyWeightImportDialog actor={importerActor} />
-      )}
+      {isEditing ? (
+        <BodyWeightEntryDialog editor={machine.child(BodyWeightEditorChild)} />
+      ) : null}
+      {isImportingForm ? (
+        <BodyWeightImportDialog
+          importer={machine.child(BodyWeightImporterChild)}
+        />
+      ) : null}
 
-      <BodyWeightSummary report={snapshot.context.report} />
-      <BodyWeightTrend chartKind={chartKind} report={snapshot.context.report} />
+      <BodyWeightSummary report={route.report} />
+      <BodyWeightTrend chartKind={chartKind} report={route.report} />
       {calendarPosition === "bottom" ? calendar : null}
     </View>
   );
@@ -1216,30 +480,34 @@ function BodyWeightCalendar({
 }
 
 function BodyWeightEntryDialog({
-  actor,
+  editor,
 }: {
-  readonly actor: ActorRefFrom<typeof bodyWeightEditorMachine>;
+  readonly editor: AtomMachine.ChildMachineAtom<typeof BodyWeightEditorChild>;
 }) {
-  const snapshot = useSelector(actor, (snapshot) => snapshot);
-  const dateKey = snapshot.context.dateKey;
-  const deleting = snapshot.matches("Deleting");
-  const disabled = deleting || snapshot.matches("Saving");
-  const hasEntry = snapshot.context.selectedEntry !== null;
-  const saving = snapshot.matches("Saving");
+  const [editorSnapshot, send] = useChildMachine(editor);
+
+  if (Option.isNone(editorSnapshot)) {
+    return null;
+  }
+
+  const snapshot = editorSnapshot.value;
+  const dateKey = snapshot.value.dateKey;
+  const deleting = BodyWeightEditorStates.matches(snapshot, "Deleting");
+  const saving = BodyWeightEditorStates.matches(snapshot, "Saving");
+  const disabled = deleting || saving;
+  const hasEntry = snapshot.value.selectedEntry !== null;
   const dateLabel = new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "long",
     weekday: "long",
-  }).format(CalendarMonthModel.dateFromDateKey({ dateKey }));
+  }).format(BodyWeightCalendarDates.dateFromDateKey({ dateKey }));
 
   return (
     <Modal
       animationType="fade"
       onRequestClose={() => {
         if (!disabled) {
-          actor.send({
-            type: "close",
-          });
+          send(BodyWeightEditorEvents.Close());
         }
       }}
       transparent
@@ -1251,9 +519,7 @@ function BodyWeightEntryDialog({
         accessibilityRole="button"
         disabled={disabled}
         onPress={() => {
-          actor.send({
-            type: "close",
-          });
+          send(BodyWeightEditorEvents.Close());
         }}
         style={styles.editorBackdrop}
       >
@@ -1274,9 +540,7 @@ function BodyWeightEntryDialog({
                 accessibilityRole="button"
                 disabled={disabled}
                 onPress={() => {
-                  actor.send({
-                    type: "close",
-                  });
+                  send(BodyWeightEditorEvents.Close());
                 }}
                 style={({ pressed }) => [
                   styles.editorCloseButton,
@@ -1287,8 +551,8 @@ function BodyWeightEntryDialog({
                 <X color={color.textMuted} size={18} strokeWidth={3} />
               </Pressable>
             </View>
-            {snapshot.context.message === null ? null : (
-              <Notice message={snapshot.context.message} tone="neutral" />
+            {snapshot.value.message === null ? null : (
+              <Notice message={snapshot.value.message} tone="neutral" />
             )}
             <NumberField
               accessibilityLabel="Weight in kilograms"
@@ -1296,15 +560,12 @@ function BodyWeightEntryDialog({
               editable={!disabled}
               key={`${dateKey}-open`}
               onChangeText={(value) => {
-                actor.send({
-                  type: "changeWeight",
-                  value,
-                });
+                send(BodyWeightEditorEvents.ChangeWeight({ value }));
               }}
               placeholder="82.4"
               rightElement={<Text style={styles.unitText}>kg</Text>}
               selectTextOnFocus
-              value={snapshot.context.weightInput}
+              value={snapshot.value.weightInput}
             />
             <View style={styles.editorActions}>
               <Button
@@ -1312,9 +573,7 @@ function BodyWeightEntryDialog({
                 icon={Trash2}
                 loading={deleting}
                 onPress={() => {
-                  actor.send({
-                    type: "deleteWeight",
-                  });
+                  send(BodyWeightEditorEvents.DeleteWeight());
                 }}
                 style={styles.editorAction}
                 variant="danger"
@@ -1326,9 +585,7 @@ function BodyWeightEntryDialog({
                 icon={Save}
                 loading={saving}
                 onPress={() => {
-                  actor.send({
-                    type: "save",
-                  });
+                  send(BodyWeightEditorEvents.Save());
                 }}
                 style={styles.editorAction}
               >
@@ -1343,23 +600,29 @@ function BodyWeightEntryDialog({
 }
 
 function BodyWeightImportDialog({
-  actor,
+  importer,
 }: {
-  readonly actor: ActorRefFrom<typeof bodyWeightImporterMachine>;
+  readonly importer: AtomMachine.ChildMachineAtom<
+    typeof BodyWeightImporterChild
+  >;
 }) {
-  const snapshot = useSelector(actor, (snapshot) => snapshot);
-  const importing = snapshot.matches("Submitting");
+  const [importerSnapshot, send] = useChildMachine(importer);
+
+  if (Option.isNone(importerSnapshot)) {
+    return null;
+  }
+
+  const snapshot = importerSnapshot.value;
+  const importing = BodyWeightImporterStates.matches(snapshot, "Submitting");
   const disabled = importing;
-  const canImport = snapshot.context.input.trim().length > 0;
+  const canImport = snapshot.value.input.trim().length > 0;
 
   return (
     <Modal
       animationType="fade"
       onRequestClose={() => {
         if (!disabled) {
-          actor.send({
-            type: "close",
-          });
+          send(BodyWeightImporterEvents.Close());
         }
       }}
       transparent
@@ -1371,9 +634,7 @@ function BodyWeightImportDialog({
         accessibilityRole="button"
         disabled={disabled}
         onPress={() => {
-          actor.send({
-            type: "close",
-          });
+          send(BodyWeightImporterEvents.Close());
         }}
         style={styles.editorBackdrop}
       >
@@ -1400,9 +661,7 @@ function BodyWeightImportDialog({
                   accessibilityRole="button"
                   disabled={disabled}
                   onPress={() => {
-                    actor.send({
-                      type: "close",
-                    });
+                    send(BodyWeightImporterEvents.Close());
                   }}
                   style={({ pressed }) => [
                     styles.editorCloseButton,
@@ -1415,8 +674,8 @@ function BodyWeightImportDialog({
                   <X color={color.textMuted} size={18} strokeWidth={3} />
                 </Pressable>
               </View>
-              {snapshot.context.message === null ? null : (
-                <Notice message={snapshot.context.message} tone="danger" />
+              {snapshot.value.message === null ? null : (
+                <Notice message={snapshot.value.message} tone="danger" />
               )}
               <TextArea
                 accessibilityLabel="Weight import rows"
@@ -1428,14 +687,11 @@ function BodyWeightImportDialog({
                 inputStyle={styles.importTextAreaInput}
                 key="weight-import-open"
                 onChangeText={(value) => {
-                  actor.send({
-                    type: "changeImportInput",
-                    value,
-                  });
+                  send(BodyWeightImporterEvents.ChangeImportInput({ value }));
                 }}
                 placeholder={"26-06-26 77.40\n26-06-23 77.40"}
                 scrollEnabled
-                value={snapshot.context.input}
+                value={snapshot.value.input}
               />
               <View style={styles.editorActions}>
                 <Button
@@ -1443,9 +699,7 @@ function BodyWeightImportDialog({
                   icon={Upload}
                   loading={importing}
                   onPress={() => {
-                    actor.send({
-                      type: "importWeights",
-                    });
+                    send(BodyWeightImporterEvents.ImportWeights());
                   }}
                   style={styles.editorAction}
                 >
@@ -1914,26 +1168,6 @@ function BodyWeightInsights({
 const CalendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const CalendarMonthModel = {
-  dateFromDateKey({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-    const [yearString, monthString, dayString] = dateKey.split("-");
-
-    return new Date(
-      Number(yearString),
-      Number(monthString) - 1,
-      Number(dayString)
-    );
-  },
-  dateKeyFromDate({
-    date,
-    fallbackDateKey,
-  }: {
-    readonly date: Date;
-    readonly fallbackDateKey: Domain.DateKey;
-  }) {
-    return Schema.decodeOption(Domain.DateKey)(dateKeyFromDate({ date })).pipe(
-      Option.getOrElse(() => fallbackDateKey)
-    );
-  },
   make({
     dateKey,
     entries,
@@ -1941,7 +1175,7 @@ const CalendarMonthModel = {
     readonly dateKey: Domain.DateKey;
     readonly entries: readonly Domain.BodyWeightEntry[];
   }) {
-    const displayedDate = CalendarMonthModel.dateFromDateKey({ dateKey });
+    const displayedDate = BodyWeightCalendarDates.dateFromDateKey({ dateKey });
     const monthIndex = displayedDate.getMonth();
     const firstOfMonth = new Date(displayedDate.getFullYear(), monthIndex, 1);
     const gridStartDate = new Date(
@@ -1959,13 +1193,13 @@ const CalendarMonthModel = {
           gridStartDate.getMonth(),
           gridStartDate.getDate() + index
         );
-        const cellDateKey = CalendarMonthModel.dateKeyFromDate({
+        const cellDateKey = BodyWeightCalendarDates.dateKeyFromDate({
           date: cellDate,
           fallbackDateKey: dateKey,
         });
         const isCurrentMonth = cellDate.getMonth() === monthIndex;
         const entry = isCurrentMonth
-          ? _findEntryForDateKey({
+          ? findBodyWeightEntryForDateKey({
               dateKey: cellDateKey,
               entries,
             })
@@ -2009,53 +1243,12 @@ const CalendarMonthModel = {
     };
   },
   monthLabel({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-    const date = CalendarMonthModel.dateFromDateKey({ dateKey });
+    const date = BodyWeightCalendarDates.dateFromDateKey({ dateKey });
 
     return new Intl.DateTimeFormat("en-US", {
       month: "long",
       year: "numeric",
     }).format(date);
-  },
-  range({ dateKey }: { readonly dateKey: Domain.DateKey }) {
-    const date = CalendarMonthModel.dateFromDateKey({ dateKey });
-    const startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-    const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-    return {
-      endDateKey: CalendarMonthModel.dateKeyFromDate({
-        date: endDate,
-        fallbackDateKey: dateKey,
-      }),
-      startDateKey: CalendarMonthModel.dateKeyFromDate({
-        date: startDate,
-        fallbackDateKey: dateKey,
-      }),
-    };
-  },
-  shiftDateKey({
-    dateKey,
-    months,
-  }: {
-    readonly dateKey: Domain.DateKey;
-    readonly months: number;
-  }) {
-    const date = CalendarMonthModel.dateFromDateKey({ dateKey });
-    const targetMonthIndex = date.getMonth() + months;
-    const targetMonthEndDate = new Date(
-      date.getFullYear(),
-      targetMonthIndex + 1,
-      0
-    );
-    const targetDate = new Date(
-      date.getFullYear(),
-      targetMonthIndex,
-      Math.min(date.getDate(), targetMonthEndDate.getDate())
-    );
-
-    return CalendarMonthModel.dateKeyFromDate({
-      date: targetDate,
-      fallbackDateKey: dateKey,
-    });
   },
 };
 
@@ -2174,37 +1367,6 @@ const BodyWeightChartDataModel = {
   },
 };
 
-function _monthNavigationContext({
-  context,
-  months,
-}: {
-  readonly context: typeof BodyWeightRouteContext.Type;
-  readonly months: number;
-}) {
-  const nextDateKey = CalendarMonthModel.shiftDateKey({
-    dateKey: context.dateKey,
-    months,
-  });
-
-  return {
-    dateKey: nextDateKey,
-    message: null,
-    monthEntries: [],
-    reportDateRange: context.reportDateRange,
-    reportDayCount: context.reportDayCount,
-  };
-}
-
-function _findEntryForDateKey({
-  dateKey,
-  entries,
-}: {
-  readonly dateKey: Domain.DateKey;
-  readonly entries: readonly Domain.BodyWeightEntry[];
-}) {
-  return entries.find((entry) => entry.dateKey === dateKey) ?? null;
-}
-
 function _dateKeyToDayIndex({ dateKey }: { readonly dateKey: Domain.DateKey }) {
   const [yearString, monthString, dayString] = dateKey.split("-");
   const year = Number(yearString);
@@ -2253,7 +1415,7 @@ function _formatChartDateLabel({
 }: {
   readonly dateKey: Domain.DateKey;
 }) {
-  const date = CalendarMonthModel.dateFromDateKey({ dateKey });
+  const date = BodyWeightCalendarDates.dateFromDateKey({ dateKey });
 
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
