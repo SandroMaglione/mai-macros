@@ -2,34 +2,13 @@ import { color, spacing } from "@/theme/tokens";
 import { formatNumber } from "@/lib/format";
 import { nutrientLabels } from "@/lib/nutrient-quality";
 import { Reporting, type Domain } from "@mai/nutrition";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
-import { setup } from "xstate";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  NutrientBreakdownEvents,
+  NutrientBreakdownMachine,
+} from "@/machines/nutrient-breakdown-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-
-const breakdownMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        includeEstimates: Schema.Boolean,
-        expanded: Schema.Boolean,
-      })
-    ),
-    events: {
-      estimates: Schema.toStandardSchemaV1(EmptyEvent),
-      expand: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-}).createMachine({
-  context: { includeEstimates: true, expanded: false },
-  on: {
-    estimates: ({ context }) => ({
-      context: { includeEstimates: !context.includeEstimates },
-    }),
-    expand: ({ context }) => ({ context: { expanded: !context.expanded } }),
-  },
-});
 
 export function NutrientBreakdown({
   includeEstimates: selectedIncludeEstimates,
@@ -42,10 +21,12 @@ export function NutrientBreakdown({
   readonly plan?: Domain.Plan;
   readonly divisor?: number;
 }) {
-  const [snapshot, , actor] = useMachine(breakdownMachine);
-  const { expanded } = snapshot.context;
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(NutrientBreakdownMachine)
+  );
+  const { expanded } = snapshot.value;
   const includeEstimates =
-    selectedIncludeEstimates ?? snapshot.context.includeEstimates;
+    selectedIncludeEstimates ?? snapshot.value.includeEstimates;
   return (
     <View style={styles.root}>
       {selectedIncludeEstimates === undefined ? (
@@ -54,7 +35,9 @@ export function NutrientBreakdown({
           <Switch
             accessibilityLabel="Include estimates"
             value={includeEstimates}
-            onValueChange={() => actor.trigger.estimates()}
+            onValueChange={() => {
+              send(NutrientBreakdownEvents.ToggleEstimates());
+            }}
             trackColor={{ true: color.primary }}
           />
         </View>
@@ -115,7 +98,9 @@ export function NutrientBreakdown({
         accessibilityLabel={
           expanded ? "Show main nutrients" : "Show all nutrients"
         }
-        onPress={() => actor.trigger.expand()}
+        onPress={() => {
+          send(NutrientBreakdownEvents.ToggleExpanded());
+        }}
       >
         <Text style={styles.link}>
           {expanded ? "Show main nutrients" : "Show all nutrients"}

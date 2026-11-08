@@ -1,7 +1,17 @@
-import { MealComparisons } from "@mai/nutrition";
-import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
-import { InsightsRuntimeClient } from "@/lib/insights-runtime-client";
 import { useDailyNutritionSummary } from "@/hooks/use-daily-nutrition-summary";
+import { useMachine, useMachineValue } from "@/hooks/use-machine";
+import { InsightsMachineAtoms } from "@/lib/insights-runtime-client";
+import {
+  DailyLogRouteEvents,
+  DailyLogRouteMachine,
+  DailyLogRouteStates,
+  WaterTrackerDisclosureEvents,
+  WaterTrackerDisclosureMachine,
+  WaterTrackerDisclosureStates,
+  type DailyLogViewData,
+  type RecordedDailyLogViewData,
+  type UnrecordedDailyLogViewData,
+} from "@/machines/daily-log-machine";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
 import { enterPinnedSummary, exitPinnedSummary } from "./pinned-summary-motion";
@@ -20,17 +30,12 @@ import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { shiftDateKey, todayDateKey } from "@/lib/date-keys";
 import { formatNumber } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
 import * as Domain from "@mai/nutrition/domain";
 import * as Reporting from "@mai/nutrition/reporting";
-import * as DailyLogs from "@mai/nutrition/services/daily-logs";
-import * as Foods from "@mai/nutrition/services/foods";
-import * as MealEntries from "@mai/nutrition/services/meal-entries";
-import { useMachine } from "@xstate/react";
 import { router } from "expo-router";
-import { Array, Effect, Match, Option, Schema } from "effect";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Option, Schema } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
   Activity,
@@ -49,41 +54,8 @@ import {
   Utensils,
 } from "lucide-react-native";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
-const OpenedDay = Schema.TaggedStruct("OpenedDay", {
-  dailyLog: Domain.DailyLog,
-  plans: Schema.Array(Domain.Plan),
-  selectedPlan: Domain.Plan,
-});
-
-const UnrecordedDay = Schema.TaggedStruct("UnrecordedDay", {
-  dateKey: Domain.DateKey,
-  plans: Schema.Array(Domain.Plan),
-  selectedPlan: Domain.Plan,
-});
-
-const RecordedDailyLogViewData = Schema.TaggedStruct("RecordedDay", {
-  day: OpenedDay,
-  foods: Schema.Array(Domain.Food),
-  mealEntries: Schema.Array(Domain.MealEntry),
-  comparisons: Schema.Array(MealComparisons.Baseline),
-});
-
-export type RecordedDailyLogViewData = typeof RecordedDailyLogViewData.Type;
-
-const UnrecordedDailyLogViewData = Schema.TaggedStruct("UnrecordedDay", {
-  day: UnrecordedDay,
-});
-
-export type UnrecordedDailyLogViewData = typeof UnrecordedDailyLogViewData.Type;
-
-const DailyLogViewData = Schema.Union([
-  RecordedDailyLogViewData,
-  UnrecordedDailyLogViewData,
-]);
-
-export type DailyLogViewData = typeof DailyLogViewData.Type;
+const canDeleteDayProjection = AtomMachine.can(DailyLogRouteEvents.DeleteDay());
 
 const dayModeOptions = [
   {
@@ -139,532 +111,18 @@ const dayModeConfirmationCopy = {
   }
 >;
 
-const LoadDailyLogResult = Schema.Union([
-  Schema.TaggedStruct("Ready", {
-    data: DailyLogViewData,
-  }),
-  Schema.TaggedStruct("NoMealPlans", {
-    dateKey: Domain.DateKey,
-  }),
-]);
-
-const DailyLogContext = Schema.Struct({
-  data: Schema.NullOr(DailyLogViewData),
-  dateKey: Domain.DateKey,
-  message: Schema.NullOr(Schema.String),
-});
-
-const DailyLogInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-});
-
-const CreateDailyLogInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  planId: Domain.PlanId,
-});
-
-const SetDailyLogModeInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  mode: Domain.DailyLogMode,
-});
-
-const SetWaterServingsInput = Schema.Struct({
-  dateKey: Domain.DateKey,
-  waterServings: Schema.NullOr(Domain.WaterServingCount),
-});
-
-const dailyLogRouteMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(DailyLogContext),
-    events: {
-      createDay: Schema.toStandardSchemaV1(EmptyEvent),
-      deleteDay: Schema.toStandardSchemaV1(EmptyEvent),
-      reload: Schema.toStandardSchemaV1(EmptyEvent),
-      setDayMode: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          mode: Domain.DailyLogMode,
-        })
-      ),
-      setWaterServings: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          waterServings: Schema.NullOr(Domain.WaterServingCount),
-        })
-      ),
-      selectPlan: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          plan: Domain.Plan,
-        })
-      ),
-    },
-    input: Schema.toStandardSchemaV1(DailyLogInput),
-  },
-  states: {
-    Loading: {},
-    Error: {},
-    Ready: {},
-    Creating: {},
-    Deleting: {},
-    Redirected: {},
-    UpdatingMode: {},
-    UpdatingWater: {},
-  },
-  actions: {
-    redirectToNewPlan: (params: { readonly dateKey: Domain.DateKey }) => {
-      router.replace({
-        pathname: "/plans/new",
-        params,
-      });
-    },
-  },
-  actors: {
-    createDailyLog: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(CreateDailyLogInput),
-        output: Schema.toStandardSchemaV1(DailyLogViewData),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const day = yield* dailyLogs.create({
-              input,
-            });
-
-            return {
-              _tag: "RecordedDay" as const,
-              day,
-              foods: [],
-              mealEntries: [],
-              comparisons: [],
-            };
-          })
-        ),
-    }),
-    deleteDailyLog: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(DailyLogInput),
-        output: Schema.toStandardSchemaV1(DailyLogViewData),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const removedDay = yield* dailyLogs.remove({
-              input,
-            });
-
-            return {
-              _tag: "UnrecordedDay" as const,
-              day: removedDay.day,
-            };
-          })
-        ),
-    }),
-    loadDailyLog: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(DailyLogInput),
-        output: Schema.toStandardSchemaV1(LoadDailyLogResult),
-      },
-      run: ({ input }) =>
-        InsightsRuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const foodsService = yield* Foods.Foods;
-            const mealEntriesService = yield* MealEntries.MealEntries;
-            const day = yield* input.dateKey === todayDateKey()
-              ? dailyLogs.openOrCreate({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                })
-              : dailyLogs.open({
-                  input: {
-                    dateKey: input.dateKey,
-                  },
-                });
-
-            if (day._tag === "UnrecordedDay") {
-              return {
-                _tag: "Ready" as const,
-                data: {
-                  _tag: "UnrecordedDay" as const,
-                  day,
-                },
-              };
-            }
-
-            const mealEntries = yield* mealEntriesService.listForDay({
-              input: {
-                dateKey: day.dailyLog.dateKey,
-              },
-            });
-            const foods = yield* foodsService.getMany({
-              input: {
-                foodIds: Domain.mealEntryFoodIds(mealEntries),
-              },
-            });
-
-            const reports = yield* NutritionReports.NutritionReports;
-            const report = yield* reports.getRange({
-              input: {
-                startDateKey: shiftDateKey({
-                  dateKey: input.dateKey,
-                  days: -MealComparisons.LOOKBACK_DAYS,
-                }),
-                endDateKey: shiftDateKey({ dateKey: input.dateKey, days: -1 }),
-              },
-            });
-            const comparisons = MealComparisons.buildBaselines({
-              report,
-              dateKey: input.dateKey,
-              planId: day.selectedPlan.id,
-            });
-
-            return {
-              _tag: "Ready" as const,
-              data: {
-                _tag: "RecordedDay" as const,
-                day,
-                foods,
-                mealEntries,
-                comparisons,
-              },
-            };
-          }).pipe(
-            Effect.catchTag("NoMealPlans", ({ dateKey: noPlanDateKey }) =>
-              Effect.succeed({
-                _tag: "NoMealPlans" as const,
-                dateKey: noPlanDateKey,
-              })
-            )
-          )
-        ),
-    }),
-    setDailyLogMode: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SetDailyLogModeInput),
-        output: Schema.toStandardSchemaV1(Domain.DailyLog),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const changedDay = yield* dailyLogs.setMode({ input });
-
-            return changedDay.dailyLog;
-          })
-        ),
-    }),
-    setWaterServings: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SetWaterServingsInput),
-        output: Schema.toStandardSchemaV1(Domain.DailyLog),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const dailyLogs = yield* DailyLogs.DailyLogs;
-            const changedDay = yield* dailyLogs.setWaterServings({ input });
-
-            return changedDay.dailyLog;
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    data: null,
-    dateKey: input.dateKey,
-    message: null,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "loadDailyLog",
-        input: ({ context }) => ({
-          dateKey: context.dateKey,
-        }),
-        onDone: ({ event, actions }, enq) =>
-          Match.value(event.output).pipe(
-            Match.tagsExhaustive({
-              NoMealPlans: ({ dateKey }) => {
-                enq(actions.redirectToNewPlan, { dateKey });
-
-                return { target: "Redirected" as const };
-              },
-              Ready: ({ data }) => ({
-                target: "Ready" as const,
-                context: {
-                  data,
-                  message: null,
-                },
-              }),
-            })
-          ),
-        onError: ({ event }) => ({
-          target: "Error",
-          context: {
-            message:
-              event.error instanceof Error
-                ? event.error.message
-                : "Could not load the daily log.",
-          },
-        }),
-      },
-    },
-    Error: {
-      on: {
-        reload: {
-          target: "Loading",
-          context: {
-            data: null,
-            message: null,
-          },
-        },
-      },
-    },
-    Ready: {
-      on: {
-        createDay: {
-          target: "Creating",
-        },
-        deleteDay: ({ context }) => {
-          if (
-            context.data === null ||
-            context.data._tag !== "RecordedDay" ||
-            Array.isReadonlyArrayNonEmpty(context.data.mealEntries) ||
-            context.data.day.dailyLog.waterServings !== null
-          ) {
-            return undefined;
-          }
-
-          return {
-            target: "Deleting",
-            context: {
-              message: null,
-            },
-          };
-        },
-        reload: {
-          target: "Loading",
-          context: {
-            data: null,
-            message: null,
-          },
-        },
-        setDayMode: ({ context }) => {
-          if (context.data === null || context.data._tag !== "RecordedDay") {
-            return undefined;
-          }
-
-          return {
-            target: "UpdatingMode",
-            context: {
-              message: null,
-            },
-          };
-        },
-        setWaterServings: ({ context }) => {
-          if (context.data === null || context.data._tag !== "RecordedDay") {
-            return undefined;
-          }
-
-          return {
-            target: "UpdatingWater",
-            context: {
-              message: null,
-            },
-          };
-        },
-        selectPlan: ({ context, event }) => {
-          if (context.data === null || context.data._tag !== "UnrecordedDay") {
-            return undefined;
-          }
-
-          return {
-            context: {
-              data: {
-                _tag: "UnrecordedDay" as const,
-                day: new DailyLogs.UnrecordedDay({
-                  dateKey: context.data.day.dateKey,
-                  plans: context.data.day.plans,
-                  selectedPlan: event.plan,
-                }),
-              },
-              message: null,
-            },
-          };
-        },
-      },
-    },
-    Deleting: {
-      invoke: {
-        src: "deleteDailyLog",
-        input: ({ context }) => {
-          if (context.data === null || context.data._tag !== "RecordedDay") {
-            throw new Error("Cannot delete a day before it loads.");
-          }
-
-          return {
-            dateKey: context.data.day.dailyLog.dateKey,
-          };
-        },
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: {
-            data: event.output,
-            message: null,
-          },
-        }),
-        onError: {
-          target: "Ready",
-          context: {
-            message: "Could not delete this day. Please try again.",
-          },
-        },
-      },
-    },
-    Creating: {
-      invoke: {
-        src: "createDailyLog",
-        input: ({ context }) => {
-          if (context.data === null || context.data._tag !== "UnrecordedDay") {
-            throw new Error("Cannot create a day before it loads.");
-          }
-
-          return {
-            dateKey: context.data.day.dateKey,
-            planId: context.data.day.selectedPlan.id,
-          };
-        },
-        onDone: ({ event }) => ({
-          target: "Ready",
-          context: {
-            data: event.output,
-            message: null,
-          },
-        }),
-        onError: {
-          target: "Ready",
-          context: {
-            message: "Could not create this day. Please try again.",
-          },
-        },
-      },
-    },
-    UpdatingMode: {
-      invoke: {
-        src: "setDailyLogMode",
-        input: ({ context, event }) => {
-          if (
-            context.data === null ||
-            context.data._tag !== "RecordedDay" ||
-            event.type !== "setDayMode"
-          ) {
-            throw new Error("Cannot change a day mode before it loads.");
-          }
-
-          return {
-            dateKey: context.data.day.dailyLog.dateKey,
-            mode: event.mode,
-          };
-        },
-        onDone: ({ context, event }) => {
-          if (context.data === null || context.data._tag !== "RecordedDay") {
-            return {
-              target: "Loading" as const,
-            };
-          }
-
-          return {
-            target: "Ready" as const,
-            context: {
-              data: {
-                ...context.data,
-                day: {
-                  ...context.data.day,
-                  dailyLog: event.output,
-                },
-              },
-              message: null,
-            },
-          };
-        },
-        onError: {
-          target: "Ready",
-          context: {
-            message: "Could not change this day mode. Please try again.",
-          },
-        },
-      },
-    },
-    UpdatingWater: {
-      invoke: {
-        src: "setWaterServings",
-        input: ({ context, event }) => {
-          if (
-            context.data === null ||
-            context.data._tag !== "RecordedDay" ||
-            event.type !== "setWaterServings"
-          ) {
-            throw new Error("Cannot change daily water before the day loads.");
-          }
-
-          return {
-            dateKey: context.data.day.dailyLog.dateKey,
-            waterServings: event.waterServings,
-          };
-        },
-        onDone: ({ context, event }) => {
-          if (context.data === null || context.data._tag !== "RecordedDay") {
-            return {
-              target: "Loading" as const,
-            };
-          }
-
-          return {
-            target: "Ready" as const,
-            context: {
-              data: {
-                ...context.data,
-                day: {
-                  ...context.data.day,
-                  dailyLog: event.output,
-                },
-              },
-              message: null,
-            },
-          };
-        },
-        onError: {
-          target: "Ready",
-          context: {
-            message: "Could not update daily water. Please try again.",
-          },
-        },
-      },
-    },
-    Redirected: {},
-  },
-});
-
 export function DailyLogRoute({
   dateKey,
 }: {
   readonly dateKey: Domain.DateKey;
 }) {
-  const [snapshot, , actor] = useMachine(dailyLogRouteMachine, {
-    input: {
-      dateKey,
-    },
-  });
-  const deleteDayEvent = {
-    type: "deleteDay",
-  } as const;
-  const routeState = snapshot.value;
+  const [snapshot, send, machine] = useMachine(() =>
+    InsightsMachineAtoms.make(DailyLogRouteMachine, { dateKey })
+  );
+  const canDeleteDay = useMachineValue(canDeleteDayProjection(machine));
+  const routeState = snapshot.state;
 
-  if (routeState === "Loading" || routeState === "Redirected") {
+  if (routeState.path === "Loading" || routeState.path === "Redirected") {
     return (
       <AppScreen contentStyle={styles.loadingContent}>
         <LoadingView message="Loading daily log" />
@@ -672,17 +130,17 @@ export function DailyLogRoute({
     );
   }
 
-  if (routeState === "Error") {
+  if (routeState.path === "Failed") {
     return (
       <AppScreen contentStyle={styles.centeredContent}>
         <Notice
-          message={snapshot.context.message ?? "Could not load the daily log."}
+          message={routeState.value.message}
           title="Daily log unavailable"
           tone="danger"
         />
         <Button
           onPress={() => {
-            actor.trigger.reload();
+            send(DailyLogRouteEvents.Reload());
           }}
           style={styles.retryButton}
           variant="secondary"
@@ -693,35 +151,29 @@ export function DailyLogRoute({
     );
   }
 
-  return snapshot.context.data === null ? (
-    <AppScreen contentStyle={styles.loadingContent}>
-      <LoadingView message="Loading daily log" />
-    </AppScreen>
-  ) : (
+  return (
     <DailyLogView
-      canDeleteDay={snapshot.can(deleteDayEvent)}
-      data={snapshot.context.data}
+      canDeleteDay={canDeleteDay}
+      data={routeState.value.data}
       disabled={
-        routeState === "Creating" ||
-        routeState === "Deleting" ||
-        routeState === "UpdatingMode" ||
-        routeState === "UpdatingWater"
+        !DailyLogRouteStates.matches(snapshot, "Recorded.Ready") &&
+        !DailyLogRouteStates.matches(snapshot, "Unrecorded.Ready")
       }
-      notice={snapshot.context.message}
+      notice={routeState.value.message}
       onCreateDay={() => {
-        actor.trigger.createDay();
+        send(DailyLogRouteEvents.CreateDay());
       }}
       onDeleteDay={() => {
-        actor.trigger.deleteDay();
+        send(DailyLogRouteEvents.DeleteDay());
       }}
       onSelectPlan={(plan) => {
-        actor.trigger.selectPlan({ plan });
+        send(DailyLogRouteEvents.SelectPlan({ plan }));
       }}
       onSetDayMode={(mode) => {
-        actor.trigger.setDayMode({ mode });
+        send(DailyLogRouteEvents.SetDayMode({ mode }));
       }}
       onSetWaterServings={(waterServings) => {
-        actor.trigger.setWaterServings({ waterServings });
+        send(DailyLogRouteEvents.SetWaterServings({ waterServings }));
       }}
     />
   );
@@ -951,36 +403,6 @@ function RecordedDailyLogView({
 
 const waterServingsPerRow = 8;
 
-const waterTrackerDisclosureMachine = setup({
-  schemas: {
-    events: {
-      toggle: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Collapsed: {},
-    Expanded: {},
-  },
-}).createMachine({
-  initial: "Collapsed",
-  states: {
-    Collapsed: {
-      on: {
-        toggle: {
-          target: "Expanded",
-        },
-      },
-    },
-    Expanded: {
-      on: {
-        toggle: {
-          target: "Collapsed",
-        },
-      },
-    },
-  },
-});
-
 function WaterTracker({
   disabled,
   onSetWaterServings,
@@ -992,10 +414,13 @@ function WaterTracker({
   ) => void;
   readonly waterServings: Domain.WaterServingCount | null;
 }) {
-  const [disclosureSnapshot, , disclosureActor] = useMachine(
-    waterTrackerDisclosureMachine
+  const [disclosureSnapshot, sendDisclosure] = useMachine(() =>
+    AtomMachine.make(WaterTrackerDisclosureMachine)
   );
-  const isExpanded = disclosureSnapshot.matches("Expanded");
+  const isExpanded = WaterTrackerDisclosureStates.matches(
+    disclosureSnapshot,
+    "Expanded"
+  );
   const recordedWaterServings = waterServings ?? 0;
   const visibleDropCount =
     (Math.floor(recordedWaterServings / waterServingsPerRow) + 1) *
@@ -1018,7 +443,9 @@ function WaterTracker({
             accessibilityRole="button"
             accessibilityState={{ disabled, expanded: isExpanded }}
             disabled={disabled}
-            onPress={disclosureActor.trigger.toggle}
+            onPress={() => {
+              sendDisclosure(WaterTrackerDisclosureEvents.Toggle());
+            }}
             style={({ pressed }) => [
               styles.waterTrackerToggle,
               pressed ? styles.pressed : null,

@@ -1,7 +1,11 @@
 import { color, radius, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  InputSelectDialogEvents,
+  InputSelectDialogMachine,
+  InputSelectDialogStates,
+} from "@/machines/input-select-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Check, ChevronDown } from "lucide-react-native";
 import {
   ActionSheetIOS,
@@ -13,40 +17,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { setup } from "xstate";
 
 export type InputSelectOption<Value extends string> = {
   readonly accessibilityLabel?: string;
   readonly label: string;
   readonly value: Value;
 };
-
-const inputSelectDialogMachine = setup({
-  schemas: {
-    events: {
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      open: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Closed: {},
-    Open: {},
-  },
-}).createMachine({
-  initial: "Closed",
-  states: {
-    Closed: {
-      on: {
-        open: { target: "Open" },
-      },
-    },
-    Open: {
-      on: {
-        close: { target: "Closed" },
-      },
-    },
-  },
-});
 
 export function InputSelect<Value extends string>({
   disabled = false,
@@ -65,10 +41,14 @@ export function InputSelect<Value extends string>({
   readonly title: string;
   readonly variant?: "default" | "header";
 }) {
-  const [snapshot, , actor] = useMachine(inputSelectDialogMachine);
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(InputSelectDialogMachine)
+  );
   const selectedOption =
     options.find((option) => option.value === selectedValue) ?? options[0];
-  const close = actor.trigger.close;
+  const close = () => {
+    send(InputSelectDialogEvents.Close());
+  };
   const open = () => {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -89,7 +69,7 @@ export function InputSelect<Value extends string>({
       return;
     }
 
-    actor.trigger.open();
+    send(InputSelectDialogEvents.Open());
   };
 
   return (
@@ -133,7 +113,7 @@ export function InputSelect<Value extends string>({
         animationType="fade"
         onRequestClose={close}
         transparent
-        visible={snapshot.matches("Open")}
+        visible={InputSelectDialogStates.matches(snapshot, "Open")}
       >
         <Pressable
           accessibilityRole="button"

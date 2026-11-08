@@ -8,8 +8,13 @@ import {
   InsightDateRange,
   insightRangeDayCount,
 } from "@mai/machines/insight-range";
-import { EmptyEvent } from "@mai/machines/schemas";
-import { useMachine } from "@xstate/react";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  InsightRangeEditorEvents,
+  InsightRangeEditorMachine,
+  InsightRangeEditorStates,
+} from "@/machines/insight-range-editor-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { Option, Schema } from "effect";
 import {
   KeyboardAvoidingView,
@@ -19,49 +24,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { setup } from "xstate";
-
-const rangeEditorMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        open: Schema.Boolean,
-        start: Schema.String,
-        end: Schema.String,
-        message: Schema.NullOr(Schema.String),
-      })
-    ),
-    events: {
-      open: Schema.toStandardSchemaV1(
-        Schema.Struct({ start: Schema.String, end: Schema.String })
-      ),
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      start: Schema.toStandardSchemaV1(Schema.Struct({ value: Schema.String })),
-      end: Schema.toStandardSchemaV1(Schema.Struct({ value: Schema.String })),
-      invalid: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-}).createMachine({
-  context: { open: false, start: "", end: "", message: null },
-  on: {
-    open: ({ event }) => ({
-      context: {
-        open: true,
-        start: event.start,
-        end: event.end,
-        message: null,
-      },
-    }),
-    close: () => ({ context: { open: false } }),
-    start: ({ event }) => ({ context: { start: event.value, message: null } }),
-    end: ({ event }) => ({ context: { end: event.value, message: null } }),
-    invalid: () => ({
-      context: {
-        message: "Enter valid dates as YYYY-MM-DD, with From on or before To.",
-      },
-    }),
-  },
-});
 
 export function InsightRangeSelect({
   compact = false,
@@ -77,7 +39,10 @@ export function InsightRangeSelect({
     dateRange: InsightDateRange | null
   ) => void;
 }) {
-  const [snapshot, , actor] = useMachine(rangeEditorMachine);
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(InsightRangeEditorMachine)
+  );
+  const editor = snapshot.value;
   return (
     <>
       <InputSelect
@@ -99,12 +64,14 @@ export function InsightRangeSelect({
         onSelect={(value) => {
           if (value === "custom") {
             const end = dateRange?.endDateKey ?? todayDateKey();
-            actor.trigger.open({
-              start:
-                dateRange?.startDateKey ??
-                shiftDateKey({ dateKey: end, days: -(rangeDayCount - 1) }),
-              end,
-            });
+            send(
+              InsightRangeEditorEvents.Open({
+                start:
+                  dateRange?.startDateKey ??
+                  shiftDateKey({ dateKey: end, days: -(rangeDayCount - 1) }),
+                end,
+              })
+            );
           } else if (value === "7" || value === "30" || value === "90") {
             onSelect(Number(value), null);
           }
@@ -112,9 +79,11 @@ export function InsightRangeSelect({
       />
       <Modal
         transparent
-        visible={snapshot.context.open}
+        visible={InsightRangeEditorStates.matches(snapshot, "Open")}
         animationType="fade"
-        onRequestClose={actor.trigger.close}
+        onRequestClose={() => {
+          send(InsightRangeEditorEvents.Close());
+        }}
       >
         <KeyboardAvoidingView behavior="padding" style={styles.keyboard}>
           <ScrollView
@@ -128,37 +97,46 @@ export function InsightRangeSelect({
                 accessibilityLabel="Range start date"
                 placeholder="YYYY-MM-DD"
                 autoCapitalize="none"
-                value={snapshot.context.start}
-                onChangeText={(value) => actor.trigger.start({ value })}
+                value={editor.start}
+                onChangeText={(value) => {
+                  send(InsightRangeEditorEvents.ChangeStart({ value }));
+                }}
               />
               <Field
                 label="To"
                 accessibilityLabel="Range end date"
                 placeholder="YYYY-MM-DD"
                 autoCapitalize="none"
-                value={snapshot.context.end}
-                onChangeText={(value) => actor.trigger.end({ value })}
+                value={editor.end}
+                onChangeText={(value) => {
+                  send(InsightRangeEditorEvents.ChangeEnd({ value }));
+                }}
               />
               <Button
                 onPress={() => {
                   const range = Schema.decodeOption(InsightDateRange)({
-                    startDateKey: snapshot.context.start.trim(),
-                    endDateKey: snapshot.context.end.trim(),
+                    startDateKey: editor.start.trim(),
+                    endDateKey: editor.end.trim(),
                   });
                   if (Option.isNone(range)) {
-                    actor.trigger.invalid();
+                    send(InsightRangeEditorEvents.Invalid());
                     return;
                   }
                   onSelect(insightRangeDayCount(range.value), range.value);
-                  actor.trigger.close();
+                  send(InsightRangeEditorEvents.Close());
                 }}
               >
                 Apply
               </Button>
-              {snapshot.context.message === null ? null : (
-                <Notice message={snapshot.context.message} tone="danger" />
+              {editor.message === null ? null : (
+                <Notice message={editor.message} tone="danger" />
               )}
-              <Button variant="secondary" onPress={actor.trigger.close}>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  send(InsightRangeEditorEvents.Close());
+                }}
+              >
                 Cancel
               </Button>
             </View>

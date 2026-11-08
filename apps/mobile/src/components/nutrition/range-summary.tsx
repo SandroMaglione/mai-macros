@@ -1,10 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { EmptyEvent } from "@mai/machines/schemas";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  CostCoverageDialogEvents,
+  CostCoverageDialogMachine,
+  CostCoverageDialogStates,
+  RangeSummaryListEvents,
+  RangeSummaryListMachine,
+  RangeSummaryListStates,
+} from "@/machines/range-summary-machine";
 import * as Reporting from "@mai/nutrition/reporting";
 import * as NutritionReports from "@mai/nutrition/services/nutrition-reports";
-import { useMachine } from "@xstate/react";
-import { Array, Schema } from "effect";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
+import { Array } from "effect";
 import type { LucideIcon } from "lucide-react-native";
 import {
   ChevronDown,
@@ -24,7 +32,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { setup } from "xstate";
 
 import {
   formatCurrencyMinor,
@@ -129,52 +136,6 @@ const targetTrendIndicators = {
   }
 >;
 
-const listVisibilityMachine = setup({
-  schemas: {
-    events: {
-      collapse: Schema.toStandardSchemaV1(EmptyEvent),
-      expand: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  states: {
-    Collapsed: {},
-    Expanded: {},
-  },
-}).createMachine({
-  initial: "Collapsed",
-  states: {
-    Collapsed: {
-      on: {
-        expand: {
-          target: "Expanded",
-        },
-      },
-    },
-    Expanded: {
-      on: {
-        collapse: {
-          target: "Collapsed",
-        },
-      },
-    },
-  },
-});
-
-const costCoverageDialogMachine = setup({
-  schemas: {
-    events: {
-      close: Schema.toStandardSchemaV1(EmptyEvent),
-      open: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-}).createMachine({
-  initial: "Closed",
-  states: {
-    Closed: { on: { open: { target: "Open" } } },
-    Open: { on: { close: { target: "Closed" } } },
-  },
-});
-
 export function RangeSummary({
   includeEstimates = true,
   rangeDayCount,
@@ -184,8 +145,8 @@ export function RangeSummary({
   readonly rangeDayCount: number;
   readonly report: NutritionReports.NutritionReportRange;
 }) {
-  const [costCoverageSnapshot, , costCoverageActor] = useMachine(
-    costCoverageDialogMachine
+  const [costCoverageSnapshot, sendCostCoverage] = useMachine(() =>
+    AtomMachine.make(CostCoverageDialogMachine)
   );
   const countedDays = NutritionReports.countedNutritionDays({ report });
   const dayCount = countedDays.length;
@@ -427,7 +388,9 @@ export function RangeSummary({
           />
           <SecondaryMetricBalanceCard
             label="Costs recorded"
-            onPress={costCoverageActor.trigger.open}
+            onPress={() => {
+              sendCostCoverage(CostCoverageDialogEvents.Open());
+            }}
             showTargetStatus={false}
             value={`${pricedEntryCount} / ${allEntries.length}`}
           />
@@ -446,10 +409,12 @@ export function RangeSummary({
 
       <CostCoverageDialog
         foods={unresolvedFoodCosts}
-        onClose={costCoverageActor.trigger.close}
+        onClose={() => {
+          sendCostCoverage(CostCoverageDialogEvents.Close());
+        }}
         pricedEntryCount={pricedEntryCount}
         totalEntryCount={allEntries.length}
-        visible={costCoverageSnapshot.matches("Open")}
+        visible={CostCoverageDialogStates.matches(costCoverageSnapshot, "Open")}
       />
 
       <View style={styles.section}>
@@ -578,8 +543,10 @@ function SummaryInsights({
   readonly allInsights: readonly NutritionReportInsight[];
   readonly insights: readonly NutritionReportInsight[];
 }) {
-  const [snapshot, , actor] = useMachine(listVisibilityMachine);
-  const isExpanded = snapshot.value === "Expanded";
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(RangeSummaryListMachine)
+  );
+  const isExpanded = RangeSummaryListStates.matches(snapshot, "Expanded");
   const visibleInsights = isExpanded ? allInsights : insights;
   const canToggle = allInsights.length > insights.length;
   const ToggleIcon = isExpanded ? ChevronUp : ChevronDown;
@@ -623,11 +590,11 @@ function SummaryInsights({
           icon={ToggleIcon}
           onPress={() => {
             if (isExpanded) {
-              actor.trigger.collapse();
+              send(RangeSummaryListEvents.Collapse());
               return;
             }
 
-            actor.trigger.expand();
+            send(RangeSummaryListEvents.Expand());
           }}
           style={styles.summaryToggle}
           variant="ghost"
@@ -856,8 +823,10 @@ function FoodContributorRows({
   readonly getValue: (food: FoodContributor) => number;
   readonly rowKeyPrefix: string;
 }) {
-  const [snapshot, , actor] = useMachine(listVisibilityMachine);
-  const isExpanded = snapshot.value === "Expanded";
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(RangeSummaryListMachine)
+  );
+  const isExpanded = RangeSummaryListStates.matches(snapshot, "Expanded");
   const canToggle = foods.length > foodContributorPreviewLimit;
   const visibleFoods = isExpanded
     ? foods
@@ -906,11 +875,11 @@ function FoodContributorRows({
             accessibilityState={{ expanded: isExpanded }}
             onPress={() => {
               if (isExpanded) {
-                actor.trigger.collapse();
+                send(RangeSummaryListEvents.Collapse());
                 return;
               }
 
-              actor.trigger.expand();
+              send(RangeSummaryListEvents.Expand());
             }}
             style={({ pressed }) => [
               styles.foodContributorToggle,

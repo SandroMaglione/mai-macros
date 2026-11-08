@@ -1,51 +1,20 @@
-import { EmptyEvent } from "@mai/machines/schemas";
-import { dailySummaryNutrients } from "@/lib/daily-summary-nutrients";
-import { useMachine } from "@xstate/react";
-import { Schema } from "effect";
+import { useMachine } from "@/hooks/use-machine";
+import {
+  DailyNutritionSummaryEvents,
+  DailyNutritionSummaryMachine,
+} from "@/machines/daily-nutrition-summary-machine";
+import { AtomMachine } from "@typeonce/effect-machine/reactivity";
 import { useRef } from "react";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from "react-native";
-import { setup } from "xstate";
-
-const SummaryNutrient = Schema.Literals(
-  dailySummaryNutrients.map(({ name }) => name)
-);
-
-export const dailyNutritionSummaryMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(
-      Schema.Struct({
-        mode: Schema.Literals(["consumed", "remaining"]),
-        pinned: Schema.Boolean,
-        nutrient: SummaryNutrient,
-      })
-    ),
-    events: {
-      toggle: Schema.toStandardSchemaV1(EmptyEvent),
-      selectNutrient: Schema.toStandardSchemaV1(
-        Schema.Struct({ nutrient: SummaryNutrient })
-      ),
-      setPinned: Schema.toStandardSchemaV1(
-        Schema.Struct({ pinned: Schema.Boolean })
-      ),
-    },
-  },
-}).createMachine({
-  context: { mode: "consumed", pinned: false, nutrient: "energyKcal" },
-  on: {
-    toggle: ({ context }) => ({
-      context: { mode: context.mode === "consumed" ? "remaining" : "consumed" },
-    }),
-    setPinned: ({ event }) => ({ context: { pinned: event.pinned } }),
-    selectNutrient: ({ event }) => ({ context: { nutrient: event.nutrient } }),
-  },
-});
 
 export function useDailyNutritionSummary(initialScrollY: number) {
-  const [snapshot, , actor] = useMachine(dailyNutritionSummaryMachine);
+  const [snapshot, send] = useMachine(() =>
+    AtomMachine.make(DailyNutritionSummaryMachine)
+  );
   const scrollY = useRef(initialScrollY);
   const summaryBottom = useRef<number | null>(null);
   const pinned = useRef(false);
@@ -55,15 +24,23 @@ export function useDailyNutritionSummary(initialScrollY: number) {
       scrollY.current >= summaryBottom.current;
     if (next !== pinned.current) {
       pinned.current = next;
-      actor.trigger.setPinned({ pinned: next });
+      send(DailyNutritionSummaryEvents.SetPinned({ pinned: next }));
     }
   };
   return {
-    mode: snapshot.context.mode,
-    pinned: snapshot.context.pinned,
-    nutrient: snapshot.context.nutrient,
-    selectNutrient: actor.trigger.selectNutrient,
-    toggle: actor.trigger.toggle,
+    mode: snapshot.value.mode,
+    pinned: snapshot.value.pinned,
+    nutrient: snapshot.value.nutrient,
+    selectNutrient: ({
+      nutrient,
+    }: {
+      readonly nutrient: typeof snapshot.value.nutrient;
+    }) => {
+      send(DailyNutritionSummaryEvents.SelectNutrient({ nutrient }));
+    },
+    toggle: () => {
+      send(DailyNutritionSummaryEvents.Toggle());
+    },
     onSummaryLayout: ({ nativeEvent }: LayoutChangeEvent) => {
       summaryBottom.current = nativeEvent.layout.y + nativeEvent.layout.height;
       syncPinned();
