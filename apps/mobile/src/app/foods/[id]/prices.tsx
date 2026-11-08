@@ -6,14 +6,21 @@ import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
 import { SectionCard } from "@/components/ui/section-card";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
 import { formatCurrencyMinor, formatNumber } from "@/lib/format";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  FoodPricesEvents,
+  FoodPricesLoaderEvents,
+  FoodPricesLoaderMachine,
+  FoodPricesMachine,
+  FoodPricesStates,
+  type FoodPricesData,
+} from "@/machines/food-prices-machine";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
-import { Domain, Foods, Measurements } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Array, DateTime, Effect, Option, Schema } from "effect";
+import { Domain, Measurements } from "@mai/nutrition";
+import { Array, DateTime, Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import {
   Check,
@@ -26,370 +33,41 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
-import { createAsyncLogic, setup } from "xstate";
 
 const RouteParams = Schema.Struct({ id: Domain.FoodId });
-
-const PriceForm = Schema.Struct({
-  price: Schema.String,
-  quantityAmount: Schema.String,
-  quantityUnit: Domain.MeasurementUnit,
-});
-
-const Context = Schema.Struct({
-  food: Schema.NullOr(Domain.Food),
-  foodId: Domain.FoodId,
-  form: PriceForm,
-  message: Schema.NullOr(Schema.String),
-  messageTone: Schema.Literals(["danger", "success"]),
-  selectedPriceId: Schema.NullOr(Domain.FoodPriceId),
-});
-
-const PriceIdEvent = Schema.Struct({ priceId: Domain.FoodPriceId });
-const ChangeTextEvent = Schema.Struct({ value: Schema.String });
-const ChangeUnitEvent = Schema.Struct({ unit: Domain.MeasurementUnit });
-const PriceMutationInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  form: PriceForm,
-});
-const PriceEditInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  form: PriceForm,
-  priceId: Domain.FoodPriceId,
-});
-const PriceSelectionInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  priceId: Schema.NullOr(Domain.FoodPriceId),
-});
-
-const foodOutput = Schema.Struct({ food: Domain.Food });
-
-const priceManagerMachine = setup({
-  schemas: {
-    context: Schema.toStandardSchemaV1(Context),
-    events: {
-      add: Schema.toStandardSchemaV1(EmptyEvent),
-      cancel: Schema.toStandardSchemaV1(EmptyEvent),
-      changePrice: Schema.toStandardSchemaV1(ChangeTextEvent),
-      changeQuantityAmount: Schema.toStandardSchemaV1(ChangeTextEvent),
-      changeQuantityUnit: Schema.toStandardSchemaV1(ChangeUnitEvent),
-      clearCurrent: Schema.toStandardSchemaV1(EmptyEvent),
-      edit: Schema.toStandardSchemaV1(PriceIdEvent),
-      remove: Schema.toStandardSchemaV1(PriceIdEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-      select: Schema.toStandardSchemaV1(PriceIdEvent),
-      submit: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-    input: Schema.toStandardSchemaV1(Schema.Struct({ foodId: Domain.FoodId })),
-  },
-  actors: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({ foodId: Domain.FoodId })
-        ),
-        output: Schema.toStandardSchemaV1(foodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return { food: yield* foods.get({ input }) };
-          })
-        ),
-    }),
-    addPrice: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PriceMutationInput),
-        output: Schema.toStandardSchemaV1(foodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.addFoodPrice({
-              input: _priceInput(input),
-            });
-            return { food: result.food };
-          })
-        ),
-    }),
-    editPrice: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PriceEditInput),
-        output: Schema.toStandardSchemaV1(foodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.editFoodPrice({
-              input: { ..._priceInput(input), priceId: input.priceId },
-            });
-            return { food: result.food };
-          })
-        ),
-    }),
-    removePrice: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(
-          Schema.Struct({
-            foodId: Domain.FoodId,
-            priceId: Domain.FoodPriceId,
-          })
-        ),
-        output: Schema.toStandardSchemaV1(foodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.removeFoodPrice({ input });
-            return { food: result.food };
-          })
-        ),
-    }),
-    selectPrice: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(PriceSelectionInput),
-        output: Schema.toStandardSchemaV1(foodOutput),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            const result = yield* foods.selectCurrentFoodPrice({ input });
-            return { food: result.food };
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    food: null,
-    foodId: input.foodId,
-    form: { price: "", quantityAmount: "1", quantityUnit: "kg" },
-    message: null,
-    messageTone: "success",
-    selectedPriceId: null,
-  }),
-  initial: "Loading",
-  on: {
-    changePrice: ({ context, event }) => ({
-      context: { form: { ...context.form, price: event.value } },
-    }),
-    changeQuantityAmount: ({ context, event }) => ({
-      context: { form: { ...context.form, quantityAmount: event.value } },
-    }),
-    changeQuantityUnit: ({ context, event }) => ({
-      context: { form: { ...context.form, quantityUnit: event.unit } },
-    }),
-  },
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: { food: event.output.food },
-        }),
-        onError: {
-          target: "LoadFailed",
-          context: { message: "Could not load prices for this food." },
-        },
-      },
-    },
-    LoadFailed: {
-      on: { retry: { target: "Loading", context: { message: null } } },
-    },
-    Listing: {
-      on: {
-        add: {
-          target: "Adding",
-          context: {
-            form: { price: "", quantityAmount: "1", quantityUnit: "kg" },
-            message: null,
-            selectedPriceId: null,
-          },
-        },
-        clearCurrent: {
-          target: "Selecting",
-          context: { selectedPriceId: null },
-        },
-        edit: ({ context, event }) => {
-          const price = context.food?.prices.find(
-            (candidate) => candidate.id === event.priceId
-          );
-          if (price === undefined) return;
-          return {
-            target: "Editing",
-            context: {
-              form: {
-                price: `${price.priceMinor / 10 ** (price.currency === "JPY" ? 0 : 2)}`,
-                quantityAmount: `${price.referenceQuantity.amount}`,
-                quantityUnit: price.referenceQuantity.unit,
-              },
-              message: null,
-              selectedPriceId: price.id,
-            },
-          };
-        },
-        remove: {
-          target: "Removing",
-          context: ({ event }) => ({ selectedPriceId: event.priceId }),
-        },
-        select: {
-          target: "Selecting",
-          context: ({ event }) => ({ selectedPriceId: event.priceId }),
-        },
-      },
-    },
-    Adding: {
-      on: {
-        cancel: { target: "Listing", context: { message: null } },
-        submit: { target: "SavingAdd" },
-      },
-    },
-    Editing: {
-      on: {
-        cancel: { target: "Listing", context: { message: null } },
-        submit: { target: "SavingEdit" },
-      },
-    },
-    SavingAdd: {
-      invoke: {
-        src: "addPrice",
-        input: ({ context }) => ({
-          foodId: context.foodId,
-          form: context.form,
-        }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: {
-            food: event.output.food,
-            message:
-              event.output.food.prices.length === 1
-                ? "Price added and selected as current."
-                : "Price added.",
-            messageTone: "success",
-          },
-        }),
-        onError: {
-          target: "Adding",
-          context: { message: "Could not add this price." },
-        },
-      },
-    },
-    SavingEdit: {
-      invoke: {
-        src: "editPrice",
-        input: ({ context }) => ({
-          foodId: context.foodId,
-          form: context.form,
-          priceId: _selectedPriceId(context),
-        }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: {
-            food: event.output.food,
-            message: "Price updated.",
-            messageTone: "success",
-          },
-        }),
-        onError: {
-          target: "Editing",
-          context: { message: "Could not update this price." },
-        },
-      },
-    },
-    Removing: {
-      invoke: {
-        src: "removePrice",
-        input: ({ context }) => ({
-          foodId: context.foodId,
-          priceId: _selectedPriceId(context),
-        }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: {
-            food: event.output.food,
-            message: "Price deleted.",
-            messageTone: "success",
-            selectedPriceId: null,
-          },
-        }),
-        onError: {
-          target: "Listing",
-          context: {
-            message: "Could not delete this price.",
-            messageTone: "danger",
-          },
-        },
-      },
-    },
-    Selecting: {
-      invoke: {
-        src: "selectPrice",
-        input: ({ context }) => ({
-          foodId: context.foodId,
-          priceId: context.selectedPriceId,
-        }),
-        onDone: ({ event }) => ({
-          target: "Listing",
-          context: {
-            food: event.output.food,
-            message:
-              event.output.food.prices.find((price) => price.isCurrent) ===
-              undefined
-                ? "No current price selected."
-                : null,
-            messageTone: "success",
-            selectedPriceId: null,
-          },
-        }),
-        onError: {
-          target: "Listing",
-          context: {
-            message: "Could not change the current price.",
-            messageTone: "danger",
-          },
-        },
-      },
-    },
-  },
-});
 
 export default function FoodPricesRoute() {
   const params = useSchemaLocalSearchParams(RouteParams);
   return Option.isNone(params) ? (
     <Redirect href="/" />
   ) : (
-    <FoodPricesScreen foodId={params.value.id} />
+    <FoodPricesLoader foodId={params.value.id} />
   );
 }
 
-function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
-  const [snapshot, , actor] = useMachine(priceManagerMachine, {
-    input: { foodId },
-  });
-  const food = snapshot.context.food;
+function FoodPricesLoader({ foodId }: { readonly foodId: Domain.FoodId }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodPricesLoaderMachine, { foodId })
+  );
+  const state = snapshot.state;
 
-  if (snapshot.matches("Loading")) {
+  if (state.path === "Loading") {
     return (
       <AppScreen contentStyle={styles.centered}>
         <LoadingView message="Loading prices" />
       </AppScreen>
     );
   }
-  if (snapshot.matches("LoadFailed") || food === null) {
+  if (state.path === "Failed") {
     return (
       <AppScreen contentStyle={styles.centered}>
-        <Notice
-          message={snapshot.context.message ?? "Could not load prices."}
-          tone="danger"
-        />
-        <Button icon={RotateCcw} onPress={actor.trigger.retry}>
+        <Notice message={state.value.message} tone="danger" />
+        <Button
+          icon={RotateCcw}
+          onPress={() => {
+            send(FoodPricesLoaderEvents.Retry());
+          }}
+        >
           Try again
         </Button>
         <Button onPress={() => router.back()} variant="secondary">
@@ -399,20 +77,25 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
     );
   }
 
+  return <FoodPricesScreen data={state.value.data} />;
+}
+
+function FoodPricesScreen({ data }: { readonly data: FoodPricesData }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodPricesMachine, data)
+  );
+  const { food, form, message, messageTone } = snapshot.value;
+
   if (
-    snapshot.matches("Adding") ||
-    snapshot.matches("Editing") ||
-    snapshot.matches("SavingAdd") ||
-    snapshot.matches("SavingEdit")
+    FoodPricesStates.matches(snapshot, "Adding") ||
+    FoodPricesStates.matches(snapshot, "Editing")
   ) {
     const saving =
-      snapshot.matches("SavingAdd") || snapshot.matches("SavingEdit");
-    const editing =
-      snapshot.matches("Editing") || snapshot.matches("SavingEdit");
-    const priceValue = Number(snapshot.context.form.price.replace(",", "."));
-    const quantityAmount = Number(
-      snapshot.context.form.quantityAmount.replace(",", ".")
-    );
+      FoodPricesStates.matches(snapshot, "Adding.Saving") ||
+      FoodPricesStates.matches(snapshot, "Editing.Saving");
+    const editing = FoodPricesStates.matches(snapshot, "Editing");
+    const priceValue = Number(form.price.replace(",", "."));
+    const quantityAmount = Number(form.quantityAmount.replace(",", "."));
     const formIsValid =
       Number.isFinite(priceValue) &&
       priceValue > 0 &&
@@ -420,7 +103,7 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
       quantityAmount > 0;
     const needsMassVolumeConversion =
       Measurements.isMassUnit(food.nutritionReference.unit) !==
-        Measurements.isMassUnit(snapshot.context.form.quantityUnit) &&
+        Measurements.isMassUnit(form.quantityUnit) &&
       food.massVolumeConversion === undefined;
     return (
       <PricePage food={food} title={editing ? "Edit price" : "Add price"}>
@@ -430,16 +113,18 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
         />
         <FoodPriceFields
           disabled={saving}
-          price={snapshot.context.form.price}
-          quantity={snapshot.context.form.quantityAmount}
-          quantityUnit={snapshot.context.form.quantityUnit}
-          onPriceChange={(value) => actor.send({ type: "changePrice", value })}
-          onQuantityChange={(value) =>
-            actor.send({ type: "changeQuantityAmount", value })
-          }
-          onQuantityUnitChange={(unit) =>
-            actor.send({ type: "changeQuantityUnit", unit })
-          }
+          price={form.price}
+          quantity={form.quantityAmount}
+          quantityUnit={form.quantityUnit}
+          onPriceChange={(value) => {
+            send(FoodPricesEvents.ChangePrice({ value }));
+          }}
+          onQuantityChange={(value) => {
+            send(FoodPricesEvents.ChangeQuantityAmount({ value }));
+          }}
+          onQuantityUnitChange={(unit) => {
+            send(FoodPricesEvents.ChangeQuantityUnit({ unit }));
+          }}
         />
         {needsMassVolumeConversion ? (
           <Notice
@@ -448,13 +133,13 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             tone="warning"
           />
         ) : null}
-        {snapshot.context.message === null ? null : (
-          <Notice message={snapshot.context.message} tone="danger" />
-        )}
+        {message === null ? null : <Notice message={message} tone="danger" />}
         <View style={styles.actions}>
           <Button
             disabled={saving}
-            onPress={actor.trigger.cancel}
+            onPress={() => {
+              send(FoodPricesEvents.Cancel());
+            }}
             style={styles.action}
             variant="secondary"
           >
@@ -464,7 +149,9 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
             disabled={!formIsValid}
             icon={Save}
             loading={saving}
-            onPress={actor.trigger.submit}
+            onPress={() => {
+              send(FoodPricesEvents.Submit());
+            }}
             style={styles.action}
           >
             {editing ? "Save price" : "Add price"}
@@ -474,7 +161,9 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
     );
   }
 
-  const busy = snapshot.matches("Removing") || snapshot.matches("Selecting");
+  const busy =
+    FoodPricesStates.matches(snapshot, "Removing") ||
+    FoodPricesStates.matches(snapshot, "Selecting");
   const currentPrice = food.prices.find((price) => price.isCurrent);
   return (
     <PricePage food={food} title="Manage prices">
@@ -482,11 +171,8 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
         message="The current price is used to estimate meal and day spending. You may leave every price unselected."
         tone="neutral"
       />
-      {snapshot.context.message === null ? null : (
-        <Notice
-          message={snapshot.context.message}
-          tone={snapshot.context.messageTone}
-        />
+      {message === null ? null : (
+        <Notice message={message} tone={messageTone} />
       )}
       {!Array.isReadonlyArrayNonEmpty(food.prices) ? (
         <Notice message="No prices have been added yet." tone="neutral" />
@@ -518,9 +204,9 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
                     <Button
                       disabled={busy}
                       icon={Pencil}
-                      onPress={() =>
-                        actor.send({ type: "edit", priceId: price.id })
-                      }
+                      onPress={() => {
+                        send(FoodPricesEvents.Edit({ priceId: price.id }));
+                      }}
                       style={styles.action}
                       variant="secondary"
                     >
@@ -529,11 +215,13 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
                     <Button
                       disabled={busy}
                       icon={price.isCurrent ? CircleOff : Check}
-                      onPress={() =>
-                        price.isCurrent
-                          ? actor.trigger.clearCurrent()
-                          : actor.send({ type: "select", priceId: price.id })
-                      }
+                      onPress={() => {
+                        send(
+                          price.isCurrent
+                            ? FoodPricesEvents.ClearCurrent()
+                            : FoodPricesEvents.Select({ priceId: price.id })
+                        );
+                      }}
                       style={styles.action}
                       variant={price.isCurrent ? "secondary" : "safe"}
                     >
@@ -543,9 +231,9 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
                   <Button
                     disabled={busy}
                     icon={Trash2}
-                    onPress={() =>
-                      actor.send({ type: "remove", priceId: price.id })
-                    }
+                    onPress={() => {
+                      send(FoodPricesEvents.Remove({ priceId: price.id }));
+                    }}
                     variant="danger"
                   >
                     Delete price
@@ -562,7 +250,13 @@ function FoodPricesScreen({ foodId }: { readonly foodId: Domain.FoodId }) {
           this selection changes.
         </Text>
       )}
-      <Button disabled={busy} icon={Plus} onPress={actor.trigger.add}>
+      <Button
+        disabled={busy}
+        icon={Plus}
+        onPress={() => {
+          send(FoodPricesEvents.Add());
+        }}
+      >
         {"Add\u00a0price"}
       </Button>
     </PricePage>
@@ -607,25 +301,6 @@ function PricePage({
       <View style={styles.body}>{children}</View>
     </AppScreen>
   );
-}
-
-function _priceInput(input: typeof PriceMutationInput.Type) {
-  return {
-    price: input.form.price.replace(",", "."),
-    currency: "EUR" as const,
-    foodId: input.foodId,
-    referenceQuantity: {
-      amount: input.form.quantityAmount.replace(",", "."),
-      unit: input.form.quantityUnit,
-    },
-  };
-}
-
-function _selectedPriceId(context: typeof Context.Type) {
-  if (context.selectedPriceId === null) {
-    throw new Error("Expected a selected price.");
-  }
-  return context.selectedPriceId;
 }
 
 const styles = StyleSheet.create({

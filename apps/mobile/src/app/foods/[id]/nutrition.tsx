@@ -6,206 +6,27 @@ import { IconButton } from "@/components/ui/icon-button";
 import { LoadingView } from "@/components/ui/loading-view";
 import { AppHeader } from "@/components/ui/mai-header";
 import { Notice } from "@/components/ui/notice";
+import { useMachine } from "@/hooks/use-machine";
 import { useSchemaLocalSearchParams } from "@/hooks/use-schema-local-search-params";
-import { RuntimeClient } from "@/lib/runtime-client";
+import { MachineAtoms } from "@/lib/machine-runtime";
+import {
+  FoodNutritionEvents,
+  FoodNutritionLoaderEvents,
+  FoodNutritionLoaderMachine,
+  FoodNutritionMachine,
+  FoodNutritionStates,
+  nutrientFields,
+  nutritionCorrections,
+  nutritionDraft,
+  type FoodNutritionData,
+} from "@/machines/food-nutrition-machine";
 import { color, spacing, tokens } from "@/theme/tokens";
-import { EmptyEvent } from "@mai/machines";
-import { Domain, Foods } from "@mai/nutrition";
-import { useMachine } from "@xstate/react";
-import { Effect, Option, Schema } from "effect";
+import { Domain } from "@mai/nutrition";
+import { Option, Schema } from "effect";
 import { Redirect, router } from "expo-router";
 import { ChevronLeft, RotateCcw, Save } from "lucide-react-native";
 import { Alert, Keyboard, StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { createAsyncLogic, setup } from "xstate";
-
-const nutrientFields = [
-  { key: "energyKcal", label: "Calories", unit: "kcal" },
-  { key: "carbsGrams", label: "Carbs", unit: "g" },
-  { key: "proteinGrams", label: "Protein", unit: "g" },
-  { key: "fatGrams", label: "Fat", unit: "g" },
-  { key: "fiberGrams", label: "Fiber", unit: "g" },
-  { key: "sugarGrams", label: "Sugar", unit: "g" },
-  { key: "saturatedFatGrams", label: "Saturated fat", unit: "g" },
-  { key: "saltGrams", label: "Salt", unit: "g" },
-] as const;
-
-const Draft = Schema.Struct({
-  energyKcal: Schema.String,
-  carbsGrams: Schema.String,
-  proteinGrams: Schema.String,
-  fatGrams: Schema.String,
-  fiberGrams: Schema.String,
-  sugarGrams: Schema.String,
-  saturatedFatGrams: Schema.String,
-  saltGrams: Schema.String,
-});
-
-function _draft(
-  corrections: Domain.FoodNutritionCorrections
-): typeof Draft.Type {
-  return {
-    energyKcal: corrections.energyKcal?.toString() ?? "",
-    carbsGrams: corrections.carbsGrams?.toString() ?? "",
-    proteinGrams: corrections.proteinGrams?.toString() ?? "",
-    fatGrams: corrections.fatGrams?.toString() ?? "",
-    fiberGrams: corrections.fiberGrams?.toString() ?? "",
-    sugarGrams: corrections.sugarGrams?.toString() ?? "",
-    saturatedFatGrams: corrections.saturatedFatGrams?.toString() ?? "",
-    saltGrams: corrections.saltGrams?.toString() ?? "",
-  };
-}
-
-function _corrections(draft: typeof Draft.Type) {
-  return Schema.decodeOption(Domain.FoodNutritionCorrections)(
-    Object.fromEntries(
-      nutrientFields.flatMap(({ key }) => {
-        const value = draft[key].trim().replace(",", ".");
-        return value === "" ? [] : [[key, Number(value)]];
-      })
-    )
-  );
-}
-
-const Context = Schema.Struct({
-  foodId: Domain.FoodId,
-  food: Schema.NullOr(Domain.Food),
-  draft: Draft,
-  usage: Schema.NullOr(Foods.FoodEditUsage),
-  message: Schema.NullOr(Schema.String),
-});
-const FoodInput = Schema.Struct({ foodId: Domain.FoodId });
-const SaveInput = Schema.Struct({
-  foodId: Domain.FoodId,
-  corrections: Domain.FoodNutritionCorrections,
-});
-
-const nutritionEditorMachine = setup({
-  schemas: {
-    input: Schema.toStandardSchemaV1(FoodInput),
-    context: Schema.toStandardSchemaV1(Context),
-    events: {
-      change: Schema.toStandardSchemaV1(
-        Schema.Struct({
-          field: Schema.Literals(nutrientFields.map(({ key }) => key)),
-          value: Schema.String,
-        })
-      ),
-      save: Schema.toStandardSchemaV1(EmptyEvent),
-      reset: Schema.toStandardSchemaV1(EmptyEvent),
-      retry: Schema.toStandardSchemaV1(EmptyEvent),
-    },
-  },
-  actors: {
-    load: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(FoodInput),
-        output: Schema.toStandardSchemaV1(
-          Schema.Struct({ food: Domain.Food, usage: Foods.FoodEditUsage })
-        ),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return {
-              food: yield* foods.get({ input }),
-              usage: yield* foods.inspectEdit({ input }),
-            };
-          })
-        ),
-    }),
-    save: createAsyncLogic({
-      schemas: {
-        input: Schema.toStandardSchemaV1(SaveInput),
-        output: Schema.toStandardSchemaV1(Domain.Food),
-      },
-      run: ({ input }) =>
-        RuntimeClient.runPromise(
-          Effect.gen(function* () {
-            const foods = yield* Foods.Foods;
-            return yield* foods.setNutritionCorrections({ input });
-          })
-        ),
-    }),
-  },
-}).createMachine({
-  context: ({ input }) => ({
-    foodId: input.foodId,
-    food: null,
-    draft: _draft({}),
-    usage: null,
-    message: null,
-  }),
-  initial: "Loading",
-  states: {
-    Loading: {
-      invoke: {
-        src: "load",
-        input: ({ context }) => ({ foodId: context.foodId }),
-        onDone: ({ event }) => ({
-          target: "Editing",
-          context: {
-            food: event.output.food,
-            usage: event.output.usage,
-            draft: _draft(event.output.food.nutritionCorrections),
-          },
-        }),
-        onError: {
-          target: "Failed",
-          context: { message: "Could not load this food." },
-        },
-      },
-    },
-    Failed: {
-      on: { retry: { target: "Loading", context: { message: null } } },
-    },
-    Editing: {
-      on: {
-        change: ({ context, event }) => ({
-          context: {
-            draft: { ...context.draft, [event.field]: event.value },
-            message: null,
-          },
-        }),
-        save: ({ context }) =>
-          Option.isSome(_corrections(context.draft))
-            ? { target: "Saving", context: { message: null } }
-            : {},
-        reset: {
-          target: "Saving",
-          context: { draft: _draft({}), message: null },
-        },
-      },
-    },
-    Saving: {
-      invoke: {
-        src: "save",
-        input: ({ context }) => {
-          const corrections = _corrections(context.draft);
-          if (Option.isNone(corrections))
-            throw new Error("Expected valid nutrition corrections.");
-          return { foodId: context.foodId, corrections: corrections.value };
-        },
-        onDone: ({ event }) => ({
-          target: "Editing",
-          context: {
-            food: event.output,
-            draft: _draft(event.output.nutritionCorrections),
-            message: "Saved for all past and future entries.",
-          },
-        }),
-        onError: {
-          target: "Editing",
-          context: {
-            message:
-              "Could not save. Your catalog values are unchanged. Try again.",
-          },
-        },
-      },
-    },
-  },
-});
 
 export default function FoodNutritionRoute() {
   const params = useSchemaLocalSearchParams(
@@ -214,51 +35,76 @@ export default function FoodNutritionRoute() {
   return Option.isNone(params) ? (
     <Redirect href="/foods" />
   ) : (
-    <FoodNutritionEditor foodId={params.value.id} />
+    <FoodNutritionLoader foodId={params.value.id} />
   );
 }
 
-function FoodNutritionEditor({ foodId }: { readonly foodId: Domain.FoodId }) {
-  const [snapshot, , actor] = useMachine(nutritionEditorMachine, {
-    input: { foodId },
-  });
-  const { food, draft, usage, message } = snapshot.context;
-  const busy = snapshot.matches("Saving");
-  const savedDraft = _draft(food?.nutritionCorrections ?? {});
+function FoodNutritionLoader({ foodId }: { readonly foodId: Domain.FoodId }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodNutritionLoaderMachine, { foodId })
+  );
+  const state = snapshot.state;
+
+  return state.path === "Ready" ? (
+    <FoodNutritionEditor data={state.value.data} />
+  ) : (
+    <AppScreen contentStyle={styles.screen} safeAreaEdges={["top"]}>
+      <NutritionHeader busy={false} />
+      {state.path === "Loading" ? (
+        <LoadingView message="Loading food" />
+      ) : (
+        <View style={styles.body}>
+          <Notice message={state.value.message} tone="danger" />
+          <Button
+            onPress={() => {
+              send(FoodNutritionLoaderEvents.Retry());
+            }}
+          >
+            Try again
+          </Button>
+        </View>
+      )}
+    </AppScreen>
+  );
+}
+
+function NutritionHeader({ busy }: { readonly busy: boolean }) {
+  return (
+    <AppHeader
+      embedded
+      title="Customize nutrition"
+      leading={
+        <IconButton
+          accessibilityLabel="Back"
+          icon={ChevronLeft}
+          disabled={busy}
+          onPress={() => router.back()}
+          variant="ghost"
+        />
+      }
+    />
+  );
+}
+
+function FoodNutritionEditor({ data }: { readonly data: FoodNutritionData }) {
+  const [snapshot, send] = useMachine(() =>
+    MachineAtoms.make(FoodNutritionMachine, data)
+  );
+  const { food, draft, usage, message } = snapshot.value;
+  const busy = FoodNutritionStates.matches(snapshot, "Saving");
+  const savedDraft = nutritionDraft(food.nutritionCorrections);
   const hasChanges = nutrientFields.some(
     ({ key }) => draft[key] !== savedDraft[key]
   );
   const hasCorrections = nutrientFields.some(
-    ({ key }) => food?.nutritionCorrections[key] !== undefined
+    ({ key }) => food.nutritionCorrections[key] !== undefined
   );
-  const valid = Option.isSome(_corrections(draft));
+  const valid = Option.isSome(nutritionCorrections(draft));
 
   return (
     <AppScreen contentStyle={styles.screen} safeAreaEdges={["top"]}>
-      <AppHeader
-        embedded
-        title="Customize nutrition"
-        leading={
-          <IconButton
-            accessibilityLabel="Back"
-            icon={ChevronLeft}
-            disabled={busy}
-            onPress={() => router.back()}
-            variant="ghost"
-          />
-        }
-      />
-      {snapshot.matches("Loading") ? (
-        <LoadingView message="Loading food" />
-      ) : food === null ? (
-        <View style={styles.body}>
-          <Notice
-            message={message ?? "Could not load this food."}
-            tone="danger"
-          />
-          <Button onPress={actor.trigger.retry}>Try again</Button>
-        </View>
-      ) : food.origin !== "app-default" ? (
+      <NutritionHeader busy={busy} />
+      {food.origin !== "app-default" ? (
         <View style={styles.body}>
           <Notice
             message="Use Edit food details to update this food."
@@ -283,9 +129,9 @@ function FoodNutritionEditor({ foodId }: { readonly foodId: Domain.FoodId }) {
                 Blank fields use catalog values. Enter 0 for zero.
               </Text>
               <Text style={styles.muted}>
-                {usage?.mealEntryCount === 0
+                {usage.mealEntryCount === 0
                   ? "Applies to future entries."
-                  : `Applies to ${usage?.mealEntryCount ?? 0} past ${usage?.mealEntryCount === 1 ? "entry" : "entries"} and future entries.`}
+                  : `Applies to ${usage.mealEntryCount} past ${usage.mealEntryCount === 1 ? "entry" : "entries"} and future entries.`}
               </Text>
             </View>
             <View style={styles.grid}>
@@ -298,9 +144,9 @@ function FoodNutritionEditor({ foodId }: { readonly foodId: Domain.FoodId }) {
                   editable={!busy}
                   value={draft[key]}
                   placeholder={food[key]?.toString() ?? "Unknown"}
-                  onChangeText={(value) =>
-                    actor.send({ type: "change", field: key, value })
-                  }
+                  onChangeText={(value) => {
+                    send(FoodNutritionEvents.Change({ field: key, value }));
+                  }}
                   rightElement={<Text style={styles.muted}>{unit}</Text>}
                   selectTextOnFocus
                 />
@@ -330,7 +176,12 @@ function FoodNutritionEditor({ foodId }: { readonly foodId: Domain.FoodId }) {
                     "Restore the original nutrition for all past and future entries using this food.",
                     [
                       { text: "Cancel", style: "cancel" },
-                      { text: "Reset", onPress: actor.trigger.reset },
+                      {
+                        text: "Reset",
+                        onPress: () => {
+                          send(FoodNutritionEvents.Reset());
+                        },
+                      },
                     ]
                   );
                 }}
@@ -347,7 +198,7 @@ function FoodNutritionEditor({ foodId }: { readonly foodId: Domain.FoodId }) {
               disabled={busy || !valid || !hasChanges}
               onPress={() => {
                 Keyboard.dismiss();
-                actor.trigger.save();
+                send(FoodNutritionEvents.Save());
               }}
             >
               Save nutrition
